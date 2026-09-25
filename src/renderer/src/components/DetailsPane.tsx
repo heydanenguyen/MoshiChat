@@ -154,7 +154,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
                 onClick={() => void toggleTag(conversationId, tag)}
               >
                 <span>{TAGS[tag].emoji}</span>
-                {TAGS[tag].name[language]}
+                <span className="tag-chip-label">{TAGS[tag].name[language]}</span>
               </button>
             )
           })}

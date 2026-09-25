@@ -9,7 +9,14 @@ const bridge: UnisonBridge = {
     add: (input) => ipcRenderer.invoke(IPC.accountsAdd, input),
     remove: (id) => ipcRenderer.invoke(IPC.accountsRemove, id),
     reconnect: (id) => ipcRenderer.invoke(IPC.accountsReconnect, id),
-    addDemo: () => ipcRenderer.invoke(IPC.accountsAddDemo)
+    addDemo: () => ipcRenderer.invoke(IPC.accountsAddDemo),
+    connectWeb: (platform) => ipcRenderer.invoke(IPC.accountsConnectWeb, platform),
+    listPages: (appId) => ipcRenderer.invoke(IPC.accountsListPages, appId),
+    addPages: (pages, includeInstagram) => ipcRenderer.invoke(IPC.accountsAddPages, pages, includeInstagram)
+  },
+  contacts: {
+    list: (query) => ipcRenderer.invoke(IPC.contactsList, query),
+    open: (accountId, peerId) => ipcRenderer.invoke(IPC.contactsOpen, accountId, peerId)
   },
   conversations: {
     list: () => ipcRenderer.invoke(IPC.conversationsList),

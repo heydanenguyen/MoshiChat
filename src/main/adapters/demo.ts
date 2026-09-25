@@ -1,4 +1,4 @@
-import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, isShared, matchesQuery } from './types'
@@ -296,6 +296,36 @@ const EXTRAS: SeedExtra[] = [
   { thread: 'whatsapp/emma', from: 'me', minutesAgo: 189, text: 'Final files', attachment: { id: 'x15', kind: 'file', name: 'campaign-final.zip', size: 96_000_000 } }
 ]
 
+/** People in the address book who have no thread yet. */
+const EXTRA_CONTACTS: Record<Platform, Array<{ id: string; name: string; handle?: string }>> = {
+  messenger: [
+    { id: 'bao', name: 'Quốc Bảo', handle: 'quocbao.design' },
+    { id: 'ha', name: 'Thu Hà', handle: 'thuha.mkt' },
+    { id: 'nam', name: 'Hoàng Nam', handle: 'hoangnam.3hvn' },
+    { id: 'yen', name: 'Hải Yến', handle: 'haiyen.pham' }
+  ],
+  instagram: [
+    { id: 'studio', name: 'Saigon Light Studio', handle: 'saigonlight.studio' },
+    { id: 'mai', name: 'Ngọc Mai', handle: 'mai.ngoc' },
+    { id: 'coffee', name: 'The Workshop Coffee', handle: 'theworkshop.coffee' }
+  ],
+  telegram: [
+    { id: 'alex', name: 'Alex Chen', handle: '@alexc' },
+    { id: 'priya', name: 'Priya Natarajan', handle: '@priya_n' },
+    { id: 'tuan', name: 'Tuấn Anh', handle: '@tuananh' }
+  ],
+  zalo: [
+    { id: 'thao', name: 'Phương Thảo', handle: '+84 909 777 888' },
+    { id: 'kho', name: 'Kho Bình Thạnh', handle: '+84 28 3899 1234' },
+    { id: 'dung', name: 'Anh Dũng Kế Toán', handle: '+84 912 333 444' }
+  ],
+  whatsapp: [
+    { id: 'carlos', name: 'Carlos Mendes', handle: '+351 912 000 111' },
+    { id: 'yuki', name: 'Yuki Tanaka', handle: '+81 90 1234 5678' },
+    { id: 'lea', name: 'Léa Moreau', handle: '+33 6 12 34 56 78' }
+  ]
+}
+
 let counter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
@@ -474,6 +504,35 @@ export class DemoAdapter implements PlatformAdapter {
 
   async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
     return (this.messages.get(id) ?? []).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async listContacts(): Promise<Peer[]> {
+    return EXTRA_CONTACTS[this.platform].map((c) => ({ id: c.id, name: c.name, handle: c.handle }))
+  }
+
+  async openConversation(peerId: string): Promise<Conversation> {
+    const id = conversationId(this.account.id, `new-${peerId}`)
+    const existing = this.conversations.get(id)
+    if (existing) return existing
+    const contact = EXTRA_CONTACTS[this.platform].find((c) => c.id === peerId)
+    const name = contact?.name ?? peerId
+    const conversation: Conversation = {
+      id,
+      accountId: this.account.id,
+      platform: this.platform,
+      title: name,
+      isGroup: false,
+      participants: [
+        { id: 'me', name: ME, isMe: true },
+        { id: name, name, handle: contact?.handle }
+      ],
+      unreadCount: 0,
+      updatedAt: Date.now()
+    }
+    this.conversations.set(id, conversation)
+    this.messages.set(id, [])
+    this.replies.set(id, ['Chào bạn 👋', 'Rất vui được nói chuyện!', 'Ok để mình xem nhé'])
+    return conversation
   }
 
   async getConversationStats(id: string): Promise<ConversationStats> {

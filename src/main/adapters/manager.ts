@@ -7,7 +7,9 @@ import type {
   AddAccountInput,
   AuthPromptKind,
   BridgeEvent,
+  Contact,
   Conversation,
+  PageOption,
   ConversationStats,
   Message,
   PeerProfile,
@@ -18,12 +20,15 @@ import type {
 } from '@shared/types'
 import type { Storage, StoredAccount } from '../storage'
 import type { AdapterContext, PlatformAdapter } from './types'
+import type { Peer } from '@shared/types'
 import { isShared, matchesQuery, previewOf, statsOf } from './types'
 import { DemoAdapter } from './demo'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
 import { ZaloAdapter, type ZaloSecret } from './zalo'
 import { WhatsAppAdapter, type WhatsAppSecret } from './whatsapp'
+import { FacebookPersonalAdapter, type FacebookPersonalSecret, type WebCookie } from './facebook-personal'
+import { InstagramPersonalAdapter, type InstagramPersonalSecret } from './instagram-personal'
 
 interface PendingAuth {
   resolve(value: string): void
@@ -47,6 +52,7 @@ export class AccountManager {
   private conversations = new Map<string, Conversation>()
   private messages = new Map<string, Map<string, Message>>()
   private pendingAuth = new Map<string, PendingAuth>()
+  private contactCache = new Map<string, { at: number; list: Contact[] }>()
 
   constructor(
     private readonly storage: Storage,
@@ -120,6 +126,84 @@ export class AccountManager {
       adapter = new WhatsAppAdapter(tempId, { authDir: `wa-${randomUUID().slice(0, 8)}` }, ctx)
     }
     return this.adoptPending(tempId, adapter)
+  }
+
+  /** Personal Facebook / Instagram from cookies captured in the in-app login window. */
+  async addWebSession(platform: 'messenger' | 'instagram', cookies: WebCookie[]): Promise<Account> {
+    const tempId = `${platform}:pending-${randomUUID().slice(0, 8)}`
+    let adapter: PlatformAdapter
+    const ctx = this.contextFor(tempId, () => adapter.account.id)
+    adapter = platform === 'messenger' ? new FacebookPersonalAdapter(tempId, { cookies }, ctx) : new InstagramPersonalAdapter(tempId, { cookies }, ctx)
+    const account = await this.adoptPending(tempId, adapter)
+    await this.storage.upsertAccount(account, { cookies })
+    return account
+  }
+
+  /** Pages picked in the OAuth flow become Messenger (and optionally Instagram) accounts. */
+  async addPages(pages: PageOption[], includeInstagram: boolean): Promise<Account[]> {
+    const accounts: Account[] = []
+    for (const page of pages) {
+      accounts.push(await this.add({ platform: 'messenger', pageId: page.id, accessToken: page.accessToken }))
+      if (includeInstagram && page.instagram) {
+        try {
+          accounts.push(await this.add({ platform: 'instagram', pageId: page.id, accessToken: page.accessToken }))
+        } catch (err) {
+          this.log(`instagram for page ${page.id} skipped:`, (err as Error).message)
+        }
+      }
+    }
+    return accounts
+  }
+
+  /** Contacts across every connected adapter, cached for a couple of minutes. */
+  async contacts(query: string): Promise<Contact[]> {
+    const needle = query.trim().toLowerCase()
+    const all: Contact[] = []
+    await Promise.all(
+      [...this.adapters.values()]
+        .filter((a) => a.account.status === 'connected')
+        .map(async (adapter) => {
+          const cached = this.contactCache.get(adapter.account.id)
+          let list = cached && Date.now() - cached.at < 120_000 ? cached.list : undefined
+          if (!list) {
+            const peers = adapter.listContacts ? await adapter.listContacts().catch(() => [] as Peer[]) : []
+            const seen = new Set<string>()
+            list = []
+            for (const peer of peers) {
+              if (seen.has(peer.id)) continue
+              seen.add(peer.id)
+              list.push({ ...peer, accountId: adapter.account.id, platform: adapter.account.platform })
+            }
+            // Recent 1:1 conversations count as contacts too.
+            for (const c of this.conversations.values()) {
+              if (c.accountId !== adapter.account.id || c.isGroup) continue
+              const other = c.participants.find((p) => !p.isMe)
+              if (!other || seen.has(other.id)) continue
+              seen.add(other.id)
+              list.push({ id: other.id, name: c.title, handle: other.handle, avatarUrl: c.avatarUrl ?? other.avatarUrl, accountId: adapter.account.id, platform: adapter.account.platform })
+            }
+            this.contactCache.set(adapter.account.id, { at: Date.now(), list })
+          }
+          all.push(...list)
+        })
+    )
+    const filtered = needle ? all.filter((c) => c.name.toLowerCase().includes(needle) || c.handle?.toLowerCase().includes(needle)) : all
+    return filtered.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 80)
+  }
+
+  async openConversation(accountId: string, peerId: string): Promise<Conversation> {
+    const adapter = this.adapters.get(accountId)
+    if (!adapter) throw new Error('Unknown account')
+    for (const c of this.conversations.values()) {
+      if (c.accountId === accountId && !c.isGroup && c.participants.some((p) => !p.isMe && p.id === peerId)) return c
+    }
+    if (!adapter.openConversation) throw new Error('This platform cannot start new conversations from Unison')
+    const conversation = await adapter.openConversation(peerId)
+    const existing = this.conversations.get(conversation.id)
+    if (existing) return existing
+    this.conversations.set(conversation.id, conversation)
+    this.emit({ type: 'conversation:upserted', conversation })
+    return conversation
   }
 
   /** Register an adapter whose id becomes known only after connect(). */
@@ -530,6 +614,12 @@ function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Sto
   } else if (stored.platform === 'whatsapp') {
     const secret = storage.readSecret<WhatsAppSecret>(stored.id)
     if (secret) adapter = new WhatsAppAdapter(stored.id, secret, ctx)
+  } else if (stored.id.startsWith('messenger:fb-')) {
+    const secret = storage.readSecret<FacebookPersonalSecret>(stored.id)
+    if (secret) adapter = new FacebookPersonalAdapter(stored.id, secret, ctx)
+  } else if (stored.id.startsWith('instagram:ig-')) {
+    const secret = storage.readSecret<InstagramPersonalSecret>(stored.id)
+    if (secret) adapter = new InstagramPersonalAdapter(stored.id, secret, ctx)
   } else {
     const secret = storage.readSecret<MetaSecret>(stored.id)
     if (secret) adapter = new MetaAdapter(stored.platform, secret, ctx)

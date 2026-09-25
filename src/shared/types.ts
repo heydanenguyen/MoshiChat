@@ -185,6 +185,21 @@ export interface AuthPrompt {
   note?: string
 }
 
+/** Someone you can start a new conversation with. */
+export interface Contact extends Peer {
+  accountId: string
+  platform: Platform
+}
+
+/** A Facebook Page (and its linked Instagram account) returned by the OAuth picker. */
+export interface PageOption {
+  id: string
+  name: string
+  accessToken: string
+  pictureUrl?: string
+  instagram?: { id: string; username: string }
+}
+
 /** Credentials supplied by the user when adding an account. Secrets never leave the main process after this. */
 export type AddAccountInput =
   | { platform: 'telegram'; apiId: number; apiHash: string }

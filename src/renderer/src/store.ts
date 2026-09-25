@@ -5,10 +5,12 @@ import type {
   AddAccountInput,
   AuthPrompt,
   BridgeEvent,
+  Contact,
   Conversation,
   ConversationStats,
   Message,
   OutgoingAttachment,
+  PageOption,
   PeerProfile,
   Platform,
   SearchHit,
@@ -26,6 +28,7 @@ export type Sheet =
   | { kind: 'settings' }
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
+  | { kind: 'new-chat' }
 
 export type DetailsTab = 'info' | 'search' | 'media' | 'links' | 'files'
 
@@ -66,6 +69,8 @@ interface State {
   pendingFiles: OutgoingAttachment[]
   forwarding?: Message
   lightbox?: Lightbox
+  /** Window narrower than a phone-ish breakpoint: list and chat stack. */
+  narrow: boolean
 
   init(): Promise<void>
   select(id?: string, highlightId?: string): void
@@ -100,6 +105,10 @@ interface State {
   respondAuth(requestId: string, value: string): Promise<void>
   cancelAuth(requestId: string): Promise<void>
   addAccount(input: AddAccountInput): Promise<void>
+  connectWeb(platform: 'messenger' | 'instagram'): Promise<void>
+  addPages(pages: PageOption[], includeInstagram: boolean): Promise<void>
+  openContact(contact: Contact): Promise<void>
+  setNarrow(narrow: boolean): void
   removeAccount(accountId: string): Promise<void>
   reconnect(accountId: string): Promise<void>
   addDemo(): Promise<void>
@@ -152,6 +161,7 @@ export const useStore = create<State>((set, get) => ({
   stats: {},
   shared: {},
   pendingFiles: [],
+  narrow: false,
 
   async init() {
     const bridge = window.unison
@@ -558,6 +568,33 @@ export const useStore = create<State>((set, get) => ({
   async addAccount(input) {
     const account = await window.unison.accounts.add(input)
     set({ accounts: { ...get().accounts, [account.id]: account }, sheet: { kind: 'none' } })
+  },
+
+  async connectWeb(platform) {
+    const account = await window.unison.accounts.connectWeb(platform)
+    set({ accounts: { ...get().accounts, [account.id]: account }, sheet: { kind: 'none' } })
+    get().showToast(translate(get().settings.language, 'connectedAs', { name: account.displayName }))
+  },
+
+  async addPages(pages, includeInstagram) {
+    const accounts = await window.unison.accounts.addPages(pages, includeInstagram)
+    const next = { ...get().accounts }
+    for (const a of accounts) next[a.id] = a
+    set({ accounts: next, sheet: { kind: 'none' } })
+  },
+
+  async openContact(contact) {
+    try {
+      const conversation = await window.unison.contacts.open(contact.accountId, contact.id)
+      set({ conversations: { ...get().conversations, [conversation.id]: conversation } })
+      get().select(conversation.id)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  setNarrow(narrow) {
+    if (get().narrow !== narrow) set({ narrow })
   },
 
   async removeAccount(accountId) {

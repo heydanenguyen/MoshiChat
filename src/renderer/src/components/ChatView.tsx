@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { BellOff, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
+import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useShowPlatformBadge, useStore, useT } from '../store'
@@ -31,6 +31,8 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const highlightId = useStore((s) => s.highlightId)
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const showBadge = useShowPlatformBadge()
+  const narrow = useStore((s) => s.narrow)
+  const select = useStore((s) => s.select)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
@@ -106,6 +108,11 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       onDrop={onDrop}
     >
       <header className="chat-header drag">
+        {narrow && (
+          <button className="icon-btn no-drag" onClick={() => select(undefined)} title={t('back')}>
+            <ChevronLeft size={20} strokeWidth={2.4} />
+          </button>
+        )}
         <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} platform={showBadge ? conversation.platform : undefined} onClick={() => toggleDetails('info')} />
         <div className="chat-header-info">
           <div className="chat-header-title">

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/baileys'
-import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
@@ -282,6 +282,38 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
     return this.messagesFor(id).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async listContacts(): Promise<Peer[]> {
+    const peers: Peer[] = []
+    for (const contact of this.contacts.values()) {
+      if (!contact.id.endsWith('@s.whatsapp.net') || this.lib?.areJidsSameUser(contact.id, this.meJid)) continue
+      const name = contact.name ?? contact.verifiedName ?? contact.notify
+      if (!name) continue
+      peers.push({ id: contact.id, name, handle: `+${contact.id.split('@')[0]}`, avatarUrl: this.avatars.get(contact.id) })
+    }
+    return peers
+  }
+
+  async openConversation(peerId: string): Promise<Conversation> {
+    const chat = this.chats.get(peerId)
+    if (chat) return this.toConversation(chat)
+    const id = conversationId(this.account.id, peerId)
+    const name = this.nameOf(peerId)
+    return {
+      id,
+      accountId: this.account.id,
+      platform: 'whatsapp',
+      title: name,
+      avatarUrl: this.avatars.get(peerId),
+      isGroup: false,
+      participants: [
+        { id: this.meJid, name: this.account.displayName, isMe: true },
+        { id: peerId, name, handle: `+${peerId.split('@')[0]}` }
+      ],
+      unreadCount: 0,
+      updatedAt: Date.now()
+    }
   }
 
   async getConversationStats(id: string): Promise<ConversationStats> {

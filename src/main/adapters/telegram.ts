@@ -1,8 +1,9 @@
+import bigInt from 'big-integer'
 import { Api, TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage, NewMessageEvent } from 'telegram/events'
 import { LogLevel } from 'telegram/extensions/Logger'
-import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery } from './types'
@@ -270,6 +271,41 @@ export class TelegramAdapter implements PlatformAdapter {
     for (const item of raw) if (item instanceof Api.Message) messages.push(await this.toMessage(item, id))
     this.remember(id, messages)
     return messages
+  }
+
+  async listContacts(): Promise<Peer[]> {
+    const client = this.requireClient()
+    const result = await client.invoke(new Api.contacts.GetContacts({ hash: bigInt(0) }))
+    if (!('users' in result)) return []
+    const peers: Peer[] = []
+    for (const user of result.users) {
+      if (!(user instanceof Api.User) || user.self || user.bot) continue
+      const id = user.id.toString()
+      this.entities.set(id, user)
+      peers.push({ id, name: fullName(user), handle: user.username ? `@${user.username}` : user.phone ? `+${user.phone}` : undefined, avatarUrl: this.senderAvatars.get(id) })
+    }
+    return peers
+  }
+
+  async openConversation(peerId: string): Promise<Conversation> {
+    const id = conversationId(this.account.id, peerId)
+    const entity = await this.entityFor(id)
+    const name = entity instanceof Api.User ? fullName(entity) : entity.title
+    const avatarUrl = await this.profilePhoto(entity)
+    return {
+      id,
+      accountId: this.account.id,
+      platform: 'telegram',
+      title: name,
+      avatarUrl,
+      isGroup: !(entity instanceof Api.User),
+      participants: [
+        { id: this.meId, name: this.account.displayName, isMe: true },
+        { id: peerId, name, handle: usernameOf(entity), avatarUrl }
+      ],
+      unreadCount: 0,
+      updatedAt: Date.now()
+    }
   }
 
   async getConversationStats(id: string): Promise<ConversationStats> {

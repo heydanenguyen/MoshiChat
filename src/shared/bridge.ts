@@ -2,9 +2,12 @@ import type {
   Account,
   AddAccountInput,
   BridgeEvent,
+  Contact,
   Conversation,
   ConversationStats,
   Message,
+  PageOption,
+  Platform,
   OutgoingAttachment,
   PeerProfile,
   SearchHit,
@@ -21,6 +24,21 @@ export interface UnisonBridge {
     remove(accountId: string): Promise<void>
     reconnect(accountId: string): Promise<void>
     addDemo(): Promise<Account[]>
+    /**
+     * Open the platform's own login page in an app window and turn the
+     * resulting session into an account (personal Facebook / Instagram).
+     */
+    connectWeb(platform: Extract<Platform, 'messenger' | 'instagram'>): Promise<Account>
+    /** Facebook Login (OAuth) with the user's app id; resolves with the Pages they manage. */
+    listPages(appId: string): Promise<PageOption[]>
+    /** Turn picked Pages (and linked Instagram accounts) into accounts. */
+    addPages(pages: PageOption[], includeInstagram: boolean): Promise<Account[]>
+  }
+  contacts: {
+    /** People across every connected account, optionally filtered by name or handle. */
+    list(query: string): Promise<Contact[]>
+    /** Open (or create) the direct conversation with a contact. */
+    open(accountId: string, peerId: string): Promise<Conversation>
   }
   conversations: {
     list(): Promise<Conversation[]>
@@ -73,6 +91,11 @@ export const IPC = {
   accountsRemove: 'accounts:remove',
   accountsReconnect: 'accounts:reconnect',
   accountsAddDemo: 'accounts:addDemo',
+  accountsConnectWeb: 'accounts:connectWeb',
+  accountsListPages: 'accounts:listPages',
+  accountsAddPages: 'accounts:addPages',
+  contactsList: 'contacts:list',
+  contactsOpen: 'contacts:open',
   conversationsList: 'conversations:list',
   conversationsMarkRead: 'conversations:markRead',
   conversationsProfile: 'conversations:profile',

@@ -1,5 +1,5 @@
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
-import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
 
@@ -341,6 +341,16 @@ export class ZaloAdapter implements PlatformAdapter {
 
   async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
     return this.messagesFor(id).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async listContacts(): Promise<Peer[]> {
+    return [...this.friends.values()].map((f) => ({ id: f.userId, name: f.displayName || f.zaloName, handle: f.username ? `@${f.username}` : f.phoneNumber || undefined, avatarUrl: f.avatar || undefined }))
+  }
+
+  async openConversation(peerId: string): Promise<Conversation> {
+    if (!this.friends.has(peerId)) await this.discoverThread(peerId, 0)
+    this.threadTypes.set(peerId, 0)
+    return this.toConversation(peerId, false)
   }
 
   async getConversationStats(id: string): Promise<ConversationStats> {

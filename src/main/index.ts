@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
-import type { AddAccountInput, BridgeEvent, OutgoingAttachment, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, BridgeEvent, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { WebCookie } from './adapters/facebook-personal'
 import { IPC } from '@shared/bridge'
 import { isMutedBy } from '@shared/types'
 import { Storage } from './storage'
@@ -58,8 +59,8 @@ function createWindow(): void {
   window = new BrowserWindow({
     width: 1240,
     height: 800,
-    minWidth: 900,
-    minHeight: 560,
+    minWidth: 420,
+    minHeight: 480,
     show: false,
     title: 'Unison',
     icon: appIcon(),
@@ -191,12 +192,114 @@ async function openAttachment(conversationId: string, messageId: string, attachm
   if (error) throw new Error(error)
 }
 
+const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string; required: string[] }> = {
+  messenger: { url: 'https://www.facebook.com/login.php', domain: '.facebook.com', required: ['c_user', 'xs'] },
+  instagram: { url: 'https://www.instagram.com/accounts/login/', domain: '.instagram.com', required: ['sessionid', 'ds_user_id'] }
+}
+
+/**
+ * Let the user sign in on the platform's real login page inside a dedicated
+ * app window, then hand the session cookies to the adapter. Passwords are
+ * typed into the platform's page only; Unison never sees them.
+ */
+function captureWebSession(platform: 'messenger' | 'instagram'): Promise<WebCookie[]> {
+  const spec = WEB_LOGIN[platform]
+  const ses = session.fromPartition(`persist:login-${platform}`)
+  return new Promise<WebCookie[]>((resolve, reject) => {
+    const loginWindow = new BrowserWindow({
+      width: 480,
+      height: 720,
+      parent: window,
+      modal: false,
+      title: platform === 'messenger' ? 'Facebook' : 'Instagram',
+      autoHideMenuBar: true,
+      webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, sandbox: true }
+    })
+    let settled = false
+    const finish = (err?: Error, cookies?: WebCookie[]): void => {
+      if (settled) return
+      settled = true
+      clearInterval(timer)
+      if (!loginWindow.isDestroyed()) loginWindow.close()
+      err ? reject(err) : resolve(cookies ?? [])
+    }
+    const check = async (): Promise<void> => {
+      try {
+        const cookies = await ses.cookies.get({ domain: spec.domain.replace(/^\./, '') })
+        const names = new Set(cookies.map((c) => c.name))
+        if (spec.required.every((n) => names.has(n))) {
+          finish(undefined, cookies.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, expirationDate: c.expirationDate })))
+        }
+      } catch {
+        /* window closing */
+      }
+    }
+    const timer = setInterval(() => void check(), 1200)
+    loginWindow.on('closed', () => finish(new Error('Sign-in cancelled')))
+    // Reuse an existing session immediately when the cookies are still valid.
+    void check()
+    void loginWindow.loadURL(spec.url)
+  })
+}
+
+const OAUTH_REDIRECT = 'https://www.facebook.com/connect/login_success.html'
+const PAGE_SCOPES = ['pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'instagram_basic', 'instagram_manage_messages']
+
+/** Facebook Login popup with the user's own App ID; returns the Pages they manage with page tokens. */
+async function listPages(appId: string): Promise<PageOption[]> {
+  const token = await new Promise<string>((resolve, reject) => {
+    const authWindow = new BrowserWindow({
+      width: 560,
+      height: 720,
+      parent: window,
+      title: 'Facebook Login',
+      autoHideMenuBar: true,
+      webPreferences: { session: session.fromPartition('persist:login-messenger'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+    })
+    let settled = false
+    const done = (err?: Error, value?: string): void => {
+      if (settled) return
+      settled = true
+      if (!authWindow.isDestroyed()) authWindow.close()
+      err ? reject(err) : resolve(value ?? '')
+    }
+    const inspect = (url: string): void => {
+      if (!url.startsWith(OAUTH_REDIRECT)) return
+      const hash = new URLSearchParams(url.split('#')[1] ?? '')
+      const query = new URL(url).searchParams
+      const accessToken = hash.get('access_token')
+      const error = query.get('error_description') ?? hash.get('error_description') ?? query.get('error')
+      if (accessToken) done(undefined, accessToken)
+      else done(new Error(error ?? 'Facebook Login was cancelled'))
+    }
+    authWindow.webContents.on('will-redirect', (_e, url) => inspect(url))
+    authWindow.webContents.on('did-navigate', (_e, url) => inspect(url))
+    authWindow.webContents.on('did-navigate-in-page', (_e, url) => inspect(url))
+    authWindow.on('closed', () => done(new Error('Facebook Login was cancelled')))
+    const url = new URL('https://www.facebook.com/v21.0/dialog/oauth')
+    url.searchParams.set('client_id', appId.trim())
+    url.searchParams.set('redirect_uri', OAUTH_REDIRECT)
+    url.searchParams.set('response_type', 'token')
+    url.searchParams.set('scope', PAGE_SCOPES.join(','))
+    void authWindow.loadURL(url.toString())
+  })
+  const response = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,picture{url},instagram_business_account{id,username}&limit=100&access_token=${encodeURIComponent(token)}`)
+  const json = (await response.json()) as { data?: Array<{ id: string; name: string; access_token: string; picture?: { data: { url: string } }; instagram_business_account?: { id: string; username: string } }>; error?: { message: string } }
+  if (json.error) throw new Error(json.error.message)
+  return (json.data ?? []).map((p) => ({ id: p.id, name: p.name, accessToken: p.access_token, pictureUrl: p.picture?.data.url, instagram: p.instagram_business_account }))
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
   ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
   ipcMain.handle(IPC.accountsRemove, (_e, id: string) => manager.remove(id))
   ipcMain.handle(IPC.accountsReconnect, (_e, id: string) => manager.reconnect(id))
   ipcMain.handle(IPC.accountsAddDemo, () => manager.addDemo())
+  ipcMain.handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => manager.addWebSession(platform, await captureWebSession(platform)))
+  ipcMain.handle(IPC.accountsListPages, (_e, appId: string) => listPages(appId))
+  ipcMain.handle(IPC.accountsAddPages, (_e, pages: PageOption[], includeInstagram: boolean) => manager.addPages(pages, includeInstagram))
+  ipcMain.handle(IPC.contactsList, (_e, query: string) => manager.contacts(query))
+  ipcMain.handle(IPC.contactsOpen, (_e, accountId: string, peerId: string) => manager.openConversation(accountId, peerId))
   ipcMain.handle(IPC.conversationsList, () => manager.listConversations())
   ipcMain.handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
   ipcMain.handle(IPC.conversationsProfile, (_e, id: string) => manager.profile(id))

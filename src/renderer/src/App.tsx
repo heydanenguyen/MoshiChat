@@ -14,6 +14,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
+import { NewChatSheet } from './components/NewChatSheet'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -34,6 +35,17 @@ export default function App(): JSX.Element {
   const mesh = useStore((s) => s.settings.mesh)
   const accent = useStore((s) => s.settings.accent)
   const font = useStore((s) => s.settings.font)
+
+  const narrow = useStore((s) => s.narrow)
+  const setNarrow = useStore((s) => s.setNarrow)
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 720px)')
+    const apply = (): void => setNarrow(media.matches)
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [setNarrow])
 
   useEffect(() => {
     document.documentElement.dataset.mesh = mesh
@@ -73,7 +85,10 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const mod = isMac ? e.metaKey : e.ctrlKey
-      if (mod && e.key.toLowerCase() === 'k') {
+      if (mod && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        openSheet({ kind: 'new-chat' })
+      } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         openSheet(sheet.kind === 'command' ? { kind: 'none' } : { kind: 'command' })
       } else if (mod && e.key === ',') {
@@ -92,7 +107,7 @@ export default function App(): JSX.Element {
   return (
     <div className="shell">
       <TitleBar />
-    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
       <div className="mesh" aria-hidden>
         <span className="mesh-blob b1" />
         <span className="mesh-blob b2" />
@@ -108,6 +123,7 @@ export default function App(): JSX.Element {
       {sheet.kind === 'settings' && <SettingsSheet />}
       {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
       {sheet.kind === 'command' && <CommandPalette />}
+      {sheet.kind === 'new-chat' && <NewChatSheet />}
       {forwarding && <ForwardSheet message={forwarding} />}
       {lightbox && <Lightbox {...lightbox} />}
       {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}

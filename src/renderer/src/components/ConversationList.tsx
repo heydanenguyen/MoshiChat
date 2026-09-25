@@ -70,7 +70,7 @@ export function ConversationList(): JSX.Element {
     <section className="list-col">
       <header className="list-header drag">
         <h1 className="list-title">{title}</h1>
-        <button className="icon-btn no-drag" title={`${t('shortcutSearch')} (Ctrl K)`} onClick={() => openSheet({ kind: 'command' })}>
+        <button className="icon-btn no-drag" title={`${t('newChat')} (Ctrl N)`} onClick={() => openSheet({ kind: 'new-chat' })}>
           <SquarePen size={18} strokeWidth={2} />
         </button>
       </header>

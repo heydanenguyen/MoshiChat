@@ -1,4 +1,4 @@
-import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 
 /** Services the manager hands to every adapter. */
 export interface AdapterContext {
@@ -54,6 +54,10 @@ export interface PlatformAdapter {
   searchInConversation?(conversationId: string, query: string, limit: number): Promise<Message[]>
   /** Oldest message, total count and latest activity. */
   getConversationStats?(conversationId: string): Promise<ConversationStats>
+  /** People the account can message (friends, contacts, recent peers). */
+  listContacts?(): Promise<Peer[]>
+  /** Direct conversation with a contact, created lazily when the platform allows it. */
+  openConversation?(peerId: string): Promise<Conversation>
 }
 
 /** Stats derived from whatever messages are at hand. */
