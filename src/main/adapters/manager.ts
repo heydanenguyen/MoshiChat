@@ -8,6 +8,7 @@ import type {
   AuthPromptKind,
   BridgeEvent,
   Conversation,
+  ConversationStats,
   Message,
   PeerProfile,
   Platform,
@@ -17,7 +18,7 @@ import type {
 } from '@shared/types'
 import type { Storage, StoredAccount } from '../storage'
 import type { AdapterContext, PlatformAdapter } from './types'
-import { isShared, matchesQuery, previewOf } from './types'
+import { isShared, matchesQuery, previewOf, statsOf } from './types'
 import { DemoAdapter } from './demo'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
@@ -309,6 +310,24 @@ export class AccountManager {
       this.log(`searchIn failed for ${conversationId}:`, (err as Error).message)
     }
     return hits.sort((a, b) => b.sentAt - a.sentAt).slice(0, SEARCH_LIMIT)
+  }
+
+  async stats(conversationId: string): Promise<ConversationStats> {
+    const adapter = this.adapterFor(conversationId)
+    const local = statsOf([...(this.messages.get(conversationId)?.values() ?? [])])
+    if (!adapter.getConversationStats) return local
+    try {
+      const remote = await adapter.getConversationStats(conversationId)
+      return {
+        firstMessageAt: remote.firstMessageAt ?? local.firstMessageAt,
+        lastMessageAt: Math.max(remote.lastMessageAt ?? 0, local.lastMessageAt ?? 0) || undefined,
+        messageCount: remote.messageCount ?? local.messageCount,
+        approximate: remote.approximate ?? false
+      }
+    } catch (err) {
+      this.log(`stats failed for ${conversationId}:`, (err as Error).message)
+      return local
+    }
   }
 
   cachedAttachment(conversationId: string, messageId: string, attachmentId: string): { message: Message; attachment: Message['attachments'][number] } | undefined {

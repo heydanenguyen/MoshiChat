@@ -1,19 +1,19 @@
-/* Unison design tokens. Modeled on macOS system colors and the HIG 8pt grid. */
+/* Unison design tokens: soft pastel mesh, glass panels, playful accents. */
 
 :root {
   color-scheme: light;
 
-  --font-text: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', Inter, system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, sans-serif;
+  --font-text: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --text-xs: 11px;
   --text-sm: 12px;
-  --text-base: 13px;
+  --text-base: 13.5px;
   --text-md: 15px;
   --text-lg: 17px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -23,107 +23,141 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-bubble: 18px;
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-panel: 22px;
+  --radius-bubble: 20px;
   --radius-full: 999px;
 
   --titlebar-height: 52px;
-  --sidebar-width: 232px;
-  --list-width: 316px;
-  --details-width: 280px;
+  --sidebar-width: 236px;
+  --list-width: 330px;
+  --details-width: 300px;
+  --gutter: 10px;
 
   --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 140ms;
   --duration-base: 220ms;
-  --duration-slow: 360ms;
+  --duration-slow: 380ms;
 
-  --accent: #007aff;
-  --accent-hover: #0a84ff;
-  --accent-soft: rgba(0, 122, 255, 0.12);
+  /* brand */
+  --accent: #4f7df3;
+  --accent-hover: #3d6cf0;
+  --accent-2: #8a6bff;
+  --accent-gradient: linear-gradient(135deg, #5b8cff 0%, #8a6bff 100%);
+  --accent-soft: rgba(79, 125, 243, 0.13);
+  --accent-soft-2: rgba(138, 107, 255, 0.13);
   --on-accent: #ffffff;
-  --danger: #ff3b30;
-  --success: #34c759;
-  --warning: #ff9f0a;
+  --danger: #ff5a5f;
+  --success: #34c77b;
+  --warning: #ffb020;
 
-  --bg-window: #ffffff;
-  --bg-sidebar: rgba(243, 243, 247, 0.78);
-  --bg-sidebar-solid: #f3f3f7;
-  --bg-list: #ffffff;
-  --bg-chat: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-input: rgba(120, 120, 128, 0.1);
-  --bg-hover: rgba(0, 0, 0, 0.045);
-  --bg-active: rgba(0, 0, 0, 0.08);
-  --bg-selected: rgba(0, 0, 0, 0.06);
-  --bg-backdrop: rgba(0, 0, 0, 0.28);
+  /* mesh background */
+  --mesh-base: #f3f4fa;
+  --mesh-1: #ffd6e0;
+  --mesh-2: #d6e6ff;
+  --mesh-3: #e7dbff;
+  --mesh-4: #d3f5e5;
+  --mesh-5: #ffe8c9;
 
-  --fill-primary: rgba(120, 120, 128, 0.2);
-  --fill-secondary: rgba(120, 120, 128, 0.16);
-  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  /* glass surfaces */
+  --glass: rgba(255, 255, 255, 0.64);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-blur: 28px;
 
-  --text-primary: #1d1d1f;
-  --text-secondary: rgba(60, 60, 67, 0.62);
-  --text-tertiary: rgba(60, 60, 67, 0.32);
-  --text-quaternary: rgba(60, 60, 67, 0.18);
+  --bg-window: #f3f4fa;
+  --bg-sidebar: transparent;
+  --bg-sidebar-solid: #eef0f8;
+  --bg-list: var(--glass);
+  --bg-chat: var(--glass);
+  --bg-elevated: rgba(255, 255, 255, 0.92);
+  --bg-input: rgba(255, 255, 255, 0.72);
+  --bg-hover: rgba(27, 29, 42, 0.05);
+  --bg-active: rgba(27, 29, 42, 0.09);
+  --bg-selected: rgba(255, 255, 255, 0.9);
+  --bg-backdrop: rgba(24, 26, 45, 0.32);
+  --ring-gap: #ffffff;
 
-  --separator: rgba(60, 60, 67, 0.14);
-  --separator-strong: rgba(60, 60, 67, 0.24);
+  --fill-primary: rgba(27, 29, 42, 0.2);
+  --fill-secondary: rgba(27, 29, 42, 0.14);
+  --fill-tertiary: rgba(27, 29, 42, 0.08);
 
-  --bubble-in: #e9e9eb;
-  --bubble-in-text: #1d1d1f;
-  --bubble-out: linear-gradient(180deg, #2f9bff 0%, #0a7aff 100%);
-  --bubble-out-solid: #0a7aff;
+  --text-primary: #1b1d2a;
+  --text-secondary: rgba(27, 29, 42, 0.6);
+  --text-tertiary: rgba(27, 29, 42, 0.36);
+  --text-quaternary: rgba(27, 29, 42, 0.2);
+
+  --separator: rgba(27, 29, 42, 0.08);
+  --separator-strong: rgba(27, 29, 42, 0.16);
+
+  --bubble-in: rgba(255, 255, 255, 0.88);
+  --bubble-in-text: #1b1d2a;
+  --bubble-out: linear-gradient(135deg, #5b8cff 0%, #8a6bff 100%);
+  --bubble-out-solid: #6b7dff;
   --bubble-out-text: #ffffff;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
-  --shadow-avatar: inset 0 0 0 0.5px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 2px rgba(31, 38, 135, 0.06), 0 0 0 0.5px rgba(31, 38, 135, 0.06);
+  --shadow-md: 0 10px 30px rgba(31, 38, 135, 0.1), 0 1px 2px rgba(31, 38, 135, 0.06);
+  --shadow-lg: 0 30px 80px rgba(31, 38, 135, 0.22), 0 2px 6px rgba(31, 38, 135, 0.08);
+  --shadow-panel: 0 12px 40px rgba(31, 38, 135, 0.08);
+  --shadow-avatar: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
-  --accent-soft: rgba(10, 132, 255, 0.2);
+  --accent: #7b9cff;
+  --accent-hover: #93adff;
+  --accent-2: #a78bff;
+  --accent-gradient: linear-gradient(135deg, #6f92ff 0%, #a17dff 100%);
+  --accent-soft: rgba(123, 156, 255, 0.18);
+  --accent-soft-2: rgba(167, 139, 255, 0.18);
 
-  --bg-window: #1e1e1e;
-  --bg-sidebar: rgba(32, 32, 34, 0.68);
-  --bg-sidebar-solid: #232325;
-  --bg-list: #1f1f21;
-  --bg-chat: #1b1b1d;
-  --bg-elevated: #2a2a2c;
-  --bg-input: rgba(120, 120, 128, 0.22);
+  --mesh-base: #0f1122;
+  --mesh-1: #3a2447;
+  --mesh-2: #1e2c58;
+  --mesh-3: #2c2456;
+  --mesh-4: #173a3a;
+  --mesh-5: #3d2b22;
+
+  --glass: rgba(24, 26, 44, 0.62);
+  --glass-strong: rgba(24, 26, 44, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  --bg-window: #0f1122;
+  --bg-sidebar-solid: #14162a;
+  --bg-elevated: rgba(34, 36, 58, 0.96);
+  --bg-input: rgba(255, 255, 255, 0.07);
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-active: rgba(255, 255, 255, 0.1);
-  --bg-selected: rgba(255, 255, 255, 0.08);
-  --bg-backdrop: rgba(0, 0, 0, 0.5);
+  --bg-selected: rgba(255, 255, 255, 0.1);
+  --bg-backdrop: rgba(0, 0, 0, 0.55);
+  --ring-gap: #1a1c2e;
 
-  --fill-primary: rgba(120, 120, 128, 0.36);
-  --fill-secondary: rgba(120, 120, 128, 0.32);
-  --fill-tertiary: rgba(118, 118, 128, 0.24);
+  --fill-primary: rgba(255, 255, 255, 0.28);
+  --fill-secondary: rgba(255, 255, 255, 0.2);
+  --fill-tertiary: rgba(255, 255, 255, 0.1);
 
-  --text-primary: #f5f5f7;
-  --text-secondary: rgba(235, 235, 245, 0.62);
-  --text-tertiary: rgba(235, 235, 245, 0.32);
-  --text-quaternary: rgba(235, 235, 245, 0.18);
+  --text-primary: #f2f3fa;
+  --text-secondary: rgba(242, 243, 250, 0.62);
+  --text-tertiary: rgba(242, 243, 250, 0.36);
+  --text-quaternary: rgba(242, 243, 250, 0.2);
 
-  --separator: rgba(84, 84, 88, 0.55);
-  --separator-strong: rgba(84, 84, 88, 0.8);
+  --separator: rgba(255, 255, 255, 0.08);
+  --separator-strong: rgba(255, 255, 255, 0.16);
 
-  --bubble-in: #3a3a3c;
-  --bubble-in-text: #f5f5f7;
-  --bubble-out: linear-gradient(180deg, #2f8fff 0%, #0a6cf0 100%);
-  --bubble-out-solid: #0a6cf0;
-  --bubble-out-text: #ffffff;
+  --bubble-in: rgba(255, 255, 255, 0.09);
+  --bubble-in-text: #f2f3fa;
+  --bubble-out: linear-gradient(135deg, #5b8cff 0%, #8a6bff 100%);
+  --bubble-out-solid: #6b7dff;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.08);
-  --shadow-lg: 0 28px 72px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
-  --shadow-avatar: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-panel: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --shadow-avatar: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
 }

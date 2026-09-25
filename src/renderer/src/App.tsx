@@ -81,6 +81,13 @@ export default function App(): JSX.Element {
 
   return (
     <div className={`app ${collapsed ? 'sidebar-collapsed' : ''}`}>
+      <div className="mesh" aria-hidden>
+        <span className="mesh-blob b1" />
+        <span className="mesh-blob b2" />
+        <span className="mesh-blob b3" />
+        <span className="mesh-blob b4" />
+        <span className="mesh-blob b5" />
+      </div>
       <Sidebar />
       <ConversationList />
       {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}

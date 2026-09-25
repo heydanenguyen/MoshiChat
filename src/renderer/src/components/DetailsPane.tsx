@@ -3,7 +3,7 @@ import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, RefreshCw, 
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, TAGS, TAG_ORDER } from '@shared/types'
 import { useShowPlatformBadge, useStore, useT, type DetailsTab } from '../store'
-import { formatBytes, formatDate, formatListTime } from '../utils'
+import { formatBytes, formatCount, formatDate, formatListTime, formatSpan } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { Highlight } from './ConversationList'
@@ -56,6 +56,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const account = useStore((s) => s.accounts[conversation?.accountId ?? ''])
   const profile = useStore((s) => s.profiles[conversationId])
   const loadProfile = useStore((s) => s.loadProfile)
+  const stats = useStore((s) => s.stats[conversationId])
+  const loadStats = useStore((s) => s.loadStats)
   const storedTags = useStore((s) => s.settings.tags[conversationId])
   const tags = storedTags ?? EMPTY_TAGS
   const toggleTag = useStore((s) => s.toggleTag)
@@ -65,7 +67,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
   useEffect(() => {
     void loadProfile(conversationId)
-  }, [conversationId, loadProfile])
+    void loadStats(conversationId)
+  }, [conversationId, loadProfile, loadStats])
 
   if (!conversation) return <></>
   const name = profile?.name ?? conversation.title
@@ -107,6 +110,35 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       </div>
 
       <div className="details-section">
+        <div className="details-section-title">{t('ourStory')}</div>
+        {stats ? (
+          <div className="stat-cards">
+            <div className="stat-card peach">
+              <span className="stat-emoji">📅</span>
+              <span className="stat-label">{t('talkingSince')}</span>
+              <span className="stat-value">{stats.firstMessageAt ? formatDate(new Date(stats.firstMessageAt).toISOString().slice(0, 10), language) : t('noHistory')}</span>
+              {stats.firstMessageAt && <span className="stat-sub">{t('talkingFor')} {formatSpan(stats.firstMessageAt, Date.now(), language)}</span>}
+            </div>
+            <div className="stat-card sky">
+              <span className="stat-emoji">💬</span>
+              <span className="stat-label">{t('messagesTotal')}</span>
+              <span className="stat-value">{stats.messageCount !== undefined ? formatCount(stats.messageCount, language) : '—'}</span>
+              {stats.approximate && stats.messageCount !== undefined && <span className="stat-sub">{t('approx')}</span>}
+            </div>
+            <div className="stat-card mint">
+              <span className="stat-emoji">⚡️</span>
+              <span className="stat-label">{t('lastActive')}</span>
+              <span className="stat-value">{stats.lastMessageAt ? formatListTime(stats.lastMessageAt, language) : '—'}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="progress-row" style={{ justifyContent: 'center' }}>
+            <span className="spinner" />
+          </div>
+        )}
+      </div>
+
+      <div className="details-section">
         <div className="details-section-title">{t('tags')}</div>
         <div className="tag-chips">
           {TAG_ORDER.map((tag: TagId) => {
@@ -115,7 +147,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
               <button
                 key={tag}
                 className={`tag-chip ${active ? 'active' : ''}`}
-                style={active ? { background: TAGS[tag].color } : undefined}
+                style={{ ['--tag' as string]: TAGS[tag].color } as React.CSSProperties}
                 onClick={() => void toggleTag(conversationId, tag)}
               >
                 <span>{TAGS[tag].emoji}</span>

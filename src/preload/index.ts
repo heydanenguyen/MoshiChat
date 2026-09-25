@@ -16,7 +16,8 @@ const bridge: UnisonBridge = {
     markRead: (id) => ipcRenderer.invoke(IPC.conversationsMarkRead, id),
     profile: (id) => ipcRenderer.invoke(IPC.conversationsProfile, id),
     shared: (id, kind) => ipcRenderer.invoke(IPC.conversationsShared, id, kind),
-    searchIn: (id, query) => ipcRenderer.invoke(IPC.conversationsSearchIn, id, query)
+    searchIn: (id, query) => ipcRenderer.invoke(IPC.conversationsSearchIn, id, query),
+    stats: (id) => ipcRenderer.invoke(IPC.conversationsStats, id)
   },
   messages: {
     list: (id, beforeId) => ipcRenderer.invoke(IPC.messagesList, id, beforeId),

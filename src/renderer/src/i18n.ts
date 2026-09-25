@@ -144,7 +144,14 @@ const vi = {
   openFile: 'Mở tệp',
   viewImage: 'Xem ảnh',
   jumpToMessage: 'Đến tin nhắn',
-  refresh: 'Làm mới'
+  refresh: 'Làm mới',
+  ourStory: 'Trò chuyện',
+  talkingSince: 'Bắt đầu từ',
+  talkingFor: 'Đã trò chuyện',
+  messagesTotal: 'Tin nhắn',
+  lastActive: 'Gần nhất',
+  approx: 'ước tính',
+  noHistory: 'Chưa có lịch sử'
 }
 
 export type Dictionary = typeof vi
@@ -294,7 +301,14 @@ const en: Dictionary = {
   openFile: 'Open file',
   viewImage: 'View image',
   jumpToMessage: 'Go to message',
-  refresh: 'Refresh'
+  refresh: 'Refresh',
+  ourStory: 'Your story',
+  talkingSince: 'Talking since',
+  talkingFor: 'Talking for',
+  messagesTotal: 'Messages',
+  lastActive: 'Last active',
+  approx: 'approx.',
+  noHistory: 'No history yet'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

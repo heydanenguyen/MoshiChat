@@ -1,5 +1,5 @@
 import type { Platform } from '@shared/types'
-import { gradientFor, initials } from '../utils'
+import { abstractAvatarUrl } from './AbstractAvatar'
 import { PlatformIcon } from './PlatformIcon'
 
 interface Props {
@@ -14,21 +14,16 @@ interface Props {
   onClick?: () => void
 }
 
+/** Photo when the platform has one, otherwise a generated abstract character. */
 export function Avatar({ name, url, size = 40, platform, ring, className = '', onClick }: Props): JSX.Element {
   const badge = Math.max(14, Math.round(size * 0.4))
   return (
     <span
       className={`avatar ${className} ${onClick ? 'clickable' : ''}`}
-      style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--bg-list), 0 0 0 4px ${ring}` : undefined }}
+      style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--ring-gap), 0 0 0 4px ${ring}` : undefined }}
       onClick={onClick}
     >
-      {url ? (
-        <img className="avatar-img" src={url} alt="" draggable={false} loading="lazy" />
-      ) : (
-        <span className="avatar-initials" style={{ background: gradientFor(name), fontSize: Math.round(size * 0.38) }}>
-          {initials(name)}
-        </span>
-      )}
+      <img className="avatar-img" src={url || abstractAvatarUrl(name)} alt="" draggable={false} loading="lazy" />
       {platform && (
         <span className="avatar-badge" style={{ width: badge, height: badge }}>
           <PlatformIcon platform={platform} size={badge} />

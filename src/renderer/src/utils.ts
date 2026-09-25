@@ -44,6 +44,26 @@ export function formatDate(value: string, lang: Language): string {
   return value
 }
 
+/** "1 năm 3 tháng" / "2 years 1 month" style span between two timestamps. */
+export function formatSpan(from: number, to: number, lang: Language): string {
+  const days = Math.max(0, Math.floor((to - from) / 86_400_000))
+  const years = Math.floor(days / 365)
+  const months = Math.floor((days % 365) / 30)
+  const vi = lang === 'vi'
+  if (years > 0) {
+    const y = vi ? `${years} năm` : `${years} ${years === 1 ? 'year' : 'years'}`
+    if (!months) return y
+    return `${y} ${vi ? `${months} tháng` : `${months} ${months === 1 ? 'month' : 'months'}`}`
+  }
+  if (months > 0) return vi ? `${months} tháng` : `${months} ${months === 1 ? 'month' : 'months'}`
+  if (days > 0) return vi ? `${days} ngày` : `${days} ${days === 1 ? 'day' : 'days'}`
+  return vi ? 'hôm nay' : 'today'
+}
+
+export function formatCount(n: number, lang: Language): string {
+  return n.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
+}
+
 export function formatBytes(bytes?: number): string {
   if (!bytes) return ''
   const units = ['B', 'KB', 'MB', 'GB']

@@ -6,6 +6,7 @@ import type {
   AuthPrompt,
   BridgeEvent,
   Conversation,
+  ConversationStats,
   Message,
   OutgoingAttachment,
   PeerProfile,
@@ -58,6 +59,7 @@ interface State {
   detailsOpen: boolean
   detailsTab: DetailsTab
   profiles: Record<string, PeerProfile | null>
+  stats: Record<string, ConversationStats>
   shared: Record<string, Message[]>
   toast?: Toast
   replyTo?: Message
@@ -91,6 +93,7 @@ interface State {
   toggleSidebar(): Promise<void>
   setDetailsTab(tab: DetailsTab): void
   loadProfile(conversationId: string, force?: boolean): Promise<void>
+  loadStats(conversationId: string, force?: boolean): Promise<void>
   loadShared(conversationId: string, kind: SharedKind, force?: boolean): Promise<void>
   searchIn(conversationId: string, query: string): Promise<Message[]>
   respondAuth(requestId: string, value: string): Promise<void>
@@ -145,6 +148,7 @@ export const useStore = create<State>((set, get) => ({
   detailsOpen: false,
   detailsTab: 'info',
   profiles: {},
+  stats: {},
   shared: {},
   pendingFiles: [],
 
@@ -193,8 +197,10 @@ export const useStore = create<State>((set, get) => ({
           const list = upsertMessage(state.messages[event.message.conversationId], event.message)
           const shared = { ...state.shared }
           for (const key of Object.keys(shared)) if (key.startsWith(event.message.conversationId + '|')) delete shared[key]
-          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared })
-          else set({ shared })
+          const stats = { ...state.stats }
+          delete stats[event.message.conversationId]
+          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared, stats })
+          else set({ shared, stats })
           if (state.selectedId === event.message.conversationId && document.hasFocus() && !event.message.isOutgoing) {
             void bridge.conversations.markRead(event.message.conversationId)
           }
@@ -501,6 +507,16 @@ export const useStore = create<State>((set, get) => ({
       set({ profiles: { ...get().profiles, [conversationId]: profile ?? null } })
     } catch {
       set({ profiles: { ...get().profiles, [conversationId]: null } })
+    }
+  },
+
+  async loadStats(conversationId, force) {
+    if (!force && get().stats[conversationId]) return
+    try {
+      const stats = await window.unison.conversations.stats(conversationId)
+      set({ stats: { ...get().stats, [conversationId]: stats } })
+    } catch {
+      /* keep whatever we have */
     }
   },
 

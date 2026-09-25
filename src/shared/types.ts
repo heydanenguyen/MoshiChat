@@ -136,6 +136,15 @@ export interface PeerProfile {
 
 export type SharedKind = 'media' | 'links' | 'files'
 
+/** How long and how much two people have been talking. */
+export interface ConversationStats {
+  firstMessageAt?: number
+  lastMessageAt?: number
+  messageCount?: number
+  /** True when the count is only what is cached locally, not the platform total. */
+  approximate?: boolean
+}
+
 export type TagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
 
 export interface TagMeta {

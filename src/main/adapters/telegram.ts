@@ -2,7 +2,7 @@ import { Api, TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage, NewMessageEvent } from 'telegram/events'
 import { LogLevel } from 'telegram/extensions/Logger'
-import type { Account, Attachment, Conversation, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery } from './types'
@@ -270,6 +270,21 @@ export class TelegramAdapter implements PlatformAdapter {
     for (const item of raw) if (item instanceof Api.Message) messages.push(await this.toMessage(item, id))
     this.remember(id, messages)
     return messages
+  }
+
+  async getConversationStats(id: string): Promise<ConversationStats> {
+    const client = this.requireClient()
+    const entity = await this.entityFor(id)
+    const oldest = await client.getMessages(entity, { limit: 1, reverse: true })
+    const newest = await client.getMessages(entity, { limit: 1 })
+    const first = oldest[0]
+    const last = newest[0]
+    return {
+      firstMessageAt: first ? first.date * 1000 : undefined,
+      lastMessageAt: last ? last.date * 1000 : undefined,
+      messageCount: typeof newest.total === 'number' ? newest.total : undefined,
+      approximate: false
+    }
   }
 
   async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {

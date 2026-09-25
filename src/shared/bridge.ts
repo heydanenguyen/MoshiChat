@@ -3,6 +3,7 @@ import type {
   AddAccountInput,
   BridgeEvent,
   Conversation,
+  ConversationStats,
   Message,
   OutgoingAttachment,
   PeerProfile,
@@ -30,6 +31,8 @@ export interface UnisonBridge {
     shared(conversationId: string, kind: SharedKind): Promise<Message[]>
     /** Search inside one conversation, newest first. */
     searchIn(conversationId: string, query: string): Promise<Message[]>
+    /** Talking since / message count / last activity. */
+    stats(conversationId: string): Promise<ConversationStats>
   }
   messages: {
     list(conversationId: string, beforeId?: string): Promise<Message[]>
@@ -75,6 +78,7 @@ export const IPC = {
   conversationsProfile: 'conversations:profile',
   conversationsShared: 'conversations:shared',
   conversationsSearchIn: 'conversations:searchIn',
+  conversationsStats: 'conversations:stats',
   messagesList: 'messages:list',
   messagesSend: 'messages:send',
   messagesForward: 'messages:forward',

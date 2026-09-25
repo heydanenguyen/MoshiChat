@@ -1,4 +1,4 @@
-import type { Account, Attachment, Conversation, Message, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, isShared, matchesQuery } from './types'
@@ -474,6 +474,14 @@ export class DemoAdapter implements PlatformAdapter {
 
   async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
     return (this.messages.get(id) ?? []).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async getConversationStats(id: string): Promise<ConversationStats> {
+    const list = this.messages.get(id) ?? []
+    // Pretend the relationship is older than the seeded history so the stats read naturally.
+    const seedDays = 30 + (id.length * 37) % 400
+    const first = list.length ? Math.min(...list.map((m) => m.sentAt)) - seedDays * 86_400_000 : undefined
+    return { firstMessageAt: first, lastMessageAt: list.at(-1)?.sentAt, messageCount: list.length + seedDays * 3, approximate: false }
   }
 
   async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {

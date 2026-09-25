@@ -1,4 +1,4 @@
-import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 
 /** Services the manager hands to every adapter. */
 export interface AdapterContext {
@@ -52,6 +52,20 @@ export interface PlatformAdapter {
   listShared?(conversationId: string, kind: SharedKind, limit: number): Promise<Message[]>
   /** Full-text search restricted to one conversation, newest first. */
   searchInConversation?(conversationId: string, query: string, limit: number): Promise<Message[]>
+  /** Oldest message, total count and latest activity. */
+  getConversationStats?(conversationId: string): Promise<ConversationStats>
+}
+
+/** Stats derived from whatever messages are at hand. */
+export const statsOf = (messages: Message[]): ConversationStats => {
+  if (!messages.length) return { messageCount: 0, approximate: true }
+  let first = Infinity
+  let last = 0
+  for (const m of messages) {
+    if (m.sentAt < first) first = m.sentAt
+    if (m.sentAt > last) last = m.sentAt
+  }
+  return { firstMessageAt: first, lastMessageAt: last, messageCount: messages.length, approximate: true }
 }
 
 export const conversationId = (accountId: string, externalId: string | number): string =>

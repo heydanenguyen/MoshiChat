@@ -35,6 +35,10 @@ Token, session và cookie được mã hoá bằng `safeStorage` của Electron 
 
 Chromium chỉ ghi âm ra WebM/Opus, còn Telegram và WhatsApp muốn Ogg/Opus để hiển thị dạng voice note. `src/main/media/webm-to-ogg.ts` đọc EBML, lấy nguyên các gói Opus và đóng lại thành Ogg (kèm CRC, granule position), nên không cần ffmpeg hay WASM. Có test riêng cho bộ remux này.
 
+## Thiết kế
+
+Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (backdrop blur) bo góc 22px nổi trên nền, font Plus Jakarta Sans đóng gói sẵn (8 subset, có tiếng Việt), bubble gửi đi gradient xanh-tím, pill nhãn pastel kiểu nhãn 3D mềm, thẻ thống kê màu kem/xanh/bạc hà. Liên hệ chưa có ảnh nhận **avatar trừu tượng** sinh bằng SVG (hình khối màu + khuôn mặt nhỏ trên đĩa đen), cố định theo tên nên mỗi người luôn cùng một nhân vật. Token ở , có bộ dark riêng.
+
 ## Tính năng
 
 - Hộp thư hợp nhất, lọc theo nền tảng hoặc tài khoản, badge chưa đọc, ghim, tắt thông báo
@@ -42,7 +46,7 @@ Chromium chỉ ghi âm ra WebM/Opus, còn Telegram và WhatsApp muốn Ogg/Opus 
 - Reply (quote), reaction nhanh (❤️ 👍 😂 😮 😢 🙏), chuyển tiếp, ghi âm voice, đính kèm qua nút kẹp giấy, kéo-thả hoặc dán ảnh
 - Trình phát voice ngay trong bong bóng, tải media theo yêu cầu
 - Tìm hội thoại và **tìm trong nội dung tin nhắn** (cache cục bộ + tìm kiếm phía máy chủ Telegram), nhảy tới tin và highlight
-- Pane chi tiết dạng tab cho từng người: thông tin (ảnh đại diện, bio, SĐT, sinh nhật, giới tính khi nền tảng cung cấp), tìm trong hội thoại, ảnh & video, liên kết, tài liệu; lightbox xem ảnh
+- Pane chi tiết dạng tab cho từng người: thông tin (ảnh đại diện, bio, SĐT, sinh nhật, giới tính khi nền tảng cung cấp), thẻ "Trò chuyện" với ngày bắt đầu, thời gian đã trò chuyện, tổng số tin (Telegram lấy số thật từ máy chủ) và lần hoạt động gần nhất, tìm trong hội thoại, ảnh & video, liên kết, tài liệu; lightbox xem ảnh
 - Gắn nhãn màu cho từng liên hệ (Công việc, Bạn thân, Người yêu, Gia đình, VIP, Vui vẻ): vòng màu quanh avatar, lọc theo nhãn ở thanh bên, chuột phải vào hội thoại để gắn nhanh
 - Emoji picker (8 nhóm, tìm kiếm, gần đây), thanh bên thu gọn thành rail 64px, icon nền tảng chỉ hiện khi xem gộp nhiều nền tảng
 - ⌘K command palette, thông báo hệ thống, dark/light/system, Tiếng Việt/English

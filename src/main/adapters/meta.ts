@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises'
-import type { Account, Attachment, Conversation, Message, Peer, Platform, SendOptions } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Platform, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf } from './types'
 
@@ -39,6 +39,7 @@ interface GraphConversation {
   id: string
   updated_time: string
   unread_count?: number
+  message_count?: number
   participants: { data: GraphParticipant[] }
   messages?: { data: GraphMessage[] }
 }
@@ -64,6 +65,8 @@ export class MetaAdapter implements PlatformAdapter {
   private updatedAt = new Map<string, string>()
   private timer?: NodeJS.Timeout
   private polling = false
+  private avatars = new Map<string, string | undefined>()
+  private counts = new Map<string, number>()
 
   constructor(
     private readonly platform: Extract<Platform, 'messenger' | 'instagram'>,
@@ -119,12 +122,61 @@ export class MetaAdapter implements PlatformAdapter {
   async listConversations(): Promise<Conversation[]> {
     const page = await this.get<Paged<GraphConversation>>(`/${this.secret.pageId}/conversations`, {
       platform: this.platform,
-      fields: `id,updated_time,unread_count,participants,messages.limit(1){${MESSAGE_FIELDS}}`,
+      fields: `id,updated_time,unread_count,message_count,participants,messages.limit(1){${MESSAGE_FIELDS}}`,
       limit: '50'
     })
     const list = page.data.map((raw) => this.toConversation(raw))
     for (const conversation of list) this.conversations.set(conversation.id, conversation)
+    void this.hydrateAvatars(list)
     return list
+  }
+
+  /** Messenger exposes profile_pic for PSIDs, Instagram for IGSIDs; fetched lazily and cached. */
+  private async hydrateAvatars(conversations: Conversation[]): Promise<void> {
+    for (const conversation of conversations.slice(0, 40)) {
+      const recipient = this.recipients.get(conversation.id)
+      if (!recipient || this.avatars.has(recipient)) continue
+      this.avatars.set(recipient, undefined)
+      try {
+        const user = await this.get<{ profile_pic?: string; name?: string }>(`/${recipient}`, { fields: 'name,profile_pic' })
+        if (user.profile_pic) {
+          this.avatars.set(recipient, user.profile_pic)
+          const current = this.conversations.get(conversation.id) ?? conversation
+          current.avatarUrl = user.profile_pic
+          this.ctx.emit({ type: 'conversation:upserted', conversation: { ...current } })
+        }
+      } catch {
+        /* profile_pic needs the user to have messaged the page; ignore */
+      }
+      await new Promise((r) => setTimeout(r, 120))
+    }
+  }
+
+  async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
+    const conversation = this.conversations.get(id)
+    const recipient = this.recipients.get(id)
+    if (!conversation || !recipient) return undefined
+    let info: { name?: string; username?: string; profile_pic?: string; follower_count?: number; is_verified_user?: boolean } = {}
+    try {
+      info = await this.get(`/${recipient}`, { fields: this.platform === 'instagram' ? 'name,username,profile_pic,follower_count,is_verified_user' : 'name,profile_pic' })
+    } catch {
+      /* limited permissions */
+    }
+    const extra: PeerProfile['extra'] = []
+    if (info.follower_count !== undefined) extra.push({ label: 'Followers', value: info.follower_count.toLocaleString() })
+    if (info.is_verified_user) extra.push({ label: 'Verified', value: '✓' })
+    return {
+      id: recipient,
+      name: info.name ?? conversation.title,
+      handle: info.username ? `@${info.username}` : conversation.participants.find((p) => !p.isMe)?.handle,
+      avatarUrl: info.profile_pic ?? conversation.avatarUrl,
+      extra
+    }
+  }
+
+  async getConversationStats(id: string): Promise<ConversationStats> {
+    const list = [...(this.conversations.values())].find((c) => c.id === id)
+    return { messageCount: this.counts.get(id), lastMessageAt: list?.updatedAt, approximate: this.counts.get(id) === undefined }
   }
 
   async fetchMessages(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
@@ -257,6 +309,7 @@ export class MetaAdapter implements PlatformAdapter {
     }))
     const other = participants.find((p) => !p.isMe)
     if (other) this.recipients.set(id, other.id)
+    if (raw.message_count !== undefined) this.counts.set(id, raw.message_count)
     const last = raw.messages?.data[0]
     const lastMessage = last ? this.toMessage(last, id) : undefined
     this.updatedAt.set(id, raw.updated_time)
@@ -265,6 +318,7 @@ export class MetaAdapter implements PlatformAdapter {
       accountId: this.account.id,
       platform: this.platform,
       title: other?.name ?? 'Conversation',
+      avatarUrl: other ? this.avatars.get(other.id) : undefined,
       isGroup: participants.filter((p) => !p.isMe).length > 1,
       participants,
       unreadCount: raw.unread_count ?? 0,

@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/baileys'
-import type { Account, Attachment, Conversation, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, isShared, matchesQuery, previewOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
 
 export interface WhatsAppSecret {
   /** Folder name (under the adapter data dir) that holds the signal keys. */
@@ -282,6 +282,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
     return this.messagesFor(id).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async getConversationStats(id: string): Promise<ConversationStats> {
+    return statsOf(this.messagesFor(id))
   }
 
   async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
