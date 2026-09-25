@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { PLATFORMS } from '@shared/types'
-import { useStore, useT } from '../store'
+import { useShowPlatformBadge, useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 
 export function CommandPalette(): JSX.Element {
@@ -9,6 +9,7 @@ export function CommandPalette(): JSX.Element {
   const conversations = useStore((s) => s.conversations)
   const select = useStore((s) => s.select)
   const closeSheet = useStore((s) => s.closeSheet)
+  const showBadge = useShowPlatformBadge()
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const ref = useRef<HTMLInputElement>(null)
@@ -53,7 +54,7 @@ export function CommandPalette(): JSX.Element {
               onMouseEnter={() => setIndex(i)}
               onClick={() => select(c.id)}
             >
-              <Avatar name={c.title} url={c.avatarUrl} size={28} platform={c.platform} />
+              <Avatar name={c.title} url={c.avatarUrl} size={28} platform={showBadge ? c.platform : undefined} />
               <span className="command-item-text">
                 <span className="command-item-title">{c.title}</span>
                 <span className="command-item-sub">

@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/baileys'
-import type { Account, Attachment, Conversation, Message, Reaction, SendOptions } from '@shared/types'
+import type { Account, Attachment, Conversation, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, previewOf } from './types'
 
 export interface WhatsAppSecret {
   /** Folder name (under the adapter data dir) that holds the signal keys. */
@@ -238,6 +238,57 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
   }
 
+  async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
+    const sock = this.requireSock()
+    const jid = externalIdOf(id)
+    const isGroup = jid.endsWith('@g.us')
+    let avatarUrl: string | undefined
+    try {
+      avatarUrl = await sock.profilePictureUrl(jid, 'image', 6000)
+    } catch {
+      /* private or none */
+    }
+    let bio: string | undefined
+    if (!isGroup) {
+      try {
+        const status = await sock.fetchStatus(jid)
+        const first = status?.[0] as { status?: { status?: string | null } } | undefined
+        bio = first?.status?.status ?? undefined
+      } catch {
+        /* status hidden */
+      }
+    }
+    const extra: PeerProfile['extra'] = []
+    if (isGroup) {
+      try {
+        const meta = await sock.groupMetadata(jid)
+        extra.push({ label: 'Members', value: String(meta.participants.length) })
+        if (meta.desc) bio = meta.desc
+        this.groupNames.set(jid, meta.subject)
+      } catch {
+        /* not a member any more */
+      }
+    }
+    return {
+      id: jid,
+      name: this.chats.get(jid)?.name || this.groupNames.get(jid) || this.nameOf(jid),
+      handle: isGroup ? undefined : `+${jid.split('@')[0]}`,
+      avatarUrl,
+      bio,
+      phone: isGroup ? undefined : `+${jid.split('@')[0]}`,
+      extra
+    }
+  }
+
+  async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
+    return this.messagesFor(id).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    return this.messagesFor(id).filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
   async react(id: string, messageId: string, emoji: string): Promise<void> {
     const jid = externalIdOf(id)
     const raw = this.rawMessage(jid, messageId)
@@ -460,6 +511,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       conversationId: id,
       senderId: senderJid,
       senderName,
+      senderAvatarUrl: isOutgoing ? this.account.avatarUrl : this.avatars.get(senderJid),
       text,
       attachments,
       reactions: this.knownReactions(id, raw.key.id ?? ''),

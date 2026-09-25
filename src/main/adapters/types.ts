@@ -1,4 +1,4 @@
-import type { Account, AuthPromptKind, BridgeEvent, Conversation, Message, SendOptions } from '@shared/types'
+import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 
 /** Services the manager hands to every adapter. */
 export interface AdapterContext {
@@ -46,6 +46,12 @@ export interface PlatformAdapter {
   searchMessages?(query: string, limit: number): Promise<Message[]>
   /** Fetch the full media for an attachment as a data URL. */
   downloadAttachment?(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
+  /** Richer profile of the peer (bio, phone, birthday...). */
+  getPeerProfile?(conversationId: string): Promise<PeerProfile | undefined>
+  /** Messages with photos/videos, links or files in one conversation, newest first. */
+  listShared?(conversationId: string, kind: SharedKind, limit: number): Promise<Message[]>
+  /** Full-text search restricted to one conversation, newest first. */
+  searchInConversation?(conversationId: string, query: string, limit: number): Promise<Message[]>
 }
 
 export const conversationId = (accountId: string, externalId: string | number): string =>
@@ -111,6 +117,23 @@ export const previewOf = (message: Message): Conversation['lastMessage'] => ({
   isOutgoing: message.isOutgoing,
   sentAt: message.sentAt
 })
+
+const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi
+
+/** URLs mentioned in the text plus link attachments. */
+export const linksOf = (message: Message): string[] => {
+  const found = new Set<string>()
+  for (const a of message.attachments) if (a.kind === 'link' && a.url) found.add(a.url)
+  for (const m of message.text.matchAll(URL_RE)) found.add(m[0])
+  return [...found]
+}
+
+/** Does the message belong in the given shared-content tab? */
+export const isShared = (message: Message, kind: SharedKind): boolean => {
+  if (kind === 'links') return linksOf(message).length > 0
+  const kinds: Attachment['kind'][] = kind === 'media' ? ['image', 'video'] : ['file', 'audio']
+  return message.attachments.some((a) => kinds.includes(a.kind))
+}
 
 /** Case-insensitive substring match over text and attachment names. */
 export const matchesQuery = (message: Message, needle: string): boolean =>

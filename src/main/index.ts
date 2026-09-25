@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from 'electron'
 import { join, basename } from 'path'
-import { readFile, stat, writeFile } from 'fs/promises'
-import type { AddAccountInput, BridgeEvent, OutgoingAttachment, SendOptions, Settings } from '@shared/types'
+import { mkdir, readFile, stat, writeFile } from 'fs/promises'
+import type { AddAccountInput, BridgeEvent, OutgoingAttachment, SendOptions, Settings, SharedKind } from '@shared/types'
 import { IPC } from '@shared/bridge'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
@@ -172,6 +172,27 @@ async function saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<Ou
   }
 }
 
+/** Open an attachment with the default app: remote URLs go to the browser, everything else is fetched to a temp file. */
+async function openAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<void> {
+  const cached = manager.cachedAttachment(conversationId, messageId, attachmentId)
+  let url = cached?.attachment.url
+  if (!url || url.startsWith('data:') === false && !/^https?:/.test(url)) url = await manager.loadAttachment(conversationId, messageId, attachmentId)
+  if (!url) throw new Error('Attachment is not available')
+  if (/^https?:/.test(url)) {
+    await shell.openExternal(url)
+    return
+  }
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(url)
+  if (!match) throw new Error('Unsupported attachment')
+  const name = cached?.attachment.name ?? `attachment-${attachmentId}`
+  const ext = name.includes('.') ? '' : '.' + (match[1].split('/')[1] ?? 'bin').replace(/[^a-z0-9]/gi, '')
+  const path = join(app.getPath('temp'), 'unison-open', `${Date.now()}-${name.replace(/[\\/:*?"<>|]/g, '_')}${ext}`)
+  await mkdir(join(app.getPath('temp'), 'unison-open'), { recursive: true })
+  await writeFile(path, Buffer.from(match[2], 'base64'))
+  const error = await shell.openPath(path)
+  if (error) throw new Error(error)
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
   ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
@@ -180,6 +201,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC.accountsAddDemo, () => manager.addDemo())
   ipcMain.handle(IPC.conversationsList, () => manager.listConversations())
   ipcMain.handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
+  ipcMain.handle(IPC.conversationsProfile, (_e, id: string) => manager.profile(id))
+  ipcMain.handle(IPC.conversationsShared, (_e, id: string, kind: SharedKind) => manager.shared(id, kind))
+  ipcMain.handle(IPC.conversationsSearchIn, (_e, id: string, query: string) => manager.searchIn(id, query))
+  ipcMain.handle(IPC.messagesOpenAttachment, (_e, id: string, messageId: string, attachmentId: string) => openAttachment(id, messageId, attachmentId))
   ipcMain.handle(IPC.messagesList, (_e, id: string, beforeId?: string) => manager.fetchMessages(id, beforeId))
   ipcMain.handle(IPC.messagesSend, (_e, id: string, text: string, options?: SendOptions) => manager.sendMessage(id, text, options))
   ipcMain.handle(IPC.messagesForward, (_e, fromId: string, messageId: string, toId: string) => manager.forward(fromId, messageId, toId))

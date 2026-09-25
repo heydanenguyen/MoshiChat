@@ -2,7 +2,7 @@ import { Api, TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage, NewMessageEvent } from 'telegram/events'
 import { LogLevel } from 'telegram/extensions/Logger'
-import type { Account, Attachment, Conversation, Message, Reaction, SendOptions } from '@shared/types'
+import type { Account, Attachment, Conversation, Message, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery } from './types'
@@ -26,6 +26,7 @@ export class TelegramAdapter implements PlatformAdapter {
   private readOutbox = new Map<string, number>()
   private recent = new Map<string, Message[]>()
   private senderNames = new Map<string, string>()
+  private senderAvatars = new Map<string, string | undefined>()
   private meId = ''
 
   constructor(
@@ -227,6 +228,60 @@ export class TelegramAdapter implements PlatformAdapter {
     return `data:${mime};base64,${buffer.toString('base64')}`
   }
 
+  async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
+    const client = this.requireClient()
+    const entity = await this.entityFor(id)
+    if (!(entity instanceof Api.User)) {
+      const title = entity.title
+      const avatarUrl = await this.profilePhoto(entity, true)
+      return { id: externalIdOf(id), name: title, avatarUrl, extra: [] }
+    }
+    const full = await client.invoke(new Api.users.GetFullUser({ id: entity }))
+    const info = full.fullUser
+    const user = full.users.find((u): u is Api.User => u instanceof Api.User) ?? entity
+    let birthday: string | undefined
+    if (info.birthday instanceof Api.Birthday) {
+      const mm = String(info.birthday.month).padStart(2, '0')
+      const dd = String(info.birthday.day).padStart(2, '0')
+      birthday = info.birthday.year ? `${info.birthday.year}-${mm}-${dd}` : `--${mm}-${dd}`
+    }
+    return {
+      id: user.id.toString(),
+      name: fullName(user),
+      handle: user.username ? `@${user.username}` : undefined,
+      avatarUrl: (await this.profilePhoto(user, true)) ?? undefined,
+      bio: info.about ?? undefined,
+      phone: user.phone ? `+${user.phone}` : undefined,
+      birthday,
+      extra: [
+        ...(user.premium ? [{ label: 'Telegram', value: 'Premium' }] : []),
+        ...(info.commonChatsCount ? [{ label: 'Common groups', value: String(info.commonChatsCount) }] : [])
+      ]
+    }
+  }
+
+  async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
+    const client = this.requireClient()
+    const entity = await this.entityFor(id)
+    const filter =
+      kind === 'media' ? new Api.InputMessagesFilterPhotoVideo() : kind === 'links' ? new Api.InputMessagesFilterUrl() : new Api.InputMessagesFilterDocument()
+    const raw = await client.getMessages(entity, { limit, filter })
+    const messages: Message[] = []
+    for (const item of raw) if (item instanceof Api.Message) messages.push(await this.toMessage(item, id))
+    this.remember(id, messages)
+    return messages
+  }
+
+  async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
+    const client = this.requireClient()
+    const entity = await this.entityFor(id)
+    const raw = await client.getMessages(entity, { limit, search: query })
+    const messages: Message[] = []
+    for (const item of raw) if (item instanceof Api.Message) messages.push(await this.toMessage(item, id))
+    this.remember(id, messages)
+    return messages
+  }
+
   async react(id: string, messageId: string, emoji: string): Promise<void> {
     const client = this.requireClient()
     const entity = await this.entityFor(id)
@@ -318,6 +373,7 @@ export class TelegramAdapter implements PlatformAdapter {
       conversationId: id,
       senderId,
       senderName,
+      senderAvatarUrl: raw.out ? this.account.avatarUrl : this.senderAvatars.get(senderId),
       text: raw.message ?? '',
       attachments,
       reactions: reactionsOf(raw),
@@ -340,7 +396,13 @@ export class TelegramAdapter implements PlatformAdapter {
     let name = ''
     try {
       const sender = (await raw.getSender()) as Entity | undefined
-      if (sender) name = sender instanceof Api.User ? fullName(sender) : sender.title
+      if (sender) {
+        name = sender instanceof Api.User ? fullName(sender) : sender.title
+        if (!this.senderAvatars.has(senderId) && this.senderAvatars.size < 200) {
+          this.senderAvatars.set(senderId, undefined)
+          void this.profilePhoto(sender).then((url) => url && this.senderAvatars.set(senderId, url))
+        }
+      }
     } catch {
       /* sender not in cache */
     }
@@ -396,9 +458,9 @@ export class TelegramAdapter implements PlatformAdapter {
     }
   }
 
-  private async profilePhoto(entity: Entity): Promise<string | undefined> {
+  private async profilePhoto(entity: Entity, big = false): Promise<string | undefined> {
     try {
-      const buffer = (await this.requireClient().downloadProfilePhoto(entity, { isBig: false })) as Buffer | undefined
+      const buffer = (await this.requireClient().downloadProfilePhoto(entity, { isBig: big })) as Buffer | undefined
       return buffer?.length ? `data:image/jpeg;base64,${buffer.toString('base64')}` : undefined
     } catch {
       return undefined

@@ -9,13 +9,15 @@ import type {
   BridgeEvent,
   Conversation,
   Message,
+  PeerProfile,
   Platform,
   SearchHit,
-  SendOptions
+  SendOptions,
+  SharedKind
 } from '@shared/types'
 import type { Storage, StoredAccount } from '../storage'
 import type { AdapterContext, PlatformAdapter } from './types'
-import { matchesQuery, previewOf } from './types'
+import { isShared, matchesQuery, previewOf } from './types'
 import { DemoAdapter } from './demo'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
@@ -245,6 +247,74 @@ export class AccountManager {
     const attachment = cached?.attachments.find((a) => a.id === attachmentId)
     if (url && attachment) attachment.url = url
     return url
+  }
+
+  async profile(conversationId: string): Promise<PeerProfile | undefined> {
+    const adapter = this.adapterFor(conversationId)
+    const conversation = this.conversations.get(conversationId)
+    let profile: PeerProfile | undefined
+    try {
+      profile = await adapter.getPeerProfile?.(conversationId)
+    } catch (err) {
+      this.log(`profile failed for ${conversationId}:`, (err as Error).message)
+    }
+    if (profile) return profile
+    if (!conversation) return undefined
+    const peer = conversation.participants.find((p) => !p.isMe)
+    return {
+      id: peer?.id ?? conversationId,
+      name: conversation.title,
+      handle: peer?.handle,
+      avatarUrl: conversation.avatarUrl ?? peer?.avatarUrl
+    }
+  }
+
+  /** Shared content: the adapter's own listing when it has one, otherwise whatever is cached. */
+  async shared(conversationId: string, kind: SharedKind): Promise<Message[]> {
+    const adapter = this.adapterFor(conversationId)
+    if (adapter.listShared) {
+      try {
+        const messages = await adapter.listShared(conversationId, kind, 60)
+        this.cache(messages)
+        return messages.sort((a, b) => b.sentAt - a.sentAt)
+      } catch (err) {
+        this.log(`listShared failed for ${conversationId}:`, (err as Error).message)
+      }
+    }
+    if (!this.messages.has(conversationId)) await this.fetchMessages(conversationId).catch(() => undefined)
+    return [...(this.messages.get(conversationId)?.values() ?? [])].filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt)
+  }
+
+  async searchIn(conversationId: string, query: string): Promise<Message[]> {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return []
+    const adapter = this.adapterFor(conversationId)
+    const seen = new Set<string>()
+    const hits: Message[] = []
+    const add = (m: Message): void => {
+      if (m.conversationId !== conversationId || seen.has(m.id)) return
+      seen.add(m.id)
+      hits.push(m)
+    }
+    for (const m of this.messages.get(conversationId)?.values() ?? []) if (matchesQuery(m, needle)) add(m)
+    try {
+      if (adapter.searchInConversation) {
+        const remote = await adapter.searchInConversation(conversationId, query.trim(), SEARCH_LIMIT)
+        this.cache(remote)
+        remote.forEach(add)
+      } else if (adapter.searchMessages) {
+        ;(await adapter.searchMessages(query.trim(), SEARCH_LIMIT)).forEach(add)
+      }
+    } catch (err) {
+      this.log(`searchIn failed for ${conversationId}:`, (err as Error).message)
+    }
+    return hits.sort((a, b) => b.sentAt - a.sentAt).slice(0, SEARCH_LIMIT)
+  }
+
+  cachedAttachment(conversationId: string, messageId: string, attachmentId: string): { message: Message; attachment: Message['attachments'][number] } | undefined {
+    const message = this.messages.get(conversationId)?.get(messageId)
+    const attachment = message?.attachments.find((a) => a.id === attachmentId)
+    return message && attachment ? { message, attachment } : undefined
   }
 
   async markRead(conversationId: string): Promise<void> {

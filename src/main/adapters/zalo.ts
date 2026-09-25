@@ -1,7 +1,7 @@
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
-import type { Account, Attachment, Conversation, Message, SendOptions } from '@shared/types'
+import type { Account, Attachment, Conversation, Message, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, previewOf } from './types'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -35,6 +35,7 @@ export class ZaloAdapter implements PlatformAdapter {
   private friends = new Map<string, User>()
   private groups = new Map<string, GroupInfo>()
   private names = new Map<string, string>()
+  private avatars = new Map<string, string>()
   private raw = new Map<string, TMessage[]>()
   private converted = new Map<string, Message[]>()
   private threadTypes = new Map<string, 0 | 1>()
@@ -130,6 +131,7 @@ export class ZaloAdapter implements PlatformAdapter {
     for (const friend of friends) {
       this.friends.set(friend.userId, friend)
       this.names.set(friend.userId, friend.displayName || friend.zaloName)
+      if (friend.avatar) this.avatars.set(friend.userId, friend.avatar)
       this.threadTypes.set(friend.userId, 0)
     }
     const groupIds = Object.keys(groupList.gridVerMap)
@@ -139,6 +141,10 @@ export class ZaloAdapter implements PlatformAdapter {
         this.groups.set(groupId, group)
         this.names.set(groupId, group.name)
         this.threadTypes.set(groupId, 1)
+        for (const member of group.currentMems ?? []) {
+          if (member.dName) this.names.set(member.id, member.dName)
+          if (member.avatar) this.avatars.set(member.id, member.avatar)
+        }
       }
     }
     // Pull recent history so previews and unread state are populated.
@@ -174,7 +180,7 @@ export class ZaloAdapter implements PlatformAdapter {
       participants: [
         { id: this.meId, name: this.account.displayName, isMe: true },
         ...(isGroup
-          ? (group?.memberIds ?? []).filter((m) => m !== this.meId).slice(0, 50).map((m) => ({ id: m, name: this.names.get(m) ?? m }))
+          ? (group?.memberIds ?? []).filter((m) => m !== this.meId).slice(0, 50).map((m) => ({ id: m, name: this.names.get(m) ?? m, avatarUrl: this.avatars.get(m) }))
           : [{ id: threadId, name: friend?.displayName ?? '', handle: friend?.username ? `@${friend.username}` : undefined, avatarUrl: friend?.avatar }])
       ],
       unreadCount: this.unread.get(threadId) ?? 0,
@@ -298,6 +304,48 @@ export class ZaloAdapter implements PlatformAdapter {
       for (const message of this.messagesFor(id)) if (matchesQuery(message, needle)) hits.push(message)
     }
     return hits.sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
+    const threadId = externalIdOf(id)
+    const group = this.groups.get(threadId)
+    if (group) {
+      return {
+        id: threadId,
+        name: group.name,
+        avatarUrl: group.fullAvt || group.avt || undefined,
+        bio: group.desc || undefined,
+        extra: [{ label: 'Members', value: String(group.totalMember ?? group.memberIds.length) }]
+      }
+    }
+    let user = this.friends.get(threadId)
+    if (!user) {
+      const info = await this.requireApi().getUserInfo(threadId)
+      user = info.changed_profiles[threadId]
+      if (user) this.friends.set(threadId, user)
+    }
+    if (!user) return undefined
+    const birthday = user.sdob && /^\d{2}\/\d{2}\/\d{4}$/.test(user.sdob) ? user.sdob.split('/').reverse().join('-') : user.sdob || undefined
+    return {
+      id: threadId,
+      name: user.displayName || user.zaloName,
+      handle: user.username ? `@${user.username}` : undefined,
+      avatarUrl: user.avatar || undefined,
+      bio: user.status || undefined,
+      phone: user.phoneNumber || undefined,
+      birthday,
+      gender: user.gender === 0 ? 'male' : user.gender === 1 ? 'female' : undefined,
+      extra: user.zaloName && user.zaloName !== user.displayName ? [{ label: 'Zalo name', value: user.zaloName }] : []
+    }
+  }
+
+  async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
+    return this.messagesFor(id).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    return this.messagesFor(id).filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
   }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {
@@ -430,6 +478,7 @@ export class ZaloAdapter implements PlatformAdapter {
       conversationId: id,
       senderId,
       senderName: outgoing ? this.account.displayName : raw.dName || this.names.get(raw.uidFrom) || 'Zalo',
+      senderAvatarUrl: outgoing ? this.account.avatarUrl : this.avatars.get(raw.uidFrom),
       text: textOf(raw),
       attachments: attachmentsOf(raw),
       reactions: [],

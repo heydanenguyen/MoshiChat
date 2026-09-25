@@ -119,6 +119,43 @@ export interface SearchHit {
   conversation: Conversation
 }
 
+/** Everything a platform is willing to tell us about the person on the other side. */
+export interface PeerProfile {
+  id: string
+  name: string
+  handle?: string
+  avatarUrl?: string
+  bio?: string
+  phone?: string
+  /** ISO date (YYYY-MM-DD) or partial (--MM-DD) when the year is hidden. */
+  birthday?: string
+  gender?: string
+  /** Extra platform-specific facts, already localised by the adapter. */
+  extra?: Array<{ label: string; value: string }>
+}
+
+export type SharedKind = 'media' | 'links' | 'files'
+
+export type TagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
+
+export interface TagMeta {
+  id: TagId
+  emoji: string
+  color: string
+  name: { vi: string; en: string }
+}
+
+export const TAGS: Record<TagId, TagMeta> = {
+  work: { id: 'work', emoji: '💼', color: '#0A84FF', name: { vi: 'Công việc', en: 'Work' } },
+  friend: { id: 'friend', emoji: '🤝', color: '#FF9F0A', name: { vi: 'Bạn thân', en: 'Best friend' } },
+  love: { id: 'love', emoji: '❤️', color: '#FF375F', name: { vi: 'Người yêu', en: 'Love' } },
+  family: { id: 'family', emoji: '🏡', color: '#30D158', name: { vi: 'Gia đình', en: 'Family' } },
+  vip: { id: 'vip', emoji: '⭐️', color: '#FFD60A', name: { vi: 'VIP', en: 'VIP' } },
+  fun: { id: 'fun', emoji: '🎉', color: '#BF5AF2', name: { vi: 'Vui vẻ', en: 'Fun' } }
+}
+
+export const TAG_ORDER: TagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
+
 export interface TypingEvent {
   conversationId: string
   peerName: string
@@ -155,13 +192,18 @@ export interface Settings {
   language: Language
   notifications: boolean
   sendOnEnter: boolean
+  /** Conversation id -> tags picked by the user. */
+  tags: Record<string, TagId[]>
+  sidebarCollapsed: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   language: 'vi',
   notifications: true,
-  sendOnEnter: true
+  sendOnEnter: true,
+  tags: {},
+  sidebarCollapsed: false
 }
 
 /** Events pushed from main to the renderer. */

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, File, Mic, Paperclip, Reply, Trash2, X } from 'lucide-react'
+import { ArrowUp, File, Mic, Paperclip, Reply, Smile, Trash2, X } from 'lucide-react'
 import { useStore, useT } from '../store'
 import { formatBytes } from '../utils'
+import { EmojiPicker } from './EmojiPicker'
 
 interface Props {
   disabled?: boolean
@@ -31,15 +32,19 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
   const [text, setText] = useState('')
   const [recording, setRecording] = useState<Recording | undefined>()
   const [elapsed, setElapsed] = useState(0)
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  const focusInput = (): void => ref.current?.focus({ preventScroll: true })
 
   useEffect(() => {
     setText('')
-    ref.current?.focus()
+    setEmojiOpen(false)
+    focusInput()
   }, [selectedId])
 
   useEffect(() => {
-    if (replyTo) ref.current?.focus()
+    if (replyTo) focusInput()
   }, [replyTo])
 
   useEffect(() => {
@@ -59,7 +64,7 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
     if ((!text.trim() && !pendingFiles.length) || disabled) return
     void send(text)
     setText('')
-    ref.current?.focus()
+    focusInput()
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -87,7 +92,20 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
   const pick = async (): Promise<void> => {
     const files = await window.unison.app.pickFiles()
     if (files.length) addFiles(files)
-    ref.current?.focus()
+    focusInput()
+  }
+
+  const insertEmoji = (emoji: string): void => {
+    const el = ref.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    const next = text.slice(0, start) + emoji + text.slice(end)
+    setText(next)
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus({ preventScroll: true })
+      el.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
   }
 
   const startRecording = async (): Promise<void> => {
@@ -198,14 +216,22 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
             onKeyDown={onKeyDown}
             onPaste={onPaste}
           />
-          {canAttach && !canSend && (
-            <button className="icon-btn composer-mic" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
-              <Mic size={18} strokeWidth={2} />
+          <div className="composer-tools">
+            <span className="emoji-anchor">
+              <button className={`icon-btn ${emojiOpen ? 'active' : ''}`} onClick={() => setEmojiOpen((o) => !o)} title={t('emoji')} disabled={disabled}>
+                <Smile size={18} strokeWidth={2} />
+              </button>
+              {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+            </span>
+            {canAttach && (
+              <button className="icon-btn" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
+                <Mic size={18} strokeWidth={2} />
+              </button>
+            )}
+            <button className={`composer-send visible ${canSend ? '' : 'idle'}`} onClick={submit} title={t('send')} disabled={!canSend}>
+              <ArrowUp size={18} strokeWidth={2.6} />
             </button>
-          )}
-          <button className={`composer-send ${canSend ? 'visible' : ''}`} onClick={submit} title={t('send')} tabIndex={canSend ? 0 : -1}>
-            <ArrowUp size={18} strokeWidth={2.6} />
-          </button>
+          </div>
         </div>
       )}
     </div>

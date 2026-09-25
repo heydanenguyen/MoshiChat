@@ -1,7 +1,7 @@
-import type { Account, Attachment, Conversation, Message, Platform, SendOptions } from '@shared/types'
+import type { Account, Attachment, Conversation, Message, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, matchesQuery } from './types'
+import { conversationId, isShared, matchesQuery } from './types'
 
 /**
  * Sample-data adapter for the first-run experience. It behaves like a live
@@ -250,6 +250,52 @@ const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThrea
   }
 }
 
+/** Sample profile facts and shared content so the details pane has something to show. */
+const PROFILES: Record<string, Partial<PeerProfile>> = {
+  'messenger/lan': { bio: 'Designer @ 3HVN · Figma & motion', birthday: '1998-03-14', phone: '+84 903 111 222', gender: 'female' },
+  'messenger/david': { bio: 'Partnerships, APAC', birthday: '--07-04', phone: '+1 415 555 0134', gender: 'male' },
+  'messenger/mom': { bio: 'Mẹ yêu ❤️', birthday: '1968-11-02', phone: '+84 912 000 111', gender: 'female' },
+  'instagram/brand': { bio: 'Clean beauty, made in Vietnam 🌿', extra: [{ label: 'Followers', value: '48.2K' }] },
+  'instagram/hieu': { bio: 'Photographer · Đà Lạt', birthday: '1995-09-21', gender: 'male' },
+  'instagram/fan': { bio: 'skincare enthusiast ✨', extra: [{ label: 'Followers', value: '312' }] },
+  'telegram/sam': { bio: 'iOS engineer. Coffee first.', phone: '+1 650 555 0199', birthday: '1992-05-30', gender: 'male' },
+  'zalo/khachhang': { bio: 'Kinh doanh sỉ lẻ thời trang', phone: '+84 933 444 555', birthday: '1985-12-08', gender: 'female' },
+  'zalo/shipper': { phone: '+84 977 888 999', gender: 'male' },
+  'whatsapp/emma': { bio: 'Brand manager · London', phone: '+44 7700 900123', birthday: '--02-17', gender: 'female' }
+}
+
+const svgImage = (a: string, b: string, label: string): string =>
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="640" height="480" fill="url(#g)"/><circle cx="480" cy="140" r="70" fill="rgba(255,255,255,.35)"/><text x="40" y="430" font-family="Segoe UI, Helvetica, Arial" font-size="40" font-weight="700" fill="rgba(255,255,255,.9)">${label}</text></svg>`
+  )
+
+interface SeedExtra {
+  thread: string
+  from: 'me' | string
+  minutesAgo: number
+  text: string
+  attachment: Attachment
+}
+
+const EXTRAS: SeedExtra[] = [
+  { thread: 'messenger/lan', from: 'Lan Phương', minutesAgo: 94, text: 'Banner bản 1 nè chị', attachment: { id: 'x1', kind: 'image', url: svgImage('#5AC8FA', '#007AFF', 'Banner v1'), width: 640, height: 480 } },
+  { thread: 'messenger/lan', from: 'Lan Phương', minutesAgo: 93, text: '', attachment: { id: 'x2', kind: 'image', url: svgImage('#FF9F0A', '#FF375F', 'Banner v2'), width: 640, height: 480 } },
+  { thread: 'messenger/lan', from: 'Lan Phương', minutesAgo: 90, text: 'File gốc đây ạ', attachment: { id: 'x3', kind: 'file', name: 'banner-thang10.fig', size: 18_400_000 } },
+  { thread: 'messenger/lan', from: 'me', minutesAgo: 60, text: 'Tham khảo thêm kiểu này nhé https://www.apple.com/newsroom/', attachment: { id: 'x4', kind: 'link', url: 'https://www.apple.com/newsroom/', name: 'Apple Newsroom' } },
+  { thread: 'messenger/team', from: 'Hoàng Nam', minutesAgo: 178, text: 'Báo cáo tuần', attachment: { id: 'x5', kind: 'file', name: 'weekly-report-w39.xlsx', size: 512_000 } },
+  { thread: 'messenger/team', from: 'Thu Hà', minutesAgo: 176, text: 'Reels đang chạy', attachment: { id: 'x6', kind: 'link', url: 'https://www.instagram.com/reels/', name: 'Instagram Reels' } },
+  { thread: 'messenger/team', from: 'Quốc Bảo', minutesAgo: 29, text: 'Concept 1', attachment: { id: 'x7', kind: 'image', url: svgImage('#30D158', '#0A84FF', 'Concept 1'), width: 640, height: 480 } },
+  { thread: 'messenger/team', from: 'Quốc Bảo', minutesAgo: 28, text: 'Concept 2', attachment: { id: 'x8', kind: 'image', url: svgImage('#BF5AF2', '#FF375F', 'Concept 2'), width: 640, height: 480 } },
+  { thread: 'instagram/brand', from: 'Aurora Skincare', minutesAgo: 257, text: 'Moodboard', attachment: { id: 'x9', kind: 'image', url: svgImage('#F9CE34', '#EE2A7B', 'Aurora'), width: 640, height: 480 } },
+  { thread: 'instagram/brand', from: 'Aurora Skincare', minutesAgo: 19, text: 'Brief chi tiết', attachment: { id: 'x10', kind: 'file', name: 'aurora-october-brief.pdf', size: 2_300_000 } },
+  { thread: 'telegram/dev', from: 'Priya', minutesAgo: 8, text: 'Release notes draft https://github.com/3hvn/unison/releases', attachment: { id: 'x11', kind: 'link', url: 'https://github.com/3hvn/unison/releases', name: 'Releases · 3hvn/unison' } },
+  { thread: 'telegram/dev', from: 'Alex', minutesAgo: 118, text: 'Screenshot build', attachment: { id: 'x12', kind: 'image', url: svgImage('#37AEE2', '#1E96C8', 'Build 0.1.0'), width: 640, height: 480 } },
+  { thread: 'zalo/khachhang', from: 'Chị Hạnh - Khách sỉ', minutesAgo: 24, text: 'Chuyển khoản rồi nha em', attachment: { id: 'x13', kind: 'image', url: svgImage('#2F8CFF', '#0057D8', 'Biên lai'), width: 640, height: 480 } },
+  { thread: 'whatsapp/emma', from: 'Emma Watson (Client)', minutesAgo: 199, text: 'Campaign visuals', attachment: { id: 'x14', kind: 'image', url: svgImage('#5DE68C', '#1FAF54', 'Campaign'), width: 640, height: 480 } },
+  { thread: 'whatsapp/emma', from: 'me', minutesAgo: 189, text: 'Final files', attachment: { id: 'x15', kind: 'file', name: 'campaign-final.zip', size: 96_000_000 } }
+]
+
 let counter = 0
 const nextId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
@@ -295,6 +341,21 @@ export class DemoAdapter implements PlatformAdapter {
         isOutgoing: from === 'me',
         status: from === 'me' ? 'read' : 'delivered'
       }))
+      for (const extra of EXTRAS.filter((e) => e.thread === `${this.platform}/${thread.key}`)) {
+        history.push({
+          id: `${id}#${extra.attachment.id}`,
+          conversationId: id,
+          senderId: extra.from === 'me' ? 'me' : extra.from,
+          senderName: extra.from === 'me' ? ME : extra.from,
+          text: extra.text,
+          attachments: [extra.attachment],
+          reactions: [],
+          sentAt: now - extra.minutesAgo * 60_000,
+          isOutgoing: extra.from === 'me',
+          status: extra.from === 'me' ? 'read' : 'delivered'
+        })
+      }
+      history.sort((a, b) => a.sentAt - b.sentAt)
       const last = history[history.length - 1]
       const participants = [
         { id: 'me', name: ME, isMe: true },
@@ -394,6 +455,31 @@ export class DemoAdapter implements PlatformAdapter {
   }
 
   async setTyping(): Promise<void> {}
+
+  async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
+    const conversation = this.conversations.get(id)
+    if (!conversation) return undefined
+    const key = id.slice(id.indexOf('/') + 1)
+    const facts = PROFILES[`${this.platform}/${key}`] ?? {}
+    const peer = conversation.participants.find((p) => !p.isMe)
+    return {
+      id: peer?.id ?? id,
+      name: conversation.title,
+      handle: SEEDS[this.platform].threads.find((t) => t.key === key)?.handle,
+      avatarUrl: conversation.avatarUrl,
+      ...facts,
+      extra: conversation.isGroup ? [{ label: 'Members', value: String(conversation.participants.length) }, ...(facts.extra ?? [])] : facts.extra
+    }
+  }
+
+  async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
+    return (this.messages.get(id) ?? []).filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    return (this.messages.get(id) ?? []).filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
 
   async forward(fromId: string, messageId: string, toId: string): Promise<Message> {
     const original = (this.messages.get(fromId) ?? []).find((m) => m.id === messageId)

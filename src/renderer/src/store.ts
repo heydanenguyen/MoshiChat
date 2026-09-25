@@ -8,14 +8,17 @@ import type {
   Conversation,
   Message,
   OutgoingAttachment,
+  PeerProfile,
   Platform,
   SearchHit,
-  Settings
+  Settings,
+  SharedKind,
+  TagId
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { translate, type TKey } from './i18n'
 
-export type Filter = 'all' | Platform | `account:${string}`
+export type Filter = 'all' | Platform | `account:${string}` | `tag:${TagId}`
 
 export type Sheet =
   | { kind: 'none' }
@@ -23,10 +26,17 @@ export type Sheet =
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
 
+export type DetailsTab = 'info' | 'search' | 'media' | 'links' | 'files'
+
 export interface Toast {
   id: number
   text: string
   kind: 'error' | 'info'
+}
+
+export interface Lightbox {
+  url: string
+  name?: string
 }
 
 interface State {
@@ -46,22 +56,30 @@ interface State {
   authPrompts: AuthPrompt[]
   sheet: Sheet
   detailsOpen: boolean
+  detailsTab: DetailsTab
+  profiles: Record<string, PeerProfile | null>
+  shared: Record<string, Message[]>
   toast?: Toast
   replyTo?: Message
   pendingFiles: OutgoingAttachment[]
   forwarding?: Message
+  lightbox?: Lightbox
 
   init(): Promise<void>
   select(id?: string, highlightId?: string): void
   setFilter(filter: Filter): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
+  /** Scroll to a message in the open thread, loading older pages until it appears. */
+  jumpTo(messageId: string): Promise<void>
   send(text: string, files?: OutgoingAttachment[]): Promise<void>
   react(messageId: string, emoji: string): Promise<void>
   setReplyTo(message?: Message): void
   startForward(message?: Message): void
   forward(toConversationId: string): Promise<void>
   loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
+  openAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<void>
+  openLightbox(lightbox?: Lightbox): void
   addFiles(files: OutgoingAttachment[]): void
   addDroppedFiles(files: File[]): void
   removeFile(path: string): void
@@ -69,13 +87,19 @@ interface State {
   openSheet(sheet: Sheet): void
   closeSheet(): void
   setSettings(patch: Partial<Settings>): Promise<void>
+  toggleTag(conversationId: string, tag: TagId): Promise<void>
+  toggleSidebar(): Promise<void>
+  setDetailsTab(tab: DetailsTab): void
+  loadProfile(conversationId: string, force?: boolean): Promise<void>
+  loadShared(conversationId: string, kind: SharedKind, force?: boolean): Promise<void>
+  searchIn(conversationId: string, query: string): Promise<Message[]>
   respondAuth(requestId: string, value: string): Promise<void>
   cancelAuth(requestId: string): Promise<void>
   addAccount(input: AddAccountInput): Promise<void>
   removeAccount(accountId: string): Promise<void>
   reconnect(accountId: string): Promise<void>
   addDemo(): Promise<void>
-  toggleDetails(): void
+  toggleDetails(tab?: DetailsTab): void
   notifyTyping(): void
   showToast(text: string, kind?: Toast['kind']): void
   t(key: TKey, params?: Record<string, string | number>): string
@@ -119,6 +143,9 @@ export const useStore = create<State>((set, get) => ({
   authPrompts: [],
   sheet: { kind: 'none' },
   detailsOpen: false,
+  detailsTab: 'info',
+  profiles: {},
+  shared: {},
   pendingFiles: [],
 
   async init() {
@@ -130,7 +157,7 @@ export const useStore = create<State>((set, get) => ({
     ])
     set({
       ready: true,
-      settings,
+      settings: { ...DEFAULT_SETTINGS, ...settings },
       accounts: Object.fromEntries(accounts.map((a) => [a.id, a])),
       conversations: Object.fromEntries(conversations.map((c) => [c.id, c]))
     })
@@ -164,7 +191,10 @@ export const useStore = create<State>((set, get) => ({
         }
         case 'message:new': {
           const list = upsertMessage(state.messages[event.message.conversationId], event.message)
-          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list } })
+          const shared = { ...state.shared }
+          for (const key of Object.keys(shared)) if (key.startsWith(event.message.conversationId + '|')) delete shared[key]
+          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared })
+          else set({ shared })
           if (state.selectedId === event.message.conversationId && document.hasFocus() && !event.message.isOutgoing) {
             void bridge.conversations.markRead(event.message.conversationId)
           }
@@ -216,7 +246,7 @@ export const useStore = create<State>((set, get) => ({
 
   select(id, highlightId) {
     const state = get()
-    set({ selectedId: id, highlightId, sheet: { kind: 'none' }, replyTo: undefined, pendingFiles: [] })
+    set({ selectedId: id, highlightId, sheet: { kind: 'none' }, replyTo: undefined, pendingFiles: [], detailsTab: 'info' })
     if (!id) return
     const conversation = state.conversations[id]
     if (conversation?.unreadCount) void window.unison.conversations.markRead(id)
@@ -259,6 +289,20 @@ export const useStore = create<State>((set, get) => ({
 
   openHit(hit) {
     get().select(hit.conversation.id, hit.message.id)
+  },
+
+  async jumpTo(messageId) {
+    const id = get().selectedId
+    if (!id) return
+    for (let page = 0; page < 8; page++) {
+      const list = get().messages[id] ?? []
+      if (list.some((m) => m.id === messageId)) break
+      if (!get().hasMore[id]) break
+      await get().loadMore(id)
+    }
+    // Re-trigger the highlight even when the same message is chosen twice.
+    set({ highlightId: undefined })
+    setTimeout(() => set({ highlightId: messageId }), 0)
   },
 
   async send(text, files) {
@@ -364,6 +408,18 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  async openAttachment(conversationId, messageId, attachmentId) {
+    try {
+      await window.unison.messages.openAttachment(conversationId, messageId, attachmentId)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  openLightbox(lightbox) {
+    set({ lightbox })
+  },
+
   addFiles(files) {
     const existing = new Set(get().pendingFiles.map((f) => f.path))
     set({ pendingFiles: [...get().pendingFiles, ...files.filter((f) => !existing.has(f.path))] })
@@ -413,12 +469,59 @@ export const useStore = create<State>((set, get) => ({
   },
 
   closeSheet() {
-    set({ sheet: { kind: 'none' }, forwarding: undefined })
+    set({ sheet: { kind: 'none' }, forwarding: undefined, lightbox: undefined })
   },
 
   async setSettings(patch) {
     const settings = await window.unison.settings.set(patch)
-    set({ settings })
+    set({ settings: { ...DEFAULT_SETTINGS, ...settings } })
+  },
+
+  async toggleTag(conversationId, tag) {
+    const current = get().settings.tags[conversationId] ?? []
+    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
+    const tags = { ...get().settings.tags }
+    if (next.length) tags[conversationId] = next
+    else delete tags[conversationId]
+    await get().setSettings({ tags })
+  },
+
+  async toggleSidebar() {
+    await get().setSettings({ sidebarCollapsed: !get().settings.sidebarCollapsed })
+  },
+
+  setDetailsTab(tab) {
+    set({ detailsTab: tab })
+  },
+
+  async loadProfile(conversationId, force) {
+    if (!force && get().profiles[conversationId] !== undefined) return
+    try {
+      const profile = await window.unison.conversations.profile(conversationId)
+      set({ profiles: { ...get().profiles, [conversationId]: profile ?? null } })
+    } catch {
+      set({ profiles: { ...get().profiles, [conversationId]: null } })
+    }
+  },
+
+  async loadShared(conversationId, kind, force) {
+    const key = `${conversationId}|${kind}`
+    if (!force && get().shared[key]) return
+    try {
+      const messages = await window.unison.conversations.shared(conversationId, kind)
+      set({ shared: { ...get().shared, [key]: messages } })
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  async searchIn(conversationId, query) {
+    try {
+      return await window.unison.conversations.searchIn(conversationId, query)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+      return []
+    }
   },
 
   async respondAuth(requestId, value) {
@@ -449,8 +552,13 @@ export const useStore = create<State>((set, get) => ({
     set({ accounts: next })
   },
 
-  toggleDetails() {
-    set({ detailsOpen: !get().detailsOpen })
+  toggleDetails(tab) {
+    const { detailsOpen, detailsTab } = get()
+    if (tab && detailsOpen && tab !== detailsTab) {
+      set({ detailsTab: tab })
+      return
+    }
+    set({ detailsOpen: !detailsOpen, detailsTab: tab ?? detailsTab })
   },
 
   notifyTyping() {
@@ -480,15 +588,22 @@ export function useVisibleConversations(): Conversation[] {
   const conversations = useStore((s) => s.conversations)
   const filter = useStore((s) => s.filter)
   const search = useStore((s) => s.search)
-  return useMemo(() => computeVisible(conversations, filter, search), [conversations, filter, search])
+  const tags = useStore((s) => s.settings.tags)
+  return useMemo(() => computeVisible(conversations, filter, search, tags), [conversations, filter, search, tags])
 }
 
-export function computeVisible(conversations: Record<string, Conversation>, filter: Filter, search: string): Conversation[] {
+export function computeVisible(
+  conversations: Record<string, Conversation>,
+  filter: Filter,
+  search: string,
+  tags: Record<string, TagId[]> = {}
+): Conversation[] {
   const query = search.trim().toLowerCase()
   return Object.values(conversations)
     .filter((c) => {
       if (filter === 'all') return true
       if (filter.startsWith('account:')) return c.accountId === filter.slice(8)
+      if (filter.startsWith('tag:')) return (tags[c.id] ?? []).includes(filter.slice(4) as TagId)
       return c.platform === filter
     })
     .filter((c) => {
@@ -501,28 +616,38 @@ export function computeVisible(conversations: Record<string, Conversation>, filt
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
 }
 
+/** Whether avatars should carry the platform badge: only when several platforms are mixed in the list. */
+export function useShowPlatformBadge(): boolean {
+  const filter = useStore((s) => s.filter)
+  return filter === 'all' || filter.startsWith('tag:')
+}
+
 export interface UnreadCounts {
   total: number
   byPlatform: Record<Platform, number>
   byAccount: Record<string, number>
+  byTag: Record<string, number>
 }
 
 export function useUnreadCounts(): UnreadCounts {
   const conversations = useStore((s) => s.conversations)
-  return useMemo(() => computeUnread(conversations), [conversations])
+  const tags = useStore((s) => s.settings.tags)
+  return useMemo(() => computeUnread(conversations, tags), [conversations, tags])
 }
 
-function computeUnread(conversations: Record<string, Conversation>): UnreadCounts {
+function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>): UnreadCounts {
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
+  const byTag: Record<string, number> = {}
   let total = 0
   for (const c of Object.values(conversations)) {
     if (!c.unreadCount || c.muted) continue
     total += c.unreadCount
     byPlatform[c.platform] += c.unreadCount
     byAccount[c.accountId] = (byAccount[c.accountId] ?? 0) + c.unreadCount
+    for (const tag of tags[c.id] ?? []) byTag[tag] = (byTag[tag] ?? 0) + c.unreadCount
   }
-  return { total, byPlatform, byAccount }
+  return { total, byPlatform, byAccount, byTag }
 }
 
 export function useT(): (key: TKey, params?: Record<string, string | number>) => string {

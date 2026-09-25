@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BellOff, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
-import { useStore, useT } from '../store'
+import { useShowPlatformBadge, useStore, useT } from '../store'
 import { formatBytes, formatDayLabel, formatTime, sectionize, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
@@ -30,6 +30,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const highlightId = useStore((s) => s.highlightId)
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
+  const showBadge = useShowPlatformBadge()
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
@@ -105,7 +106,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       onDrop={onDrop}
     >
       <header className="chat-header drag">
-        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} platform={conversation.platform} />
+        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} platform={showBadge ? conversation.platform : undefined} onClick={() => toggleDetails('info')} />
         <div className="chat-header-info">
           <div className="chat-header-title">
             {conversation.title}
@@ -114,7 +115,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
           <div className={`chat-header-sub ${isTyping ? 'typing' : ''}`}>{subtitle}</div>
         </div>
         <div className="chat-header-actions no-drag">
-          <button className={`icon-btn ${detailsOpen ? 'active' : ''}`} onClick={toggleDetails} title={t('details')}>
+          <button className={`icon-btn ${detailsOpen ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
         </div>
@@ -292,7 +293,7 @@ function Bubble({
         {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
         {!sticker &&
           message.attachments.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} />)}
-        {message.text && (media ? <div className="bubble-caption">{message.text}</div> : message.text)}
+        {message.text && (media ? <div className="bubble-caption"><Linkify text={message.text} /></div> : <Linkify text={message.text} />)}
         {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
         {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
       </div>
@@ -336,21 +337,28 @@ function Bubble({
 
 function AttachmentView({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
   const t = useT()
+  const openLightbox = useStore((s) => s.openLightbox)
+  const loadAttachment = useStore((s) => s.loadAttachment)
+  const openAttachment = useStore((s) => s.openAttachment)
   const openExternal = (url?: string): void => {
     if (url && /^https?:/.test(url)) void window.unison.app.openExternal(url)
+  }
+  const viewImage = async (): Promise<void> => {
+    const url = attachment.url ?? (await loadAttachment(message.conversationId, message.id, attachment.id)) ?? attachment.thumbnailUrl
+    if (url) openLightbox({ url, name: attachment.name })
   }
   switch (attachment.kind) {
     case 'image': {
       const src = attachment.url ?? attachment.thumbnailUrl
       return src ? (
-        <img className="attachment-image" src={src} alt={t('photo')} draggable={false} onClick={() => openExternal(attachment.url)} />
+        <img className="attachment-image" src={src} alt={t('photo')} draggable={false} onClick={() => void viewImage()} />
       ) : (
         <div className="attachment-image placeholder">{t('photo')}</div>
       )
     }
     case 'video':
       return (
-        <div style={{ position: 'relative' }} onClick={() => openExternal(attachment.url)}>
+        <div style={{ position: 'relative' }} onClick={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))}>
           {attachment.thumbnailUrl ? (
             <img className="attachment-image" src={attachment.thumbnailUrl} alt={t('video')} draggable={false} />
           ) : (
@@ -386,7 +394,7 @@ function AttachmentView({ attachment, message }: { attachment: Attachment; messa
       )
     default:
       return (
-        <div className="attachment-file" onClick={() => openExternal(attachment.url)}>
+        <div className="attachment-file" onClick={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))}>
           <span className="attachment-file-icon">
             <File size={18} />
           </span>
@@ -397,6 +405,27 @@ function AttachmentView({ attachment, message }: { attachment: Attachment; messa
         </div>
       )
   }
+}
+
+const LINK_RE = /https?:\/\/[^\s<>"')\]]+/g
+
+/** Plain text with clickable URLs. */
+function Linkify({ text }: { text: string }): JSX.Element {
+  const parts: Array<string | JSX.Element> = []
+  let last = 0
+  for (const match of text.matchAll(LINK_RE)) {
+    const start = match.index ?? 0
+    if (start > last) parts.push(text.slice(last, start))
+    const url = match[0]
+    parts.push(
+      <a key={start} className="attachment-link" href={url} onClick={(e) => (e.preventDefault(), void window.unison.app.openExternal(url))}>
+        {url}
+      </a>
+    )
+    last = start + url.length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return <>{parts}</>
 }
 
 const BAR_COUNT = 28

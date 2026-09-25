@@ -5,7 +5,9 @@ import type {
   Conversation,
   Message,
   OutgoingAttachment,
+  PeerProfile,
   SearchHit,
+  SharedKind,
   SendOptions,
   Settings
 } from './types'
@@ -22,6 +24,12 @@ export interface UnisonBridge {
   conversations: {
     list(): Promise<Conversation[]>
     markRead(conversationId: string): Promise<void>
+    /** Profile of the other side (or the group). */
+    profile(conversationId: string): Promise<PeerProfile | undefined>
+    /** Messages carrying photos/videos, links or files, newest first. */
+    shared(conversationId: string, kind: SharedKind): Promise<Message[]>
+    /** Search inside one conversation, newest first. */
+    searchIn(conversationId: string, query: string): Promise<Message[]>
   }
   messages: {
     list(conversationId: string, beforeId?: string): Promise<Message[]>
@@ -31,6 +39,8 @@ export interface UnisonBridge {
     search(query: string): Promise<SearchHit[]>
     /** Fetch the full media of an attachment on demand. Resolves to a data URL, or undefined when unavailable. */
     loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
+    /** Open an attachment with the OS (downloads it first when needed). */
+    openAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<void>
     typing(conversationId: string): Promise<void>
   }
   auth: {
@@ -62,12 +72,16 @@ export const IPC = {
   accountsAddDemo: 'accounts:addDemo',
   conversationsList: 'conversations:list',
   conversationsMarkRead: 'conversations:markRead',
+  conversationsProfile: 'conversations:profile',
+  conversationsShared: 'conversations:shared',
+  conversationsSearchIn: 'conversations:searchIn',
   messagesList: 'messages:list',
   messagesSend: 'messages:send',
   messagesForward: 'messages:forward',
   messagesReact: 'messages:react',
   messagesSearch: 'messages:search',
   messagesLoadAttachment: 'messages:loadAttachment',
+  messagesOpenAttachment: 'messages:openAttachment',
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',

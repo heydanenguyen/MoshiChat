@@ -12,6 +12,7 @@ import { AddAccountSheet } from './components/AddAccountSheet'
 import { AuthPromptSheet } from './components/AuthPromptSheet'
 import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
+import { Lightbox } from './components/Lightbox'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -27,6 +28,8 @@ export default function App(): JSX.Element {
   const selectedId = useStore((s) => s.selectedId)
   const toast = useStore((s) => s.toast)
   const forwarding = useStore((s) => s.forwarding)
+  const lightbox = useStore((s) => s.lightbox)
+  const collapsed = useStore((s) => s.settings.sidebarCollapsed)
 
   useEffect(() => {
     void init()
@@ -66,7 +69,7 @@ export default function App(): JSX.Element {
       } else if (mod && e.key === ',') {
         e.preventDefault()
         openSheet({ kind: 'settings' })
-      } else if (e.key === 'Escape' && (sheet.kind !== 'none' || useStore.getState().forwarding)) {
+      } else if (e.key === 'Escape' && (sheet.kind !== 'none' || useStore.getState().forwarding || useStore.getState().lightbox)) {
         closeSheet()
       }
     }
@@ -77,7 +80,7 @@ export default function App(): JSX.Element {
   if (!ready) return <div className="app" />
 
   return (
-    <div className="app">
+    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar />
       <ConversationList />
       {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
@@ -87,6 +90,7 @@ export default function App(): JSX.Element {
       {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
       {sheet.kind === 'command' && <CommandPalette />}
       {forwarding && <ForwardSheet message={forwarding} />}
+      {lightbox && <Lightbox {...lightbox} />}
       {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
 
       {toast && (

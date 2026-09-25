@@ -13,7 +13,10 @@ const bridge: UnisonBridge = {
   },
   conversations: {
     list: () => ipcRenderer.invoke(IPC.conversationsList),
-    markRead: (id) => ipcRenderer.invoke(IPC.conversationsMarkRead, id)
+    markRead: (id) => ipcRenderer.invoke(IPC.conversationsMarkRead, id),
+    profile: (id) => ipcRenderer.invoke(IPC.conversationsProfile, id),
+    shared: (id, kind) => ipcRenderer.invoke(IPC.conversationsShared, id, kind),
+    searchIn: (id, query) => ipcRenderer.invoke(IPC.conversationsSearchIn, id, query)
   },
   messages: {
     list: (id, beforeId) => ipcRenderer.invoke(IPC.messagesList, id, beforeId),
@@ -22,6 +25,7 @@ const bridge: UnisonBridge = {
     react: (id, messageId, emoji) => ipcRenderer.invoke(IPC.messagesReact, id, messageId, emoji),
     search: (query) => ipcRenderer.invoke(IPC.messagesSearch, query),
     loadAttachment: (id, messageId, attachmentId) => ipcRenderer.invoke(IPC.messagesLoadAttachment, id, messageId, attachmentId),
+    openAttachment: (id, messageId, attachmentId) => ipcRenderer.invoke(IPC.messagesOpenAttachment, id, messageId, attachmentId),
     typing: (id) => ipcRenderer.invoke(IPC.messagesTyping, id)
   },
   auth: {

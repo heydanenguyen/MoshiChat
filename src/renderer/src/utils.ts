@@ -29,6 +29,21 @@ export function formatDayLabel(ts: number, lang: Language): string {
   return date.toLocaleDateString(locale(lang), { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
+/** Birthday-style dates: full ISO date or --MM-DD when the year is hidden. */
+export function formatDate(value: string, lang: Language): string {
+  const partial = /^--(\d{2})-(\d{2})$/.exec(value)
+  if (partial) {
+    const d = new Date(2000, Number(partial[1]) - 1, Number(partial[2]))
+    return d.toLocaleDateString(locale(lang), { day: 'numeric', month: 'long' })
+  }
+  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (full) {
+    const d = new Date(Number(full[1]), Number(full[2]) - 1, Number(full[3]))
+    return d.toLocaleDateString(locale(lang), { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  return value
+}
+
 export function formatBytes(bytes?: number): string {
   if (!bytes) return ''
   const units = ['B', 'KB', 'MB', 'GB']
