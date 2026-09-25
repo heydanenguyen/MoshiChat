@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, RefreshCw, Search, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
-import { PLATFORMS, TAGS, TAG_ORDER } from '@shared/types'
+import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy } from '@shared/types'
 import { useShowPlatformBadge, useStore, useT, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan } from '../utils'
 import { Avatar } from './Avatar'
@@ -61,6 +61,9 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const storedTags = useStore((s) => s.settings.tags[conversationId])
   const tags = storedTags ?? EMPTY_TAGS
   const toggleTag = useStore((s) => s.toggleTag)
+  const muted = useStore((s) => s.settings.muted)
+  const toggleMute = useStore((s) => s.toggleMute)
+  const allTags = useStore((s) => s.settings.tags)
   const language = useStore((s) => s.settings.language)
   const openLightbox = useStore((s) => s.openLightbox)
   const showBadge = useShowPlatformBadge()
@@ -205,10 +208,19 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           <span>{t('pinned')}</span>
           <span>{conversation.pinned ? '✓' : '—'}</span>
         </div>
-        <div className="details-kv">
+        <div className="details-kv" style={{ alignItems: 'center' }}>
           <span>{t('notifications')}</span>
-          <span>{conversation.muted ? t('muted') : '✓'}</span>
+          <button
+            className={`switch ${!muted.conversations.includes(conversationId) && !conversation.muted ? 'on' : ''}`}
+            role="switch"
+            aria-checked={!muted.conversations.includes(conversationId)}
+            onClick={() => void toggleMute('conversations', conversationId)}
+            title={isMutedBy({ muted, tags: allTags }, conversation) ? t('mutedByRule') : undefined}
+          />
         </div>
+        {isMutedBy({ muted, tags: allTags }, conversation) && !muted.conversations.includes(conversationId) && (
+          <div className="field-hint">{t('mutedByRule')}</div>
+        )}
       </div>
     </>
   )

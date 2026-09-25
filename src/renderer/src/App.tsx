@@ -13,6 +13,7 @@ import { AuthPromptSheet } from './components/AuthPromptSheet'
 import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
+import { TitleBar } from './components/TitleBar'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -30,6 +31,15 @@ export default function App(): JSX.Element {
   const forwarding = useStore((s) => s.forwarding)
   const lightbox = useStore((s) => s.lightbox)
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const mesh = useStore((s) => s.settings.mesh)
+  const accent = useStore((s) => s.settings.accent)
+  const font = useStore((s) => s.settings.font)
+
+  useEffect(() => {
+    document.documentElement.dataset.mesh = mesh
+    document.documentElement.dataset.accent = accent
+    document.documentElement.dataset.font = font
+  }, [mesh, accent, font])
 
   useEffect(() => {
     void init()
@@ -77,9 +87,11 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [sheet.kind, openSheet, closeSheet])
 
-  if (!ready) return <div className="app" />
+  if (!ready) return <div className="shell" />
 
   return (
+    <div className="shell">
+      <TitleBar />
     <div className={`app ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="mesh" aria-hidden>
         <span className="mesh-blob b1" />
@@ -106,6 +118,7 @@ export default function App(): JSX.Element {
           {toast.text}
         </div>
       )}
+    </div>
     </div>
   )
 }

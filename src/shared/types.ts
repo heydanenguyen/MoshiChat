@@ -196,6 +196,43 @@ export type AddAccountInput =
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type Language = 'vi' | 'en'
 
+export type MeshId = 'sunrise' | 'ocean' | 'candy' | 'forest' | 'lavender' | 'mono'
+export type AccentId = 'ocean' | 'violet' | 'rose' | 'coral' | 'mint' | 'sun'
+export type FontId = 'jakarta' | 'inter' | 'nunito' | 'system'
+
+export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatch: string[] }> = [
+  { id: 'sunrise', name: { vi: 'Bình minh', en: 'Sunrise' }, swatch: ['#ffd6e0', '#d6e6ff', '#e7dbff', '#ffe8c9'] },
+  { id: 'ocean', name: { vi: 'Đại dương', en: 'Ocean' }, swatch: ['#cfe7ff', '#d2f4f1', '#dfe2ff', '#e6f7ff'] },
+  { id: 'candy', name: { vi: 'Kẹo ngọt', en: 'Candy' }, swatch: ['#ffd1e8', '#ffe1c9', '#f2d5ff', '#d6f0ff'] },
+  { id: 'forest', name: { vi: 'Rừng xanh', en: 'Forest' }, swatch: ['#d5f5e3', '#e9f7c9', '#d3ecff', '#fff1cf'] },
+  { id: 'lavender', name: { vi: 'Oải hương', en: 'Lavender' }, swatch: ['#e6dbff', '#f3d9ff', '#d9e2ff', '#ffe3f2'] },
+  { id: 'mono', name: { vi: 'Tối giản', en: 'Mono' }, swatch: ['#eceef5', '#e3e6ef', '#f2f3f8', '#dfe3ee'] }
+]
+
+export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string }> = [
+  { id: 'ocean', name: { vi: 'Xanh biển', en: 'Ocean' }, from: '#5b8cff', to: '#8a6bff' },
+  { id: 'violet', name: { vi: 'Tím', en: 'Violet' }, from: '#8b5cf6', to: '#d946ef' },
+  { id: 'rose', name: { vi: 'Hồng', en: 'Rose' }, from: '#f45d8a', to: '#ff8a5b' },
+  { id: 'coral', name: { vi: 'San hô', en: 'Coral' }, from: '#ff7a59', to: '#ffb347' },
+  { id: 'mint', name: { vi: 'Bạc hà', en: 'Mint' }, from: '#22c1a3', to: '#4fa3ff' },
+  { id: 'sun', name: { vi: 'Nắng', en: 'Sun' }, from: '#f7b733', to: '#fc4a1a' }
+]
+
+export const FONTS: Array<{ id: FontId; name: string; family: string }> = [
+  { id: 'jakarta', name: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans'" },
+  { id: 'inter', name: 'Inter', family: "'Inter'" },
+  { id: 'nunito', name: 'Nunito', family: "'Nunito'" },
+  { id: 'system', name: 'System', family: '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI"' }
+]
+
+/** Where notifications are switched off. */
+export interface MuteRules {
+  conversations: string[]
+  tags: TagId[]
+  accounts: string[]
+  platforms: Platform[]
+}
+
 export interface Settings {
   theme: ThemePreference
   language: Language
@@ -204,6 +241,10 @@ export interface Settings {
   /** Conversation id -> tags picked by the user. */
   tags: Record<string, TagId[]>
   sidebarCollapsed: boolean
+  mesh: MeshId
+  accent: AccentId
+  font: FontId
+  muted: MuteRules
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -212,7 +253,22 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: true,
   sendOnEnter: true,
   tags: {},
-  sidebarCollapsed: false
+  sidebarCollapsed: false,
+  mesh: 'sunrise',
+  accent: 'ocean',
+  font: 'jakarta',
+  muted: { conversations: [], tags: [], accounts: [], platforms: [] }
+}
+
+/** True when notifications for this conversation are switched off by any rule. */
+export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversation: Pick<Conversation, 'id' | 'accountId' | 'platform'>): boolean {
+  const m = settings.muted
+  if (!m) return false
+  if (m.conversations.includes(conversation.id)) return true
+  if (m.accounts.includes(conversation.accountId)) return true
+  if (m.platforms.includes(conversation.platform)) return true
+  const tags = settings.tags?.[conversation.id] ?? []
+  return tags.some((t) => m.tags.includes(t))
 }
 
 /** Events pushed from main to the renderer. */
@@ -227,6 +283,7 @@ export type BridgeEvent =
   | { type: 'auth:prompt'; prompt: AuthPrompt }
   | { type: 'auth:cleared'; requestId: string }
   | { type: 'focus-conversation'; conversationId: string }
+  | { type: 'window:state'; maximized: boolean }
 
 export interface PlatformMeta {
   id: Platform

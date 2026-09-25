@@ -211,17 +211,13 @@ a {
 }
 
 .sidebar-top {
-  height: var(--titlebar-height);
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
   padding: 0 var(--space-2);
   flex-shrink: 0;
-}
-
-.platform-mac .sidebar-top {
-  padding-left: 72px;
 }
 
 .sidebar.collapsed .sidebar-top {
@@ -476,7 +472,7 @@ a {
 }
 
 .list-header {
-  height: var(--titlebar-height);
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -842,6 +838,46 @@ mark {
   color: #fff;
 }
 
+/* pastel tile: matches the tag pills */
+.platform-icon.tile {
+  background: color-mix(in srgb, var(--brand) 16%, white);
+  color: color-mix(in srgb, var(--brand) 82%, black);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+:root[data-theme='dark'] .platform-icon.tile {
+  background: color-mix(in srgb, var(--brand) 26%, #1a1c2e);
+  color: color-mix(in srgb, var(--brand) 70%, white);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.nav-item-icon.tile {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--brand) 16%, white);
+  color: color-mix(in srgb, var(--brand) 82%, black);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.nav-item-icon.tile.accent {
+  --brand: var(--accent);
+}
+
+:root[data-theme='dark'] .nav-item-icon.tile {
+  background: color-mix(in srgb, var(--brand) 26%, #1a1c2e);
+  color: color-mix(in srgb, var(--brand) 70%, white);
+  box-shadow: none;
+}
+
+.muted-mark {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
 /* ================================================================== chat */
 
 .chat-col {
@@ -860,21 +896,13 @@ mark {
 }
 
 .chat-header {
-  height: var(--titlebar-height);
+  height: 56px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--separator);
   flex-shrink: 0;
-}
-
-.platform-win .chat-header {
-  padding-right: 150px;
-}
-
-.platform-win .app:has(.details-col) .chat-header {
-  padding-right: var(--space-4);
 }
 
 .chat-header-info {
@@ -1729,16 +1757,12 @@ mark {
 }
 
 .details-top {
-  height: var(--titlebar-height);
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding: 0 var(--space-3);
   flex-shrink: 0;
-}
-
-.platform-win .details-top {
-  padding-right: 150px;
 }
 
 .details-tabs {
@@ -2803,10 +2827,6 @@ mark {
   place-items: center;
 }
 
-.platform-win .lightbox-close {
-  top: 60px;
-}
-
 .lightbox-caption {
   position: fixed;
   bottom: 20px;
@@ -2867,4 +2887,360 @@ kbd {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ================================================================== shell & title bar */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.shell > .app {
+  flex: 1;
+  min-height: 0;
+}
+
+.titlebar {
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  position: relative;
+  z-index: 2;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  user-select: none;
+}
+
+.traffic-spacer {
+  width: 64px;
+}
+
+.traffic-lights {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.traffic-lights .light {
+  width: 13px;
+  height: 13px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.traffic-lights .light svg {
+  width: 8px;
+  height: 8px;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  fill: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.traffic-lights:hover .light svg {
+  opacity: 1;
+}
+
+.traffic-lights .light:active {
+  transform: scale(0.9);
+}
+
+.light.close {
+  background: #ff5f57;
+}
+.light.min {
+  background: #febc2e;
+}
+.light.max {
+  background: #28c840;
+}
+
+.titlebar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+  pointer-events: none;
+}
+
+.titlebar-title strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.titlebar-sub {
+  color: var(--text-secondary);
+}
+
+.titlebar-right {
+  margin-left: auto;
+  width: 64px;
+}
+
+/* ================================================================== personalisation pickers */
+
+.mesh-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mesh-swatch {
+  height: 54px;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  display: flex;
+  align-items: flex-end;
+  padding: 6px 8px;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    border-color var(--duration-fast) ease;
+}
+
+.mesh-swatch span {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: rgba(27, 29, 42, 0.7);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+}
+
+.mesh-swatch:hover {
+  transform: translateY(-2px);
+}
+
+.mesh-swatch.active {
+  border-color: var(--accent);
+}
+
+.accent-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.accent-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 2px var(--bg-elevated);
+  transition: transform var(--duration-base) var(--ease-spring);
+}
+
+.accent-dot:hover {
+  transform: scale(1.12);
+}
+
+.accent-dot.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
+}
+
+.font-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.font-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  background: var(--fill-tertiary);
+  border: 2px solid transparent;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+}
+
+.font-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.font-sample {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.font-name {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.mute-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mute-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 5px;
+  border-radius: 11px;
+  background: var(--fill-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.mute-chip.muted {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+/* ================================================================== mesh presets */
+
+:root[data-mesh='ocean'] {
+  --mesh-1: #cfe7ff;
+  --mesh-2: #d2f4f1;
+  --mesh-3: #dfe2ff;
+  --mesh-4: #e6f7ff;
+  --mesh-5: #d6ecff;
+}
+:root[data-mesh='candy'] {
+  --mesh-1: #ffd1e8;
+  --mesh-2: #ffe1c9;
+  --mesh-3: #f2d5ff;
+  --mesh-4: #d6f0ff;
+  --mesh-5: #fff0c9;
+}
+:root[data-mesh='forest'] {
+  --mesh-1: #d5f5e3;
+  --mesh-2: #e9f7c9;
+  --mesh-3: #d3ecff;
+  --mesh-4: #fff1cf;
+  --mesh-5: #dff7ee;
+}
+:root[data-mesh='lavender'] {
+  --mesh-1: #e6dbff;
+  --mesh-2: #f3d9ff;
+  --mesh-3: #d9e2ff;
+  --mesh-4: #ffe3f2;
+  --mesh-5: #ece4ff;
+}
+:root[data-mesh='mono'] {
+  --mesh-1: #eceef5;
+  --mesh-2: #e3e6ef;
+  --mesh-3: #f2f3f8;
+  --mesh-4: #dfe3ee;
+  --mesh-5: #eaedf4;
+}
+
+:root[data-theme='dark'][data-mesh='ocean'] {
+  --mesh-1: #1c3358;
+  --mesh-2: #163d3d;
+  --mesh-3: #232a58;
+  --mesh-4: #16324a;
+  --mesh-5: #1b2f4e;
+}
+:root[data-theme='dark'][data-mesh='candy'] {
+  --mesh-1: #4a2340;
+  --mesh-2: #4a3226;
+  --mesh-3: #3d2456;
+  --mesh-4: #1f3550;
+  --mesh-5: #4a3d1f;
+}
+:root[data-theme='dark'][data-mesh='forest'] {
+  --mesh-1: #1c3d2f;
+  --mesh-2: #2e3d1c;
+  --mesh-3: #1f3346;
+  --mesh-4: #3d3520;
+  --mesh-5: #1e3a33;
+}
+:root[data-theme='dark'][data-mesh='lavender'] {
+  --mesh-1: #33255c;
+  --mesh-2: #45245c;
+  --mesh-3: #262f58;
+  --mesh-4: #4a2442;
+  --mesh-5: #2f2756;
+}
+:root[data-theme='dark'][data-mesh='mono'] {
+  --mesh-1: #23263a;
+  --mesh-2: #1c1f30;
+  --mesh-3: #2a2d42;
+  --mesh-4: #1f2234;
+  --mesh-5: #262940;
+}
+
+/* ================================================================== accent presets */
+
+:root[data-accent='violet'] {
+  --accent: #8b5cf6;
+  --accent-hover: #7c4fe8;
+  --accent-2: #d946ef;
+  --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%);
+  --accent-soft: rgba(139, 92, 246, 0.14);
+  --bubble-out: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%);
+}
+:root[data-accent='rose'] {
+  --accent: #f45d8a;
+  --accent-hover: #e94d7b;
+  --accent-2: #ff8a5b;
+  --accent-gradient: linear-gradient(135deg, #f45d8a 0%, #ff8a5b 100%);
+  --accent-soft: rgba(244, 93, 138, 0.14);
+  --bubble-out: linear-gradient(135deg, #f45d8a 0%, #ff8a5b 100%);
+}
+:root[data-accent='coral'] {
+  --accent: #ff7a59;
+  --accent-hover: #f26a48;
+  --accent-2: #ffb347;
+  --accent-gradient: linear-gradient(135deg, #ff7a59 0%, #ffb347 100%);
+  --accent-soft: rgba(255, 122, 89, 0.14);
+  --bubble-out: linear-gradient(135deg, #ff7a59 0%, #ffb347 100%);
+}
+:root[data-accent='mint'] {
+  --accent: #22c1a3;
+  --accent-hover: #1bb094;
+  --accent-2: #4fa3ff;
+  --accent-gradient: linear-gradient(135deg, #22c1a3 0%, #4fa3ff 100%);
+  --accent-soft: rgba(34, 193, 163, 0.14);
+  --bubble-out: linear-gradient(135deg, #22c1a3 0%, #4fa3ff 100%);
+}
+:root[data-accent='sun'] {
+  --accent: #f0a020;
+  --accent-hover: #e0921a;
+  --accent-2: #fc4a1a;
+  --accent-gradient: linear-gradient(135deg, #f7b733 0%, #fc4a1a 100%);
+  --accent-soft: rgba(247, 183, 51, 0.16);
+  --bubble-out: linear-gradient(135deg, #f7b733 0%, #fc4a1a 100%);
+}
+
+/* ================================================================== font presets */
+
+:root[data-font='inter'] {
+  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+}
+:root[data-font='nunito'] {
+  --font-text: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+}
+:root[data-font='system'] {
+  --font-text: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
 }

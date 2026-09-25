@@ -49,6 +49,9 @@ Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (ba
 - Pane chi tiết dạng tab cho từng người: thông tin (ảnh đại diện, bio, SĐT, sinh nhật, giới tính khi nền tảng cung cấp), thẻ "Trò chuyện" với ngày bắt đầu, thời gian đã trò chuyện, tổng số tin (Telegram lấy số thật từ máy chủ) và lần hoạt động gần nhất, tìm trong hội thoại, ảnh & video, liên kết, tài liệu; lightbox xem ảnh
 - Gắn nhãn màu cho từng liên hệ (Công việc, Bạn thân, Người yêu, Gia đình, VIP, Vui vẻ): vòng màu quanh avatar, lọc theo nhãn ở thanh bên, chuột phải vào hội thoại để gắn nhanh
 - Emoji picker (8 nhóm, tìm kiếm, gần đây), thanh bên thu gọn thành rail 64px, icon nền tảng chỉ hiện khi xem gộp nhiều nền tảng
+- Cá nhân hoá trong Cài đặt: 6 bộ nền gradient (Bình minh, Đại dương, Kẹo ngọt, Rừng xanh, Oải hương, Tối giản), 6 màu nhấn, 4 font (Plus Jakarta Sans, Inter, Nunito, hệ thống)
+- Tắt thông báo theo từng hội thoại (chuột phải hoặc công tắc ở tab Thông tin), theo nhãn, theo tài khoản (chuột phải ở thanh bên) hoặc theo nền tảng; badge chưa đọc cũng bỏ qua những gì đã tắt
+- Thanh tiêu đề mỏng kiểu mac ở mọi nền tảng: trên Windows app tự vẽ ba đèn giao thông thay cho nút hệ thống che nội dung
 - ⌘K command palette, thông báo hệ thống, dark/light/system, Tiếng Việt/English
 
 ## Kiến trúc

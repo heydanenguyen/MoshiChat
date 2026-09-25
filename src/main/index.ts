@@ -3,6 +3,7 @@ import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import type { AddAccountInput, BridgeEvent, OutgoingAttachment, SendOptions, Settings, SharedKind } from '@shared/types'
 import { IPC } from '@shared/bridge'
+import { isMutedBy } from '@shared/types'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
@@ -29,6 +30,7 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   if (Date.now() - event.message.sentAt > 60_000) return
   const conversation = manager.listConversations().find((c) => c.id === event.message.conversationId)
   if (conversation?.muted) return
+  if (conversation && isMutedBy(storage.settings, conversation)) return
   const title = conversation?.isGroup ? `${event.message.senderName} in ${conversation.title}` : event.message.senderName
   const notification = new Notification({
     title,
@@ -43,16 +45,8 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   notification.show()
 }
 
-function overlayColors(): { color: string; symbolColor: string } {
-  const dark = nativeTheme.shouldUseDarkColors
-  return { color: dark ? '#1c1c1e' : '#f2f2f7', symbolColor: dark ? '#e5e5ea' : '#1c1c1e' }
-}
-
 function applyTheme(theme: Settings['theme']): void {
   nativeTheme.themeSource = theme
-  if (isWindows && window && !window.isDestroyed()) {
-    window.setTitleBarOverlay({ ...overlayColors(), height: 52 })
-  }
 }
 
 function appIcon(): Electron.NativeImage | undefined {
@@ -70,12 +64,11 @@ function createWindow(): void {
     title: 'Unison',
     icon: appIcon(),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
+    // A thin custom title bar on every platform; macOS keeps its native traffic lights inset into it.
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
-    titleBarOverlay: isWindows ? { ...overlayColors(), height: 52 } : undefined,
-    trafficLightPosition: isMac ? { x: 16, y: 18 } : undefined,
+    trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
     vibrancy: isMac ? 'sidebar' : undefined,
     visualEffectState: isMac ? 'active' : undefined,
-    backgroundMaterial: isWindows ? 'mica' : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -96,6 +89,11 @@ function createWindow(): void {
   })
   window.webContents.on('preload-error', (_e, path, error) => log('preload error', path, error.message))
   window.on('closed', () => (window = undefined))
+  const sendState = (): void => {
+    if (window && !window.isDestroyed()) window.webContents.send(IPC.event, { type: 'window:state', maximized: window.isMaximized() })
+  }
+  window.on('maximize', sendState)
+  window.on('unmaximize', sendState)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)

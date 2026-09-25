@@ -5,20 +5,31 @@ import { PLATFORMS } from '@shared/types'
 interface Props {
   platform: Platform
   size?: number
+  /**
+   * badge: white glyph on the brand gradient (avatars, small).
+   * tile: pastel rounded tile with the glyph in the brand color (sidebar, pickers).
+   */
+  variant?: 'badge' | 'tile'
   className?: string
   style?: CSSProperties
 }
 
-/** Rounded platform glyphs drawn on the brand gradient. */
-export function PlatformIcon({ platform, size = 16, className = '', style }: Props): JSX.Element {
-  const glyph = size * 0.58
+export function PlatformIcon({ platform, size = 16, variant = 'badge', className = '', style }: Props): JSX.Element {
+  const meta = PLATFORMS[platform]
+  if (variant === 'tile') {
+    return (
+      <span
+        className={`platform-icon tile ${className}`}
+        style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), ['--brand' as string]: meta.color, ...style } as CSSProperties}
+        aria-label={meta.name}
+      >
+        <Glyph platform={platform} size={size * 0.56} />
+      </span>
+    )
+  }
   return (
-    <span
-      className={`platform-icon ${className}`}
-      style={{ width: size, height: size, background: PLATFORMS[platform].gradient, ...style }}
-      aria-label={PLATFORMS[platform].name}
-    >
-      <Glyph platform={platform} size={glyph} />
+    <span className={`platform-icon ${className}`} style={{ width: size, height: size, background: meta.gradient, ...style }} aria-label={meta.name}>
+      <Glyph platform={platform} size={size * 0.58} />
     </span>
   )
 }

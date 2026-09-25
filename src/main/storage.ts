@@ -39,7 +39,7 @@ export class Storage {
       this.data = {
         version: 1,
         accounts: parsed.accounts ?? [],
-        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) }
+        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}), muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) } }
       }
     } catch {
       this.data = structuredClone(EMPTY)

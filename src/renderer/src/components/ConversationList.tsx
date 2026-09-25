@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BellOff, Pin, Search, SquarePen, X } from 'lucide-react'
-import { PLATFORMS, TAGS, TAG_ORDER, type Platform, type TagId } from '@shared/types'
+import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy, type Platform, type TagId } from '@shared/types'
 import { useShowPlatformBadge, useStore, useT, useVisibleConversations } from '../store'
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
@@ -26,6 +26,8 @@ export function ConversationList(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
   const toggleTag = useStore((s) => s.toggleTag)
+  const muted = useStore((s) => s.settings.muted)
+  const toggleMute = useStore((s) => s.toggleMute)
   const openSheet = useStore((s) => s.openSheet)
   const showBadge = useShowPlatformBadge()
   const [menu, setMenu] = useState<TagMenuState | undefined>()
@@ -140,7 +142,7 @@ export function ConversationList(): JSX.Element {
                   </span>
                   <span className="conv-meta">
                     {c.pinned && <Pin size={12} strokeWidth={2.2} />}
-                    {c.muted && <BellOff size={12} strokeWidth={2.2} />}
+                    {(c.muted || isMutedBy({ muted, tags }, c)) && <BellOff size={12} strokeWidth={2.2} />}
                     {c.unreadCount > 0 && <span className="unread-pill">{c.unreadCount > 99 ? '99+' : c.unreadCount}</span>}
                   </span>
                 </span>
@@ -175,6 +177,10 @@ export function ConversationList(): JSX.Element {
 
       {menu && (
         <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          <button className="context-menu-item" onClick={() => { void toggleMute('conversations', menu.conversationId); setMenu(undefined) }}>
+            <BellOff size={15} />
+            <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
+          </button>
           <div className="context-menu-title">{t('tags')}</div>
           {TAG_ORDER.map((tag) => {
             const active = (tags[menu.conversationId] ?? []).includes(tag)

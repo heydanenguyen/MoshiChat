@@ -14,9 +14,9 @@ const vi = {
   noConversationsHint: 'Kết nối một tài khoản để bắt đầu.',
   noResults: 'Không tìm thấy kết quả',
   selectConversation: 'Chọn một hội thoại',
-  selectConversationHint: 'Mọi tin nhắn Messenger, Instagram và Telegram của bạn, ở cùng một nơi.',
+  selectConversationHint: 'Mọi tin nhắn Messenger, Instagram, Telegram, Zalo và WhatsApp của bạn, ở cùng một nơi.',
   welcomeTitle: 'Mọi cuộc trò chuyện, một nơi duy nhất.',
-  welcomeBody: 'Kết nối Messenger, Instagram và Telegram. Unison gom tất cả vào một hộp thư gọn gàng, nhanh và riêng tư.',
+  welcomeBody: 'Kết nối Messenger, Instagram, Telegram, Zalo và WhatsApp. Unison gom tất cả vào một hộp thư gọn gàng, nhanh và riêng tư.',
   tryDemo: 'Dùng thử với dữ liệu mẫu',
   connectAccount: 'Kết nối tài khoản',
   you: 'Bạn',
@@ -151,7 +151,21 @@ const vi = {
   messagesTotal: 'Tin nhắn',
   lastActive: 'Gần nhất',
   approx: 'ước tính',
-  noHistory: 'Chưa có lịch sử'
+  noHistory: 'Chưa có lịch sử',
+  personalize: 'Cá nhân hoá',
+  background: 'Nền',
+  backgroundHint: 'Chọn bộ màu gradient cho toàn app.',
+  accentColor: 'Màu nhấn',
+  accentHint: 'Dùng cho nút, bong bóng gửi đi và badge.',
+  font: 'Phông chữ',
+  mute: 'Tắt thông báo',
+  unmute: 'Bật thông báo',
+  muteByPlatform: 'Tắt theo nền tảng',
+  muteByTag: 'Tắt theo nhãn',
+  mutedByRule: 'Đang tắt bởi quy tắc nền tảng, tài khoản hoặc nhãn',
+  minimize: 'Thu nhỏ',
+  maximize: 'Phóng to',
+  restore: 'Khôi phục'
 }
 
 export type Dictionary = typeof vi
@@ -171,9 +185,9 @@ const en: Dictionary = {
   noConversationsHint: 'Connect an account to get started.',
   noResults: 'No results',
   selectConversation: 'Select a conversation',
-  selectConversationHint: 'All of your Messenger, Instagram and Telegram messages, in one place.',
+  selectConversationHint: 'All of your Messenger, Instagram, Telegram, Zalo and WhatsApp messages, in one place.',
   welcomeTitle: 'Every conversation, one place.',
-  welcomeBody: 'Connect Messenger, Instagram and Telegram. Unison brings them into a single inbox that is fast, quiet and private.',
+  welcomeBody: 'Connect Messenger, Instagram, Telegram, Zalo and WhatsApp. Unison brings them into a single inbox that is fast, quiet and private.',
   tryDemo: 'Try with sample data',
   connectAccount: 'Connect an account',
   you: 'You',
@@ -308,7 +322,21 @@ const en: Dictionary = {
   messagesTotal: 'Messages',
   lastActive: 'Last active',
   approx: 'approx.',
-  noHistory: 'No history yet'
+  noHistory: 'No history yet',
+  personalize: 'Personalize',
+  background: 'Background',
+  backgroundHint: 'Pick the gradient palette for the whole app.',
+  accentColor: 'Accent color',
+  accentHint: 'Used for buttons, outgoing bubbles and badges.',
+  font: 'Font',
+  mute: 'Mute notifications',
+  unmute: 'Unmute notifications',
+  muteByPlatform: 'Mute by platform',
+  muteByTag: 'Mute by tag',
+  mutedByRule: 'Muted by a platform, account or tag rule',
+  minimize: 'Minimize',
+  maximize: 'Maximize',
+  restore: 'Restore'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

@@ -16,7 +16,7 @@ import type {
   SharedKind,
   TagId
 } from '@shared/types'
-import { DEFAULT_SETTINGS } from '@shared/types'
+import { DEFAULT_SETTINGS, isMutedBy, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${TagId}`
@@ -90,6 +90,7 @@ interface State {
   closeSheet(): void
   setSettings(patch: Partial<Settings>): Promise<void>
   toggleTag(conversationId: string, tag: TagId): Promise<void>
+  toggleMute<K extends keyof MuteRules>(kind: K, id: MuteRules[K][number]): Promise<void>
   toggleSidebar(): Promise<void>
   setDetailsTab(tab: DetailsTab): void
   loadProfile(conversationId: string, force?: boolean): Promise<void>
@@ -492,6 +493,12 @@ export const useStore = create<State>((set, get) => ({
     await get().setSettings({ tags })
   },
 
+  async toggleMute(kind, id) {
+    const current = get().settings.muted[kind] as string[]
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+    await get().setSettings({ muted: { ...get().settings.muted, [kind]: next } })
+  },
+
   async toggleSidebar() {
     await get().setSettings({ sidebarCollapsed: !get().settings.sidebarCollapsed })
   },
@@ -648,16 +655,18 @@ export interface UnreadCounts {
 export function useUnreadCounts(): UnreadCounts {
   const conversations = useStore((s) => s.conversations)
   const tags = useStore((s) => s.settings.tags)
-  return useMemo(() => computeUnread(conversations, tags), [conversations, tags])
+  const muted = useStore((s) => s.settings.muted)
+  return useMemo(() => computeUnread(conversations, tags, muted), [conversations, tags, muted])
 }
 
-function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>): UnreadCounts {
+function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>, muted?: MuteRules): UnreadCounts {
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
   const byTag: Record<string, number> = {}
   let total = 0
   for (const c of Object.values(conversations)) {
     if (!c.unreadCount || c.muted) continue
+    if (muted && isMutedBy({ muted, tags }, c)) continue
     total += c.unreadCount
     byPlatform[c.platform] += c.unreadCount
     byAccount[c.accountId] = (byAccount[c.accountId] ?? 0) + c.unreadCount
