@@ -37,7 +37,7 @@ Chromium chỉ ghi âm ra WebM/Opus, còn Telegram và WhatsApp muốn Ogg/Opus 
 
 ## Thiết kế
 
-Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (backdrop blur) bo góc 22px nổi trên nền, font Plus Jakarta Sans đóng gói sẵn (8 subset, có tiếng Việt), bubble gửi đi gradient xanh-tím, pill nhãn pastel kiểu nhãn 3D mềm, thẻ thống kê màu kem/xanh/bạc hà. Liên hệ chưa có ảnh nhận **avatar trừu tượng** sinh bằng SVG (hình khối màu + khuôn mặt nhỏ trên đĩa đen), cố định theo tên nên mỗi người luôn cùng một nhân vật. Token ở , có bộ dark riêng.
+Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (backdrop blur) bo góc 22px nổi trên nền, font Plus Jakarta Sans đóng gói sẵn (8 subset, có tiếng Việt), bubble gửi đi gradient xanh-tím, pill nhãn pastel kiểu nhãn 3D mềm, thẻ thống kê màu kem/xanh/bạc hà. Liên hệ chưa có ảnh nhận **avatar trừu tượng** sinh bằng SVG (hình khối màu + khuôn mặt nhỏ trên đĩa đen), cố định theo tên nên mỗi người luôn cùng một nhân vật. Token ở `src/renderer/src/styles/tokens.css`, có bộ dark riêng.
 
 ## Tính năng
 
