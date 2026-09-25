@@ -39,6 +39,24 @@ export default function App(): JSX.Element {
   const narrow = useStore((s) => s.narrow)
   const setNarrow = useStore((s) => s.setNarrow)
 
+  // Apple-style overlay scrollbars: show the thumb only while scrolling or hovering.
+  useEffect(() => {
+    const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>()
+    const onScroll = (e: Event): void => {
+      const el = e.target as Element
+      if (!(el instanceof Element) || !el.classList.contains('scroll')) return
+      el.classList.add('is-scrolling')
+      const existing = timers.get(el)
+      if (existing) clearTimeout(existing)
+      timers.set(
+        el,
+        setTimeout(() => el.classList.remove('is-scrolling'), 900)
+      )
+    }
+    document.addEventListener('scroll', onScroll, true)
+    return () => document.removeEventListener('scroll', onScroll, true)
+  }, [])
+
   useEffect(() => {
     const media = window.matchMedia('(max-width: 720px)')
     const apply = (): void => setNarrow(media.matches)

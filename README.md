@@ -55,6 +55,8 @@ Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (ba
 - Responsive: bubble và ảnh co theo bề rộng khung chat (container query), dưới 1180px pane chi tiết thành lớp phủ, dưới 980px thanh bên thành rail, dưới 720px một cột kiểu điện thoại với nút quay lại
 - Cá nhân hoá trong Cài đặt: 6 bộ nền gradient (Bình minh, Đại dương, Kẹo ngọt, Rừng xanh, Oải hương, Tối giản), 6 màu nhấn, 4 font (Plus Jakarta Sans, Inter, Nunito, hệ thống)
 - Tắt thông báo theo từng hội thoại (chuột phải hoặc công tắc ở tab Thông tin), theo nhãn, theo tài khoản (chuột phải ở thanh bên) hoặc theo nền tảng; badge chưa đọc cũng bỏ qua những gì đã tắt
+- Thanh tiêu đề hiện câu chào vui xoay vòng mỗi 90 giây, gọi tên bạn, biết giờ trong ngày, số tin chưa đọc và thời tiết thật nơi bạn ở (Open-Meteo, định vị thô qua IP, không cần API key; tắt được trong Cài đặt)
+- Thanh cuộn kiểu macOS: viên 4px chỉ hiện khi cuộn hoặc rê chuột
 - Thanh tiêu đề mỏng kiểu mac ở mọi nền tảng: trên Windows app tự vẽ ba đèn giao thông thay cho nút hệ thống che nội dung
 - ⌘K command palette, thông báo hệ thống, dark/light/system, Tiếng Việt/English
 

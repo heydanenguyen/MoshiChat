@@ -13,7 +13,8 @@ import type {
   SearchHit,
   SharedKind,
   SendOptions,
-  Settings
+  Settings,
+  WeatherInfo
 } from './types'
 
 /** The API exposed to the renderer through the preload script. */
@@ -79,6 +80,8 @@ export interface UnisonBridge {
     describeFile(file: File): OutgoingAttachment
     /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
     saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<OutgoingAttachment>
+    /** Local weather for the greeting line; undefined when offline. */
+    weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform
     windowAction(action: 'minimize' | 'maximize' | 'close'): void
   }
@@ -117,6 +120,7 @@ export const IPC = {
   appOpenExternal: 'app:openExternal',
   appPickFiles: 'app:pickFiles',
   appSaveVoice: 'app:saveVoice',
+  appWeather: 'app:weather',
   appWindowAction: 'app:windowAction',
   event: 'bridge:event'
 } as const

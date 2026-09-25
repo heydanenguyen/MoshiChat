@@ -240,6 +240,17 @@ export const FONTS: Array<{ id: FontId; name: string; family: string }> = [
   { id: 'system', name: 'System', family: '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI"' }
 ]
 
+/** Current conditions near the user, from Open-Meteo (WMO weather codes). */
+export interface WeatherInfo {
+  city: string
+  country: string
+  temperature: number
+  feelsLike?: number
+  code: number
+  isDay: boolean
+  fetchedAt: number
+}
+
 /** Where notifications are switched off. */
 export interface MuteRules {
   conversations: string[]
@@ -260,6 +271,8 @@ export interface Settings {
   accent: AccentId
   font: FontId
   muted: MuteRules
+  /** Cheerful rotating line (with local weather) in the title bar. */
+  greetings: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -272,7 +285,8 @@ export const DEFAULT_SETTINGS: Settings = {
   mesh: 'sunrise',
   accent: 'ocean',
   font: 'jakarta',
-  muted: { conversations: [], tags: [], accounts: [], platforms: [] }
+  muted: { conversations: [], tags: [], accounts: [], platforms: [] },
+  greetings: true
 }
 
 /** True when notifications for this conversation are switched off by any rule. */

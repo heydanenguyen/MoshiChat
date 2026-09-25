@@ -190,7 +190,9 @@ const vi = {
   noPages: 'Tài khoản này không quản lý Page nào',
   noInstagramLinked: 'Chưa liên kết Instagram',
   alsoInstagram: 'Thêm cả Instagram đã liên kết',
-  connectedAs: 'Đã kết nối {name}'
+  connectedAs: 'Đã kết nối {name}',
+  greetings: 'Câu chào trên thanh tiêu đề',
+  greetingsHint: 'Một câu vui mỗi vài phút, kèm thời tiết nơi bạn đang ở (định vị thô qua IP).'
 }
 
 export type Dictionary = typeof vi
@@ -386,7 +388,9 @@ const en: Dictionary = {
   noPages: 'This account does not manage any Page',
   noInstagramLinked: 'No Instagram linked',
   alsoInstagram: 'Also add linked Instagram accounts',
-  connectedAs: 'Connected {name}'
+  connectedAs: 'Connected {name}',
+  greetings: 'Title bar greetings',
+  greetingsHint: 'A cheerful line every few minutes, with the weather where you are (coarse IP location).'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

@@ -108,6 +108,18 @@ export function SettingsSheet(): JSX.Element {
               </div>
               <div className="settings-row">
                 <div className="settings-row-text">
+                  <div className="settings-row-title">{t('greetings')}</div>
+                  <div className="settings-row-sub">{t('greetingsHint')}</div>
+                </div>
+                <button
+                  className={`switch ${settings.greetings ? 'on' : ''}`}
+                  role="switch"
+                  aria-checked={settings.greetings}
+                  onClick={() => void setSettings({ greetings: !settings.greetings })}
+                />
+              </div>
+              <div className="settings-row">
+                <div className="settings-row-text">
                   <div className="settings-row-title">{t('appearance')}</div>
                 </div>
                 <div className="segmented">

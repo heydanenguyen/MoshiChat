@@ -9,6 +9,7 @@ import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
+import { getWeather } from './weather'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
@@ -325,6 +326,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number) => saveVoice(bytes, duration))
+  ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!window) return
     if (action === 'minimize') window.minimize()
