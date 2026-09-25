@@ -176,6 +176,10 @@ function registerIpc(): void {
   })
 }
 
+// Chromium stops painting occluded windows on Windows, which breaks screenshot-based
+// UI checks during development. Keep the default behaviour in packaged builds.
+if (process.env.ELECTRON_RENDERER_URL && isWindows) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
