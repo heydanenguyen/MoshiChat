@@ -49,15 +49,19 @@ interface State {
   toast?: Toast
   replyTo?: Message
   pendingFiles: OutgoingAttachment[]
+  forwarding?: Message
 
   init(): Promise<void>
   select(id?: string, highlightId?: string): void
   setFilter(filter: Filter): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
-  send(text: string): Promise<void>
+  send(text: string, files?: OutgoingAttachment[]): Promise<void>
   react(messageId: string, emoji: string): Promise<void>
   setReplyTo(message?: Message): void
+  startForward(message?: Message): void
+  forward(toConversationId: string): Promise<void>
+  loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
   addFiles(files: OutgoingAttachment[]): void
   addDroppedFiles(files: File[]): void
   removeFile(path: string): void
@@ -82,6 +86,9 @@ let toastCounter = 0
 let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+const cleanError = (err: unknown): string =>
+  (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
 
 function upsertMessage(list: Message[] | undefined, message: Message, replaceId?: string): Message[] | undefined {
   if (!list) return list
@@ -254,8 +261,9 @@ export const useStore = create<State>((set, get) => ({
     get().select(hit.conversation.id, hit.message.id)
   },
 
-  async send(text) {
-    const { selectedId, messages, settings, replyTo, pendingFiles } = get()
+  async send(text, files) {
+    const { selectedId, messages, settings, replyTo } = get()
+    const pendingFiles = files ?? get().pendingFiles
     const trimmed = text.trim()
     if (!selectedId || (!trimmed && !pendingFiles.length)) return
     const tempId = `temp-${Date.now()}`
@@ -269,8 +277,9 @@ export const useStore = create<State>((set, get) => ({
         id: `${tempId}-${i}`,
         kind: f.mime.startsWith('image/') ? 'image' : f.mime.startsWith('video/') ? 'video' : f.mime.startsWith('audio/') ? 'audio' : 'file',
         url: f.preview,
-        name: f.name,
-        size: f.size
+        name: f.voice ? translate(settings.language, 'voice') : f.name,
+        size: f.size,
+        duration: f.duration
       })),
       reactions: [],
       replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName, text: replyTo.text } : undefined,
@@ -281,20 +290,24 @@ export const useStore = create<State>((set, get) => ({
     set({
       messages: { ...messages, [selectedId]: [...(messages[selectedId] ?? []), optimistic] },
       replyTo: undefined,
-      pendingFiles: []
+      pendingFiles: files ? get().pendingFiles : []
     })
     try {
       const sent = await window.unison.messages.send(selectedId, trimmed, {
         replyToId: replyTo?.id,
         attachments: pendingFiles.length ? pendingFiles : undefined
       })
+      // Keep local previews for media the platform does not echo back.
+      for (const [i, attachment] of sent.attachments.entries()) {
+        if (!attachment.url && optimistic.attachments[i]?.url) attachment.url = optimistic.attachments[i].url
+      }
       const s = get()
       set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], sent, tempId) ?? [] } })
     } catch (err) {
       const s = get()
       const failed = { ...optimistic, status: 'failed' as const }
       set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], failed) ?? [] } })
-      get().showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+      get().showToast(cleanError(err), 'error')
     }
   },
 
@@ -304,12 +317,51 @@ export const useStore = create<State>((set, get) => ({
     try {
       await window.unison.messages.react(selectedId, messageId, emoji)
     } catch (err) {
-      get().showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+      get().showToast(cleanError(err), 'error')
     }
   },
 
   setReplyTo(message) {
     set({ replyTo: message })
+  },
+
+  startForward(message) {
+    set({ forwarding: message })
+  },
+
+  async forward(toConversationId) {
+    const { forwarding, settings } = get()
+    if (!forwarding) return
+    set({ forwarding: undefined })
+    try {
+      const sent = await window.unison.messages.forward(forwarding.conversationId, forwarding.id, toConversationId)
+      const s = get()
+      if (s.messages[toConversationId]) {
+        set({ messages: { ...s.messages, [toConversationId]: upsertMessage(s.messages[toConversationId], sent) ?? [] } })
+      }
+      get().showToast(translate(settings.language, 'forwarded', { name: s.conversations[toConversationId]?.title ?? '' }))
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  async loadAttachment(conversationId, messageId, attachmentId) {
+    try {
+      const url = await window.unison.messages.loadAttachment(conversationId, messageId, attachmentId)
+      if (!url) return undefined
+      const s = get()
+      const list = s.messages[conversationId]
+      if (list) {
+        const next = list.map((m) =>
+          m.id === messageId ? { ...m, attachments: m.attachments.map((a) => (a.id === attachmentId ? { ...a, url } : a)) } : m
+        )
+        set({ messages: { ...s.messages, [conversationId]: next } })
+      }
+      return url
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+      return undefined
+    }
   },
 
   addFiles(files) {
@@ -361,7 +413,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   closeSheet() {
-    set({ sheet: { kind: 'none' } })
+    set({ sheet: { kind: 'none' }, forwarding: undefined })
   },
 
   async setSettings(patch) {
@@ -431,7 +483,7 @@ export function useVisibleConversations(): Conversation[] {
   return useMemo(() => computeVisible(conversations, filter, search), [conversations, filter, search])
 }
 
-function computeVisible(conversations: Record<string, Conversation>, filter: Filter, search: string): Conversation[] {
+export function computeVisible(conversations: Record<string, Conversation>, filter: Filter, search: string): Conversation[] {
   const query = search.trim().toLowerCase()
   return Object.values(conversations)
     .filter((c) => {

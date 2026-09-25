@@ -18,8 +18,10 @@ const bridge: UnisonBridge = {
   messages: {
     list: (id, beforeId) => ipcRenderer.invoke(IPC.messagesList, id, beforeId),
     send: (id, text, options) => ipcRenderer.invoke(IPC.messagesSend, id, text, options),
+    forward: (fromId, messageId, toId) => ipcRenderer.invoke(IPC.messagesForward, fromId, messageId, toId),
     react: (id, messageId, emoji) => ipcRenderer.invoke(IPC.messagesReact, id, messageId, emoji),
     search: (query) => ipcRenderer.invoke(IPC.messagesSearch, query),
+    loadAttachment: (id, messageId, attachmentId) => ipcRenderer.invoke(IPC.messagesLoadAttachment, id, messageId, attachmentId),
     typing: (id) => ipcRenderer.invoke(IPC.messagesTyping, id)
   },
   auth: {
@@ -39,6 +41,7 @@ const bridge: UnisonBridge = {
       mime: file.type || 'application/octet-stream',
       size: file.size
     }),
+    saveVoice: (bytes, durationSeconds) => ipcRenderer.invoke(IPC.appSaveVoice, bytes, durationSeconds),
     platform: process.platform,
     windowAction: (action) => ipcRenderer.send(IPC.appWindowAction, action)
   },

@@ -5,7 +5,7 @@ import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/
 import type { Account, Attachment, Conversation, Message, Reaction, SendOptions } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, previewOf } from './types'
+import { conversationId, externalIdOf, matchesQuery, previewOf } from './types'
 
 export interface WhatsAppSecret {
   /** Folder name (under the adapter data dir) that holds the signal keys. */
@@ -175,7 +175,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const files = options.attachments ?? []
     for (const [index, file] of files.entries()) {
       const caption = index === files.length - 1 ? text : undefined
-      if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
+      if (file.voice) sent = await sock.sendMessage(jid, { audio: { url: file.path }, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: file.duration }, misc)
+      else if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
       else if (file.mime.startsWith('video/')) sent = await sock.sendMessage(jid, { video: { url: file.path }, caption }, misc)
       else sent = await sock.sendMessage(jid, { document: { url: file.path }, mimetype: file.mime, fileName: file.name, caption }, misc)
     }
@@ -198,6 +199,43 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async setTyping(id: string): Promise<void> {
     await this.requireSock().sendPresenceUpdate('composing', externalIdOf(id)).catch(() => undefined)
+  }
+
+  async forward(fromId: string, messageId: string, toId: string): Promise<Message> {
+    const raw = this.rawMessage(externalIdOf(fromId), messageId)
+    if (!raw) throw new Error('Message not found')
+    const toJid = externalIdOf(toId)
+    const sent = await this.requireSock().sendMessage(toJid, { forward: raw })
+    if (!sent) throw new Error('WhatsApp did not return the forwarded message')
+    this.remember(toJid, [sent])
+    const message = await this.toMessage(sent, toId)
+    this.cacheConverted(toId, [message])
+    return message
+  }
+
+  async searchMessages(query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    const hits: Message[] = []
+    for (const jid of this.history.keys()) {
+      const id = conversationId(this.account.id, jid)
+      for (const message of this.messagesFor(id)) if (matchesQuery(message, needle)) hits.push(message)
+    }
+    return hits.sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  async downloadAttachment(id: string, messageId: string): Promise<string | undefined> {
+    const raw = this.rawMessage(externalIdOf(id), messageId)
+    if (!raw || !this.lib) return undefined
+    const content = this.lib.normalizeMessageContent(raw.message)
+    const media = content?.imageMessage ?? content?.videoMessage ?? content?.audioMessage ?? content?.documentMessage ?? content?.stickerMessage
+    if (!media) return undefined
+    if (Number(media.fileLength ?? 0) > 25_000_000) return undefined
+    try {
+      const buffer = await this.lib.downloadMediaMessage(raw, 'buffer', {})
+      return `data:${media.mimetype ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`
+    } catch {
+      return undefined
+    }
   }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {
@@ -407,7 +445,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     } else if (content?.audioMessage) {
       const m = content.audioMessage
       contextInfo = m.contextInfo
-      attachments.push({ id: `${raw.key.id}-aud`, kind: 'audio', name: m.ptt ? 'Voice message' : 'Audio', size: Number(m.fileLength ?? 0) })
+      attachments.push({ id: `${raw.key.id}-aud`, kind: 'audio', name: m.ptt ? 'Voice message' : 'Audio', size: Number(m.fileLength ?? 0), duration: m.seconds ?? undefined })
     } else if (content?.stickerMessage) {
       contextInfo = content.stickerMessage.contextInfo
       attachments.push({ id: `${raw.key.id}-stk`, kind: 'sticker', name: '' })

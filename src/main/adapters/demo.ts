@@ -1,7 +1,7 @@
 import type { Account, Attachment, Conversation, Message, Platform, SendOptions } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId } from './types'
+import { conversationId, matchesQuery } from './types'
 
 /**
  * Sample-data adapter for the first-run experience. It behaves like a live
@@ -349,8 +349,9 @@ export class DemoAdapter implements PlatformAdapter {
       id: nextId('a' + index),
       kind: file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file',
       url: file.preview,
-      name: file.name,
-      size: file.size
+      name: file.voice ? 'Voice message' : file.name,
+      size: file.size,
+      duration: file.duration
     }))
     const message: Message = {
       id: nextId('m'),
@@ -393,6 +394,34 @@ export class DemoAdapter implements PlatformAdapter {
   }
 
   async setTyping(): Promise<void> {}
+
+  async forward(fromId: string, messageId: string, toId: string): Promise<Message> {
+    const original = (this.messages.get(fromId) ?? []).find((m) => m.id === messageId)
+    if (!original) throw new Error('Message not found')
+    const message: Message = {
+      ...original,
+      id: nextId('m'),
+      conversationId: toId,
+      senderId: 'me',
+      senderName: ME,
+      reactions: [],
+      replyTo: undefined,
+      sentAt: Date.now(),
+      isOutgoing: true,
+      status: 'sent'
+    }
+    this.append(message)
+    return message
+  }
+
+  async searchMessages(query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    return [...this.messages.values()]
+      .flat()
+      .filter((m) => matchesQuery(m, needle))
+      .sort((a, b) => b.sentAt - a.sentAt)
+      .slice(0, limit)
+  }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {
     const message = (this.messages.get(id) ?? []).find((m) => m.id === messageId)

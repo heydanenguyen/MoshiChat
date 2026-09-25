@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from 'electron'
 import { join, basename } from 'path'
-import { readFile, stat } from 'fs/promises'
+import { readFile, stat, writeFile } from 'fs/promises'
 import type { AddAccountInput, BridgeEvent, OutgoingAttachment, SendOptions, Settings } from '@shared/types'
 import { IPC } from '@shared/bridge'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
+import { webmToOgg } from './media/webm-to-ogg'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
@@ -145,6 +146,32 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
   return files
 }
 
+/** Persist a MediaRecorder voice note as Ogg/Opus so platforms treat it as a voice message. */
+async function saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<OutgoingAttachment> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  let data: Uint8Array = bytes
+  let ext = 'webm'
+  let mime = 'audio/webm'
+  try {
+    data = webmToOgg(bytes)
+    ext = 'ogg'
+    mime = 'audio/ogg'
+  } catch (err) {
+    log('voice remux failed, keeping WebM:', (err as Error).message)
+  }
+  const path = join(app.getPath('temp'), `unison-voice-${stamp}.${ext}`)
+  await writeFile(path, data)
+  return {
+    path,
+    name: `voice-${stamp}.${ext}`,
+    mime,
+    size: data.length,
+    voice: true,
+    duration: Math.round(durationSeconds),
+    preview: data.length < 2_000_000 ? `data:${mime};base64,${Buffer.from(data).toString('base64')}` : undefined
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
   ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
@@ -155,6 +182,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
   ipcMain.handle(IPC.messagesList, (_e, id: string, beforeId?: string) => manager.fetchMessages(id, beforeId))
   ipcMain.handle(IPC.messagesSend, (_e, id: string, text: string, options?: SendOptions) => manager.sendMessage(id, text, options))
+  ipcMain.handle(IPC.messagesForward, (_e, fromId: string, messageId: string, toId: string) => manager.forward(fromId, messageId, toId))
+  ipcMain.handle(IPC.messagesLoadAttachment, (_e, id: string, messageId: string, attachmentId: string) => manager.loadAttachment(id, messageId, attachmentId))
   ipcMain.handle(IPC.messagesReact, (_e, id: string, messageId: string, emoji: string) => manager.react(id, messageId, emoji))
   ipcMain.handle(IPC.messagesSearch, (_e, query: string) => manager.search(query))
   ipcMain.handle(IPC.messagesTyping, (_e, id: string) => manager.setTyping(id))
@@ -168,6 +197,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
+  ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number) => saveVoice(bytes, duration))
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!window) return
     if (action === 'minimize') window.minimize()

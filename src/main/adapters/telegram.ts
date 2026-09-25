@@ -5,7 +5,7 @@ import { LogLevel } from 'telegram/extensions/Logger'
 import type { Account, Attachment, Conversation, Message, Reaction, SendOptions } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf } from './types'
+import { conversationId, externalIdOf, matchesQuery } from './types'
 
 export interface TelegramSecret {
   apiId: number
@@ -153,11 +153,13 @@ export class TelegramAdapter implements PlatformAdapter {
     const files = options.attachments ?? []
     let sent: Api.Message
     if (files.length) {
+      const voice = files.length === 1 && files[0].voice
       const result = await client.sendFile(entity, {
         file: files.length === 1 ? files[0].path : files.map((f) => f.path),
         caption: text || undefined,
         replyTo,
-        forceDocument: files.some((f) => !f.mime.startsWith('image/') && !f.mime.startsWith('video/'))
+        voiceNote: !!voice,
+        forceDocument: !voice && files.some((f) => !f.mime.startsWith('image/') && !f.mime.startsWith('video/'))
       })
       sent = Array.isArray(result) ? result[result.length - 1] : result
     } else {
@@ -166,6 +168,63 @@ export class TelegramAdapter implements PlatformAdapter {
     const message = await this.toMessage(sent, id)
     this.remember(id, [message])
     return message
+  }
+
+  async forward(fromId: string, messageId: string, toId: string): Promise<Message> {
+    const client = this.requireClient()
+    const fromEntity = await this.entityFor(fromId)
+    const toEntity = await this.entityFor(toId)
+    const result = await client.forwardMessages(toEntity, { messages: [Number(messageId)], fromPeer: fromEntity })
+    const sent = result[0]
+    if (!sent) throw new Error('Telegram did not return the forwarded message')
+    const message = await this.toMessage(sent, toId)
+    this.remember(toId, [message])
+    return message
+  }
+
+  /** Server-side search across every dialog (messages.searchGlobal). */
+  async searchMessages(query: string, limit: number): Promise<Message[]> {
+    const client = this.requireClient()
+    const result = await client.invoke(
+      new Api.messages.SearchGlobal({
+        q: query,
+        offsetRate: 0,
+        offsetPeer: new Api.InputPeerEmpty(),
+        offsetId: 0,
+        limit,
+        filter: new Api.InputMessagesFilterEmpty(),
+        minDate: 0,
+        maxDate: 0
+      })
+    )
+    if (!('messages' in result)) return []
+    for (const user of result.users) if (user instanceof Api.User) this.entities.set(user.id.toString(), user)
+    for (const chat of result.chats) {
+      if (chat instanceof Api.Chat) this.entities.set(`-${chat.id}`, chat)
+      else if (chat instanceof Api.Channel) this.entities.set(`-100${chat.id}`, chat)
+    }
+    const messages: Message[] = []
+    for (const raw of result.messages) {
+      if (!(raw instanceof Api.Message)) continue
+      const peerId = peerToId(raw.peerId)
+      if (!peerId) continue
+      messages.push(await this.toMessage(raw, conversationId(this.account.id, peerId)))
+    }
+    return messages
+  }
+
+  async downloadAttachment(id: string, messageId: string): Promise<string | undefined> {
+    const client = this.requireClient()
+    const entity = await this.entityFor(id)
+    const [raw] = await client.getMessages(entity, { ids: [Number(messageId)] })
+    if (!(raw instanceof Api.Message) || !raw.media) return undefined
+    const doc = raw.media instanceof Api.MessageMediaDocument ? raw.media.document : undefined
+    const size = doc instanceof Api.Document ? Number(doc.size) : 0
+    if (size > 25_000_000) return undefined
+    const buffer = (await client.downloadMedia(raw, {})) as Buffer | undefined
+    if (!buffer?.length) return undefined
+    const mime = doc instanceof Api.Document ? doc.mimeType : 'image/jpeg'
+    return `data:${mime};base64,${buffer.toString('base64')}`
   }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {
@@ -316,7 +375,8 @@ export class TelegramAdapter implements PlatformAdapter {
         name: sticker ? sticker.alt : (filename?.fileName ?? (audio ? 'Voice message' : 'File')),
         size: Number(doc.size),
         width: video?.w,
-        height: video?.h
+        height: video?.h,
+        duration: audio?.duration ?? video?.duration
       }
       if (sticker && doc.mimeType === 'image/webp') attachment.url = await this.downloadThumb(raw)
       if (video && !video.roundMessage) attachment.thumbnailUrl = await this.downloadThumb(raw)

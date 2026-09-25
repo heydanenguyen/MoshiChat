@@ -108,7 +108,16 @@ const vi = {
   showQr: 'Hiện mã QR',
   scanQr: 'Quét mã QR',
   qrHint: 'Mở {app} trên điện thoại và quét mã này để liên kết.',
-  qrWaiting: 'Đang chờ quét…'
+  qrWaiting: 'Đang chờ quét…',
+  forward: 'Chuyển tiếp',
+  forwardTo: 'Chuyển tiếp đến…',
+  forwarded: 'Đã chuyển tiếp đến {name}',
+  forwardTextOnly: 'chỉ văn bản',
+  recordVoice: 'Ghi âm',
+  recording: 'Đang ghi âm…',
+  micDenied: 'Không truy cập được micro',
+  play: 'Phát',
+  pause: 'Tạm dừng'
 }
 
 export type Dictionary = typeof vi
@@ -222,7 +231,16 @@ const en: Dictionary = {
   showQr: 'Show QR code',
   scanQr: 'Scan QR code',
   qrHint: 'Open {app} on your phone and scan this code to link.',
-  qrWaiting: 'Waiting for scan…'
+  qrWaiting: 'Waiting for scan…',
+  forward: 'Forward',
+  forwardTo: 'Forward to…',
+  forwarded: 'Forwarded to {name}',
+  forwardTextOnly: 'text only',
+  recordVoice: 'Record voice message',
+  recording: 'Recording…',
+  micDenied: 'Microphone access was denied',
+  play: 'Play',
+  pause: 'Pause'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

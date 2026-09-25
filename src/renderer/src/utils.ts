@@ -104,5 +104,5 @@ export function sectionize(messages: Message[]): DaySection[] {
   return sections
 }
 
-export const isMac = (window.unison?.app.platform ?? 'win32') === 'darwin'
+export const isMac = typeof window !== 'undefined' && (window.unison?.app.platform ?? 'win32') === 'darwin'
 export const modKey = isMac ? '⌘' : 'Ctrl'

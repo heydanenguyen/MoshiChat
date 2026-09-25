@@ -1,7 +1,7 @@
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
 import type { Account, Attachment, Conversation, Message, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, previewOf } from './types'
+import { conversationId, externalIdOf, matchesQuery, previewOf } from './types'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -262,6 +262,42 @@ export class ZaloAdapter implements PlatformAdapter {
   async setTyping(id: string): Promise<void> {
     const threadId = externalIdOf(id)
     await this.requireApi().sendTypingEvent(threadId, this.threadTypes.get(threadId) ?? 0).catch(() => undefined)
+  }
+
+  async forward(fromId: string, messageId: string, toId: string): Promise<Message> {
+    const raw = this.rawMessage(externalIdOf(fromId), messageId)
+    if (!raw) throw new Error('Message not found')
+    const text = textOf(raw)
+    if (!text) throw new Error('Zalo can only forward text messages from Unison')
+    const toThread = externalIdOf(toId)
+    const type = this.threadTypes.get(toThread) ?? 0
+    const result = await this.requireApi().forwardMessage({ message: text }, [toThread], type)
+    const ok = result.success[0]
+    if (!ok) throw new Error(`Zalo refused the forward (${result.fail[0]?.error_code ?? 'unknown'})`)
+    const message: Message = {
+      id: String(ok.msgId),
+      conversationId: toId,
+      senderId: this.meId,
+      senderName: this.account.displayName,
+      text,
+      attachments: [],
+      reactions: [],
+      sentAt: Date.now(),
+      isOutgoing: true,
+      status: 'sent'
+    }
+    this.cacheConverted(toId, [message])
+    return message
+  }
+
+  async searchMessages(query: string, limit: number): Promise<Message[]> {
+    const needle = query.toLowerCase()
+    const hits: Message[] = []
+    for (const threadId of this.raw.keys()) {
+      const id = conversationId(this.account.id, threadId)
+      for (const message of this.messagesFor(id)) if (matchesQuery(message, needle)) hits.push(message)
+    }
+    return hits.sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
   }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {

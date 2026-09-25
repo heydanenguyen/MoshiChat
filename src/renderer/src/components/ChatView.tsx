@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { BellOff, File, Info, Mic, Play, Reply, SmilePlus } from 'lucide-react'
+import { BellOff, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
@@ -258,6 +258,7 @@ function Bubble({
 }): JSX.Element {
   const t = useT()
   const setReplyTo = useStore((s) => s.setReplyTo)
+  const startForward = useStore((s) => s.startForward)
   const react = useStore((s) => s.react)
   const [picker, setPicker] = useState(false)
   const direction = message.isOutgoing ? 'out' : 'in'
@@ -276,7 +277,8 @@ function Bubble({
     return () => window.removeEventListener('mousedown', close)
   }, [picker])
 
-  const showActions = (features.reply || features.react) && message.status !== 'sending' && message.status !== 'failed'
+  const settled = message.status !== 'sending' && message.status !== 'failed'
+  const showActions = settled && (features.reply || features.react || true)
 
   return (
     <div className={`bubble-row ${highlighted ? 'highlight' : ''}`} data-message-id={message.id}>
@@ -289,12 +291,12 @@ function Bubble({
         )}
         {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
         {!sticker &&
-          message.attachments.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} />)}
+          message.attachments.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} />)}
         {message.text && (media ? <div className="bubble-caption">{message.text}</div> : message.text)}
         {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
         {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
       </div>
-      {showActions ? (
+      {showActions && (
         <div className={`bubble-actions ${picker ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
           {features.react && (
             <button className="icon-btn" title={t('react')} onClick={() => setPicker((p) => !p)}>
@@ -306,6 +308,9 @@ function Bubble({
               <Reply size={15} strokeWidth={2} />
             </button>
           )}
+          <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
+            <Forward size={15} strokeWidth={2} />
+          </button>
           {picker && (
             <div className="emoji-picker">
               {QUICK_REACTIONS.map((emoji) => (
@@ -323,13 +328,13 @@ function Bubble({
             </div>
           )}
         </div>
-      ) : null}
+      )}
       <span className="bubble-time">{formatTime(message.sentAt, language)}</span>
     </div>
   )
 }
 
-function AttachmentView({ attachment }: { attachment: Attachment }): JSX.Element {
+function AttachmentView({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
   const t = useT()
   const openExternal = (url?: string): void => {
     if (url && /^https?:/.test(url)) void window.unison.app.openExternal(url)
@@ -365,6 +370,8 @@ function AttachmentView({ attachment }: { attachment: Attachment }): JSX.Element
           </span>
         </div>
       )
+    case 'audio':
+      return <AudioPlayer attachment={attachment} message={message} />
     case 'link':
       return (
         <a className="attachment-link" href={attachment.url} onClick={(e) => (e.preventDefault(), openExternal(attachment.url))}>
@@ -380,12 +387,99 @@ function AttachmentView({ attachment }: { attachment: Attachment }): JSX.Element
     default:
       return (
         <div className="attachment-file" onClick={() => openExternal(attachment.url)}>
-          <span className="attachment-file-icon">{attachment.kind === 'audio' ? <Mic size={18} /> : <File size={18} />}</span>
+          <span className="attachment-file-icon">
+            <File size={18} />
+          </span>
           <span>
-            <div className="attachment-file-name">{attachment.name ?? (attachment.kind === 'audio' ? t('voice') : t('file'))}</div>
+            <div className="attachment-file-name">{attachment.name ?? t('file')}</div>
             <div className="attachment-file-meta">{formatBytes(attachment.size) || attachment.kind}</div>
           </span>
         </div>
       )
   }
+}
+
+const BAR_COUNT = 28
+/** Deterministic pseudo-waveform so every voice note has its own shape. */
+function barsFor(seed: string): number[] {
+  let hash = 7
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0
+  return Array.from({ length: BAR_COUNT }, (_, i) => {
+    hash = (hash * 1103515245 + 12345) & 0x7fffffff
+    return 5 + ((hash >> 8) % 14) + (i % 5 === 0 ? 3 : 0)
+  })
+}
+
+function AudioPlayer({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
+  const t = useT()
+  const loadAttachment = useStore((s) => s.loadAttachment)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [duration, setDuration] = useState(attachment.duration ?? 0)
+  const bars = barsFor(attachment.id)
+
+  const toggle = async (): Promise<void> => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) {
+      audio.pause()
+      return
+    }
+    if (!audio.src || audio.src === window.location.href) {
+      if (!attachment.url) {
+        setLoading(true)
+        const url = await loadAttachment(message.conversationId, message.id, attachment.id)
+        setLoading(false)
+        if (!url) return
+        audio.src = url
+      } else {
+        audio.src = attachment.url
+      }
+    }
+    try {
+      await audio.play()
+    } catch {
+      /* format not supported */
+    }
+  }
+
+  const format = (s: number): string => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`
+  const shown = playing && duration ? progress * duration : duration
+
+  return (
+    <div className="audio-player">
+      <button className="audio-play" onClick={() => void toggle()} title={playing ? t('pause') : t('play')}>
+        {loading ? <span className="spinner" /> : playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
+      </button>
+      <div className="audio-track">
+        <div className="audio-bars">
+          {bars.map((h, i) => (
+            <span key={i} style={{ height: h }} className={i / BAR_COUNT < progress ? 'played' : ''} />
+          ))}
+        </div>
+        <span className="audio-time">{format(shown)}</span>
+      </div>
+      <audio
+        ref={audioRef}
+        preload="none"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false)
+          setProgress(0)
+        }}
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration
+          if (Number.isFinite(d) && d > 0) setDuration(d)
+        }}
+        onTimeUpdate={(e) => {
+          const d = e.currentTarget.duration
+          if (Number.isFinite(d) && d > 0) setProgress(e.currentTarget.currentTime / d)
+          else if (duration) setProgress(Math.min(1, e.currentTarget.currentTime / duration))
+        }}
+      />
+    </div>
+  )
 }

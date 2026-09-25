@@ -26,8 +26,11 @@ export interface UnisonBridge {
   messages: {
     list(conversationId: string, beforeId?: string): Promise<Message[]>
     send(conversationId: string, text: string, options?: SendOptions): Promise<Message>
+    forward(fromConversationId: string, messageId: string, toConversationId: string): Promise<Message>
     react(conversationId: string, messageId: string, emoji: string): Promise<void>
     search(query: string): Promise<SearchHit[]>
+    /** Fetch the full media of an attachment on demand. Resolves to a data URL, or undefined when unavailable. */
+    loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
     typing(conversationId: string): Promise<void>
   }
   auth: {
@@ -43,6 +46,8 @@ export interface UnisonBridge {
     pickFiles(): Promise<OutgoingAttachment[]>
     /** Resolve a dropped or pasted File to an OutgoingAttachment (the path is only known in the preload). */
     describeFile(file: File): OutgoingAttachment
+    /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
+    saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<OutgoingAttachment>
     platform: NodeJS.Platform
     windowAction(action: 'minimize' | 'maximize' | 'close'): void
   }
@@ -59,8 +64,10 @@ export const IPC = {
   conversationsMarkRead: 'conversations:markRead',
   messagesList: 'messages:list',
   messagesSend: 'messages:send',
+  messagesForward: 'messages:forward',
   messagesReact: 'messages:react',
   messagesSearch: 'messages:search',
+  messagesLoadAttachment: 'messages:loadAttachment',
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
@@ -68,6 +75,7 @@ export const IPC = {
   settingsSet: 'settings:set',
   appOpenExternal: 'app:openExternal',
   appPickFiles: 'app:pickFiles',
+  appSaveVoice: 'app:saveVoice',
   appWindowAction: 'app:windowAction',
   event: 'bridge:event'
 } as const

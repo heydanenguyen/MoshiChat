@@ -11,6 +11,7 @@ import { SettingsSheet } from './components/SettingsSheet'
 import { AddAccountSheet } from './components/AddAccountSheet'
 import { AuthPromptSheet } from './components/AuthPromptSheet'
 import { CommandPalette } from './components/CommandPalette'
+import { ForwardSheet } from './components/ForwardSheet'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -25,6 +26,7 @@ export default function App(): JSX.Element {
   const detailsOpen = useStore((s) => s.detailsOpen)
   const selectedId = useStore((s) => s.selectedId)
   const toast = useStore((s) => s.toast)
+  const forwarding = useStore((s) => s.forwarding)
 
   useEffect(() => {
     void init()
@@ -64,7 +66,7 @@ export default function App(): JSX.Element {
       } else if (mod && e.key === ',') {
         e.preventDefault()
         openSheet({ kind: 'settings' })
-      } else if (e.key === 'Escape' && sheet.kind !== 'none') {
+      } else if (e.key === 'Escape' && (sheet.kind !== 'none' || useStore.getState().forwarding)) {
         closeSheet()
       }
     }
@@ -84,6 +86,7 @@ export default function App(): JSX.Element {
       {sheet.kind === 'settings' && <SettingsSheet />}
       {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
       {sheet.kind === 'command' && <CommandPalette />}
+      {forwarding && <ForwardSheet message={forwarding} />}
       {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
 
       {toast && (

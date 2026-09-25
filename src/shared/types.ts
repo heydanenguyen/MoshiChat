@@ -68,6 +68,8 @@ export interface Attachment {
   size?: number
   width?: number
   height?: number
+  /** Seconds, for audio and video. */
+  duration?: number
 }
 
 export interface Reaction {
@@ -100,8 +102,11 @@ export interface OutgoingAttachment {
   name: string
   mime: string
   size: number
-  /** Data URL preview for images, so the optimistic bubble can show it immediately. */
+  /** Data URL preview for images (and small voice notes), so the optimistic bubble can show it immediately. */
   preview?: string
+  /** Recorded voice note: platforms mark it as push-to-talk. */
+  voice?: boolean
+  duration?: number
 }
 
 export interface SendOptions {

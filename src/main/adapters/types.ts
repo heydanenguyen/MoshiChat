@@ -40,6 +40,12 @@ export interface PlatformAdapter {
   markRead(conversationId: string): Promise<void>
   setTyping?(conversationId: string): Promise<void>
   react?(conversationId: string, messageId: string, emoji: string): Promise<void>
+  /** Native forward within the same account. The manager falls back to re-sending text otherwise. */
+  forward?(fromConversationId: string, messageId: string, toConversationId: string): Promise<Message>
+  /** Search beyond what the manager has cached (server side or the adapter's own history). */
+  searchMessages?(query: string, limit: number): Promise<Message[]>
+  /** Fetch the full media for an attachment as a data URL. */
+  downloadAttachment?(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
 }
 
 export const conversationId = (accountId: string, externalId: string | number): string =>
@@ -63,6 +69,7 @@ export const mimeOf = (name: string): string => {
     mp3: 'audio/mpeg',
     m4a: 'audio/mp4',
     ogg: 'audio/ogg',
+    opus: 'audio/ogg',
     wav: 'audio/wav',
     pdf: 'application/pdf',
     zip: 'application/zip',
@@ -104,3 +111,7 @@ export const previewOf = (message: Message): Conversation['lastMessage'] => ({
   isOutgoing: message.isOutgoing,
   sentAt: message.sentAt
 })
+
+/** Case-insensitive substring match over text and attachment names. */
+export const matchesQuery = (message: Message, needle: string): boolean =>
+  message.text.toLowerCase().includes(needle) || message.attachments.some((a) => a.name?.toLowerCase().includes(needle))

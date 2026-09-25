@@ -15,7 +15,7 @@ import type {
 } from '@shared/types'
 import type { Storage, StoredAccount } from '../storage'
 import type { AdapterContext, PlatformAdapter } from './types'
-import { previewOf } from './types'
+import { matchesQuery, previewOf } from './types'
 import { DemoAdapter } from './demo'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
@@ -30,6 +30,10 @@ interface PendingAuth {
 }
 
 const SEARCH_LIMIT = 60
+const SEARCH_TIMEOUT = 4000
+
+/** Injectable factory so tests can plug in fake adapters. */
+export type AdapterFactory = (stored: StoredAccount, ctx: AdapterContext, storage: Storage) => PlatformAdapter | undefined
 
 /**
  * Owns every adapter, keeps a unified conversation cache and fans adapter
@@ -44,13 +48,14 @@ export class AccountManager {
   constructor(
     private readonly storage: Storage,
     private readonly emit: (event: BridgeEvent) => void,
-    private readonly log: (...args: unknown[]) => void
+    private readonly log: (...args: unknown[]) => void,
+    private readonly factory: AdapterFactory = defaultFactory
   ) {}
 
   /** Restore persisted accounts and connect them in the background. */
   async restore(): Promise<void> {
     for (const stored of this.storage.accounts) {
-      const adapter = this.createAdapter(stored)
+      const adapter = this.factory(stored, this.contextFor(stored.id), this.storage)
       if (!adapter) continue
       this.adapters.set(stored.id, adapter)
       void this.connect(adapter)
@@ -111,6 +116,11 @@ export class AccountManager {
     } else {
       adapter = new WhatsAppAdapter(tempId, { authDir: `wa-${randomUUID().slice(0, 8)}` }, ctx)
     }
+    return this.adoptPending(tempId, adapter)
+  }
+
+  /** Register an adapter whose id becomes known only after connect(). */
+  async adoptPending(tempId: string, adapter: PlatformAdapter): Promise<Account> {
     this.adapters.set(tempId, adapter)
     this.emit({ type: 'account:updated', account: { ...adapter.account } })
     try {
@@ -164,14 +174,27 @@ export class AccountManager {
   async sendMessage(conversationId: string, text: string, options: SendOptions = {}): Promise<Message> {
     const adapter = this.adapterFor(conversationId)
     const message = await adapter.sendMessage(conversationId, text, options)
-    this.cache([message])
-    const conversation = this.conversations.get(conversationId)
-    if (conversation) {
-      conversation.lastMessage = previewOf(message)
-      conversation.updatedAt = message.sentAt
-      this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
-    }
+    this.trackSent(message)
     return message
+  }
+
+  /**
+   * Forward a message. Same-account forwards use the platform's native
+   * forward when available; anything else re-sends the text, which is the
+   * only part that survives a platform hop.
+   */
+  async forward(fromConversationId: string, messageId: string, toConversationId: string): Promise<Message> {
+    const from = this.adapterFor(fromConversationId)
+    const to = this.adapterFor(toConversationId)
+    if (from === to && from.forward) {
+      const message = await from.forward(fromConversationId, messageId, toConversationId)
+      this.trackSent(message)
+      return message
+    }
+    const source = this.messages.get(fromConversationId)?.get(messageId)
+    if (!source) throw new Error('Message is not available to forward')
+    if (!source.text.trim()) throw new Error('Only text can be forwarded to another account')
+    return this.sendMessage(toConversationId, source.text)
   }
 
   async react(conversationId: string, messageId: string, emoji: string): Promise<void> {
@@ -180,20 +203,48 @@ export class AccountManager {
     await adapter.react(conversationId, messageId, emoji)
   }
 
-  search(query: string): SearchHit[] {
+  /** Local cache first, then every adapter's own search, merged and de-duplicated. */
+  async search(query: string): Promise<SearchHit[]> {
     const needle = query.trim().toLowerCase()
     if (needle.length < 2) return []
+    const seen = new Set<string>()
     const hits: SearchHit[] = []
-    for (const [conversationId, messages] of this.messages) {
-      const conversation = this.conversations.get(conversationId)
-      if (!conversation) continue
-      for (const message of messages.values()) {
-        if (message.text.toLowerCase().includes(needle) || message.attachments.some((a) => a.name?.toLowerCase().includes(needle))) {
-          hits.push({ message, conversation })
-        }
-      }
+    const add = (message: Message): void => {
+      const key = `${message.conversationId}#${message.id}`
+      const conversation = this.conversations.get(message.conversationId)
+      if (!conversation || seen.has(key)) return
+      seen.add(key)
+      hits.push({ message, conversation })
+    }
+    for (const bucket of this.messages.values()) {
+      for (const message of bucket.values()) if (matchesQuery(message, needle)) add(message)
+    }
+    const remote = [...this.adapters.values()]
+      .filter((a) => a.searchMessages && a.account.status === 'connected')
+      .map((a) =>
+        Promise.race([
+          a.searchMessages!(query.trim(), SEARCH_LIMIT),
+          new Promise<Message[]>((resolve) => setTimeout(() => resolve([]), SEARCH_TIMEOUT))
+        ]).catch((err: Error) => {
+          this.log(`search failed for ${a.account.id}:`, err.message)
+          return [] as Message[]
+        })
+      )
+    for (const messages of await Promise.all(remote)) {
+      this.cache(messages)
+      for (const message of messages) add(message)
     }
     return hits.sort((a, b) => b.message.sentAt - a.message.sentAt).slice(0, SEARCH_LIMIT)
+  }
+
+  async loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined> {
+    const adapter = this.adapterFor(conversationId)
+    if (!adapter.downloadAttachment) return undefined
+    const url = await adapter.downloadAttachment(conversationId, messageId, attachmentId)
+    const cached = this.messages.get(conversationId)?.get(messageId)
+    const attachment = cached?.attachments.find((a) => a.id === attachmentId)
+    if (url && attachment) attachment.url = url
+    return url
   }
 
   async markRead(conversationId: string): Promise<void> {
@@ -231,28 +282,14 @@ export class AccountManager {
 
   // ---- internals --------------------------------------------------------
 
-  private createAdapter(stored: StoredAccount): PlatformAdapter | undefined {
-    if (stored.demo) return new DemoAdapter(stored.platform, this.contextFor(stored.id))
-    const ctx = this.contextFor(stored.id)
-    let adapter: PlatformAdapter | undefined
-    if (stored.platform === 'telegram') {
-      const secret = this.storage.readSecret<TelegramSecret>(stored.id)
-      if (secret) adapter = new TelegramAdapter(stored.id, secret, ctx)
-    } else if (stored.platform === 'zalo') {
-      const secret = this.storage.readSecret<ZaloSecret>(stored.id)
-      if (secret) adapter = new ZaloAdapter(stored.id, secret, ctx)
-    } else if (stored.platform === 'whatsapp') {
-      const secret = this.storage.readSecret<WhatsAppSecret>(stored.id)
-      if (secret) adapter = new WhatsAppAdapter(stored.id, secret, ctx)
-    } else {
-      const secret = this.storage.readSecret<MetaSecret>(stored.id)
-      if (secret) adapter = new MetaAdapter(stored.platform, secret, ctx)
+  private trackSent(message: Message): void {
+    this.cache([message])
+    const conversation = this.conversations.get(message.conversationId)
+    if (conversation) {
+      conversation.lastMessage = previewOf(message)
+      conversation.updatedAt = message.sentAt
+      this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
     }
-    if (!adapter) return undefined
-    adapter.account.displayName = stored.displayName
-    adapter.account.handle = stored.handle
-    adapter.account.avatarUrl = stored.avatarUrl
-    return adapter
   }
 
   private async connect(adapter: PlatformAdapter): Promise<void> {
@@ -390,4 +427,27 @@ export class AccountManager {
       log: (...args) => this.log(`[${currentId()}]`, ...args)
     }
   }
+}
+
+function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Storage): PlatformAdapter | undefined {
+  if (stored.demo) return new DemoAdapter(stored.platform, ctx)
+  let adapter: PlatformAdapter | undefined
+  if (stored.platform === 'telegram') {
+    const secret = storage.readSecret<TelegramSecret>(stored.id)
+    if (secret) adapter = new TelegramAdapter(stored.id, secret, ctx)
+  } else if (stored.platform === 'zalo') {
+    const secret = storage.readSecret<ZaloSecret>(stored.id)
+    if (secret) adapter = new ZaloAdapter(stored.id, secret, ctx)
+  } else if (stored.platform === 'whatsapp') {
+    const secret = storage.readSecret<WhatsAppSecret>(stored.id)
+    if (secret) adapter = new WhatsAppAdapter(stored.id, secret, ctx)
+  } else {
+    const secret = storage.readSecret<MetaSecret>(stored.id)
+    if (secret) adapter = new MetaAdapter(stored.platform, secret, ctx)
+  }
+  if (!adapter) return undefined
+  adapter.account.displayName = stored.displayName
+  adapter.account.handle = stored.handle
+  adapter.account.avatarUrl = stored.avatarUrl
+  return adapter
 }

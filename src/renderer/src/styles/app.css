@@ -2046,3 +2046,119 @@ mark {
 .platform-grid {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
+
+/* ------------------------------------------------------------------ voice */
+
+.composer-box.recording {
+  align-items: center;
+  gap: 10px;
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  animation: pulse 1s ease-in-out infinite;
+  margin-left: 4px;
+}
+
+.recording-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 40px;
+}
+
+.recording-label {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.composer-mic {
+  margin-bottom: 2px;
+}
+
+.audio-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  padding: 4px 6px 4px 2px;
+}
+
+.audio-play {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.bubble.in .audio-play {
+  background: var(--accent);
+  color: #fff;
+}
+
+.audio-track {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.audio-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+}
+
+.audio-bars span {
+  flex: 1;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.35;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.audio-bars span.played {
+  opacity: 0.9;
+}
+
+.audio-time {
+  font-size: var(--text-xs);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ forward */
+
+.forward-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--space-4) 10px;
+  border-bottom: 1px solid var(--separator);
+  color: var(--accent);
+}
+
+.forward-preview-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.forward-preview-text strong {
+  font-size: var(--text-xs);
+}
+
+.forward-preview-text span {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
