@@ -47,7 +47,12 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
   const [prefs] = useState(readSplashPrefs)
   const logo = prefs.logo && LOGO_ORDER.includes(prefs.logo) ? prefs.logo : 'buddies'
   const language = prefs.language ?? 'vi'
-  const [line] = useState(() => pickSplashLine(language, prefs.name ?? '', new Date().getHours(), prefs.last))
+  // The very first launch (right after installing) gets a proper welcome; later ones a random greeting.
+  const [line] = useState(() =>
+    prefs.last
+      ? pickSplashLine(language, prefs.name ?? '', new Date().getHours(), prefs.last)
+      : { emoji: '🎉', text: language === 'en' ? 'Welcome to Unison! We are your chat buddies' : 'Chào mừng đến với Unison! Tụi mình là bộ đôi của bạn' }
+  )
   const [minElapsed, setMinElapsed] = useState(false)
   const [leaving, setLeaving] = useState(false)
 
