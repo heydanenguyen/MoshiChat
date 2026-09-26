@@ -70,8 +70,15 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
   useEffect(() => {
     void loadProfile(conversationId)
-    void loadStats(conversationId)
+    void loadStats(conversationId, true)
   }, [conversationId, loadProfile, loadStats])
+
+  // Keep refreshing while the adapter is still walking back through history.
+  useEffect(() => {
+    if (!stats?.pending) return
+    const timer = setInterval(() => void loadStats(conversationId, true), 2500)
+    return () => clearInterval(timer)
+  }, [stats?.pending, conversationId, loadStats])
 
   if (!conversation) return <></>
   const name = profile?.name ?? conversation.title
@@ -120,13 +127,20 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
               <span className="stat-emoji">📅</span>
               <span className="stat-label">{t('talkingSince')}</span>
               <span className="stat-value">{stats.firstMessageAt ? formatDate(new Date(stats.firstMessageAt).toISOString().slice(0, 10), language) : t('noHistory')}</span>
-              {stats.firstMessageAt && <span className="stat-sub">{t('talkingFor')} {formatSpan(stats.firstMessageAt, Date.now(), language)}</span>}
+              {stats.firstMessageAt && (
+                <span className="stat-sub">
+                  {stats.pending ? t('searchingFirst') : `${t('talkingFor')} ${formatSpan(stats.firstMessageAt, Date.now(), language)}`}
+                </span>
+              )}
             </div>
             <div className="stat-card sky">
               <span className="stat-emoji">💬</span>
               <span className="stat-label">{t('messagesTotal')}</span>
-              <span className="stat-value">{stats.messageCount !== undefined ? formatCount(stats.messageCount, language) : '—'}</span>
-              {stats.approximate && stats.messageCount !== undefined && <span className="stat-sub">{t('approx')}</span>}
+              <span className="stat-value">
+                {stats.messageCount !== undefined ? formatCount(stats.messageCount, language) : '—'}
+                {stats.approximate && stats.messageCount !== undefined ? '+' : ''}
+              </span>
+              {stats.pending ? <span className="stat-sub">{t('counting')}</span> : stats.approximate && stats.messageCount !== undefined && <span className="stat-sub">{t('approx')}</span>}
             </div>
             <div className="stat-card mint">
               <span className="stat-emoji">⚡️</span>
@@ -297,10 +311,22 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
   const loadAttachment = useStore((s) => s.loadAttachment)
   const openAttachment = useStore((s) => s.openAttachment)
   const language = useStore((s) => s.settings.language)
+  const stats = useStore((s) => s.stats[conversationId])
+  const loadStats = useStore((s) => s.loadStats)
 
   useEffect(() => {
-    void loadShared(conversationId, kind)
-  }, [conversationId, kind, loadShared])
+    void loadShared(conversationId, kind, true)
+    void loadStats(conversationId, true)
+  }, [conversationId, kind, loadShared, loadStats])
+
+  useEffect(() => {
+    if (!stats?.pending) return
+    const timer = setInterval(() => {
+      void loadShared(conversationId, kind, true)
+      void loadStats(conversationId, true)
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [stats?.pending, conversationId, kind, loadShared, loadStats])
 
   const items = useMemo(() => {
     const list = messages ?? []

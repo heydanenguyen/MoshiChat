@@ -275,7 +275,7 @@ export const useStore = create<State>((set, get) => ({
           const s = get()
           set({
             messages: { ...s.messages, [id]: messages },
-            hasMore: { ...s.hasMore, [id]: messages.length >= PAGE },
+            hasMore: { ...s.hasMore, [id]: messages.length > 0 },
             loading: { ...s.loading, [id]: false }
           })
         })
@@ -472,7 +472,7 @@ export const useStore = create<State>((set, get) => ({
       const merged = [...older.filter((m) => !known.has(m.id)), ...(s.messages[conversationId] ?? [])]
       set({
         messages: { ...s.messages, [conversationId]: merged },
-        hasMore: { ...s.hasMore, [conversationId]: older.length >= PAGE },
+        hasMore: { ...s.hasMore, [conversationId]: older.filter((m) => !known.has(m.id)).length > 0 },
         loading: { ...s.loading, [conversationId]: false }
       })
     } catch (err) {

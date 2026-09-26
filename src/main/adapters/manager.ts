@@ -416,11 +416,13 @@ export class AccountManager {
     if (!adapter.getConversationStats) return local
     try {
       const remote = await adapter.getConversationStats(conversationId)
+      const first = [remote.firstMessageAt, local.firstMessageAt].filter((v): v is number => typeof v === 'number')
       return {
-        firstMessageAt: remote.firstMessageAt ?? local.firstMessageAt,
+        firstMessageAt: first.length ? Math.min(...first) : undefined,
         lastMessageAt: Math.max(remote.lastMessageAt ?? 0, local.lastMessageAt ?? 0) || undefined,
         messageCount: remote.messageCount ?? local.messageCount,
-        approximate: remote.approximate ?? false
+        approximate: remote.approximate ?? false,
+        pending: remote.pending ?? false
       }
     } catch (err) {
       this.log(`stats failed for ${conversationId}:`, (err as Error).message)

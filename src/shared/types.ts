@@ -143,6 +143,8 @@ export interface ConversationStats {
   messageCount?: number
   /** True when the count is only what is cached locally, not the platform total. */
   approximate?: boolean
+  /** The adapter is still walking back through history; numbers will grow. */
+  pending?: boolean
 }
 
 export type TagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'

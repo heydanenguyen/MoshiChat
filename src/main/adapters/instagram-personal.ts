@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto'
-import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
+import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promises'
+import { join } from 'path'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, statsOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { DirectComposer } from '../direct-composer'
@@ -59,6 +61,30 @@ interface InboxResponse {
 }
 
 const POLL_INTERVAL = 20_000
+/** Instagram silently truncates bigger pages (100 returns 75 and claims there is nothing older). */
+const PAGE_SIZE = 20
+/** Delay between history pages while crawling, to stay a polite web client. */
+const CRAWL_DELAY = 650
+/** Pages per crawl run (~3,000 messages); a longer thread resumes the next time it is opened. */
+const CRAWL_PAGES_PER_RUN = 150
+/** Pages per turn before letting a more recently opened thread go first. */
+const CRAWL_TURN_PAGES = 15
+/** A longer breather every so many pages. */
+const CRAWL_REST_EVERY = 45
+const CRAWL_REST_MS = 6000
+const SHARED_CAP = 600
+/** Item types that are not messages a person wrote. */
+const NON_MESSAGE = new Set(['action_log', 'placeholder', 'video_call_event'])
+
+/** Per-thread history walk, persisted so counts survive restarts and only new items are fetched later. */
+interface CrawlState {
+  count: number
+  firstAt?: number
+  newestAt?: number
+  cursor?: string
+  done: boolean
+  shared: Message[]
+}
 const MAX_BACKOFF = 8
 const HISTORY_LIMIT = 300
 const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
@@ -81,6 +107,21 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private aliases = new Map<string, string>()
   private timer?: NodeJS.Timeout
   private polling = false
+  private crawls = new Map<string, CrawlState>()
+  /** Threads with crawl work queued or running (drives the "pending" flag). */
+  private crawling = new Set<string>()
+  /** When each thread last finished a crawl run; catch-ups are throttled to one a minute. */
+  private crawledAt = new Map<string, number>()
+  /** Crawl queue, most recently requested last. */
+  private crawlQueue: Array<{ threadId: string; id: string }> = []
+  private crawlWorker = false
+  /** Pause all crawling until this time (after Instagram throttles us). */
+  private crawlPausedUntil = 0
+  /** Threads that already caught up on newer items during the current job. */
+  private caughtUp = new Set<string>()
+  private pagesSinceRest = 0
+  private crawlFile = ''
+  private saveTimer?: NodeJS.Timeout
   /** Polls to skip after Instagram answers 429; doubles on each hit. */
   private skip = 0
   private backoff = 1
@@ -120,6 +161,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       throw err
     }
     await this.ctx.saveSecret(this.secret)
+    await this.loadCrawls()
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
     this.setStatus('connected')
   }
@@ -149,19 +191,30 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private async fetchPage(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
     const threadId = this.threadIdFor(id)
     if (!threadId) return this.history.get(id) ?? []
-    const params = new URLSearchParams({ limit: String(Math.min(limit, 40)) })
+    let cursor: string | undefined
     if (beforeId) {
-      const cursor = this.cursors.get(id)
+      cursor = this.cursors.get(id)
       if (!cursor) return []
-      params.set('cursor', cursor)
     }
+    const collected: Message[] = []
+    for (let i = 0; i < Math.ceil(limit / PAGE_SIZE); i++) {
+      const page = await this.page(threadId, cursor)
+      collected.push(...page.items.map((item) => this.toMessage(item, id)))
+      cursor = page.hasOlder ? page.cursor : undefined
+      if (!cursor) break
+    }
+    this.cursors.set(id, cursor)
+    this.remember(id, collected)
+    return collected.sort((a, b) => a.sentAt - b.sentAt)
+  }
+
+  /** One page of a thread, newest first. */
+  private async page(threadId: string, cursor?: string): Promise<{ items: IgItem[]; cursor?: string; hasOlder: boolean }> {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+    if (cursor) params.set('cursor', cursor)
     const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?${params}`, { headers: APP_HEADERS })
-    const thread = res.thread
-    this.absorbUsers(thread.users)
-    this.cursors.set(id, thread.has_older ? thread.oldest_cursor : undefined)
-    const messages = (thread.items ?? []).map((item) => this.toMessage(item, id))
-    this.remember(id, messages)
-    return messages.sort((a, b) => a.sentAt - b.sentAt)
+    this.absorbUsers(res.thread.users)
+    return { items: res.thread.items ?? [], cursor: res.thread.oldest_cursor, hasOlder: !!res.thread.has_older }
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
@@ -295,8 +348,169 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     return (this.history.get(id) ?? []).filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
   }
 
-  async getConversationStats(id: string) {
-    return statsOf(this.history.get(id) ?? [])
+  async getConversationStats(id: string): Promise<ConversationStats> {
+    const threadId = this.threadIdFor(id)
+    if (!threadId) return { messageCount: 0, approximate: false }
+    this.ensureCrawl(threadId, id)
+    const state = this.crawls.get(threadId)
+    const recent = this.history.get(id) ?? []
+    return {
+      firstMessageAt: state?.firstAt,
+      lastMessageAt: Math.max(state?.newestAt ?? 0, recent.at(-1)?.sentAt ?? 0) || undefined,
+      messageCount: state?.count,
+      approximate: !state?.done,
+      pending: this.crawling.has(threadId)
+    }
+  }
+
+  async listShared(id: string, kind: SharedKind, limit: number): Promise<Message[]> {
+    const threadId = this.threadIdFor(id)
+    if (threadId) this.ensureCrawl(threadId, id)
+    const seen = new Set<string>()
+    const out: Message[] = []
+    for (const m of [...(this.history.get(id) ?? []), ...(threadId ? (this.crawls.get(threadId)?.shared ?? []) : [])]) {
+      if (seen.has(m.id) || !isShared(m, kind)) continue
+      seen.add(m.id)
+      out.push(m)
+    }
+    return out.sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+  }
+
+  // ---- history crawl ------------------------------------------------------
+
+  /**
+   * Walk the whole thread once (persisted), then only catch up on newer
+   * items. One thread at a time, paced, and it stops on the first error so a
+   * throttled or signed-out session is left alone.
+   */
+  private ensureCrawl(threadId: string, id: string): void {
+    const existing = this.crawls.get(threadId)
+    if (existing?.done && !this.crawling.has(threadId) && Date.now() - (this.crawledAt.get(threadId) ?? 0) < 60_000) return
+    if (!existing) this.crawls.set(threadId, { count: 0, done: false, shared: [] })
+    // Most recently requested goes to the back = next to run.
+    this.crawlQueue = this.crawlQueue.filter((job) => job.threadId !== threadId)
+    this.crawlQueue.push({ threadId, id })
+    if (!this.crawling.has(threadId)) this.caughtUp.delete(threadId)
+    this.crawling.add(threadId)
+    void this.runCrawler()
+  }
+
+  private async runCrawler(): Promise<void> {
+    if (this.crawlWorker) return
+    this.crawlWorker = true
+    try {
+      while (this.crawlQueue.length) {
+        if (Date.now() < this.crawlPausedUntil || this.account.status !== 'connected') break
+        const job = this.crawlQueue[this.crawlQueue.length - 1]
+        const state = this.crawls.get(job.threadId)!
+        let finished = false
+        try {
+          if (state.newestAt !== undefined && !this.caughtUp.has(job.threadId)) {
+            await this.catchUp(job.threadId, job.id, state)
+            this.caughtUp.add(job.threadId)
+          }
+          if (!state.done) await this.walkBack(job.threadId, job.id, state, CRAWL_TURN_PAGES)
+          finished = state.done
+        } catch (err) {
+          finished = true
+          if (err instanceof SessionExpiredError) {
+            this.expire(err)
+            this.crawlQueue = []
+          } else if (/429|wait a few minutes|rate/i.test((err as Error).message)) {
+            this.crawlPausedUntil = Date.now() + 10 * 60_000
+            this.ctx.log('instagram crawl paused for 10 minutes (rate limited)')
+          } else {
+            this.ctx.log('instagram crawl stopped', (err as Error).message)
+          }
+        }
+        // Take the job off the top; unfinished work moves to the front (lowest priority).
+        this.crawlQueue = this.crawlQueue.filter((j) => j !== job)
+        if (finished) {
+          this.crawling.delete(job.threadId)
+          this.crawledAt.set(job.threadId, Date.now())
+        } else {
+          this.crawlQueue.unshift(job)
+        }
+        this.scheduleSave()
+      }
+    } finally {
+      this.crawlWorker = false
+      if (Date.now() < this.crawlPausedUntil || this.account.status !== 'connected') {
+        for (const job of this.crawlQueue) this.crawling.delete(job.threadId)
+        this.crawlQueue = []
+      }
+    }
+  }
+
+  private async catchUp(threadId: string, id: string, state: CrawlState): Promise<void> {
+    const since = state.newestAt ?? 0
+    let cursor: string | undefined
+    for (let pages = 0; pages < 25; pages++) {
+      const page = await this.page(threadId, cursor)
+      let reachedKnown = false
+      for (const item of page.items) {
+        if (Number(item.timestamp) / 1000 <= since) {
+          reachedKnown = true
+          break
+        }
+        this.absorbItem(state, item, id)
+      }
+      if (reachedKnown || !page.hasOlder || !page.cursor) return
+      cursor = page.cursor
+      await sleep(CRAWL_DELAY)
+    }
+  }
+
+  private async walkBack(threadId: string, id: string, state: CrawlState, maxPages = CRAWL_PAGES_PER_RUN): Promise<void> {
+    for (let pages = 0; pages < maxPages; pages++) {
+      const page = await this.page(threadId, state.cursor)
+      for (const item of page.items) this.absorbItem(state, item, id)
+      state.cursor = page.cursor
+      if (!page.hasOlder || !page.cursor) {
+        state.done = true
+        return
+      }
+      if (pages % 10 === 9) this.scheduleSave()
+      this.pagesSinceRest += 1
+      await sleep(this.pagesSinceRest % CRAWL_REST_EVERY === 0 ? CRAWL_REST_MS : CRAWL_DELAY)
+    }
+  }
+
+  private absorbItem(state: CrawlState, item: IgItem, id: string): void {
+    const at = Number(item.timestamp) / 1000
+    if (!state.firstAt || at < state.firstAt) state.firstAt = at
+    if (!state.newestAt || at > state.newestAt) state.newestAt = at
+    if (NON_MESSAGE.has(item.item_type)) return
+    state.count += 1
+    const message = this.toMessage(item, id)
+    if (isShared(message, 'media') || isShared(message, 'links') || isShared(message, 'files')) {
+      if (!state.shared.some((m) => m.id === message.id)) {
+        state.shared.push(message)
+        if (state.shared.length > SHARED_CAP) {
+          state.shared.sort((a, b) => b.sentAt - a.sentAt)
+          state.shared.length = SHARED_CAP
+        }
+      }
+    }
+  }
+
+  private async loadCrawls(): Promise<void> {
+    this.crawlFile = join(this.ctx.dataDir(), `crawl-${this.mePk}.json`)
+    try {
+      const raw = JSON.parse(await readFileAsync(this.crawlFile, 'utf8')) as Record<string, CrawlState>
+      for (const [threadId, state] of Object.entries(raw)) this.crawls.set(threadId, { ...state, shared: state.shared ?? [] })
+    } catch {
+      /* first run */
+    }
+  }
+
+  private scheduleSave(): void {
+    if (!this.crawlFile) return
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => {
+      const data = Object.fromEntries(this.crawls)
+      void writeFileAsync(this.crawlFile, JSON.stringify(data)).catch(() => undefined)
+    }, 1500)
   }
 
   // ---- requests ---------------------------------------------------------
@@ -351,6 +565,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
           .map((item) => this.toMessage(item, id))
           .sort((a, b) => a.sentAt - b.sentAt)
         this.remember(id, fresh)
+        const state = this.crawls.get(thread.thread_id)
+        if (state?.newestAt !== undefined) {
+          for (const item of res.thread.items ?? []) if (Number(item.timestamp) / 1000 > state.newestAt) this.absorbItem(state, item, id)
+          this.scheduleSave()
+        }
         for (const message of fresh) if (!message.isOutgoing) this.ctx.emit({ type: 'message:new', message })
       }
       this.backoff = 1
@@ -525,3 +744,5 @@ function itemText(item: IgItem): string {
       return ''
   }
 }
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

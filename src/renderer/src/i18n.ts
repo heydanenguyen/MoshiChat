@@ -195,7 +195,9 @@ const vi = {
   greetingsHint: 'Một câu vui mỗi vài phút, kèm thời tiết nơi bạn đang ở (định vị thô qua IP).',
   sessionExpired: 'Phiên đăng nhập đã bị nền tảng đăng xuất. Đăng nhập lại để tiếp tục nhắn tin.',
   sessionCheckpoint: 'Nền tảng yêu cầu xác minh bảo mật. Đăng nhập lại để xác nhận là bạn.',
-  signInAgain: 'Đăng nhập lại'
+  signInAgain: 'Đăng nhập lại',
+  counting: 'đang đếm toàn bộ lịch sử…',
+  searchingFirst: 'đang tìm tin nhắn đầu tiên…'
 }
 
 export type Dictionary = typeof vi
@@ -396,7 +398,9 @@ const en: Dictionary = {
   greetingsHint: 'A cheerful line every few minutes, with the weather where you are (coarse IP location).',
   sessionExpired: 'The platform signed this session out. Sign in again to keep messaging.',
   sessionCheckpoint: 'The platform wants a security check. Sign in again to confirm it is you.',
-  signInAgain: 'Sign in again'
+  signInAgain: 'Sign in again',
+  counting: 'counting the whole history…',
+  searchingFirst: 'looking for the first message…'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }
