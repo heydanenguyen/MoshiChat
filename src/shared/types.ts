@@ -394,6 +394,23 @@ export interface Settings {
   customAccents?: CustomAccent[]
   /** Per conversation: nickname, custom photo, birthday set by the user. */
   contactOverrides?: Record<string, ContactOverride>
+  /** Send "seen" to the platform when you open a chat (off = read privately). */
+  sendReadReceipts?: boolean
+  /** Messages bookmarked to find again later (newest first). */
+  savedMessages?: SavedMessage[]
+}
+
+/** A bookmarked message: enough to list it and jump back to it. */
+export interface SavedMessage {
+  conversationId: string
+  messageId: string
+  platform: Platform
+  text: string
+  kind?: PreviewKind
+  senderName: string
+  isOutgoing: boolean
+  sentAt: number
+  savedAt: number
 }
 
 /** What the user changed about a contact in Unison (never sent to the platform). */

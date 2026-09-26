@@ -16,6 +16,7 @@ import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
 import { NewChatSheet } from './components/NewChatSheet'
+import { SavedSheet } from './components/SavedSheet'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -155,6 +156,7 @@ export default function App(): JSX.Element {
       {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
       {sheet.kind === 'command' && <CommandPalette />}
       {sheet.kind === 'new-chat' && <NewChatSheet />}
+      {sheet.kind === 'saved' && <SavedSheet />}
       {forwarding && <ForwardSheet message={forwarding} />}
       {lightbox && <Lightbox {...lightbox} />}
       {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}

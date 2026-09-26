@@ -80,7 +80,8 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     const login = (mod.login ?? mod.default) as FcaModule['login']
     const appState = this.secret.cookies.map((c) => ({ key: c.name, name: c.name, value: c.value, domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }))
     const api = await new Promise<FcaApi>((resolve, reject) => {
-      login({ appState } as never, { listenEvents: true, selfListen: true, updatePresence: false, autoReconnect: true, online: false, userAgent: browserUserAgent(), randomUserAgent: false } as never, (err, result) => {
+      // autoMarkRead defaults to true in ws3-fca: it would send "seen" for every incoming message.
+      login({ appState } as never, { listenEvents: true, selfListen: true, updatePresence: false, autoReconnect: true, online: false, userAgent: browserUserAgent(), randomUserAgent: false, autoMarkRead: false, autoMarkDelivery: false } as never, (err, result) => {
         if (err || !result) reject(new Error(typeof err === 'string' ? err : (err?.error ?? err?.message ?? 'Facebook login failed')))
         else resolve(result)
       })

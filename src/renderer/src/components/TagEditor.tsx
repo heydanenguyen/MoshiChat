@@ -90,7 +90,8 @@ export function TagManager(): JSX.Element {
   const tags = useStore((s) => s.settings.tags)
   const [confirming, setConfirming] = useState<string | undefined>()
   const [adding, setAdding] = useState(false)
-  const usage = (id: string): number => Object.values(tags).filter((ids) => ids.includes(id)).length
+  const conversations = useStore((s) => s.conversations)
+  const usage = (id: string): number => Object.entries(tags).filter(([cid, ids]) => conversations[cid] && ids.includes(id)).length
 
   return (
     <div className="tag-manager">

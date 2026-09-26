@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { BellOff, Bookmark, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagChip } from './Tag'
@@ -30,6 +30,8 @@ export function Sidebar(): JSX.Element {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
+  const conversations = useStore((s) => s.conversations)
+  const savedCount = useStore((s) => s.settings.savedMessages?.length ?? 0)
   const { list: tagList } = useTagDefs()
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
@@ -81,7 +83,11 @@ export function Sidebar(): JSX.Element {
   const platformsWithAccounts = PLATFORM_ORDER.filter((p) => accountList.some((a) => a.platform === p))
   const platforms = platformsWithAccounts.length ? platformsWithAccounts : PLATFORM_ORDER
   const tagCounts: Record<string, number> = {}
-  for (const list of Object.values(tags)) for (const tag of list) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+  // Count only chats that exist right now (tags of removed accounts or old chats are ignored).
+  for (const [conversationId, list] of Object.entries(tags)) {
+    if (!conversations[conversationId]) continue
+    for (const tag of list) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+  }
 
   const badge = (count?: number): JSX.Element | null => (count ? <span className="nav-badge">{count}</span> : null)
   const isMuted = (target: MuteTarget): boolean => (muted[target.kind] as string[]).includes(target.id)
@@ -114,6 +120,13 @@ export function Sidebar(): JSX.Element {
             {!collapsed && <span className="nav-item-label">{t('allInboxes')}</span>}
             {!collapsed && badge(unread.total)}
             {collapsed && unread.total > 0 && <span className="rail-dot" />}
+          </button>
+          <button className="nav-item" onClick={() => openSheet({ kind: 'saved' })} title={t('savedMessages')}>
+            <span className="nav-item-icon tile saved-tile">
+              <Bookmark size={14} strokeWidth={2.4} />
+            </span>
+            {!collapsed && <span className="nav-item-label">{t('savedMessages')}</span>}
+            {!collapsed && savedCount > 0 && <span className="nav-badge subtle">{savedCount}</span>}
           </button>
           {platforms.map((platform) => {
             const target: MuteTarget = { kind: 'platforms', id: platform }
