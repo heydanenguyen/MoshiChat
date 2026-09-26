@@ -359,7 +359,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       lastMessageAt: Math.max(state?.newestAt ?? 0, recent.at(-1)?.sentAt ?? 0) || undefined,
       messageCount: state?.count,
       approximate: !state?.done,
-      pending: this.crawling.has(threadId)
+      pending: this.crawling.has(threadId) && !state?.done
     }
   }
 
