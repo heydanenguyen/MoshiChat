@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
+import { TagIcon } from './Tag'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -116,8 +117,8 @@ export function Sidebar(): JSX.Element {
                   onContextMenu={contextFor(target, tag.name[language])}
                   title={tag.name[language]}
                 >
-                  <span className="nav-item-icon tile" style={{ ['--brand' as string]: tag.color } as React.CSSProperties}>
-                    {tag.emoji}
+                  <span className="nav-item-icon tag-tile" style={{ ['--tag' as string]: tag.color } as React.CSSProperties}>
+                    <TagIcon tag={tag} size={15} />
                   </span>
                   {!collapsed && <span className="nav-item-label">{tag.name[language]}</span>}
                   {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}

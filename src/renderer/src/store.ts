@@ -103,7 +103,7 @@ interface State {
   closeSheet(): void
   setSettings(patch: Partial<Settings>): Promise<void>
   toggleTag(conversationId: string, tag: TagId): Promise<void>
-  createTag(input: { name: string; emoji: string; color: string }): Promise<TagMeta>
+  createTag(input: { name: string; icon: string; color: string }): Promise<TagMeta>
   deleteTag(tag: TagId): Promise<void>
   togglePin(conversationId: string): Promise<void>
   toggleMute<K extends keyof MuteRules>(kind: K, id: MuteRules[K][number]): Promise<void>
@@ -521,9 +521,9 @@ export const useStore = create<State>((set, get) => ({
     await get().setSettings({ tags })
   },
 
-  async createTag({ name, emoji, color }) {
+  async createTag({ name, icon, color }) {
     const clean = name.trim().slice(0, 24)
-    const tag: TagMeta = { id: `c-${Date.now().toString(36)}`, emoji: emoji.trim() || '🏷️', color, name: { vi: clean, en: clean } }
+    const tag: TagMeta = { id: `c-${Date.now().toString(36)}`, icon, emoji: '', color, name: { vi: clean, en: clean } }
     await get().setSettings({ tagDefs: [...tagDefsOf(get().settings), tag] })
     return tag
   },

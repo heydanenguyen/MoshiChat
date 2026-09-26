@@ -3,6 +3,7 @@ import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, Refre
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
+import { TagChip } from './Tag'
 import { useShowPlatformBadge, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
 import { Avatar } from './Avatar'
@@ -130,22 +131,12 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         <div className="tag-chips">
           {tagList.map((tag) => {
             const active = tags.includes(tag.id)
-            return (
-              <button
-                key={tag.id}
-                className={`tag-chip ${active ? 'active' : ''}`}
-                style={{ ['--tag' as string]: tag.color } as React.CSSProperties}
-                onClick={() => void toggleTag(conversationId, tag.id)}
-              >
-                <span>{tag.emoji}</span>
-                <span className="tag-chip-label">{tag.name[language]}</span>
-              </button>
-            )
+            return <TagChip key={tag.id} tag={tag} size="md" muted={!active} onClick={() => void toggleTag(conversationId, tag.id)} />
           })}
           {!creating && (
-            <button className="tag-chip add" onClick={() => setCreating(true)} title={t('tagNew')}>
-              <Plus size={14} strokeWidth={2.6} />
-              <span className="tag-chip-label">{t('tagNew')}</span>
+            <button className="tag-pill md add" onClick={() => setCreating(true)} title={t('tagNew')}>
+              <Plus size={15} strokeWidth={2.4} />
+              <span className="tag-pill-label">{t('tagNew')}</span>
             </button>
           )}
         </div>

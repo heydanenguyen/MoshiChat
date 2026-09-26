@@ -202,28 +202,35 @@ export type BuiltinTagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
 
 export interface TagMeta {
   id: TagId
+  /** Line icon name (see the renderer's TAG_ICONS). */
+  icon?: string
+  /** Older custom tags only; newer tags use `icon`. */
   emoji: string
   color: string
   name: { vi: string; en: string }
 }
 
 export const TAGS: Record<BuiltinTagId, TagMeta> = {
-  work: { id: 'work', emoji: '💼', color: '#0A84FF', name: { vi: 'Công việc', en: 'Work' } },
-  friend: { id: 'friend', emoji: '🤝', color: '#FF9F0A', name: { vi: 'Bạn thân', en: 'Best friend' } },
-  love: { id: 'love', emoji: '❤️', color: '#FF375F', name: { vi: 'Người yêu', en: 'Love' } },
-  family: { id: 'family', emoji: '🏡', color: '#30D158', name: { vi: 'Gia đình', en: 'Family' } },
-  vip: { id: 'vip', emoji: '⭐️', color: '#FFD60A', name: { vi: 'VIP', en: 'VIP' } },
-  fun: { id: 'fun', emoji: '🎉', color: '#BF5AF2', name: { vi: 'Vui vẻ', en: 'Fun' } }
+  work: { id: 'work', icon: 'briefcase', emoji: '💼', color: '#2F7BEF', name: { vi: 'Công việc', en: 'Work' } },
+  friend: { id: 'friend', icon: 'handshake', emoji: '🤝', color: '#F2711C', name: { vi: 'Bạn thân', en: 'Best friend' } },
+  love: { id: 'love', icon: 'heart', emoji: '❤️', color: '#EC3F6B', name: { vi: 'Người yêu', en: 'Love' } },
+  family: { id: 'family', icon: 'house', emoji: '🏡', color: '#12A87A', name: { vi: 'Gia đình', en: 'Family' } },
+  vip: { id: 'vip', icon: 'star', emoji: '⭐️', color: '#9B5CF0', name: { vi: 'VIP', en: 'VIP' } },
+  fun: { id: 'fun', icon: 'party', emoji: '🎉', color: '#6BA812', name: { vi: 'Vui vẻ', en: 'Fun' } }
 }
 
 export const TAG_ORDER: BuiltinTagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
 
-/** Colours offered when creating a tag. */
-export const TAG_COLORS = ['#FF375F', '#FF9F0A', '#FFD60A', '#30D158', '#64D2FF', '#0A84FF', '#5E5CE6', '#BF5AF2', '#FF6482', '#AC8E68']
+/** Colours offered when creating a tag: saturated enough for the label, soft as a pastel fill. */
+export const TAG_COLORS = ['#2F7BEF', '#6BA812', '#12A87A', '#F2711C', '#9B5CF0', '#EC3F6B', '#0EA5C6', '#D69E0B', '#C44FD6', '#64748B']
 
-/** The user's tags in display order (the six built-ins until they change anything). */
+/** The user's tags in display order (the six built-ins until they change anything). Built-ins always use the current look. */
 export function tagDefsOf(settings: { tagDefs?: TagMeta[] }): TagMeta[] {
-  return settings.tagDefs ?? TAG_ORDER.map((id) => TAGS[id])
+  if (!settings.tagDefs) return TAG_ORDER.map((id) => TAGS[id])
+  return settings.tagDefs.map((tag) => {
+    const builtin = TAGS[tag.id as BuiltinTagId]
+    return builtin ? { ...tag, icon: builtin.icon, color: builtin.color, emoji: builtin.emoji } : tag
+  })
 }
 
 export interface TypingEvent {

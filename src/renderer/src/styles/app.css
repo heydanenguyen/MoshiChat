@@ -1930,123 +1930,6 @@ mark {
   grid-template-columns: 1fr;
 }
 
-.tag-chip.add {
-  border: 1px dashed var(--separator-strong);
-  background: transparent;
-  color: var(--text-tertiary);
-  padding: 0 12px 0 9px;
-}
-.tag-chip.add:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.tag-creator {
-  --tag: var(--accent);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--tag) 10%, var(--glass-strong));
-  border: 1px solid color-mix(in srgb, var(--tag) 35%, transparent);
-  animation: sheet-in var(--duration-base) var(--ease-spring);
-}
-.tag-creator-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.tag-creator-row.wrap {
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.tag-creator-emoji {
-  width: 38px;
-  height: 34px;
-  border-radius: 10px;
-  text-align: center;
-  font-size: 18px;
-  background: var(--bg-input);
-  border: 1px solid var(--separator);
-}
-.tag-creator-name {
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 10px;
-  font-weight: 700;
-  background: var(--bg-input);
-  border: 1px solid var(--separator);
-  color: var(--text-primary);
-}
-.tag-creator-name:focus,
-.tag-creator-emoji:focus {
-  outline: none;
-  border-color: var(--tag);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tag) 25%, transparent);
-}
-.tag-creator-save {
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: var(--tag);
-  transition:
-    transform var(--duration-fast) var(--ease-spring),
-    opacity var(--duration-fast) ease;
-}
-.tag-creator-save:disabled {
-  opacity: 0.35;
-}
-.tag-creator-save:not(:disabled):hover {
-  transform: scale(1.08);
-}
-.tag-creator-pick {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  font-size: 16px;
-  display: grid;
-  place-items: center;
-  transition:
-    background var(--duration-fast) ease,
-    transform var(--duration-fast) var(--ease-spring);
-}
-.tag-creator-pick:hover {
-  background: var(--bg-hover);
-  transform: scale(1.15);
-}
-.tag-creator-pick.active {
-  background: color-mix(in srgb, var(--tag) 22%, transparent);
-}
-.tag-creator-color {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
-  transition: transform var(--duration-fast) var(--ease-spring);
-}
-.tag-creator-color:hover {
-  transform: scale(1.15);
-}
-.tag-creator-color.active {
-  box-shadow:
-    0 0 0 2px var(--bg-elevated),
-    0 0 0 4px currentColor;
-  color: var(--text-primary);
-  transform: scale(1.1);
-}
-.tag-creator-hint {
-  font-size: var(--text-xs);
-  color: var(--danger);
-}
-
 .tag-manager {
   display: flex;
   flex-direction: column;
@@ -2668,66 +2551,6 @@ mark {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.tag-chip {
-  --tag: var(--text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 13px 0 10px;
-  border-radius: 12px;
-  background: var(--fill-tertiary);
-  font-size: var(--text-base);
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text-secondary);
-  border: 1px solid transparent;
-  transform: rotate(0deg);
-  transition:
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease,
-    transform var(--duration-base) var(--ease-spring),
-    box-shadow var(--duration-fast) ease;
-}
-
-.tag-chip:nth-child(even):hover {
-  transform: rotate(2deg) translateY(-1px);
-}
-.tag-chip:nth-child(odd):hover {
-  transform: rotate(-2deg) translateY(-1px);
-}
-
-.tag-chip.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 14%, white) 0%, color-mix(in srgb, var(--tag) 26%, white) 100%);
-  border-color: color-mix(in srgb, var(--tag) 32%, white);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -2px 0 color-mix(in srgb, var(--tag) 22%, transparent),
-    0 6px 14px color-mix(in srgb, var(--tag) 22%, transparent);
-  color: color-mix(in srgb, var(--tag) 70%, black);
-}
-
-.tag-chip.active .tag-chip-label {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--tag) 85%, black) 0%, var(--tag) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-:root[data-theme='dark'] .tag-chip.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 26%, #1a1c2e) 0%, color-mix(in srgb, var(--tag) 38%, #1a1c2e) 100%);
-  border-color: color-mix(in srgb, var(--tag) 45%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: color-mix(in srgb, var(--tag) 70%, white);
-}
-
-:root[data-theme='dark'] .tag-chip.active .tag-chip-label {
-  background: linear-gradient(135deg, var(--tag) 0%, color-mix(in srgb, var(--tag) 55%, white) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 /* details lists */
@@ -4263,4 +4086,314 @@ kbd {
 
 .list-col .reconnect-banner .btn {
   align-self: flex-start;
+}
+
+/* ================================================================== tag pills
+   Pastel fill of the tag colour, soft raised edge (white top highlight, tinted bottom lip),
+   line icon + bold label in a deeper shade of the same colour. No tilt, just a gentle lift. */
+
+.tag-pill {
+  --tag: #64748b;
+  --tag-ink: color-mix(in srgb, var(--tag) 80%, #0b1020);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px 0 11px;
+  border-radius: 11px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--tag-ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 9%, white) 0%, color-mix(in srgb, var(--tag) 19%, white) 100%);
+  border: 1px solid color-mix(in srgb, var(--tag) 24%, white);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 0 color-mix(in srgb, var(--tag) 13%, transparent),
+    0 1px 1px color-mix(in srgb, var(--tag) 10%, transparent),
+    0 6px 14px -8px color-mix(in srgb, var(--tag) 50%, transparent);
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    box-shadow var(--duration-fast) ease,
+    filter var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
+}
+.tag-pill .tag-glyph {
+  flex-shrink: 0;
+  color: var(--tag-ink);
+}
+.tag-pill .tag-glyph.emoji {
+  line-height: 1;
+}
+.tag-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-pill.interactive {
+  cursor: pointer;
+}
+.tag-pill.interactive:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 0 color-mix(in srgb, var(--tag) 16%, transparent),
+    0 1px 1px color-mix(in srgb, var(--tag) 12%, transparent),
+    0 10px 18px -8px color-mix(in srgb, var(--tag) 60%, transparent);
+}
+.tag-pill.interactive:active {
+  transform: translateY(0) scale(0.97);
+}
+/* not applied / muted: an outline in the tag colour, still colourful but clearly off */
+.tag-pill.muted {
+  color: color-mix(in srgb, var(--tag-ink) 72%, transparent);
+  background: color-mix(in srgb, var(--tag) 4%, transparent);
+  border-color: color-mix(in srgb, var(--tag) 30%, transparent);
+  box-shadow: none;
+}
+.tag-pill.muted .tag-glyph {
+  color: inherit;
+}
+.tag-pill.muted.interactive:hover {
+  color: var(--tag-ink);
+  background: color-mix(in srgb, var(--tag) 10%, transparent);
+  box-shadow: none;
+}
+:root[data-theme='dark'] .tag-pill.muted {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--tag) 40%, transparent);
+  box-shadow: none;
+}
+
+.tag-pill.lg {
+  height: 42px;
+  padding: 0 17px 0 14px;
+  gap: 8px;
+  border-radius: 13px;
+  font-size: 19px;
+}
+.tag-pill.sm {
+  height: 26px;
+  padding: 0 9px 0 8px;
+  gap: 5px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.tag-pill.xs {
+  height: 18px;
+  padding: 0 5px;
+  gap: 3px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+.tag-pill.icon-only {
+  padding: 0;
+  justify-content: center;
+}
+.tag-pill.icon-only.xs {
+  width: 20px;
+}
+.tag-pill.icon-only.sm {
+  width: 26px;
+}
+
+.tag-pill.add {
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px dashed var(--separator-strong);
+  box-shadow: none;
+  cursor: pointer;
+}
+.tag-pill.add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+:root[data-theme='dark'] .tag-pill {
+  --tag-ink: color-mix(in srgb, var(--tag) 55%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 20%, #15172a) 0%, color-mix(in srgb, var(--tag) 30%, #15172a) 100%);
+  border-color: color-mix(in srgb, var(--tag) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 6px 14px -8px color-mix(in srgb, var(--tag) 60%, transparent);
+}
+:root[data-theme='dark'] .tag-pill.add {
+  background: transparent;
+  border-color: var(--separator-strong);
+  color: var(--text-tertiary);
+  box-shadow: none;
+}
+
+.tag-chips {
+  gap: 8px;
+}
+
+/* conversation rows: tiny icon pills after the name */
+.conv-tags {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: -3px;
+}
+
+/* sidebar: pastel tile with the line icon */
+.nav-item-icon.tag-tile {
+  --tag: #64748b;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--tag) 80%, #0b1020);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 10%, white) 0%, color-mix(in srgb, var(--tag) 22%, white) 100%);
+  border: 1px solid color-mix(in srgb, var(--tag) 24%, white);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1.5px 0 color-mix(in srgb, var(--tag) 14%, transparent);
+}
+.nav-item-icon.tag-tile .tag-glyph {
+  color: inherit;
+}
+:root[data-theme='dark'] .nav-item-icon.tag-tile {
+  color: color-mix(in srgb, var(--tag) 55%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 20%, #15172a) 0%, color-mix(in srgb, var(--tag) 32%, #15172a) 100%);
+  border-color: color-mix(in srgb, var(--tag) 42%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* context menu rows hold a small pill */
+.context-menu-item .tag-pill {
+  pointer-events: none;
+}
+
+/* ================================================================== tag creator */
+
+.tag-creator {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow-sm);
+  animation: sheet-in var(--duration-base) var(--ease-spring);
+}
+.tag-creator-preview {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+  min-width: 0;
+}
+.tag-creator-preview .tag-pill {
+  max-width: 100%;
+}
+.tag-creator-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tag-creator-name {
+  --tag: var(--accent);
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 11px;
+  font-weight: 600;
+  background: var(--bg-input);
+  border: 1px solid var(--separator);
+  color: var(--text-primary);
+}
+.tag-creator-name:focus {
+  outline: none;
+  border-color: var(--tag);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tag) 22%, transparent);
+}
+.tag-creator-save {
+  --tag: var(--accent);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--tag);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition:
+    transform var(--duration-fast) var(--ease-spring),
+    opacity var(--duration-fast) ease;
+}
+.tag-creator-save:disabled {
+  opacity: 0.3;
+}
+.tag-creator-save:not(:disabled):hover {
+  transform: scale(1.06);
+}
+.tag-creator-icons {
+  --tag: var(--accent);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 4px;
+}
+.tag-creator-icon {
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.tag-creator-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.tag-creator-icon.active {
+  color: color-mix(in srgb, var(--tag) 80%, #0b1020);
+  background: color-mix(in srgb, var(--tag) 16%, white);
+  border-color: color-mix(in srgb, var(--tag) 30%, white);
+}
+:root[data-theme='dark'] .tag-creator-icon.active {
+  color: color-mix(in srgb, var(--tag) 55%, white);
+  background: color-mix(in srgb, var(--tag) 25%, transparent);
+  border-color: color-mix(in srgb, var(--tag) 45%, transparent);
+}
+.tag-creator-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px;
+}
+.tag-creator-color {
+  --tag: #64748b;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 25%, white), color-mix(in srgb, var(--tag) 55%, white));
+  border: 2px solid var(--tag);
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+.tag-creator-color:hover {
+  transform: scale(1.12);
+}
+.tag-creator-color.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--tag);
+}
+.tag-creator-hint {
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+
+.tag-manager-row {
+  gap: 12px;
+}
+.tag-manager-count {
+  margin-left: auto;
 }
