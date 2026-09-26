@@ -265,6 +265,18 @@ export function SettingsSheet(): JSX.Element {
               </div>
               <div className="settings-row">
                 <div className="settings-row-text">
+                  <div className="settings-row-title">{t('readReceipts')}</div>
+                  <div className="settings-row-sub">{t('readReceiptsHint')}</div>
+                </div>
+                <button
+                  className={`switch ${settings.sendReadReceipts !== false ? 'on' : ''}`}
+                  role="switch"
+                  aria-checked={settings.sendReadReceipts !== false}
+                  onClick={() => void setSettings({ sendReadReceipts: settings.sendReadReceipts === false })}
+                />
+              </div>
+              <div className="settings-row">
+                <div className="settings-row-text">
                   <div className="settings-row-title">{t('sendOnEnter')}</div>
                   <div className="settings-row-sub">{t('sendOnEnterHint')}</div>
                 </div>

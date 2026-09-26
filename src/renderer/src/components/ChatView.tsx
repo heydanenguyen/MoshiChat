@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
+import { BellOff, Bookmark, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
@@ -398,6 +398,8 @@ function Bubble({
   const setReplyTo = useStore((s) => s.setReplyTo)
   const startForward = useStore((s) => s.startForward)
   const react = useStore((s) => s.react)
+  const toggleSaved = useStore((s) => s.toggleSaved)
+  const saved = useStore((s) => !!s.settings.savedMessages?.some((m) => m.messageId === message.id && m.conversationId === message.conversationId))
   const [picker, setPicker] = useState(false)
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && a.url)
@@ -460,6 +462,9 @@ function Bubble({
           <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
             <Forward size={15} strokeWidth={2} />
           </button>
+          <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
+            <Bookmark size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+          </button>
           {picker && (
             <div className="emoji-picker">
               {QUICK_REACTIONS.map((emoji) => (
@@ -478,7 +483,10 @@ function Bubble({
           )}
         </div>
       )}
-      <span className="bubble-time">{formatTime(message.sentAt, language)}</span>
+      <span className="bubble-time">
+        {saved && <Bookmark className="saved-mark" size={11} strokeWidth={2.4} fill="currentColor" />}
+        {formatTime(message.sentAt, language)}
+      </span>
     </div>
   )
 }

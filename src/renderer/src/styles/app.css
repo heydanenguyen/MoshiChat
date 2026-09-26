@@ -5668,3 +5668,246 @@ kbd {
 .bubble-color.default {
   position: relative;
 }
+
+/* ================================================================== motion polish
+   Hover transforms on elements that are only promoted to a GPU layer when the hover starts make
+   text and icons re-rasterise and jump by a pixel on Windows. So:
+   - controls with text/icons respond with colour and shadow only (no scale/translate),
+   - small graphic elements that do move are layers from the start (will-change),
+   - micro-interactions use a calm ease-out, and everything respects reduced motion. */
+
+:root {
+  --ease-smooth: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* quick actions (info panel): tint, never scale the icon */
+.quick-action-icon {
+  transition:
+    background-color var(--duration-base) var(--ease-smooth),
+    color var(--duration-base) var(--ease-smooth),
+    box-shadow var(--duration-base) var(--ease-smooth);
+}
+.quick-action:hover .quick-action-icon {
+  transform: none;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.quick-action.on:hover .quick-action-icon {
+  background: var(--accent-gradient);
+}
+.quick-action {
+  transition: background-color var(--duration-base) var(--ease-smooth);
+}
+
+/* text-bearing controls: shadow/colour feedback instead of movement */
+.btn.primary:hover,
+.tag-pill.interactive:hover,
+.tag-pill.interactive:active,
+.platform-card:hover,
+.mode-card:hover,
+.mesh-swatch:hover {
+  transform: none;
+}
+.btn,
+.tag-pill,
+.platform-card,
+.mode-card,
+.mesh-swatch {
+  transition:
+    transform var(--duration-fast) var(--ease-smooth),
+    background-color var(--duration-base) var(--ease-smooth),
+    box-shadow var(--duration-base) var(--ease-smooth),
+    border-color var(--duration-base) var(--ease-smooth),
+    color var(--duration-base) var(--ease-smooth),
+    filter var(--duration-base) var(--ease-smooth),
+    opacity var(--duration-base) var(--ease-smooth);
+}
+.tag-pill.interactive:hover {
+  filter: brightness(1.03) saturate(1.05);
+}
+.platform-card:hover,
+.mode-card:hover,
+.mesh-swatch:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* small graphics that do move: their own layer from the start, so no jump when the motion begins */
+.accent-dot,
+.bubble-color,
+.avatar-choice,
+.sticker-cell,
+.logo-tile,
+.video-play,
+.story-card,
+.conv-pin-action,
+.album-tile img,
+.media-cell img,
+.avatar.clickable,
+.tag-creator-save,
+.emoji-picker button,
+.accent-add,
+.section-add,
+.icon-btn,
+.composer-send {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+.accent-dot,
+.bubble-color,
+.avatar-choice,
+.logo-tile,
+.sticker-cell,
+.video-play,
+.story-card,
+.avatar.clickable {
+  transition:
+    transform var(--duration-base) var(--ease-smooth),
+    box-shadow var(--duration-base) var(--ease-smooth),
+    background-color var(--duration-base) var(--ease-smooth);
+}
+/* gentler hover scales */
+.sticker-cell:hover {
+  transform: scale(1.06);
+}
+.avatar.clickable:hover {
+  transform: scale(1.03);
+}
+
+/* list rows and nav: colour only */
+.conv-item,
+.nav-item,
+.account-row,
+.context-menu-item,
+.result-item {
+  transition:
+    background-color var(--duration-fast) var(--ease-smooth),
+    color var(--duration-fast) var(--ease-smooth),
+    box-shadow var(--duration-base) var(--ease-smooth);
+}
+.nav-item:active {
+  transform: none;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ================================================================== saved messages */
+
+.nav-item-icon.saved-tile {
+  --brand: #f59e0b;
+}
+.bubble-actions .icon-btn.saved-on {
+  color: #f59e0b;
+}
+.saved-mark {
+  color: #f59e0b;
+  margin-right: 3px;
+  vertical-align: -1px;
+}
+.bubble-row:has(.saved-mark) .bubble-time {
+  opacity: 1;
+}
+
+.saved-sheet {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 64px));
+}
+.saved-sheet .sheet-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.saved-sheet .sheet-title svg {
+  color: #f59e0b;
+}
+.saved-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.saved-empty-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+}
+.saved-empty strong {
+  color: var(--text-primary);
+}
+.saved-group {
+  margin-bottom: 14px;
+}
+.saved-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 6px;
+  font-weight: 800;
+  font-size: var(--text-sm);
+}
+.saved-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-md);
+  transition: background-color var(--duration-fast) var(--ease-smooth);
+}
+.saved-item:hover {
+  background: var(--bg-hover);
+}
+.saved-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+}
+.saved-item-main:disabled {
+  opacity: 0.5;
+}
+.saved-item-who {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.saved-item-time {
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.saved-item-text {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-remove {
+  opacity: 0;
+  margin-right: 4px;
+  transition: opacity var(--duration-fast) var(--ease-smooth);
+}
+.saved-item:hover .saved-remove,
+.saved-remove:focus-visible {
+  opacity: 1;
+}

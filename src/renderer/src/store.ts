@@ -19,12 +19,14 @@ import type {
   TagId,
   TagMeta,
   ContactOverride,
-  CustomAccent
+  CustomAccent,
+  SavedMessage
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
 import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
 import { accentVars, type AccentSpec } from '@shared/accent'
+import { previewKindOf } from '@shared/preview'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -34,6 +36,7 @@ export type Sheet =
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
   | { kind: 'new-chat' }
+  | { kind: 'saved' }
 
 export type DetailsTab = 'info' | 'search' | 'media' | 'links' | 'files'
 
@@ -90,7 +93,9 @@ interface State {
   setSearch(search: string): void
   openHit(hit: SearchHit): void
   /** Scroll to a message in the open thread, loading older pages until it appears. */
-  jumpTo(messageId: string): Promise<void>
+  jumpTo(messageId: string, maxPages?: number): Promise<void>
+  toggleSaved(message: Message): Promise<void>
+  openSaved(saved: SavedMessage): Promise<void>
   send(text: string, files?: OutgoingAttachment[]): Promise<void>
   react(messageId: string, emoji: string): Promise<void>
   setReplyTo(message?: Message): void
@@ -331,10 +336,41 @@ export const useStore = create<State>((set, get) => ({
     get().select(hit.conversation.id, hit.message.id)
   },
 
-  async jumpTo(messageId) {
+  async toggleSaved(message) {
+    const conversation = get().conversations[message.conversationId]
+    const list = get().settings.savedMessages ?? []
+    const exists = list.some((s) => s.messageId === message.id && s.conversationId === message.conversationId)
+    const next = exists
+      ? list.filter((s) => !(s.messageId === message.id && s.conversationId === message.conversationId))
+      : [
+          {
+            conversationId: message.conversationId,
+            messageId: message.id,
+            platform: conversation?.platform ?? 'messenger',
+            text: message.text.slice(0, 280),
+            kind: previewKindOf(message),
+            senderName: message.senderName,
+            isOutgoing: message.isOutgoing,
+            sentAt: message.sentAt,
+            savedAt: Date.now()
+          },
+          ...list
+        ].slice(0, 500)
+    await get().setSettings({ savedMessages: next })
+    get().showToast(translate(get().settings.language, exists ? 'unsaved' : 'savedToast'))
+  },
+
+  async openSaved(saved) {
+    get().select(saved.conversationId)
+    // Wait for the first page, then walk back until the message is loaded and highlight it.
+    for (let i = 0; i < 50 && !get().messages[saved.conversationId]; i++) await new Promise((r) => setTimeout(r, 100))
+    await get().jumpTo(saved.messageId, 40)
+  },
+
+  async jumpTo(messageId, maxPages = 8) {
     const id = get().selectedId
     if (!id) return
-    for (let page = 0; page < 8; page++) {
+    for (let page = 0; page < maxPages; page++) {
       const list = get().messages[id] ?? []
       if (list.some((m) => m.id === messageId)) break
       if (!get().hasMore[id]) break
@@ -667,6 +703,8 @@ export const useStore = create<State>((set, get) => ({
 
   async removeAccount(accountId) {
     await window.unison.accounts.remove(accountId)
+    // Main drops that account's tags, pins, nicknames and saved messages; pick up the cleaned settings.
+    set({ settings: { ...DEFAULT_SETTINGS, ...(await window.unison.settings.get()) } })
   },
 
   async reconnect(accountId) {

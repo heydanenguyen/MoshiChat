@@ -72,6 +72,39 @@ async function stickerFile(id: string): Promise<OutgoingAttachment> {
   }
 }
 
+/**
+ * Drop per-chat settings (tags, pins, nicknames, saved messages, mutes) that belong to accounts
+ * which no longer exist, so counts and lists never include chats that are gone.
+ */
+async function pruneOrphanedSettings(): Promise<void> {
+  const accounts = new Set(storage.accounts.map((a) => a.id))
+  const owned = (conversationId: string): boolean => {
+    const slash = conversationId.indexOf('/')
+    return slash > 0 && accounts.has(conversationId.slice(0, slash))
+  }
+  const settings = storage.settings
+  const keep = <T>(record: Record<string, T> | undefined): Record<string, T> | undefined =>
+    record ? Object.fromEntries(Object.entries(record).filter(([id]) => owned(id))) : record
+  const patch: Partial<Settings> = {}
+  const tags = keep(settings.tags) ?? {}
+  if (Object.keys(tags).length !== Object.keys(settings.tags ?? {}).length) patch.tags = tags
+  const pins = keep(settings.pins)
+  if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
+  const overrides = keep(settings.contactOverrides)
+  if (overrides && Object.keys(overrides).length !== Object.keys(settings.contactOverrides ?? {}).length) patch.contactOverrides = overrides
+  const saved = settings.savedMessages?.filter((m) => owned(m.conversationId))
+  if (saved && saved.length !== settings.savedMessages?.length) patch.savedMessages = saved
+  const mutedChats = settings.muted?.conversations.filter(owned)
+  const mutedAccounts = settings.muted?.accounts.filter((id) => accounts.has(id))
+  if (settings.muted && (mutedChats?.length !== settings.muted.conversations.length || mutedAccounts?.length !== settings.muted.accounts.length)) {
+    patch.muted = { ...settings.muted, conversations: mutedChats ?? [], accounts: mutedAccounts ?? [] }
+  }
+  if (Object.keys(patch).length) {
+    await storage.setSettings(patch)
+    log('pruned settings of removed accounts:', Object.keys(patch).join(', '))
+  }
+}
+
 /** Window/taskbar icon for the chosen logo (rendered by scripts/make-icons.mjs into resources/icons). */
 function appIcon(logo: Settings['logo'] = storage.settings.logo): Electron.NativeImage | undefined {
   const name = `${logo ?? 'buddies'}.png`
@@ -415,7 +448,10 @@ async function listPages(appId: string): Promise<PageOption[]> {
 function registerIpc(): void {
   ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
   ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
-  ipcMain.handle(IPC.accountsRemove, (_e, id: string) => manager.remove(id))
+  ipcMain.handle(IPC.accountsRemove, async (_e, id: string) => {
+    await manager.remove(id)
+    await pruneOrphanedSettings()
+  })
   ipcMain.handle(IPC.accountsReconnect, async (_e, id: string) => {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
@@ -488,6 +524,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     if (isWindows) app.setAppUserModelId('com.3hvn.unison')
     await storage.load()
+    await pruneOrphanedSettings()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()

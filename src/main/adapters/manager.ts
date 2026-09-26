@@ -447,6 +447,8 @@ export class AccountManager {
       conversation.unreadCount = 0
       this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
     }
+    // Private reading: clear the badge in Unison only, the platform is not told.
+    if (this.storage.settings.sendReadReceipts === false) return
     await this.adapterFor(conversationId).markRead(conversationId)
   }
 
