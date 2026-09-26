@@ -33,6 +33,8 @@ interface IgXma {
 
 export interface IgItem {
   item_id: string
+  /** Shared with the newer "Slide" layer; used to resolve placeholders. */
+  message_id?: string
   user_id: number | string
   timestamp: string | number
   item_type: string

@@ -4,7 +4,8 @@ import { join } from 'path'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
-import { mapIgItem, type IgItem } from './instagram-items'
+import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
+import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { DirectComposer } from '../direct-composer'
@@ -26,6 +27,8 @@ interface IgUser {
 
 interface IgThread {
   thread_id: string
+  /** The newer "Slide" thread id (thread_fbid) used by the web client's GraphQL. */
+  thread_v2_id?: string
   thread_title?: string
   is_group?: boolean
   users: IgUser[]
@@ -94,6 +97,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private typingTimers = new Map<string, NodeJS.Timeout>()
   private mePk = ''
   private threads = new Map<string, IgThread>()
+  /** Placeholder items ("update to the latest version") resolved through the web client's GraphQL. */
+  private slideResolved = new Map<string, MappedItem>()
+  private slideCache = new Map<string, { at: number; nodes: Map<string, SlideNode> }>()
+  private v2Ids = new Map<string, string>()
+  private slideFailures = 0
   private users = new Map<string, IgUser>()
   private history = new Map<string, Message[]>()
   private cursors = new Map<string, string | undefined>()
@@ -180,6 +188,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const list = inbox.map((thread) => this.toConversation(thread))
     // Count the most recent threads quietly so their numbers are ready when opened.
     for (const thread of inbox.slice(0, 12)) this.ensureCrawl(thread.thread_id, conversationId(this.account.id, thread.thread_id), true)
+    void this.resolveListPreviews(inbox.slice(0, 20))
     return list
   }
 
@@ -198,6 +207,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const collected: Message[] = []
     for (let i = 0; i < Math.ceil(limit / PAGE_SIZE); i++) {
       const page = await this.page(threadId, cursor)
+      await this.resolveSlide(threadId, page.items)
       collected.push(...page.items.filter((item) => this.visible(item)).map((item) => this.toMessage(item, id)))
       cursor = page.hasOlder ? page.cursor : undefined
       if (!cursor) break
@@ -215,6 +225,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     if (cursor) params.set('cursor', cursor)
     const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?${params}`, { headers: APP_HEADERS })
     this.absorbUsers(res.thread.users)
+    if (res.thread.thread_v2_id) this.v2Ids.set(threadId, res.thread.thread_v2_id)
     return { items: res.thread.items ?? [], cursor: res.thread.oldest_cursor, hasOlder: !!res.thread.has_older }
   }
 
@@ -302,6 +313,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
     }
     if (!sent) throw new Error('Instagram did not confirm the upload yet. Check the conversation before sending again')
+    await this.resolveSlide(threadId, [sent])
     const message = this.toMessage(sent, id)
     this.remember(id, [message])
     // Text sent right after shows up through the next refresh.
@@ -613,6 +625,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         const known = this.history.get(id)
         if (!known || !lastId || known.some((m) => m.id === lastId)) continue
         const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
+        await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
         const fresh = (res.thread.items ?? [])
           .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
           .map((item) => this.toMessage(item, id))
@@ -764,8 +777,56 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   private mapped(item: IgItem): ReturnType<typeof mapIgItem> {
+    const resolved = this.slideResolved.get(item.item_id)
+    if (resolved) return resolved
     this.mapContext.mePk = this.mePk
     return mapIgItem(item, this.mapContext)
+  }
+
+  /**
+   * Messages in Instagram's newer format come back from direct_v2 as "Message unavailable"
+   * placeholders. The web client reads them through GraphQL (IGDThreadDetailQuery, newest 20),
+   * so do the same and remember the result per item.
+   */
+  private async resolveSlide(threadId: string, items: IgItem[]): Promise<void> {
+    const pending = items.filter((item) => item.item_type === 'placeholder' && item.message_id && !this.slideResolved.has(item.item_id))
+    if (!pending.length || this.slideFailures >= 5) return
+    const v2 = this.threads.get(threadId)?.thread_v2_id ?? this.v2Ids.get(threadId)
+    if (!v2) return
+    let cached = this.slideCache.get(threadId)
+    const missing = (c?: { nodes: Map<string, SlideNode> }): boolean => pending.some((item) => !c?.nodes.has(item.message_id!))
+    if (!cached || (missing(cached) && Date.now() - cached.at > 5_000)) {
+      try {
+        const res = await this.realtime.graphql('IGDThreadDetailQuery', {
+          min_uq_seq_id: null,
+          thread_fbid: v2,
+          __relay_internal__pv__IGDEnableOffMsysChatThemesQErelayprovider: true,
+          __relay_internal__pv__IGDInitialMessagePageCountrelayprovider: 20
+        })
+        cached = { at: Date.now(), nodes: new Map(slideNodesOf(res).flatMap((n) => (n.message_id ? [[n.message_id, n] as const] : []))) }
+        this.slideCache.set(threadId, cached)
+        this.slideFailures = 0
+      } catch (err) {
+        this.slideFailures += 1
+        this.ctx.log('instagram slide lookup failed', (err as Error).message)
+        return
+      }
+    }
+    for (const item of pending) {
+      const node = cached.nodes.get(item.message_id!)
+      if (node) this.slideResolved.set(item.item_id, mapSlideNode(node, item.item_id))
+    }
+  }
+
+  /** Conversation list rows whose newest message is a placeholder get their real preview. */
+  private async resolveListPreviews(threads: IgThread[]): Promise<void> {
+    for (const thread of threads) {
+      const last = thread.last_permanent_item ?? thread.items?.[0]
+      if (!last || last.item_type !== 'placeholder' || this.slideResolved.has(last.item_id)) continue
+      await this.resolveSlide(thread.thread_id, [last])
+      if (this.slideResolved.has(last.item_id)) this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
+      await sleep(400)
+    }
   }
 
   /** Instagram's own bookkeeping rows (reaction logs, "call started") never show as messages. */

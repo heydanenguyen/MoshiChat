@@ -231,12 +231,14 @@ async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebC
   const ses = session.fromPartition(`persist:login-${platform}`)
   // Facebook sessions are shared with ws3-fca, which now uses this exact browser identity.
   if (platform === 'messenger') ses.setUserAgent(browserUserAgent())
-  // Drop only the dead login cookies; keep device ids (datr, mid, ig_did) so the platform recognises this device.
-  for (const name of spec.required) {
-    const deadValues = new Set(dead.filter((c) => c.name === name).map((c) => c.value))
-    for (const c of await ses.cookies.get({ name })) {
-      if (!deadValues.has(c.value)) continue
-      await ses.cookies.remove(`https://${(c.domain ?? spec.domain).replace(/^\./, '')}${c.path ?? '/'}`, name).catch(() => undefined)
+  // If the window still holds exactly the rejected session, drop its login cookies so the sign-in page shows.
+  // A newer session (new token, same user id) is kept and reused. Device ids (datr, mid, ig_did) always stay.
+  const current = await ses.cookies.get({ domain: spec.domain.replace(/^\./, '') })
+  const isDead = (c: Electron.Cookie): boolean => dead.some((d) => d.name === c.name && d.value === c.value)
+  const loginCookies = current.filter((c) => spec.required.includes(c.name))
+  if (dead.length && loginCookies.length && spec.required.every((n) => loginCookies.some((c) => c.name === n && isDead(c)))) {
+    for (const c of loginCookies) {
+      await ses.cookies.remove(`https://${(c.domain ?? spec.domain).replace(/^\./, '')}${c.path ?? '/'}`, c.name).catch(() => undefined)
     }
   }
   return new Promise<WebCookie[]>((resolve, reject) => {
@@ -279,7 +281,11 @@ async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebC
         const cookies = await ses.cookies.get({ domain: spec.domain.replace(/^\./, '') })
         const names = new Set(cookies.map((c) => c.name))
         const deadValues = new Set(dead.map((c) => c.name + '=' + c.value))
-        const signedIn = spec.required.every((n) => cookies.some((c) => c.name === n && !deadValues.has(n + '=' + c.value)))
+        // All login cookies present, and not the exact rejected set. The user-id cookie (c_user, ds_user_id)
+        // is the same in every session, so only the session token has to be new.
+        const present = spec.required.every((n) => names.has(n))
+        const stale = dead.length > 0 && spec.required.every((n) => cookies.some((c) => c.name === n && deadValues.has(n + '=' + c.value)))
+        const signedIn = present && !stale
         const state = `${path} [${spec.required.filter((n) => names.has(n))}] signedIn=${signedIn}`
         if (!app.isPackaged && state !== lastState) log(`login window (${platform}): ${state}`)
         lastState = state
