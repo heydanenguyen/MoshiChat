@@ -32,8 +32,8 @@ export function Avatar({ name, url, size = 40, platform, ring, className = '', o
   const badge = Math.max(14, Math.round(size * 0.4))
   return (
     <span
-      className={`avatar ${className} ${onClick ? 'clickable' : ''}`}
-      style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--ring-gap), 0 0 0 4px ${ring}` : undefined }}
+      className={`avatar ${ring ? 'ringed' : ''} ${size >= 72 ? 'large' : ''} ${className} ${onClick ? 'clickable' : ''}`}
+      style={{ width: size, height: size, ['--ring' as string]: ring } as React.CSSProperties}
       onClick={onClick}
     >
       <AvatarImage name={name} url={url} />

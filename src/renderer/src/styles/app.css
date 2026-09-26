@@ -5343,3 +5343,328 @@ kbd {
   align-items: center;
   gap: 6px;
 }
+
+/* ================================================================== thread width, photos, albums, big emoji */
+
+/* a little more room for messages and photos when the chat is wide (narrow layouts keep their rules) */
+@container chat (min-width: 621px) {
+  .msg-group-body {
+    max-width: min(76%, 640px);
+  }
+  .attachment-image {
+    max-width: min(360px, 100%);
+    max-height: 420px;
+  }
+}
+.attachment-image {
+  border-radius: 18px;
+}
+.bubble.media {
+  padding: 3px;
+}
+.bubble.media .attachment-image {
+  border-radius: 16px;
+}
+/* separate photo messages never touch */
+.bubble-row + .bubble-row {
+  margin-top: 1px;
+}
+.bubble.media + .bubble.media,
+.bubble-row:has(.bubble.media) + .bubble-row:has(.bubble.media) {
+  margin-top: 3px;
+}
+
+/* albums: consecutive photos/videos as one grid */
+.album-row {
+  align-items: flex-end;
+}
+.album {
+  display: grid;
+  gap: 3px;
+  width: min(360px, 100%);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--fill-tertiary);
+}
+.album.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.album.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.album-tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  cursor: zoom-in;
+  background: var(--fill-secondary);
+}
+.album-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+.album-tile:hover img {
+  transform: scale(1.04);
+}
+.album-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  padding-left: 2px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.album-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.42);
+}
+.album-row .bubble-time {
+  align-self: flex-end;
+}
+
+/* emoji-only messages: large, no bubble */
+.bubble.jumbo {
+  background: none !important;
+  box-shadow: none !important;
+  padding: 0 2px;
+  line-height: 1.12;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', var(--font-text);
+  letter-spacing: 0.04em;
+}
+.bubble.jumbo.e1 {
+  font-size: 56px;
+}
+.bubble.jumbo.e2 {
+  font-size: 44px;
+}
+.bubble.jumbo.e3 {
+  font-size: 36px;
+}
+.bubble.jumbo.out {
+  color: inherit;
+}
+
+/* ================================================================== avatar ring: crisp border, no dark fringe */
+
+.avatar-img {
+  background: var(--fill-tertiary);
+}
+.avatar.ringed::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--ring);
+  pointer-events: none;
+}
+.avatar.ringed.large::before {
+  inset: -6px;
+  border-width: 2.5px;
+}
+.avatar.large .avatar-img {
+  box-shadow: none;
+}
+
+/* ================================================================== info panel: hero, quick actions, cards */
+
+.details-hero .details-name {
+  margin-top: var(--space-4);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.details-sub {
+  margin-top: 3px;
+  max-width: 100%;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.details-avatar-large {
+  box-shadow: none;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 2px var(--space-3) var(--space-3);
+}
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 7px;
+  border-radius: var(--radius-lg);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) ease;
+}
+.quick-action:hover {
+  background: var(--bg-hover);
+}
+.quick-action-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.quick-action:hover .quick-action-icon {
+  transform: scale(1.06);
+}
+.quick-action.on .quick-action-icon {
+  color: var(--on-accent);
+  background: var(--accent-gradient);
+}
+.details-hint {
+  margin: -4px var(--space-4) var(--space-2);
+}
+
+.details-card {
+  margin: 0 var(--space-3) var(--space-3);
+  padding: 12px 12px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-sm);
+}
+.details-card.plain {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.details-card-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 9px;
+}
+.tag-chips.compact {
+  gap: 6px;
+}
+.details-card .details-row {
+  padding: 0;
+}
+
+.fact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fact-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.fact-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fact-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.fact-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fact-note {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  vertical-align: 1px;
+}
+
+.bubble-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.bubble-color {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  transition: transform var(--duration-base) var(--ease-spring);
+}
+.bubble-color span {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.bubble-color.flat {
+  border-radius: 8px;
+}
+.bubble-color:hover {
+  transform: scale(1.12);
+}
+.bubble-color.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--text-primary);
+}
+.bubble-color.default span {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+.bubble-color.default::after {
+  content: 'A';
+  position: absolute;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--on-accent);
+}
+.bubble-color.default {
+  position: relative;
+}

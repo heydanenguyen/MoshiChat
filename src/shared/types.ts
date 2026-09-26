@@ -403,6 +403,8 @@ export interface ContactOverride {
   avatar?: string
   /** YYYY-MM-DD, or --MM-DD without the year. */
   birthday?: string
+  /** Outgoing bubble colour for this chat: a preset or custom accent id. */
+  bubble?: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {

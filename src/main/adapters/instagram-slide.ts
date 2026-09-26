@@ -30,6 +30,10 @@ export interface SlideContent {
   text_body?: string | null
   xma_text_body?: string | null
   attachments?: SlideAttachment[] | null
+  /** Videos and voice notes come in their own lists (SlideMessageVideosContent / AudiosContent). */
+  videos?: SlideAttachment[] | null
+  audios?: SlideAttachment[] | null
+  images?: SlideAttachment[] | null
   xma?: SlideXma | null
   [key: string]: unknown
 }
@@ -66,9 +70,14 @@ function waveformOf(a: SlideAttachment): number[] | undefined {
   return undefined
 }
 
+/** Media items of a Slide message, whichever list Instagram put them in. */
+function mediaList(content: SlideContent): SlideAttachment[] {
+  return content.attachments?.length ? content.attachments : content.videos?.length ? content.videos : content.audios?.length ? content.audios : (content.images ?? [])
+}
+
 function mediaAttachments(content: SlideContent, id: string): Attachment[] {
   const type = content.__typename ?? ''
-  return (content.attachments ?? []).map((a, i): Attachment => {
+  return mediaList(content).map((a, i): Attachment => {
     const aid = `${id}-s${i}`
     const url = a.attachment_cdn_url ?? undefined
     const still = a.preview_cdn_url ?? a.preview_cdn_fallback_url ?? undefined
@@ -109,11 +118,11 @@ export function mapSlideNode(node: SlideNode, id: string): MappedItem {
   const type = content.__typename ?? ''
   const text = content.text_body ?? node.text_body ?? ''
   if (/Sticker/.test(type)) {
-    const first = content.attachments?.[0]
+    const first = mediaList(content)[0]
     const url = first?.attachment_cdn_url ?? first?.preview_cdn_url ?? content.xma?.preview_image?.url ?? undefined
     if (url) return { text: '', attachments: [{ id: `${id}-k`, kind: 'sticker', url }], preview: 'sticker' }
   }
-  if (content.attachments?.length) {
+  if (mediaList(content).length) {
     const attachments = mediaAttachments(content, id)
     const kind = attachments[0].kind
     return { text, attachments, preview: kind === 'audio' ? 'voice' : kind === 'video' ? 'video' : attachments[0].name === 'GIF' ? 'gif' : 'photo' }

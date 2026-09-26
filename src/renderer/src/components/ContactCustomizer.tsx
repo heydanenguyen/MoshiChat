@@ -59,7 +59,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   const save = async (): Promise<void> => {
     setBusy(true)
     try {
-      await setContactOverride(conversation.id, { nickname, avatar, birthday: birthday || undefined })
+      await setContactOverride(conversation.id, { ...override, nickname, avatar, birthday: birthday || undefined })
       onClose()
     } finally {
       setBusy(false)
@@ -67,7 +67,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   }
 
   const reset = async (): Promise<void> => {
-    await setContactOverride(conversation.id, undefined)
+    await setContactOverride(conversation.id, override?.bubble ? { bubble: override.bubble } : undefined)
     onClose()
   }
 

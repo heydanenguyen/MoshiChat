@@ -18,11 +18,13 @@ import type {
   SharedKind,
   TagId,
   TagMeta,
-  ContactOverride
+  ContactOverride,
+  CustomAccent
 } from '@shared/types'
-import { DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
+import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
 import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
+import { accentVars, type AccentSpec } from '@shared/accent'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -557,6 +559,7 @@ export const useStore = create<State>((set, get) => ({
     if (override?.nickname?.trim()) clean.nickname = override.nickname.trim().slice(0, 60)
     if (override?.avatar) clean.avatar = override.avatar
     if (override?.birthday) clean.birthday = override.birthday
+    if (override?.bubble) clean.bubble = override.bubble
     if (Object.keys(clean).length) overrides[conversationId] = clean
     else delete overrides[conversationId]
     await get().setSettings({ contactOverrides: overrides })
@@ -719,6 +722,23 @@ export function customAvatarUrl(value?: string): string | undefined {
     if (LOGO_ORDER.includes(id)) return `data:image/svg+xml;utf8,${encodeURIComponent(logoIconSvg(id, true))}`
   }
   return undefined
+}
+
+/** Colours of a per-chat bubble choice (preset or custom accent id); undefined = follow the app accent. */
+export function bubbleSpecOf(id: string | undefined, customAccents?: CustomAccent[]): AccentSpec | undefined {
+  if (!id) return undefined
+  const preset = ACCENTS.find((a) => a.id === id)
+  if (preset) return preset.flat ? { from: preset.from } : { from: preset.from, to: preset.to }
+  const custom = customAccents?.find((a) => a.id === id)
+  return custom ? { from: custom.from, to: custom.to } : undefined
+}
+
+/** CSS variables that recolour outgoing bubbles for one chat. */
+export function bubbleVarsOf(id: string | undefined, customAccents?: CustomAccent[]): React.CSSProperties | undefined {
+  const spec = bubbleSpecOf(id, customAccents)
+  if (!spec) return undefined
+  const v = accentVars(spec)
+  return { '--bubble-out': v['--bubble-out'], '--bubble-out-text': v['--bubble-out-text'], '--bubble-out-shadow': v['--bubble-out-shadow'] } as React.CSSProperties
 }
 
 const decorated = new WeakSet<Conversation>()
