@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
-import { useShowPlatformBadge, useStore, useT } from '../store'
+import { useStore, useT } from '../store'
 import { formatBytes, formatDayLabel, formatTime, sectionize, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
@@ -31,7 +31,6 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const highlightId = useStore((s) => s.highlightId)
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
-  const showBadge = useShowPlatformBadge()
   const narrow = useStore((s) => s.narrow)
   const select = useStore((s) => s.select)
 
@@ -114,7 +113,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
             <ChevronLeft size={20} strokeWidth={2.4} />
           </button>
         )}
-        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} platform={showBadge ? conversation.platform : undefined} onClick={() => toggleDetails('info')} />
+        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} onClick={() => toggleDetails('info')} />
         <div className="chat-header-info">
           <div className="chat-header-title">
             {conversation.title}
