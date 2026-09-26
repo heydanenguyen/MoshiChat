@@ -82,11 +82,26 @@ export class WebClient {
         headers['Content-Type'] = 'application/x-www-form-urlencoded';
         body = new URLSearchParams(req.form).toString();
       }
-      const res = await fetch(req.path, { method: req.method, headers, body, credentials: 'include' });
-      const text = await res.text();
-      return { status: res.status, text, url: res.url };
+      // A stalled request must never block the caller forever (the crawler waits on it).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      try {
+        const res = await fetch(req.path, { method: req.method, headers, body, credentials: 'include', signal: controller.signal });
+        const text = await res.text();
+        return { status: res.status, text, url: res.url };
+      } catch (err) {
+        return { status: 0, text: '', url: '', error: String(err && err.name === 'AbortError' ? 'timed out' : err) };
+      } finally {
+        clearTimeout(timer);
+      }
     })()`
-    const result = (await this.window!.webContents.executeJavaScript(script, true)) as { status: number; text: string; url: string }
+    const pending = this.window!.webContents.executeJavaScript(script, true) as Promise<{ status: number; text: string; url: string; error?: string }>
+    let guard: NodeJS.Timeout | undefined
+    const result = await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => (guard = setTimeout(() => reject(new Error('Request timed out')), 40_000)))
+    ]).finally(() => clearTimeout(guard))
+    if (result.error) throw new Error(`Request failed: ${result.error}`)
     if (/\/challenge\/|\/checkpoint\//.test(result.url)) throw new SessionExpiredError('checkpoint')
     if (/\/accounts\/login|\/login\.php/.test(result.url)) throw new SessionExpiredError('logged_out')
     let parsed: unknown

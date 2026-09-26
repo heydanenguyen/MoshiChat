@@ -430,8 +430,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
             await this.catchUp(job.threadId, job.id, state)
             this.caughtUp.add(job.threadId)
           }
+          const before = state.count
           if (!state.done) await this.walkBack(job.threadId, job.id, state, CRAWL_TURN_PAGES)
           finished = state.done
+          if (import.meta.env.DEV) this.ctx.log('instagram crawl turn: +' + (state.count - before) + ' messages, done=' + state.done + ', queue=' + this.crawlQueue.length)
         } catch (err) {
           finished = true
           if (err instanceof SessionExpiredError) {
