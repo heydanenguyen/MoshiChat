@@ -80,6 +80,12 @@
     "asarUnpack": [
       "node_modules/@whiskeysockets/baileys/**",
       "node_modules/zca-js/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icons",
+        "to": "icons"
+      }
     ]
   }
 }

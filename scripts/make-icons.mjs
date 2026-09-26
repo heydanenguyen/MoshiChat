@@ -1,18 +1,27 @@
-// Renders the app icons from the SVG sources in build/.
-//   build/icon.svg        two "Unison buddies" (large sizes)
-//   build/icon-small.svg  the orange buddy alone (16-48 px, stays legible)
-// Outputs: build/icon.png (1024), build/icon.ico (16-256), resources/icon.png (256, window icon).
-// Run: node scripts/make-icons.mjs
+// Renders every icon from the logo characters in src/shared/logos.ts (single source of truth).
+//   build/icon.svg, build/icon-small.svg   reference SVGs of the default logo (Buddies)
+//   build/icon.png (1024), build/icon.ico  installer / executable icon (Buddies)
+//   resources/icon.png (256)               fallback window icon
+//   resources/icons/<logo>.png (256)       window/taskbar icon for each logo picked in Settings
+// Run: npm run icons
+import { buildSync } from 'esbuild'
 import sharp from 'sharp'
-import { writeFile } from 'fs/promises'
+import { mkdir, rm, writeFile } from 'fs/promises'
+import { pathToFileURL } from 'url'
 
-/** Rasterise at 2x the target size (density is relative to the SVG's own viewBox width), then downsample. */
-const VIEWBOX = { 'build/icon.svg': 1024, 'build/icon-small.svg': 64 }
-const render = (file, size) =>
-  sharp(file, { density: Math.max(1, Math.ceil(((72 * size) / VIEWBOX[file]) * 2)) })
+const bundle = 'build/.logos.bundle.mjs'
+buildSync({ entryPoints: ['src/shared/logos.ts'], bundle: true, format: 'esm', platform: 'node', outfile: bundle, logLevel: 'error' })
+const { LOGO_ORDER, logoIconSvg } = await import(pathToFileURL(bundle).href)
+await rm(bundle, { force: true })
+
+/** Rasterise an SVG string at 2x the target size, then downsample (density is relative to its viewBox). */
+async function render(svg, size) {
+  const viewBoxWidth = Number(/viewBox="[\d.-]+ [\d.-]+ ([\d.]+)/.exec(svg)?.[1] ?? 64)
+  return sharp(Buffer.from(svg), { density: Math.max(1, Math.ceil(((72 * size) / viewBoxWidth) * 2)) })
     .resize(size, size)
     .png({ compressionLevel: 9 })
     .toBuffer()
+}
 
 /** ICO container with PNG-compressed entries (supported since Windows Vista). */
 function ico(images) {
@@ -26,8 +35,6 @@ function ico(images) {
     const entry = Buffer.alloc(16)
     entry.writeUInt8(size >= 256 ? 0 : size, 0)
     entry.writeUInt8(size >= 256 ? 0 : size, 1)
-    entry.writeUInt8(0, 2)
-    entry.writeUInt8(0, 3)
     entry.writeUInt16LE(1, 4)
     entry.writeUInt16LE(32, 6)
     entry.writeUInt32LE(data.length, 8)
@@ -38,12 +45,17 @@ function ico(images) {
   return Buffer.concat([header, ...entries, ...images.map((i) => i.data)])
 }
 
-const large = 'build/icon.svg'
-const small = 'build/icon-small.svg'
+const large = logoIconSvg('buddies')
+const small = logoIconSvg('buddies', true)
+await writeFile('build/icon.svg', large + '\n')
+await writeFile('build/icon-small.svg', small + '\n')
 await writeFile('build/icon.png', await render(large, 1024))
 await writeFile('resources/icon.png', await render(large, 256))
 const icoSizes = [16, 24, 32, 48, 64, 128, 256]
 const images = []
 for (const size of icoSizes) images.push({ size, data: await render(size <= 48 ? small : large, size) })
 await writeFile('build/icon.ico', ico(images))
-console.log('icons written:', ['build/icon.png (1024)', 'resources/icon.png (256)', `build/icon.ico (${icoSizes.join(', ')})`].join(' · '))
+
+await mkdir('resources/icons', { recursive: true })
+for (const id of LOGO_ORDER) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 256))
+console.log(`icons written: build/icon.png, build/icon.ico (${icoSizes.join(', ')}), resources/icon.png, resources/icons/{${LOGO_ORDER.join(',')}}.png`)

@@ -247,6 +247,8 @@ const vi = {
   tagDelete: 'Xóa tag',
   tagDeleteConfirm: 'Xóa?',
   tagDeleteSure: 'Nhấn lần nữa để xóa',
+  logo: 'Logo',
+  logoHint: 'Chọn nhân vật cho Unison. Biểu tượng cửa sổ và thanh taskbar đổi theo ngay.',
   lastMessageAt: 'Tin nhắn gần nhất: {time}',
   tagManage: 'Quản lý tag',
   tagManageHint: 'Tạo tag riêng với emoji và màu, hoặc xóa tag không dùng. Xóa tag sẽ gỡ nó khỏi mọi hội thoại.'
@@ -502,6 +504,8 @@ const en: Dictionary = {
   tagDelete: 'Delete tag',
   tagDeleteConfirm: 'Delete?',
   tagDeleteSure: 'Click again to delete',
+  logo: 'Logo',
+  logoHint: 'Pick Unison’s character. The window and taskbar icon change with it.',
   lastMessageAt: 'Last message: {time}',
   tagManage: 'Manage tags',
   tagManageHint: 'Create your own tags with an emoji and colour, or delete ones you do not use. Deleting a tag removes it from every chat.'

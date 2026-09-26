@@ -1,3 +1,4 @@
+import type { LogoId } from './logos'
 /** Domain model shared between main, preload and renderer. */
 
 export type Platform = 'messenger' | 'instagram' | 'telegram' | 'zalo' | 'whatsapp'
@@ -365,6 +366,8 @@ export interface Settings {
   tagDefs?: TagMeta[]
   /** Pins set in Unison: conversation id -> pinned. Overrides the platform's own pin. */
   pins?: Record<string, boolean>
+  /** Logo character used in the app and as the window icon. */
+  logo?: LogoId
 }
 
 export const DEFAULT_SETTINGS: Settings = {
