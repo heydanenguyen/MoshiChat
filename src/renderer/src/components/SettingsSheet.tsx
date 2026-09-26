@@ -206,7 +206,7 @@ export function SettingsSheet(): JSX.Element {
                     {tagList.map((tag) => {
                       const muted = mutedTags.includes(tag.id)
                       return (
-                        <TagChip key={tag.id} tag={tag} size="sm" muted={muted} onClick={() => void toggleMute('tags', tag.id)}>
+                        <TagChip key={tag.id} tag={tag} size="sm" flat={muted} onClick={() => void toggleMute('tags', tag.id)}>
                           {muted && <BellOff size={12} strokeWidth={2.4} />}
                         </TagChip>
                       )

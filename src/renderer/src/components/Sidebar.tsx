@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, Trash2 } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
-import { TagIcon } from './Tag'
+import { TagChip } from './Tag'
+import { TagCreator } from './TagEditor'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -14,6 +15,8 @@ interface Menu {
   label: string
   x: number
   y: number
+  /** Second click on "Delete tag" confirms. */
+  confirmDelete?: boolean
 }
 
 export function Sidebar(): JSX.Element {
@@ -29,8 +32,38 @@ export function Sidebar(): JSX.Element {
   const { list: tagList } = useTagDefs()
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
+  const deleteTag = useStore((s) => s.deleteTag)
   const unread = useUnreadCounts()
   const [menu, setMenu] = useState<Menu | undefined>()
+  const [creator, setCreator] = useState<{ x: number; y: number } | undefined>()
+  const addRef = useRef<HTMLButtonElement>(null)
+
+  // The tag creator floats next to the sidebar; outside clicks and Escape close it.
+  useEffect(() => {
+    if (!creator) return
+    const close = (): void => setCreator(undefined)
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', close)
+    }
+  }, [creator])
+
+  const openCreator = (anchor: HTMLElement | null): void => {
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
+    const width = 300
+    const height = 360
+    const x = collapsed ? rect.right + 10 : Math.min(rect.left, window.innerWidth - width - 12)
+    const y = Math.max(12, Math.min(collapsed ? rect.top : rect.bottom + 8, window.innerHeight - height - 12))
+    setCreator({ x, y })
+  }
 
   useEffect(() => {
     if (!menu) return
@@ -48,7 +81,6 @@ export function Sidebar(): JSX.Element {
   const platforms = platformsWithAccounts.length ? platformsWithAccounts : PLATFORM_ORDER
   const tagCounts: Record<string, number> = {}
   for (const list of Object.values(tags)) for (const tag of list) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
-  const usedTags = tagList.filter((tag) => tagCounts[tag.id])
 
   const badge = (count?: number): JSX.Element | null => (count ? <span className="nav-badge">{count}</span> : null)
   const isMuted = (target: MuteTarget): boolean => (muted[target.kind] as string[]).includes(target.id)
@@ -104,31 +136,49 @@ export function Sidebar(): JSX.Element {
           })}
         </div>
 
-        {usedTags.length > 0 && (
-          <div className="sidebar-section">
-            {!collapsed && <div className="sidebar-section-title">{t('tags')}</div>}
-            {usedTags.map((tag) => {
+        <div className="sidebar-section">
+          {!collapsed && (
+            <div className="sidebar-section-head">
+              <span className="sidebar-section-title">{t('tags')}</span>
+              <button ref={addRef} className="section-add" onMouseDown={(e) => e.stopPropagation()} onClick={() => (creator ? setCreator(undefined) : openCreator(addRef.current))} title={t('tagNew')}>
+                <Plus size={14} strokeWidth={2.6} />
+              </button>
+            </div>
+          )}
+          <div className={`sidebar-tags ${collapsed ? 'rail' : ''}`}>
+            {tagList.map((tag) => {
               const target: MuteTarget = { kind: 'tags', id: tag.id }
+              const active = filter === `tag:${tag.id}`
               return (
-                <button
+                <TagChip
                   key={tag.id}
-                  className={`nav-item ${filter === `tag:${tag.id}` ? 'active' : ''}`}
-                  onClick={() => setFilter(`tag:${tag.id}`)}
+                  tag={tag}
+                  size="sm"
+                  iconOnly={collapsed}
+                  selected={active}
+                  count={collapsed ? undefined : (tagCounts[tag.id] ?? 0)}
+                  dot={(unread.byTag[tag.id] ?? 0) > 0}
+                  onClick={() => setFilter(active ? 'all' : `tag:${tag.id}`)}
                   onContextMenu={contextFor(target, tag.name[language])}
-                  title={tag.name[language]}
+                  title={`${tag.name[language]} · ${(tagCounts[tag.id] ?? 0) === 1 ? t('tagUsageOne') : t('tagUsage', { count: tagCounts[tag.id] ?? 0 })}`}
                 >
-                  <span className="nav-item-icon tag-tile" style={{ ['--tag' as string]: tag.color } as React.CSSProperties}>
-                    <TagIcon tag={tag} size={15} />
-                  </span>
-                  {!collapsed && <span className="nav-item-label">{tag.name[language]}</span>}
-                  {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}
-                  {!collapsed && <span className="nav-badge subtle">{tagCounts[tag.id]}</span>}
-                  {collapsed && (unread.byTag[tag.id] ?? 0) > 0 && <span className="rail-dot" />}
-                </button>
+                  {!collapsed && isMuted(target) && <BellOff size={11} strokeWidth={2.4} className="tag-pill-muted" />}
+                </TagChip>
               )
             })}
+            {(collapsed || tagList.length === 0) && (
+              <button
+                className={`tag-pill sm add ${collapsed ? 'icon-only' : ''}`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => (creator ? setCreator(undefined) : openCreator(e.currentTarget))}
+                title={t('tagNew')}
+              >
+                <Plus size={13} strokeWidth={2.6} />
+                {!collapsed && <span className="tag-pill-label">{t('tagNew')}</span>}
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {accountList.length > 0 && (
           <div className="sidebar-section">
@@ -192,6 +242,29 @@ export function Sidebar(): JSX.Element {
             <BellOff size={15} />
             <span>{isMuted(menu.target) ? t('unmute') : t('mute')}</span>
           </button>
+          {menu.target.kind === 'tags' && (
+            <button
+              className={`context-menu-item danger ${menu.confirmDelete ? 'confirm' : ''}`}
+              onClick={() => {
+                if (!menu.confirmDelete) {
+                  setMenu({ ...menu, confirmDelete: true })
+                  return
+                }
+                void deleteTag(menu.target.id)
+                setMenu(undefined)
+              }}
+            >
+              <Trash2 size={15} />
+              <span>{menu.confirmDelete ? t('tagDeleteSure') : t('tagDelete')}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {creator && (
+        <div className="tag-popover" style={{ left: creator.x, top: creator.y }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={t('tagNew')}>
+          <div className="tag-popover-title">{t('tagNew')}</div>
+          <TagCreator onCreated={() => setCreator(undefined)} onCancel={() => setCreator(undefined)} />
         </div>
       )}
     </aside>

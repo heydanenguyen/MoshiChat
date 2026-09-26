@@ -218,8 +218,8 @@ export function ConversationList(): JSX.Element {
           {tagList.map((tag) => {
             const active = (tags[menu.conversationId] ?? []).includes(tag.id)
             return (
-              <button key={tag.id} className={`context-menu-item ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
-                <TagChip tag={tag} size="sm" muted={!active} />
+              <button key={tag.id} className={`context-menu-item tag-row ${active ? "active" : ""}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
+                <TagChip tag={tag} size="sm" flat={!active} />
                 {active && <span className="context-menu-check">✓</span>}
               </button>
             )

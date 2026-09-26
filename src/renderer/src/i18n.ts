@@ -246,6 +246,8 @@ const vi = {
   tagUsageOne: '1 hội thoại',
   tagDelete: 'Xóa tag',
   tagDeleteConfirm: 'Xóa?',
+  tagDeleteSure: 'Nhấn lần nữa để xóa',
+  lastMessageAt: 'Tin nhắn gần nhất: {time}',
   tagManage: 'Quản lý tag',
   tagManageHint: 'Tạo tag riêng với emoji và màu, hoặc xóa tag không dùng. Xóa tag sẽ gỡ nó khỏi mọi hội thoại.'
 }
@@ -499,6 +501,8 @@ const en: Dictionary = {
   tagUsageOne: '1 chat',
   tagDelete: 'Delete tag',
   tagDeleteConfirm: 'Delete?',
+  tagDeleteSure: 'Click again to delete',
+  lastMessageAt: 'Last message: {time}',
   tagManage: 'Manage tags',
   tagManageHint: 'Create your own tags with an emoji and colour, or delete ones you do not use. Deleting a tag removes it from every chat.'
 }

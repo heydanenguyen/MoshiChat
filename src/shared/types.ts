@@ -206,30 +206,50 @@ export interface TagMeta {
   icon?: string
   /** Older custom tags only; newer tags use `icon`. */
   emoji: string
+  /** Ink: label and icon colour. */
   color: string
+  /** Pastel slab colour (lighter, often warmer than the ink). Derived from `color` when absent. */
+  fill?: string
   name: { vi: string; en: string }
 }
 
+/** Ink + fill pairs sampled from the pastel "slab" tag style. */
+export const TAG_PALETTE: Array<{ color: string; fill: string }> = [
+  { color: '#3B82EE', fill: '#D2E5FF' },
+  { color: '#5A9A0B', fill: '#DDF48A' },
+  { color: '#11996A', fill: '#BDEFD2' },
+  { color: '#EC7212', fill: '#FFDF8E' },
+  { color: '#A052E8', fill: '#EAD7FF' },
+  { color: '#E0457F', fill: '#FFD4E5' },
+  { color: '#0A97B5', fill: '#C2EEF7' },
+  { color: '#DC4436', fill: '#FFD6CE' },
+  { color: '#B07415', fill: '#F7E5BC' },
+  { color: '#56657C', fill: '#E0E6EF' }
+]
+
+/** Kept for older call sites: the ink colours of the palette. */
+export const TAG_COLORS = TAG_PALETTE.map((p) => p.color)
+
 export const TAGS: Record<BuiltinTagId, TagMeta> = {
-  work: { id: 'work', icon: 'briefcase', emoji: '💼', color: '#2F7BEF', name: { vi: 'Công việc', en: 'Work' } },
-  friend: { id: 'friend', icon: 'handshake', emoji: '🤝', color: '#F2711C', name: { vi: 'Bạn thân', en: 'Best friend' } },
-  love: { id: 'love', icon: 'heart', emoji: '❤️', color: '#EC3F6B', name: { vi: 'Người yêu', en: 'Love' } },
-  family: { id: 'family', icon: 'house', emoji: '🏡', color: '#12A87A', name: { vi: 'Gia đình', en: 'Family' } },
-  vip: { id: 'vip', icon: 'star', emoji: '⭐️', color: '#9B5CF0', name: { vi: 'VIP', en: 'VIP' } },
-  fun: { id: 'fun', icon: 'party', emoji: '🎉', color: '#6BA812', name: { vi: 'Vui vẻ', en: 'Fun' } }
+  work: { id: 'work', icon: 'briefcase', emoji: '💼', ...TAG_PALETTE[0], name: { vi: 'Công việc', en: 'Work' } },
+  friend: { id: 'friend', icon: 'handshake', emoji: '🤝', ...TAG_PALETTE[3], name: { vi: 'Bạn thân', en: 'Best friend' } },
+  love: { id: 'love', icon: 'heart', emoji: '❤️', ...TAG_PALETTE[5], name: { vi: 'Người yêu', en: 'Love' } },
+  family: { id: 'family', icon: 'house', emoji: '🏡', ...TAG_PALETTE[2], name: { vi: 'Gia đình', en: 'Family' } },
+  vip: { id: 'vip', icon: 'star', emoji: '⭐️', ...TAG_PALETTE[4], name: { vi: 'VIP', en: 'VIP' } },
+  fun: { id: 'fun', icon: 'party', emoji: '🎉', ...TAG_PALETTE[1], name: { vi: 'Vui vẻ', en: 'Fun' } }
 }
 
 export const TAG_ORDER: BuiltinTagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
-
-/** Colours offered when creating a tag: saturated enough for the label, soft as a pastel fill. */
-export const TAG_COLORS = ['#2F7BEF', '#6BA812', '#12A87A', '#F2711C', '#9B5CF0', '#EC3F6B', '#0EA5C6', '#D69E0B', '#C44FD6', '#64748B']
 
 /** The user's tags in display order (the six built-ins until they change anything). Built-ins always use the current look. */
 export function tagDefsOf(settings: { tagDefs?: TagMeta[] }): TagMeta[] {
   if (!settings.tagDefs) return TAG_ORDER.map((id) => TAGS[id])
   return settings.tagDefs.map((tag) => {
     const builtin = TAGS[tag.id as BuiltinTagId]
-    return builtin ? { ...tag, icon: builtin.icon, color: builtin.color, emoji: builtin.emoji } : tag
+    if (builtin) return { ...tag, icon: builtin.icon, color: builtin.color, fill: builtin.fill, emoji: builtin.emoji }
+    // Custom tags made before fills existed: use the palette fill for their ink when there is one.
+    if (!tag.fill) return { ...tag, fill: TAG_PALETTE.find((p) => p.color.toLowerCase() === tag.color.toLowerCase())?.fill }
+    return tag
   })
 }
 

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { Cake, Clock, File, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { TagChip } from './Tag'
-import { useShowPlatformBadge, useStore, useT, useTagDefs, type DetailsTab } from '../store'
+import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -52,6 +52,24 @@ export function DetailsPane(): JSX.Element | null {
   )
 }
 
+/** When the last message was: "1 giờ trước", exact time on hover; refreshes every minute. */
+function ActivityChip({ at }: { at: number }): JSX.Element {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+  const exact = new Date(at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return (
+    <span className="details-chip activity" title={t('lastMessageAt', { time: exact })} aria-label={t('lastMessageAt', { time: exact })}>
+      <Clock size={14} strokeWidth={2.4} />
+      {formatAgo(at, language)}
+    </span>
+  )
+}
+
 function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const t = useT()
   const conversation = useStore((s) => s.conversations[conversationId])
@@ -61,6 +79,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const storedTags = useStore((s) => s.settings.tags[conversationId])
   const tags = storedTags ?? EMPTY_TAGS
   const toggleTag = useStore((s) => s.toggleTag)
+  const pins = useStore((s) => s.settings.pins)
+  const togglePin = useStore((s) => s.togglePin)
   const { list: tagList, byId: tagById } = useTagDefs()
   const [creating, setCreating] = useState(false)
   const muted = useStore((s) => s.settings.muted)
@@ -76,6 +96,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   }, [conversationId, loadProfile])
 
   if (!conversation) return <></>
+  const pinned = isPinned(conversation, pins)
   const name = profile?.name ?? conversation.title
   const avatar = profile?.avatarUrl ?? conversation.avatarUrl
   const handle = profile?.handle ?? conversation.participants.find((p) => !p.isMe)?.handle
@@ -103,10 +124,13 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           <div className="details-handle">{conversation.isGroup ? t('members', { count: conversation.participants.length }) : handle}</div>
         )}
         {profile?.bio && <div className="profile-bio">{profile.bio}</div>}
-        <span className="details-chip">
-          <PlatformIcon platform={conversation.platform} size={18} />
-          {PLATFORMS[conversation.platform].name}
-        </span>
+        <div className="details-meta">
+          <span className="details-chip">
+            <PlatformIcon platform={conversation.platform} size={18} />
+            {PLATFORMS[conversation.platform].name}
+          </span>
+          {conversation.updatedAt > 0 && <ActivityChip at={conversation.updatedAt} />}
+        </div>
         {profile === undefined && (
           <div className="progress-row" style={{ marginTop: 10 }}>
             <span className="spinner" />
@@ -115,23 +139,11 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       </div>
 
       <div className="details-section">
-        <div className="details-section-title">{t('ourStory')}</div>
-        <div className="stat-cards single">
-          <div className="stat-card mint">
-            <span className="stat-emoji">⚡️</span>
-            <span className="stat-label">{t('lastActive')}</span>
-            <span className="stat-value">{conversation.updatedAt ? formatListTime(conversation.updatedAt, language) : '—'}</span>
-            {conversation.updatedAt > 0 && <span className="stat-sub">{formatAgo(conversation.updatedAt, language)}</span>}
-          </div>
-        </div>
-      </div>
-
-      <div className="details-section">
         <div className="details-section-title">{t('tags')}</div>
         <div className="tag-chips">
           {tagList.map((tag) => {
             const active = tags.includes(tag.id)
-            return <TagChip key={tag.id} tag={tag} size="md" muted={!active} onClick={() => void toggleTag(conversationId, tag.id)} />
+            return <TagChip key={tag.id} tag={tag} size="md" flat={!active} onClick={() => void toggleTag(conversationId, tag.id)} />
           })}
           {!creating && (
             <button className="tag-pill md add" onClick={() => setCreating(true)} title={t('tagNew')}>
@@ -194,9 +206,9 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
             </div>
           </div>
         )}
-        <div className="details-kv">
+        <div className="details-kv" style={{ alignItems: 'center' }}>
           <span>{t('pinned')}</span>
-          <span>{conversation.pinned ? '✓' : '—'}</span>
+          <button className={`switch ${pinned ? 'on' : ''}`} role="switch" aria-checked={pinned} onClick={() => void togglePin(conversationId)} />
         </div>
         <div className="details-kv" style={{ alignItems: 'center' }}>
           <span>{t('notifications')}</span>
