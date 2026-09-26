@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, Trash2 } from 'lucide-react'
+import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagChip } from './Tag'
+import { UnisonMark } from './Logo'
 import { TagCreator } from './TagEditor'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
@@ -94,10 +95,8 @@ export function Sidebar(): JSX.Element {
       <div className="sidebar-top">
         {!collapsed && (
           <div className="brand">
-            <span className="brand-mark">
-              <Sparkles size={13} strokeWidth={2.5} />
-            </span>
-            {t('appName')}
+            <UnisonMark size={30} />
+            <span className="brand-word">{t('appName')}</span>
           </div>
         )}
         <button className="icon-btn sidebar-toggle" onClick={() => void toggleSidebar()} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}>

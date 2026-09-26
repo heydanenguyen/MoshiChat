@@ -1,6 +1,5 @@
-import { MessageCircle } from 'lucide-react'
 import { useStore, useT } from '../store'
-import { PlatformIcon } from './PlatformIcon'
+import { UnisonDuo, UnisonMark } from './Logo'
 
 export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.Element {
   const t = useT()
@@ -12,11 +11,7 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
       <section className="chat-col">
         <div className="drag" style={{ height: 'var(--titlebar-height)', flexShrink: 0 }} />
         <div className="welcome">
-          <div className="welcome-logos">
-            <PlatformIcon platform="messenger" size={56} style={{ borderRadius: 16 }} />
-            <PlatformIcon platform="instagram" size={56} style={{ borderRadius: 16 }} />
-            <PlatformIcon platform="telegram" size={56} style={{ borderRadius: 16 }} />
-          </div>
+          <UnisonDuo size={170} className="welcome-hero" />
           <h2 className="welcome-title">{t('welcomeTitle')}</h2>
           <p className="welcome-body">{t('welcomeBody')}</p>
           <div className="welcome-actions">
@@ -36,9 +31,7 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
     <section className="chat-col">
       <div className="drag" style={{ height: 'var(--titlebar-height)', flexShrink: 0 }} />
       <div className="empty-state">
-        <div className="empty-icon">
-          <MessageCircle size={34} strokeWidth={1.8} />
-        </div>
+        <UnisonMark size={92} mood="calm" className="empty-buddy" title="" />
         <div className="empty-title">{t('selectConversation')}</div>
         <div className="empty-body">{t('selectConversationHint')}</div>
       </div>
