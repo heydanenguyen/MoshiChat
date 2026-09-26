@@ -2,6 +2,7 @@ import { BellOff, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagManager } from './TagEditor'
+import { TagChip } from './Tag'
 import { useStore, useT, useTagDefs } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -205,13 +206,9 @@ export function SettingsSheet(): JSX.Element {
                     {tagList.map((tag) => {
                       const muted = mutedTags.includes(tag.id)
                       return (
-                        <button key={tag.id} className={`mute-chip ${muted ? 'muted' : ''}`} onClick={() => void toggleMute('tags', tag.id)}>
-                          <span className="tag-swatch" style={{ background: tag.color }}>
-                            {tag.emoji}
-                          </span>
-                          {tag.name[language]}
-                          {muted && <BellOff size={12} />}
-                        </button>
+                        <TagChip key={tag.id} tag={tag} size="sm" muted={muted} onClick={() => void toggleMute('tags', tag.id)}>
+                          {muted && <BellOff size={12} strokeWidth={2.4} />}
+                        </TagChip>
                       )
                     })}
                   </div>

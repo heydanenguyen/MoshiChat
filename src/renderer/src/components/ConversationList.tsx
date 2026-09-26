@@ -5,6 +5,7 @@ import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleC
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
 import { PreviewText } from './MessageParts'
+import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 
 interface TagMenuState {
@@ -136,7 +137,7 @@ export function ConversationList(): JSX.Element {
                     {convTags.length > 0 && (
                       <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
                         {convTags.map((tag) => (
-                          <span key={tag}>{tagById[tag].emoji}</span>
+                          <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
                         ))}
                       </span>
                     )}
@@ -218,10 +219,7 @@ export function ConversationList(): JSX.Element {
             const active = (tags[menu.conversationId] ?? []).includes(tag.id)
             return (
               <button key={tag.id} className={`context-menu-item ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
-                <span className="tag-swatch" style={{ background: tag.color }}>
-                  {tag.emoji}
-                </span>
-                <span>{tag.name[language]}</span>
+                <TagChip tag={tag} size="sm" muted={!active} />
                 {active && <span className="context-menu-check">✓</span>}
               </button>
             )
