@@ -108,7 +108,7 @@ export function NewChatSheet(): JSX.Element {
             </button>
             {platformsAvailable.map((p) => (
               <button key={p} className={`filter-chip ${platform === p ? 'active' : ''}`} onClick={() => setPlatform(p)}>
-                <PlatformIcon platform={p} size={18} variant="tile" />
+                <PlatformIcon platform={p} size={18} />
                 {PLATFORMS[p].name}
               </button>
             ))}

@@ -97,7 +97,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
             <div className="platform-grid">
               {PLATFORM_ORDER.map((p) => (
                 <button key={p} className="platform-card" onClick={() => setPlatform(p)}>
-                  <PlatformIcon platform={p} size={52} variant="tile" />
+                  <PlatformIcon platform={p} size={52} />
                   <span className="platform-card-name">{PLATFORMS[p].name}</span>
                   <span className="platform-card-sub">{p === 'telegram' ? t('methodPhone') : p === 'zalo' || p === 'whatsapp' ? t('methodQr') : t('methodLogin')}</span>
                 </button>

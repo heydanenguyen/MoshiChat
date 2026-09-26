@@ -237,7 +237,7 @@ export function SettingsSheet(): JSX.Element {
                       const muted = mutedPlatforms.includes(platform)
                       return (
                         <button key={platform} className={`mute-chip ${muted ? 'muted' : ''}`} onClick={() => void toggleMute('platforms', platform)}>
-                          <PlatformIcon platform={platform} size={22} variant="tile" />
+                          <PlatformIcon platform={platform} size={22} />
                           {PLATFORMS[platform].name}
                           {muted && <BellOff size={12} />}
                         </button>
