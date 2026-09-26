@@ -155,7 +155,7 @@ export function Sidebar(): JSX.Element {
                   tag={tag}
                   size="sm"
                   iconOnly={collapsed}
-                  selected={active}
+                  flat={!active}
                   count={collapsed ? undefined : (tagCounts[tag.id] ?? 0)}
                   dot={(unread.byTag[tag.id] ?? 0) > 0}
                   onClick={() => setFilter(active ? 'all' : `tag:${tag.id}`)}
