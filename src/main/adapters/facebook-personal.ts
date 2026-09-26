@@ -2,6 +2,7 @@ import { createReadStream } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join } from 'path'
 import { browserUserAgent } from '../user-agent'
+import { mapFcaAttachment, mapFcaEvent, type FcaAttachment } from './facebook-items'
 import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf } from './types'
@@ -146,7 +147,8 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
     const api = this.requireApi()
     const threadId = externalIdOf(id)
-    const attachment = (options.attachments ?? []).map((f) => createReadStream(f.path))
+    // Messenger plays AAC voice notes natively; recordings carry an .m4a copy.
+    const attachment = (options.attachments ?? []).map((f) => createReadStream(f.alternates?.find((alt) => alt.mime === 'audio/mp4')?.path ?? f.path))
     const payload = attachment.length ? { body: text, attachment } : { body: text }
     const result = (await new Promise<{ messageID?: string; timestamp?: number | string }>((resolve, reject) => {
       const cb = (err: unknown, info?: { messageID?: string; timestamp?: number | string }): void => (err ? reject(err instanceof Error ? err : new Error(String(err))) : resolve(info ?? {}))
@@ -364,6 +366,16 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
   }
 
   private toMessage(raw: FcaMessage, id: string): Message {
+    const extra = raw as unknown as {
+      type?: string
+      snippet?: string
+      logMessageType?: string
+      logMessageData?: unknown
+      messageReactions?: Array<{ reaction: string; userID: string }>
+      raw?: { message_id?: string; snippet?: string }
+    }
+    // History returns "unknown" rows without an id; keep them addressable and show what Facebook says.
+    if (!raw.messageID && extra.raw?.message_id) (raw as { messageID: string }).messageID = extra.raw.message_id
     const isOutgoing = raw.senderID === this.meId
     const sender = this.users.get(raw.senderID)
     const message: Message = {
@@ -373,11 +385,19 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
       senderName: isOutgoing ? this.account.displayName : (sender?.name ?? 'Facebook'),
       senderAvatarUrl: isOutgoing ? this.account.avatarUrl : sender?.thumbSrc,
       text: raw.body ?? '',
-      attachments: (raw.attachments ?? []).map((a, i) => toAttachment(a as unknown as Record<string, string | undefined>, `${raw.messageID}-${i}`)),
-      reactions: summarizeReactions((raw.reactions ?? []) as Array<{ reaction: string; userID: string }>, this.meId),
+      attachments: (raw.attachments ?? []).map((a, i) => mapFcaAttachment(a as unknown as FcaAttachment, `${raw.messageID}-${i}`)),
+      reactions: summarizeReactions(((raw.reactions as unknown as Array<{ reaction: string; userID: string }>) ?? extra.messageReactions ?? []), this.meId),
       sentAt: Number(raw.timestamp) || Date.now(),
       isOutgoing,
       status: isOutgoing ? 'delivered' : 'delivered'
+    }
+    if (extra.type === 'event') {
+      const event = mapFcaEvent(extra)
+      message.text = event.text
+      message.system = event.system
+    } else if (extra.type === 'unknown' && !message.text && !message.attachments.length) {
+      message.text = extra.raw?.snippet ?? ''
+      message.system = message.text ? { kind: 'event' } : { kind: 'unavailable' }
     }
     if (raw.messageReply) {
       message.replyTo = { id: raw.messageReply.messageID, senderName: this.users.get(raw.messageReply.senderID)?.name ?? '', text: raw.messageReply.body ?? '' }
@@ -437,26 +457,6 @@ function pinUserAgent(): void {
   })
   uaModule.defaultUserAgent = ua
   uaPinned = true
-}
-
-function toAttachment(raw: Record<string, string | undefined>, id: string): Attachment {
-  const type = raw.type
-  const url = raw.url ?? raw.largePreviewUrl ?? raw.previewUrl
-  switch (type) {
-    case 'photo':
-    case 'animated_image':
-      return { id, kind: 'image', url, thumbnailUrl: raw.previewUrl ?? raw.thumbnailUrl }
-    case 'video':
-      return { id, kind: 'video', url, thumbnailUrl: raw.previewUrl }
-    case 'audio':
-      return { id, kind: 'audio', url, name: raw.filename ?? 'Audio' }
-    case 'sticker':
-      return { id, kind: 'sticker', url, name: raw.description ?? '' }
-    case 'share':
-      return { id, kind: 'link', url: raw.url, name: raw.title ?? raw.url }
-    default:
-      return { id, kind: 'file', url, name: raw.filename ?? raw.name ?? 'File' }
-  }
 }
 
 function summarizeReactions(list: Array<{ reaction: string; userID: string }>, meId: string): Message['reactions'] {

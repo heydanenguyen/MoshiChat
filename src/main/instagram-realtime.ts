@@ -14,6 +14,8 @@ export interface RealtimeHandlers {
 const KIND_RE = /SlideUQPP(NewMessage|NewRavenMessage|ReadReceipt|CreateReaction|DeleteReaction|DeleteMessage|EditMessage|MarkRead|AdminTextMessage)\b/g
 const TYPING_RE = /\/direct_v2\/threads\/(\d+)\/activity_indicator_id[^"]*"[\s\S]{0,60}?"value"\s*:\s*"((?:[^"\\]|\\.)*)"/g
 const RELOAD_EVERY = 30 * 60_000
+/** Last seen persisted query ids, used when the module registry lookup fails. */
+const KNOWN_DOC_IDS: Record<string, string> = { IGDThreadDetailQuery: '28288012930891325' }
 /** Anything that looks typing-related; used to log key names (never values) once per shape. */
 const DIAG_RE = /activity_indicator|typing_indicator|is_typing|"typing"|TypingIndicator/i
 
@@ -76,6 +78,59 @@ export class InstagramRealtime {
     this.reloadTimer = undefined
     if (this.window && !this.window.isDestroyed()) this.window.destroy()
     this.window = undefined
+  }
+
+  /**
+   * Run one of the web client's own GraphQL queries inside the inbox window, with its tokens.
+   * The persisted query id is read from Instagram's module registry (it changes on deploys),
+   * falling back to the last id we saw.
+   */
+  async graphql(operation: string, variables: Record<string, unknown>): Promise<unknown> {
+    const win = this.window
+    if (!win || win.isDestroyed()) throw new Error('Instagram web client is not running')
+    if (win.webContents.isLoading()) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 20_000)
+        win.webContents.once('did-finish-load', () => {
+          clearTimeout(timer)
+          resolve()
+        })
+      })
+    }
+    const payload = JSON.stringify({ operation, variables, fallback: KNOWN_DOC_IDS[operation] ?? '' })
+    const result = (await win.webContents.executeJavaScript(
+      `(async () => {
+        const req = ${payload};
+        const need = (name) => { try { return window.require(name) } catch (e) { return undefined } };
+        for (let i = 0; i < 40 && !need('DTSGInitialData'); i++) await new Promise((r) => setTimeout(r, 250));
+        const dtsg = need('DTSGInitialData')?.token;
+        const lsd = need('LSD')?.token ?? '';
+        if (!dtsg) return { error: 'no token' };
+        const docId = need(req.operation + '_instagramRelayOperation') || req.fallback;
+        if (!docId) return { error: 'unknown query' };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 25000);
+        try {
+          const body = new URLSearchParams({ fb_dtsg: dtsg, lsd, fb_api_caller_class: 'RelayModern', fb_api_req_friendly_name: req.operation, server_timestamps: 'true', variables: JSON.stringify(req.variables), doc_id: docId });
+          const res = await fetch('/api/graphql', { method: 'POST', credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-FB-LSD': lsd, 'X-IG-App-ID': '936619743392459', 'X-FB-Friendly-Name': req.operation }, body });
+          const text = await res.text();
+          return { status: res.status, text: text.split('\\n')[0], docId };
+        } catch (e) {
+          return { error: String(e) };
+        } finally {
+          clearTimeout(timer);
+        }
+      })()`,
+      true
+    )) as { status?: number; text?: string; error?: string; docId?: string }
+    if (result.error) throw new Error(`Instagram ${operation}: ${result.error}`)
+    if (result.docId && result.docId !== KNOWN_DOC_IDS[operation] && !this.seenKinds.has('doc:' + operation)) {
+      this.seenKinds.add('doc:' + operation)
+      this.handlers.log(`instagram realtime: ${operation} uses doc ${result.docId}`)
+    }
+    const parsed = JSON.parse(result.text ?? '{}') as { errors?: Array<{ message?: string }> }
+    if (parsed.errors?.length && !(parsed as { data?: unknown }).data) throw new Error(`Instagram ${operation}: ${parsed.errors[0].message ?? 'error'}`)
+    return parsed
   }
 
   private restart(): void {
