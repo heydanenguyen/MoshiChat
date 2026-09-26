@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, RefreshCw, Search, User, X } from 'lucide-react'
+import { Cake, File, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
-import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy } from '@shared/types'
-import { useShowPlatformBadge, useStore, useT, type DetailsTab } from '../store'
-import { formatBytes, formatCount, formatDate, formatListTime, formatSpan } from '../utils'
+import { PLATFORMS, isMutedBy } from '@shared/types'
+import { TagCreator } from './TagEditor'
+import { useShowPlatformBadge, useStore, useT, useTagDefs, type DetailsTab } from '../store'
+import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { Highlight } from './ConversationList'
@@ -56,11 +57,11 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const account = useStore((s) => s.accounts[conversation?.accountId ?? ''])
   const profile = useStore((s) => s.profiles[conversationId])
   const loadProfile = useStore((s) => s.loadProfile)
-  const stats = useStore((s) => s.stats[conversationId])
-  const loadStats = useStore((s) => s.loadStats)
   const storedTags = useStore((s) => s.settings.tags[conversationId])
   const tags = storedTags ?? EMPTY_TAGS
   const toggleTag = useStore((s) => s.toggleTag)
+  const { list: tagList, byId: tagById } = useTagDefs()
+  const [creating, setCreating] = useState(false)
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
   const allTags = useStore((s) => s.settings.tags)
@@ -70,15 +71,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
   useEffect(() => {
     void loadProfile(conversationId)
-    void loadStats(conversationId, true)
-  }, [conversationId, loadProfile, loadStats])
-
-  // Keep refreshing while the adapter is still walking back through history.
-  useEffect(() => {
-    if (!stats?.pending) return
-    const timer = setInterval(() => void loadStats(conversationId, true), 2500)
-    return () => clearInterval(timer)
-  }, [stats?.pending, conversationId, loadStats])
+    setCreating(false)
+  }, [conversationId, loadProfile])
 
   if (!conversation) return <></>
   const name = profile?.name ?? conversation.title
@@ -99,7 +93,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           url={avatar}
           size={96}
           platform={showBadge ? conversation.platform : undefined}
-          ring={tags[0] ? TAGS[tags[0]].color : undefined}
+          ring={tags.map((tag) => tagById[tag]).find(Boolean)?.color}
           className="details-avatar-large"
           onClick={() => avatar && openLightbox({ url: avatar, name })}
         />
@@ -121,58 +115,49 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
       <div className="details-section">
         <div className="details-section-title">{t('ourStory')}</div>
-        {stats ? (
-          <div className="stat-cards">
-            <div className="stat-card peach">
-              <span className="stat-emoji">📅</span>
-              <span className="stat-label">{t('talkingSince')}</span>
-              <span className="stat-value">{stats.firstMessageAt ? formatDate(new Date(stats.firstMessageAt).toISOString().slice(0, 10), language) : t('noHistory')}</span>
-              {stats.firstMessageAt && (
-                <span className="stat-sub">
-                  {stats.pending ? t('searchingFirst') : `${t('talkingFor')} ${formatSpan(stats.firstMessageAt, Date.now(), language)}`}
-                </span>
-              )}
-            </div>
-            <div className="stat-card sky">
-              <span className="stat-emoji">💬</span>
-              <span className="stat-label">{t('messagesTotal')}</span>
-              <span className="stat-value">
-                {stats.messageCount !== undefined ? formatCount(stats.messageCount, language) : '—'}
-                {stats.approximate && stats.messageCount !== undefined ? '+' : ''}
-              </span>
-              {stats.pending ? <span className="stat-sub">{t('counting')}</span> : stats.approximate && stats.messageCount !== undefined && <span className="stat-sub">{t('approx')}</span>}
-            </div>
-            <div className="stat-card mint">
-              <span className="stat-emoji">⚡️</span>
-              <span className="stat-label">{t('lastActive')}</span>
-              <span className="stat-value">{stats.lastMessageAt ? formatListTime(stats.lastMessageAt, language) : '—'}</span>
-            </div>
+        <div className="stat-cards single">
+          <div className="stat-card mint">
+            <span className="stat-emoji">⚡️</span>
+            <span className="stat-label">{t('lastActive')}</span>
+            <span className="stat-value">{conversation.updatedAt ? formatListTime(conversation.updatedAt, language) : '—'}</span>
+            {conversation.updatedAt > 0 && <span className="stat-sub">{formatAgo(conversation.updatedAt, language)}</span>}
           </div>
-        ) : (
-          <div className="progress-row" style={{ justifyContent: 'center' }}>
-            <span className="spinner" />
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="details-section">
         <div className="details-section-title">{t('tags')}</div>
         <div className="tag-chips">
-          {TAG_ORDER.map((tag: TagId) => {
-            const active = tags.includes(tag)
+          {tagList.map((tag) => {
+            const active = tags.includes(tag.id)
             return (
               <button
-                key={tag}
+                key={tag.id}
                 className={`tag-chip ${active ? 'active' : ''}`}
-                style={{ ['--tag' as string]: TAGS[tag].color } as React.CSSProperties}
-                onClick={() => void toggleTag(conversationId, tag)}
+                style={{ ['--tag' as string]: tag.color } as React.CSSProperties}
+                onClick={() => void toggleTag(conversationId, tag.id)}
               >
-                <span>{TAGS[tag].emoji}</span>
-                <span className="tag-chip-label">{TAGS[tag].name[language]}</span>
+                <span>{tag.emoji}</span>
+                <span className="tag-chip-label">{tag.name[language]}</span>
               </button>
             )
           })}
+          {!creating && (
+            <button className="tag-chip add" onClick={() => setCreating(true)} title={t('tagNew')}>
+              <Plus size={14} strokeWidth={2.6} />
+              <span className="tag-chip-label">{t('tagNew')}</span>
+            </button>
+          )}
         </div>
+        {creating && (
+          <TagCreator
+            onCreated={(tag) => {
+              setCreating(false)
+              void toggleTag(conversationId, tag.id)
+            }}
+            onCancel={() => setCreating(false)}
+          />
+        )}
       </div>
 
       {facts.length > 0 && (
@@ -311,22 +296,9 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
   const loadAttachment = useStore((s) => s.loadAttachment)
   const openAttachment = useStore((s) => s.openAttachment)
   const language = useStore((s) => s.settings.language)
-  const stats = useStore((s) => s.stats[conversationId])
-  const loadStats = useStore((s) => s.loadStats)
-
   useEffect(() => {
     void loadShared(conversationId, kind, true)
-    void loadStats(conversationId, true)
-  }, [conversationId, kind, loadShared, loadStats])
-
-  useEffect(() => {
-    if (!stats?.pending) return
-    const timer = setInterval(() => {
-      void loadShared(conversationId, kind, true)
-      void loadStats(conversationId, true)
-    }, 3000)
-    return () => clearInterval(timer)
-  }, [stats?.pending, conversationId, kind, loadShared, loadStats])
+  }, [conversationId, kind, loadShared])
 
   const items = useMemo(() => {
     const list = messages ?? []

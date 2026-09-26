@@ -16,12 +16,13 @@ import type {
   SearchHit,
   Settings,
   SharedKind,
-  TagId
+  TagId,
+  TagMeta
 } from '@shared/types'
-import { DEFAULT_SETTINGS, isMutedBy, type MuteRules } from '@shared/types'
+import { DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
 
-export type Filter = 'all' | Platform | `account:${string}` | `tag:${TagId}`
+export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
 export type Sheet =
   | { kind: 'none' }
@@ -102,6 +103,9 @@ interface State {
   closeSheet(): void
   setSettings(patch: Partial<Settings>): Promise<void>
   toggleTag(conversationId: string, tag: TagId): Promise<void>
+  createTag(input: { name: string; emoji: string; color: string }): Promise<TagMeta>
+  deleteTag(tag: TagId): Promise<void>
+  togglePin(conversationId: string): Promise<void>
   toggleMute<K extends keyof MuteRules>(kind: K, id: MuteRules[K][number]): Promise<void>
   toggleSidebar(): Promise<void>
   setDetailsTab(tab: DetailsTab): void
@@ -517,6 +521,34 @@ export const useStore = create<State>((set, get) => ({
     await get().setSettings({ tags })
   },
 
+  async createTag({ name, emoji, color }) {
+    const clean = name.trim().slice(0, 24)
+    const tag: TagMeta = { id: `c-${Date.now().toString(36)}`, emoji: emoji.trim() || '🏷️', color, name: { vi: clean, en: clean } }
+    await get().setSettings({ tagDefs: [...tagDefsOf(get().settings), tag] })
+    return tag
+  },
+
+  async deleteTag(tag) {
+    const { settings, filter } = get()
+    const tags: Record<string, TagId[]> = {}
+    for (const [conversationId, list] of Object.entries(settings.tags)) {
+      const next = list.filter((t) => t !== tag)
+      if (next.length) tags[conversationId] = next
+    }
+    await get().setSettings({
+      tagDefs: tagDefsOf(settings).filter((t) => t.id !== tag),
+      tags,
+      muted: { ...settings.muted, tags: settings.muted.tags.filter((t) => t !== tag) }
+    })
+    if (filter === `tag:${tag}`) set({ filter: 'all' })
+  },
+
+  async togglePin(conversationId) {
+    const { settings, conversations } = get()
+    const pinned = isPinned(conversations[conversationId], settings.pins)
+    await get().setSettings({ pins: { ...(settings.pins ?? {}), [conversationId]: !pinned } })
+  },
+
   async toggleMute(kind, id) {
     const current = get().settings.muted[kind] as string[]
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
@@ -663,14 +695,31 @@ export function useVisibleConversations(): Conversation[] {
   const filter = useStore((s) => s.filter)
   const search = useStore((s) => s.search)
   const tags = useStore((s) => s.settings.tags)
-  return useMemo(() => computeVisible(conversations, filter, search, tags), [conversations, filter, search, tags])
+  const pins = useStore((s) => s.settings.pins)
+  return useMemo(() => computeVisible(conversations, filter, search, tags, pins), [conversations, filter, search, tags, pins])
+}
+
+/** Pinned in Unison, or on the platform when Unison has no say. */
+export function isPinned(conversation: Pick<Conversation, 'id' | 'pinned'> | undefined, pins?: Record<string, boolean>): boolean {
+  if (!conversation) return false
+  return pins?.[conversation.id] ?? !!conversation.pinned
+}
+
+/** The user's tags, with a lookup by id. Stable while settings.tagDefs is unchanged. */
+export function useTagDefs(): { list: TagMeta[]; byId: Record<string, TagMeta> } {
+  const defs = useStore((s) => s.settings.tagDefs)
+  return useMemo(() => {
+    const list = tagDefsOf({ tagDefs: defs })
+    return { list, byId: Object.fromEntries(list.map((t) => [t.id, t])) }
+  }, [defs])
 }
 
 export function computeVisible(
   conversations: Record<string, Conversation>,
   filter: Filter,
   search: string,
-  tags: Record<string, TagId[]> = {}
+  tags: Record<string, TagId[]> = {},
+  pins?: Record<string, boolean>
 ): Conversation[] {
   const query = search.trim().toLowerCase()
   return Object.values(conversations)
@@ -687,7 +736,7 @@ export function computeVisible(
         c.participants.some((p) => p.name.toLowerCase().includes(query) || p.handle?.toLowerCase().includes(query))
       )
     })
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
+    .sort((a, b) => Number(isPinned(b, pins)) - Number(isPinned(a, pins)) || b.updatedAt - a.updatedAt)
 }
 
 /** Whether avatars should carry the platform badge: only when several platforms are mixed in the list. */

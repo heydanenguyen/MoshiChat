@@ -233,7 +233,21 @@ const vi = {
   previewStoryMention: 'Nhắc đến trong story',
   previewStoryShare: 'Story',
   previewCall: 'Cuộc gọi',
-  previewUnavailable: 'Tin nhắn không hỗ trợ'
+  previewUnavailable: 'Tin nhắn không hỗ trợ',
+  pin: 'Ghim',
+  unpin: 'Bỏ ghim',
+  ago: 'trước',
+  tagNew: 'Tag mới',
+  tagEmoji: 'Biểu tượng',
+  tagNamePlaceholder: 'Tên tag, ví dụ: Gym',
+  tagCreate: 'Tạo tag',
+  tagExists: 'Đã có tag trùng tên',
+  tagUsage: '{count} hội thoại',
+  tagUsageOne: '1 hội thoại',
+  tagDelete: 'Xóa tag',
+  tagDeleteConfirm: 'Xóa?',
+  tagManage: 'Quản lý tag',
+  tagManageHint: 'Tạo tag riêng với emoji và màu, hoặc xóa tag không dùng. Xóa tag sẽ gỡ nó khỏi mọi hội thoại.'
 }
 
 export type Dictionary = typeof vi
@@ -472,7 +486,21 @@ const en: Dictionary = {
   previewStoryMention: 'Story mention',
   previewStoryShare: 'Story',
   previewCall: 'Call',
-  previewUnavailable: 'Unsupported message'
+  previewUnavailable: 'Unsupported message',
+  pin: 'Pin',
+  unpin: 'Unpin',
+  ago: 'ago',
+  tagNew: 'New tag',
+  tagEmoji: 'Emoji',
+  tagNamePlaceholder: 'Tag name, e.g. Gym',
+  tagCreate: 'Create tag',
+  tagExists: 'A tag with this name already exists',
+  tagUsage: '{count} chats',
+  tagUsageOne: '1 chat',
+  tagDelete: 'Delete tag',
+  tagDeleteConfirm: 'Delete?',
+  tagManage: 'Manage tags',
+  tagManageHint: 'Create your own tags with an emoji and colour, or delete ones you do not use. Deleting a tag removes it from every chat.'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

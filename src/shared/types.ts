@@ -196,7 +196,9 @@ export interface ConversationStats {
   pending?: boolean
 }
 
-export type TagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
+/** Built-in tag ids, or `c-…` for tags the user created. */
+export type TagId = string
+export type BuiltinTagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
 
 export interface TagMeta {
   id: TagId
@@ -205,7 +207,7 @@ export interface TagMeta {
   name: { vi: string; en: string }
 }
 
-export const TAGS: Record<TagId, TagMeta> = {
+export const TAGS: Record<BuiltinTagId, TagMeta> = {
   work: { id: 'work', emoji: '💼', color: '#0A84FF', name: { vi: 'Công việc', en: 'Work' } },
   friend: { id: 'friend', emoji: '🤝', color: '#FF9F0A', name: { vi: 'Bạn thân', en: 'Best friend' } },
   love: { id: 'love', emoji: '❤️', color: '#FF375F', name: { vi: 'Người yêu', en: 'Love' } },
@@ -214,7 +216,15 @@ export const TAGS: Record<TagId, TagMeta> = {
   fun: { id: 'fun', emoji: '🎉', color: '#BF5AF2', name: { vi: 'Vui vẻ', en: 'Fun' } }
 }
 
-export const TAG_ORDER: TagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
+export const TAG_ORDER: BuiltinTagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
+
+/** Colours offered when creating a tag. */
+export const TAG_COLORS = ['#FF375F', '#FF9F0A', '#FFD60A', '#30D158', '#64D2FF', '#0A84FF', '#5E5CE6', '#BF5AF2', '#FF6482', '#AC8E68']
+
+/** The user's tags in display order (the six built-ins until they change anything). */
+export function tagDefsOf(settings: { tagDefs?: TagMeta[] }): TagMeta[] {
+  return settings.tagDefs ?? TAG_ORDER.map((id) => TAGS[id])
+}
 
 export interface TypingEvent {
   conversationId: string
@@ -324,6 +334,10 @@ export interface Settings {
   muted: MuteRules
   /** Cheerful rotating line (with local weather) in the title bar. */
   greetings: boolean
+  /** Tag definitions (built-in and custom) in display order; absent means the built-in six. */
+  tagDefs?: TagMeta[]
+  /** Pins set in Unison: conversation id -> pinned. Overrides the platform's own pin. */
+  pins?: Record<string, boolean>
 }
 
 export const DEFAULT_SETTINGS: Settings = {

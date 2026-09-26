@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'fs/promises'
+import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
@@ -10,6 +12,8 @@ export interface ZaloSecret {
 type ZcaModule = typeof import('zca-js')
 
 const HISTORY_LIMIT = 300
+/** How many rounds of "older messages" to ask Zalo for after connecting (each round ~ a few dozen). */
+const SYNC_ROUNDS = 8
 
 /** Emoji shown in the UI mapped onto Zalo's reaction codes. */
 const REACTION_CODES: Record<string, string> = {
@@ -42,6 +46,11 @@ export class ZaloAdapter implements PlatformAdapter {
   private unread = new Map<string, number>()
   private lastActivity = new Map<string, number>()
   private qrPromptId?: string
+  /** Zalo Web has no per-chat history API for 1:1 chats; messages come in sync rounds over the socket. */
+  private syncRounds: Record<0 | 1, number> = { 0: 0, 1: 0 }
+  private cacheFile = ''
+  private groupHistoryGone = false
+  private saveTimer?: NodeJS.Timeout
 
   constructor(
     initialId: string,
@@ -87,6 +96,9 @@ export class ZaloAdapter implements PlatformAdapter {
       this.ctx.log('zalo profile failed', (err as Error).message)
     }
     await this.ctx.saveSecret(this.secret)
+    // Messages synced earlier, so chats are not empty after a restart.
+    this.cacheFile = join(this.ctx.dataDir(), `zalo-cache-${this.meId}.json`)
+    await this.loadCache()
     this.wireListener(api, zca)
     api.listener.start({ retryOnClose: true })
     this.setStatus('connected')
@@ -147,9 +159,6 @@ export class ZaloAdapter implements PlatformAdapter {
         }
       }
     }
-    // Pull recent history so previews and unread state are populated.
-    api.listener.requestOldMessages(0)
-    api.listener.requestOldMessages(1)
     return this.buildConversations()
   }
 
@@ -169,7 +178,8 @@ export class ZaloAdapter implements PlatformAdapter {
     const friend = this.friends.get(threadId)
     const group = this.groups.get(threadId)
     const last = this.messagesFor(id).at(-1)
-    const activity = this.lastActivity.get(threadId) ?? (friend?.lastActionTime ? Number(friend.lastActionTime) : 0)
+    // Only real message times: a friend's lastActionTime is when they were last online, not when you talked.
+    const activity = this.lastActivity.get(threadId) ?? 0
     return {
       id,
       accountId: this.account.id,
@@ -191,11 +201,13 @@ export class ZaloAdapter implements PlatformAdapter {
 
   async fetchMessages(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
     const threadId = externalIdOf(id)
-    if (this.threadTypes.get(threadId) === 1 && !this.raw.get(threadId)?.length) {
+    if (this.threadTypes.get(threadId) === 1 && !this.raw.get(threadId)?.length && !this.groupHistoryGone) {
       try {
         const history = await this.requireApi().getGroupChatHistory(threadId, Math.max(limit, 50))
         this.remember(threadId, history.groupMsgs.map((m) => m.data))
       } catch (err) {
+        // Zalo retired this endpoint for web sessions (404); stop asking until the next start.
+        if (/404/.test((err as Error).message)) this.groupHistoryGone = true
         this.ctx.log('zalo group history failed', (err as Error).message)
       }
     }
@@ -387,6 +399,8 @@ export class ZaloAdapter implements PlatformAdapter {
   // ---- events -----------------------------------------------------------
 
   private wireListener(api: API, _zca: ZcaModule): void {
+    // History can only be requested once the socket has its cipher key (replies are encrypted with it).
+    api.listener.on('cipher_key', () => this.startSync(api))
     api.listener.on('message', (message: ZMessage) => {
       const threadId = message.threadId
       this.threadTypes.set(threadId, message.type)
@@ -396,6 +410,7 @@ export class ZaloAdapter implements PlatformAdapter {
       const converted = this.toMessage(message.data, id, message.isSelf)
       this.cacheConverted(id, [converted])
       this.lastActivity.set(threadId, converted.sentAt)
+      this.scheduleSave()
       if (!known) {
         if (!message.isSelf) this.unread.set(threadId, (this.unread.get(threadId) ?? 0) + 1)
         this.ctx.emit({ type: 'message:new', message: converted })
@@ -404,7 +419,8 @@ export class ZaloAdapter implements PlatformAdapter {
         }
       }
     })
-    api.listener.on('old_messages', (messages: ZMessage[]) => {
+    api.listener.on('old_messages', (messages: ZMessage[], threadType: 0 | 1) => {
+      this.continueSync(api, messages, threadType)
       const touched = new Set<string>()
       for (const message of messages) {
         this.threadTypes.set(message.threadId, message.type)
@@ -419,6 +435,7 @@ export class ZaloAdapter implements PlatformAdapter {
       }
       if (touched.size) {
         this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: this.buildConversations() })
+        this.scheduleSave()
       }
     })
     api.listener.on('typing', (typing) => {
@@ -537,6 +554,54 @@ export class ZaloAdapter implements PlatformAdapter {
     }
     list.sort((a, b) => Number(a.ts) - Number(b.ts))
     this.raw.set(threadId, list.slice(-HISTORY_LIMIT))
+  }
+
+  private startSync(api: API): void {
+    this.syncRounds = { 0: 0, 1: 0 }
+    this.ctx.log('zalo: syncing recent messages')
+    api.listener.requestOldMessages(0)
+    api.listener.requestOldMessages(1)
+  }
+
+  /** Keep asking for older messages, continuing from the oldest one in the last batch. */
+  private continueSync(api: API, messages: ZMessage[], threadType: 0 | 1): void {
+    const type = threadType === 1 ? 1 : 0
+    this.syncRounds[type] += 1
+    if (!messages.length || this.syncRounds[type] >= SYNC_ROUNDS) {
+      this.ctx.log(`zalo: ${type ? 'group' : 'direct'} sync finished after ${this.syncRounds[type]} rounds`)
+      return
+    }
+    const oldest = messages.reduce((a, b) => (Number(a.data.ts) <= Number(b.data.ts) ? a : b))
+    setTimeout(() => {
+      try {
+        api.listener.requestOldMessages(type, oldest.data.msgId)
+      } catch (err) {
+        this.ctx.log('zalo sync request failed', (err as Error).message)
+      }
+    }, 600)
+  }
+
+  private async loadCache(): Promise<void> {
+    try {
+      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as { threads?: Array<[string, 0 | 1, TMessage[]]> }
+      for (const [threadId, type, list] of data.threads ?? []) {
+        this.threadTypes.set(threadId, type)
+        this.raw.set(threadId, list)
+        const last = list.at(-1)
+        if (last) this.lastActivity.set(threadId, Math.max(this.lastActivity.get(threadId) ?? 0, Number(last.ts)))
+      }
+    } catch {
+      /* first run */
+    }
+  }
+
+  private scheduleSave(): void {
+    if (!this.cacheFile) return
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => {
+      const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
+      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
+    }, 2000)
   }
 
   private rawMessage(threadId: string, messageId: string): TMessage | undefined {

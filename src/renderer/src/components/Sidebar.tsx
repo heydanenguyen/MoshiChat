@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
-import { PLATFORMS, PLATFORM_ORDER, TAGS, TAG_ORDER } from '@shared/types'
-import { useStore, useT, useUnreadCounts } from '../store'
+import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
+import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 
@@ -25,6 +25,7 @@ export function Sidebar(): JSX.Element {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
+  const { list: tagList } = useTagDefs()
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
   const unread = useUnreadCounts()
@@ -46,7 +47,7 @@ export function Sidebar(): JSX.Element {
   const platforms = platformsWithAccounts.length ? platformsWithAccounts : PLATFORM_ORDER
   const tagCounts: Record<string, number> = {}
   for (const list of Object.values(tags)) for (const tag of list) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
-  const usedTags = TAG_ORDER.filter((tag) => tagCounts[tag])
+  const usedTags = tagList.filter((tag) => tagCounts[tag.id])
 
   const badge = (count?: number): JSX.Element | null => (count ? <span className="nav-badge">{count}</span> : null)
   const isMuted = (target: MuteTarget): boolean => (muted[target.kind] as string[]).includes(target.id)
@@ -106,22 +107,22 @@ export function Sidebar(): JSX.Element {
           <div className="sidebar-section">
             {!collapsed && <div className="sidebar-section-title">{t('tags')}</div>}
             {usedTags.map((tag) => {
-              const target: MuteTarget = { kind: 'tags', id: tag }
+              const target: MuteTarget = { kind: 'tags', id: tag.id }
               return (
                 <button
-                  key={tag}
-                  className={`nav-item ${filter === `tag:${tag}` ? 'active' : ''}`}
-                  onClick={() => setFilter(`tag:${tag}`)}
-                  onContextMenu={contextFor(target, TAGS[tag].name[language])}
-                  title={TAGS[tag].name[language]}
+                  key={tag.id}
+                  className={`nav-item ${filter === `tag:${tag.id}` ? 'active' : ''}`}
+                  onClick={() => setFilter(`tag:${tag.id}`)}
+                  onContextMenu={contextFor(target, tag.name[language])}
+                  title={tag.name[language]}
                 >
-                  <span className="nav-item-icon tile" style={{ ['--brand' as string]: TAGS[tag].color } as React.CSSProperties}>
-                    {TAGS[tag].emoji}
+                  <span className="nav-item-icon tile" style={{ ['--brand' as string]: tag.color } as React.CSSProperties}>
+                    {tag.emoji}
                   </span>
-                  {!collapsed && <span className="nav-item-label">{TAGS[tag].name[language]}</span>}
+                  {!collapsed && <span className="nav-item-label">{tag.name[language]}</span>}
                   {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}
-                  {!collapsed && <span className="nav-badge subtle">{tagCounts[tag]}</span>}
-                  {collapsed && (unread.byTag[tag] ?? 0) > 0 && <span className="rail-dot" />}
+                  {!collapsed && <span className="nav-badge subtle">{tagCounts[tag.id]}</span>}
+                  {collapsed && (unread.byTag[tag.id] ?? 0) > 0 && <span className="rail-dot" />}
                 </button>
               )
             })}
