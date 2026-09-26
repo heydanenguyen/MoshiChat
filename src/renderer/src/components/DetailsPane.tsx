@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { Bell, BellOff, Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
-import { PLATFORMS, isMutedBy } from '@shared/types'
+import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { ContactCustomizer } from './ContactCustomizer'
 import { TagChip } from './Tag'
@@ -91,6 +91,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const allTags = useStore((s) => s.settings.tags)
   const language = useStore((s) => s.settings.language)
   const openLightbox = useStore((s) => s.openLightbox)
+  const setDetailsTab = useStore((s) => s.setDetailsTab)
 
   useEffect(() => {
     void loadProfile(conversationId)
@@ -106,12 +107,19 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const originalName = conversation.originalTitle ? (profile?.name ?? conversation.originalTitle) : undefined
   const handle = profile?.handle ?? conversation.participants.find((p) => !p.isMe)?.handle
   const others = conversation.participants.filter((p) => !p.isMe)
-  const facts: Array<{ icon: JSX.Element; label: string; value: string }> = []
+  const facts: Array<{ icon: JSX.Element; label: string; value: string; note?: string }> = []
   if (profile?.phone) facts.push({ icon: <Phone size={14} />, label: t('phone'), value: profile.phone })
   if (profile?.birthday) facts.push({ icon: <Cake size={14} />, label: t('birthday'), value: formatDate(profile.birthday, language) })
-  else if (custom?.birthday) facts.push({ icon: <Cake size={14} />, label: t('birthday'), value: `${formatDate(custom.birthday, language)} · ${t('setByYou')}` })
+  else if (custom?.birthday) facts.push({ icon: <Cake size={14} />, label: t('birthday'), value: formatDate(custom.birthday, language), note: t('setByYou') })
   if (profile?.gender) facts.push({ icon: <User size={14} />, label: t('gender'), value: profile.gender === 'male' ? t('male') : profile.gender === 'female' ? t('female') : profile.gender })
   for (const item of profile?.extra ?? []) facts.push({ icon: <Info size={14} />, label: item.label, value: item.value })
+
+  const mutedHere = muted.conversations.includes(conversationId) || !!conversation.muted
+  const mutedByRule = isMutedBy({ muted, tags: allTags }, conversation) && !muted.conversations.includes(conversationId)
+  const subtitle = [
+    conversation.isGroup ? t('members', { count: conversation.participants.length }) : handle,
+    originalName && originalName !== name ? t('originalName', { name: originalName }) : undefined
+  ].filter(Boolean)
 
   return (
     <>
@@ -119,21 +127,13 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         <Avatar
           name={name}
           url={avatar}
-          size={96}
+          size={92}
           ring={tags.map((tag) => tagById[tag]).find(Boolean)?.color}
           className="details-avatar-large"
           onClick={() => avatar && openLightbox({ url: avatar, name })}
         />
-        <div className="details-name-row">
-          <div className="details-name">{name}</div>
-          <button className={`icon-btn details-edit ${customizing ? 'active' : ''}`} onClick={() => setCustomizing((v) => !v)} title={t('customize')} aria-expanded={customizing}>
-            <Pencil size={14} strokeWidth={2.3} />
-          </button>
-        </div>
-        {originalName && originalName !== name && <div className="details-original">{t('originalName', { name: originalName })}</div>}
-        {(handle || conversation.isGroup) && (
-          <div className="details-handle">{conversation.isGroup ? t('members', { count: conversation.participants.length }) : handle}</div>
-        )}
+        <div className="details-name">{name}</div>
+        {subtitle.length > 0 && <div className="details-sub">{subtitle.join(' · ')}</div>}
         {profile?.bio && <div className="profile-bio">{profile.bio}</div>}
         <div className="details-meta">
           <span className="details-chip">
@@ -149,22 +149,46 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         )}
       </div>
 
+      <div className="quick-actions">
+        <button className="quick-action" onClick={() => setDetailsTab('search')}>
+          <span className="quick-action-icon">
+            <Search size={17} strokeWidth={2.2} />
+          </span>
+          {t('searchShort')}
+        </button>
+        <button className={`quick-action ${pinned ? 'on' : ''}`} onClick={() => void togglePin(conversationId)} aria-pressed={pinned}>
+          <span className="quick-action-icon">{pinned ? <PinOff size={17} strokeWidth={2.2} /> : <Pin size={17} strokeWidth={2.2} />}</span>
+          {pinned ? t('unpinShort') : t('pinShort')}
+        </button>
+        <button className={`quick-action ${mutedHere ? 'on' : ''}`} onClick={() => void toggleMute('conversations', conversationId)} aria-pressed={mutedHere}>
+          <span className="quick-action-icon">{mutedHere ? <BellOff size={17} strokeWidth={2.2} /> : <Bell size={17} strokeWidth={2.2} />}</span>
+          {mutedHere ? t('unmuteShort') : t('muteShort')}
+        </button>
+        <button className={`quick-action ${customizing ? 'on' : ''}`} onClick={() => setCustomizing((v) => !v)} aria-expanded={customizing}>
+          <span className="quick-action-icon">
+            <Pencil size={16} strokeWidth={2.2} />
+          </span>
+          {t('customize')}
+        </button>
+      </div>
+      {mutedByRule && <div className="field-hint centered details-hint">{t('mutedByRule')}</div>}
+
       {customizing && (
-        <div className="details-section">
+        <div className="details-card plain">
           <ContactCustomizer conversation={conversation} onClose={() => setCustomizing(false)} />
         </div>
       )}
 
-      <div className="details-section">
-        <div className="details-section-title">{t('tags')}</div>
-        <div className="tag-chips">
+      <div className="details-card">
+        <div className="details-card-title">{t('tags')}</div>
+        <div className="tag-chips compact">
           {tagList.map((tag) => {
             const active = tags.includes(tag.id)
-            return <TagChip key={tag.id} tag={tag} size="md" flat={!active} onClick={() => void toggleTag(conversationId, tag.id)} />
+            return <TagChip key={tag.id} tag={tag} size="sm" flat={!active} onClick={() => void toggleTag(conversationId, tag.id)} />
           })}
           {!creating && (
-            <button className="tag-pill md add" onClick={() => setCreating(true)} title={t('tagNew')}>
-              <Plus size={15} strokeWidth={2.4} />
+            <button className="tag-pill sm add" onClick={() => setCreating(true)} title={t('tagNew')}>
+              <Plus size={13} strokeWidth={2.6} />
               <span className="tag-pill-label">{t('tagNew')}</span>
             </button>
           )}
@@ -180,17 +204,25 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         )}
       </div>
 
+      <div className="details-card">
+        <div className="details-card-title">{t('bubbleColor')}</div>
+        <BubbleColorRow conversationId={conversationId} />
+      </div>
+
       {facts.length > 0 && (
-        <div className="details-section">
-          <div className="details-section-title">{t('details')}</div>
-          <div className="profile-facts">
+        <div className="details-card">
+          <div className="details-card-title">{t('details')}</div>
+          <div className="fact-list">
             {facts.map((fact, i) => (
-              <div key={i} className="details-kv">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {fact.icon}
-                  {fact.label}
+              <div key={i} className="fact">
+                <span className="fact-icon">{fact.icon}</span>
+                <span className="fact-text">
+                  <span className="fact-label">{fact.label}</span>
+                  <span className="fact-value">
+                    {fact.value}
+                    {fact.note && <span className="fact-note">{fact.note}</span>}
+                  </span>
                 </span>
-                <span style={{ textAlign: 'right' }}>{fact.value}</span>
               </div>
             ))}
           </div>
@@ -198,8 +230,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       )}
 
       {conversation.isGroup && others.length > 0 && (
-        <div className="details-section">
-          <div className="details-section-title">{t('participants')}</div>
+        <div className="details-card">
+          <div className="details-card-title">{t('participants')}</div>
           {others.map((p) => (
             <div key={p.id} className="details-row">
               <Avatar name={p.name} url={p.avatarUrl} size={30} />
@@ -212,9 +244,9 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         </div>
       )}
 
-      <div className="details-section">
-        <div className="details-section-title">{t('connectedVia')}</div>
-        {account && (
+      {account && (
+        <div className="details-card">
+          <div className="details-card-title">{t('connectedVia')}</div>
           <div className="details-row">
             <Avatar name={account.displayName} url={account.avatarUrl} size={30} platform={account.platform} />
             <div className="details-row-text">
@@ -222,26 +254,43 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
               <div className="details-row-sub">{account.handle ?? PLATFORMS[account.platform].name}</div>
             </div>
           </div>
-        )}
-        <div className="details-kv" style={{ alignItems: 'center' }}>
-          <span>{t('pinned')}</span>
-          <button className={`switch ${pinned ? 'on' : ''}`} role="switch" aria-checked={pinned} onClick={() => void togglePin(conversationId)} />
         </div>
-        <div className="details-kv" style={{ alignItems: 'center' }}>
-          <span>{t('notifications')}</span>
-          <button
-            className={`switch ${!muted.conversations.includes(conversationId) && !conversation.muted ? 'on' : ''}`}
-            role="switch"
-            aria-checked={!muted.conversations.includes(conversationId)}
-            onClick={() => void toggleMute('conversations', conversationId)}
-            title={isMutedBy({ muted, tags: allTags }, conversation) ? t('mutedByRule') : undefined}
-          />
-        </div>
-        {isMutedBy({ muted, tags: allTags }, conversation) && !muted.conversations.includes(conversationId) && (
-          <div className="field-hint">{t('mutedByRule')}</div>
-        )}
-      </div>
+      )}
     </>
+  )
+}
+
+/** Per-chat outgoing bubble colour: follow the app accent, a preset, or one of your custom accents. */
+function BubbleColorRow({ conversationId }: { conversationId: string }): JSX.Element {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const custom = useStore((s) => s.settings.contactOverrides?.[conversationId])
+  const customAccents = useStore((s) => s.settings.customAccents)
+  const setContactOverride = useStore((s) => s.setContactOverride)
+  const current = custom?.bubble
+  const pick = (bubble?: string): void => void setContactOverride(conversationId, { ...custom, bubble })
+  const options = [
+    ...ACCENTS.map((a) => ({ id: a.id as string, fill: a.flat ? a.from : `linear-gradient(135deg, ${a.from}, ${a.to})`, flat: !!a.flat, name: a.name[language] })),
+    ...(customAccents ?? []).map((a) => ({ id: a.id as string, fill: a.to ? `linear-gradient(135deg, ${a.from}, ${a.to})` : a.from, flat: !a.to, name: a.to ? `${a.from} → ${a.to}` : a.from }))
+  ]
+  return (
+    <div className="bubble-colors" role="radiogroup" aria-label={t('bubbleColor')}>
+      <button className={`bubble-color default ${!current ? 'active' : ''}`} role="radio" aria-checked={!current} onClick={() => pick(undefined)} title={t('bubbleDefault')}>
+        <span style={{ background: 'var(--accent-gradient)' }} />
+      </button>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          className={`bubble-color ${o.flat ? 'flat' : ''} ${current === o.id ? 'active' : ''}`}
+          role="radio"
+          aria-checked={current === o.id}
+          onClick={() => pick(o.id)}
+          title={o.name}
+        >
+          <span style={{ background: o.fill }} />
+        </button>
+      ))}
+    </div>
   )
 }
 

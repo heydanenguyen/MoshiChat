@@ -25,6 +25,12 @@ describe('mapSlideNode', () => {
     expect(voice.attachments[0]).toMatchObject({ kind: 'audio', url: 'https://cdn/a.m4a', waveform: [0.25, 0.5, 1] })
   })
 
+  it('reads videos from the videos list (SlideMessageVideosContent)', () => {
+    const out = mapSlideNode({ content: { __typename: 'SlideMessageVideosContent', videos: [{ attachment_cdn_url: 'https://cdn/v.mp4', preview_cdn_url: 'https://cdn/p.jpg', preview_width: 720, preview_height: 1280 }] } }, 'v2')
+    expect(out.preview).toBe('video')
+    expect(out.attachments[0]).toMatchObject({ kind: 'video', url: 'https://cdn/v.mp4', thumbnailUrl: 'https://cdn/p.jpg', width: 720, height: 1280 })
+  })
+
   it('maps shared stories and posts from XMA cards, and text', () => {
     const story = mapSlideNode({ content: { __typename: 'SlideMessageXMAContent', xma: { target_url: 'https://www.instagram.com/stories/cafe/1/', preview_image: { url: 'https://cdn/s.jpg' }, header_title_text: 'cafe' } } }, 's')
     expect(story.attachments[0]).toMatchObject({ kind: 'story', label: 'story_share', author: 'cafe' })

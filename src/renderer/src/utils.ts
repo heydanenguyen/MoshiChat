@@ -158,3 +158,18 @@ export function sectionize(messages: Message[]): DaySection[] {
 
 export const isMac = typeof window !== 'undefined' && (window.unison?.app.platform ?? 'win32') === 'darwin'
 export const modKey = isMac ? '⌘' : 'Ctrl'
+
+const EMOJI_GRAPHEME = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\u{200D}\u{FE0F}\u{20E3}#*0-9])+$/u
+
+/**
+ * 1-3 when the text is only emoji (shown large, no bubble, like Instagram/iMessage); 0 otherwise.
+ * Counts user-perceived characters, so flags, skin tones and ZWJ families count as one.
+ */
+export function jumboEmojiCount(text: string): number {
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.length > 40) return 0
+  const segments = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)].map((s) => s.segment).filter((s) => s.trim())
+  if (!segments.length || segments.length > 3) return 0
+  const allEmoji = segments.every((g) => EMOJI_GRAPHEME.test(g) && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g))
+  return allEmoji ? segments.length : 0
+}

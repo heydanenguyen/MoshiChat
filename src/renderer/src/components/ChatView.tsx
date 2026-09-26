@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
-import { useStore, useT } from '../store'
-import { formatBytes, formatDayLabel, formatTime, sectionize, type MessageGroup } from '../utils'
+import { bubbleVarsOf, useStore, useT } from '../store'
+import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, sectionize, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
@@ -29,6 +29,9 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const toggleDetails = useStore((s) => s.toggleDetails)
   const loadMore = useStore((s) => s.loadMore)
   const language = useStore((s) => s.settings.language)
+  const bubbleChoice = useStore((s) => s.settings.contactOverrides?.[conversation.id]?.bubble)
+  const customAccents = useStore((s) => s.settings.customAccents)
+  const bubbleVars = useMemo(() => bubbleVarsOf(bubbleChoice, customAccents), [bubbleChoice, customAccents])
   const highlightId = useStore((s) => s.highlightId)
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const narrow = useStore((s) => s.narrow)
@@ -99,6 +102,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   return (
     <section
       className="chat-col"
+      style={bubbleVars}
       onDragEnter={(e) => {
         e.preventDefault()
         if (features.attachments) setDragging((d) => d + 1)
@@ -249,15 +253,27 @@ function Group({
       )}
       <div className="msg-group-body">
         {showSender && <div className="msg-sender">{group.senderName}</div>}
-        {group.messages.map((message, index) => {
-          const position =
-            group.messages.length === 1
-              ? 'single'
-              : index === 0
-                ? 'first'
-                : index === group.messages.length - 1
-                  ? 'last'
-                  : 'middle'
+        {groupItems(group.messages).map((item, index, items) => {
+          const position = items.length === 1 ? 'single' : index === 0 ? 'first' : index === items.length - 1 ? 'last' : 'middle'
+          if (item.type === 'album') {
+            const reacted = item.messages.flatMap((m) => m.reactions)
+            return (
+              <div key={item.messages[0].id} style={{ display: 'contents' }}>
+                <Album messages={item.messages} outgoing={group.isOutgoing} highlightId={highlightId} language={language} />
+                {reacted.length > 0 && (
+                  <div className="reactions">
+                    {reacted.slice(0, 6).map((r, i) => (
+                      <span key={i} className={`reaction-chip ${r.byMe ? 'mine' : ''}`}>
+                        {r.emoji}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.messages.some((m) => m.id === lastOutgoingId) && <div className="status-line">{t('delivered')}</div>}
+              </div>
+            )
+          }
+          const message = item.message
           return (
             <div key={message.id} style={{ display: 'contents' }}>
               <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={conversation.platform} />
@@ -295,6 +311,74 @@ function Group({
   )
 }
 
+type GroupItem = { type: 'one'; message: Message } | { type: 'album'; messages: Message[] }
+
+/** A photo or video with nothing else (no text, no reply) can join an album. */
+function albumable(m: Message): boolean {
+  const a = m.attachments[0]
+  return (
+    m.attachments.length === 1 &&
+    !m.text.trim() &&
+    !m.replyTo &&
+    !m.system &&
+    m.status !== 'failed' &&
+    (a.kind === 'image' || a.kind === 'video') &&
+    !a.expired &&
+    !!(a.thumbnailUrl || a.url)
+  )
+}
+
+/** Consecutive photos/videos sent within two minutes become one album (like Instagram / Messenger). */
+function groupItems(messages: Message[]): GroupItem[] {
+  const items: GroupItem[] = []
+  for (const m of messages) {
+    const last = items[items.length - 1]
+    if (albumable(m) && last?.type === 'album' && m.sentAt - last.messages[last.messages.length - 1].sentAt < 120_000) {
+      last.messages.push(m)
+      continue
+    }
+    items.push(albumable(m) ? { type: 'album', messages: [m] } : { type: 'one', message: m })
+  }
+  // A lone photo keeps the normal bubble (bigger, natural aspect ratio).
+  return items.map((item) => (item.type === 'album' && item.messages.length === 1 ? { type: 'one', message: item.messages[0] } : item))
+}
+
+function Album({ messages, outgoing, highlightId, language }: { messages: Message[]; outgoing: boolean; highlightId?: string; language: 'vi' | 'en' }): JSX.Element {
+  const openLightbox = useStore((s) => s.openLightbox)
+  const shown = messages.slice(0, 9)
+  const extra = messages.length - shown.length
+  const cols = messages.length === 2 || messages.length === 4 ? 2 : 3
+  return (
+    <div className={`bubble-row album-row ${messages.some((m) => m.id === highlightId) ? 'highlight' : ''}`} data-message-id={messages[0].id}>
+      <div className={`album ${outgoing ? 'out' : 'in'} cols-${cols}`}>
+        {shown.map((m, i) => {
+          const a = m.attachments[0]
+          const src = a.thumbnailUrl ?? a.url
+          return (
+            <button
+              key={m.id}
+              className="album-tile"
+              data-message-id={m.id}
+              onClick={() =>
+                a.kind === 'video' && a.url ? openLightbox({ url: a.url, video: true, poster: a.thumbnailUrl }) : openLightbox({ url: a.url ?? src ?? '' })
+              }
+            >
+              <img src={src} alt="" draggable={false} loading="lazy" />
+              {a.kind === 'video' && (
+                <span className="album-play">
+                  <Play size={16} fill="currentColor" />
+                </span>
+              )}
+              {i === shown.length - 1 && extra > 0 && <span className="album-more">+{extra}</span>}
+            </button>
+          )
+        })}
+      </div>
+      <span className="bubble-time">{formatTime(messages[messages.length - 1].sentAt, language)}</span>
+    </div>
+  )
+}
+
 function Bubble({
   message,
   position,
@@ -322,7 +406,10 @@ function Bubble({
   const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')
   // A story reaction is just the emoji on the story card; a share without words needs no bubble either.
   const bubbleless = !!story && (story.label === 'story_reaction' || !message.text.trim()) && inline.length === 0
+  // Emoji-only messages render large without a bubble (like Instagram / iMessage).
+  const jumbo = !message.attachments.length && !message.replyTo ? jumboEmojiCount(message.text) : 0
   const classes = ['bubble', direction, position]
+  if (jumbo) classes.push('jumbo', `e${jumbo}`)
   if (sticker) classes.push('sticker')
   else if (media) classes.push('media')
   if (message.status === 'failed') classes.push('failed')
@@ -415,7 +502,14 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
       if (attachment.expired) return <GoneMedia />
       const src = attachment.url ?? attachment.thumbnailUrl
       return src ? (
-        <img className="attachment-image" src={src} alt={t('photo')} draggable={false} onClick={() => void viewImage()} />
+        <img
+          className="attachment-image"
+          src={src}
+          alt={t('photo')}
+          draggable={false}
+          onClick={() => void viewImage()}
+          style={attachment.width && attachment.height ? { aspectRatio: `${attachment.width} / ${attachment.height}` } : undefined}
+        />
       ) : (
         <div className="attachment-image placeholder">{t('photo')}</div>
       )
