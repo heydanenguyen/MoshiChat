@@ -272,6 +272,8 @@ export class AccountManager {
 
   async sendMessage(conversationId: string, text: string, options: SendOptions = {}): Promise<Message> {
     const adapter = this.adapterFor(conversationId)
+    if (adapter.account.status === 'needs_auth') throw new Error('This account needs you to sign in again before sending')
+    if (adapter.account.status === 'connecting') throw new Error('Still connecting, try again in a moment')
     const message = await adapter.sendMessage(conversationId, text, options)
     this.trackSent(message)
     return message

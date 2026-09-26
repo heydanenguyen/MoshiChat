@@ -203,7 +203,16 @@ const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string
  * app window, then hand the session cookies to the adapter. Passwords are
  * typed into the platform's page only; Unison never sees them.
  */
+const openLogins = new Map<string, BrowserWindow>()
+
 async function captureWebSession(platform: 'messenger' | 'instagram', fresh = false): Promise<WebCookie[]> {
+  const existing = openLogins.get(platform)
+  if (existing && !existing.isDestroyed()) {
+    // Already waiting on this platform (for example a two-factor step): bring it back instead of opening another.
+    existing.show()
+    existing.focus()
+    throw new Error('Finish signing in in the Instagram/Facebook window that is already open')
+  }
   const spec = WEB_LOGIN[platform]
   const ses = session.fromPartition(`persist:login-${platform}`)
   if (fresh) {
@@ -223,6 +232,16 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
       title: platform === 'messenger' ? 'Facebook' : 'Instagram',
       autoHideMenuBar: true,
       webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, sandbox: true }
+    })
+    openLogins.set(platform, loginWindow)
+    loginWindow.on('closed', () => openLogins.delete(platform))
+    loginWindow.once('ready-to-show', () => loginWindow.focus())
+    // Two-factor and checkpoint pages must not end up hidden behind the main window.
+    loginWindow.webContents.on('did-navigate', () => {
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.show()
+        loginWindow.focus()
+      }
     })
     let settled = false
     const finish = (err?: Error, cookies?: WebCookie[]): void => {

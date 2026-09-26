@@ -4,6 +4,7 @@ import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './ty
 import { conversationId, externalIdOf, matchesQuery, statsOf } from './types'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
+import { DirectComposer } from '../direct-composer'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -70,6 +71,7 @@ const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
 export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
   private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
+  private composer = new DirectComposer('persist:login-instagram')
   private mePk = ''
   private threads = new Map<string, IgThread>()
   private users = new Map<string, IgUser>()
@@ -131,6 +133,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
     this.web.close()
+    this.composer.close()
     this.setStatus('disconnected')
   }
 
@@ -167,25 +170,34 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   private async send(id: string, text: string, options: SendOptions): Promise<Message> {
     if (options.attachments?.length) throw new Error('Personal Instagram supports text messages only for now')
+    if (!text.trim()) throw new Error('Message is empty')
     const external = externalIdOf(id)
     const threadId = this.threadIdFor(id)
-    const clientContext = randomUUID()
-    const form: Record<string, string> = { action: 'send_item', client_context: clientContext, mutation_token: clientContext, text }
-    if (threadId) form.thread_ids = JSON.stringify([threadId])
+    let url: string
+    if (threadId) url = `https://www.instagram.com/direct/t/${threadId}/`
     else {
-      const peer = this.pendingPeers.get(external)
-      if (!peer) throw new Error('Unknown Instagram recipient')
-      form.recipient_users = JSON.stringify([[peer]])
+      const peer = this.users.get(this.pendingPeers.get(external) ?? '')
+      if (!peer?.username) throw new Error('Unknown Instagram recipient')
+      url = `https://ig.me/m/${peer.username}`
     }
-    const res = await this.web.json<{ payload?: { item_id?: string; thread_id?: string; timestamp?: string } }>('/api/v1/direct_v2/threads/broadcast/text/', {
-      method: 'POST',
-      form,
-      headers: APP_HEADERS
-    })
-    const payload = res.payload ?? {}
-    if (!threadId && payload.thread_id) this.aliases.set(external, payload.thread_id)
+    const sentAt = Date.now()
+    await this.composer.send(url, text)
+
+    // Pick up the real item id (reads are safe on the web API); fall back to a local id.
+    let itemId: string | undefined
+    const resolvedThread = threadId ?? (await this.findThreadFor(external))
+    if (resolvedThread) {
+      if (!threadId) this.aliases.set(external, resolvedThread)
+      try {
+        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${resolvedThread}/?limit=5`, { headers: APP_HEADERS })
+        const mine = (res.thread.items ?? []).find((item) => String(item.user_id) === this.mePk && (item.text ?? '') === text)
+        itemId = mine?.item_id
+      } catch {
+        /* the next poll will reconcile */
+      }
+    }
     const message: Message = {
-      id: payload.item_id ?? `local-${clientContext}`,
+      id: itemId ?? `local-${randomUUID()}`,
       conversationId: id,
       senderId: this.mePk,
       senderName: this.account.displayName,
@@ -193,12 +205,20 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       text,
       attachments: [],
       reactions: [],
-      sentAt: payload.timestamp ? Number(payload.timestamp) / 1000 : Date.now(),
+      sentAt,
       isOutgoing: true,
       status: 'sent'
     }
     this.remember(id, [message])
     return message
+  }
+
+  /** After messaging a brand-new peer, find the thread Instagram created. */
+  private async findThreadFor(external: string): Promise<string | undefined> {
+    const peerPk = this.pendingPeers.get(external)
+    if (!peerPk) return undefined
+    const threads = await this.inbox().catch(() => [] as IgThread[])
+    return threads.find((t) => !t.is_group && t.users.length === 1 && String(t.users[0].pk) === peerPk)?.thread_id
   }
 
   async markRead(id: string): Promise<void> {
@@ -367,6 +387,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
     this.web.close()
+    this.composer.close()
     this.setStatus('needs_auth', err.reason)
   }
 
