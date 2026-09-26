@@ -7,6 +7,7 @@ import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { DirectComposer } from '../direct-composer'
+import { InstagramRealtime } from '../instagram-realtime'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -60,7 +61,8 @@ interface InboxResponse {
   viewer?: IgUser
 }
 
-const POLL_INTERVAL = 20_000
+/** Safety poll; realtime events trigger refreshes within a second. */
+const POLL_INTERVAL = 45_000
 /** Instagram silently truncates bigger pages (100 returns 75 and claims there is nothing older). */
 const PAGE_SIZE = 20
 /** Delay between history pages while crawling, to stay a polite web client. */
@@ -98,6 +100,15 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
   private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
   private composer = new DirectComposer('persist:login-instagram')
+  private realtime = new InstagramRealtime('persist:login-instagram', {
+    onActivity: () => this.onRealtimeActivity(),
+    onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
+    onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),
+    log: (...args) => this.ctx.log(...args)
+  })
+  private activityTimer?: NodeJS.Timeout
+  private pollAgain = false
+  private typingTimers = new Map<string, NodeJS.Timeout>()
   private mePk = ''
   private threads = new Map<string, IgThread>()
   private users = new Map<string, IgUser>()
@@ -162,6 +173,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     await this.ctx.saveSecret(this.secret)
     await this.loadCrawls()
+    this.realtime.start()
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
     this.setStatus('connected')
   }
@@ -174,6 +186,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   async disconnect(): Promise<void> {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
+    this.realtime.stop()
     this.web.close()
     this.composer.close()
     this.setStatus('disconnected')
@@ -181,7 +194,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   async listConversations(): Promise<Conversation[]> {
     const inbox = await this.inbox()
-    return inbox.map((thread) => this.toConversation(thread))
+    const list = inbox.map((thread) => this.toConversation(thread))
+    // Count the most recent threads quietly so their numbers are ready when opened.
+    for (const thread of inbox.slice(0, 12)) this.ensureCrawl(thread.thread_id, conversationId(this.account.id, thread.thread_id), true)
+    return list
   }
 
   async fetchMessages(id: string, options: FetchMessagesOptions): Promise<Message[]> {
@@ -205,7 +221,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     this.cursors.set(id, cursor)
     this.remember(id, collected)
-    return collected.sort((a, b) => a.sentAt - b.sentAt)
+    const known = this.threads.get(threadId)
+    if (known) this.applySeen(known, false)
+    return (this.history.get(id) ?? collected).filter((m) => collected.some((c) => c.id === m.id)).sort((a, b) => a.sentAt - b.sentAt)
   }
 
   /** One page of a thread, newest first. */
@@ -383,13 +401,16 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    * items. One thread at a time, paced, and it stops on the first error so a
    * throttled or signed-out session is left alone.
    */
-  private ensureCrawl(threadId: string, id: string): void {
+  private ensureCrawl(threadId: string, id: string, background = false): void {
     const existing = this.crawls.get(threadId)
     if (existing?.done && !this.crawling.has(threadId) && Date.now() - (this.crawledAt.get(threadId) ?? 0) < 60_000) return
+    // Background work never overtakes something the user asked for, and finished threads need no pre-count.
+    if (background && (existing?.done || this.crawling.has(threadId))) return
     if (!existing) this.crawls.set(threadId, { count: 0, done: false, shared: [] })
-    // Most recently requested goes to the back = next to run.
+    // Most recently requested goes to the back = next to run; background jobs go to the front (last).
     this.crawlQueue = this.crawlQueue.filter((job) => job.threadId !== threadId)
-    this.crawlQueue.push({ threadId, id })
+    if (background) this.crawlQueue.unshift({ threadId, id })
+    else this.crawlQueue.push({ threadId, id })
     if (!this.crawling.has(threadId)) this.caughtUp.delete(threadId)
     this.crawling.add(threadId)
     void this.runCrawler()
@@ -538,12 +559,17 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     for (const thread of threads) {
       this.threads.set(thread.thread_id, thread)
       this.absorbUsers(thread.users)
+      this.applySeen(thread)
     }
     return threads
   }
 
   private async poll(): Promise<void> {
-    if (this.polling) return
+    if (this.polling) {
+      // A realtime event arrived mid-refresh: run once more right after.
+      this.pollAgain = true
+      return
+    }
     if (this.skip > 0) {
       this.skip -= 1
       return
@@ -570,7 +596,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
           for (const item of res.thread.items ?? []) if (Number(item.timestamp) / 1000 > state.newestAt) this.absorbItem(state, item, id)
           this.scheduleSave()
         }
-        for (const message of fresh) if (!message.isOutgoing) this.ctx.emit({ type: 'message:new', message })
+        // Includes messages the user sent from another device; the app dedupes by id.
+        for (const message of fresh) this.ctx.emit({ type: 'message:new', message })
       }
       this.backoff = 1
     } catch (err) {
@@ -586,6 +613,54 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       this.ctx.log('instagram poll failed', message)
     } finally {
       this.polling = false
+      if (this.pollAgain) {
+        this.pollAgain = false
+        setTimeout(() => void this.poll(), 200)
+      }
+    }
+  }
+
+  private onRealtimeActivity(): void {
+    // Coalesce bursts (a message often arrives with a receipt and a reaction).
+    if (this.activityTimer) return
+    this.activityTimer = setTimeout(() => {
+      this.activityTimer = undefined
+      void this.poll()
+    }, 350)
+  }
+
+  private onRealtimeTyping(threadId: string, senderId: string, typing: boolean): void {
+    if (senderId === this.mePk) return
+    const id = conversationId(this.account.id, threadId)
+    const user = this.users.get(senderId)
+    const peerName = user?.full_name || user?.username || 'Instagram'
+    const existing = this.typingTimers.get(id)
+    if (existing) clearTimeout(existing)
+    this.ctx.emit({ type: 'typing', typing: { conversationId: id, peerName, isTyping: typing } })
+    if (typing) {
+      // Instagram's own TTL is ~11s; stop showing it if no "stopped" event arrives.
+      this.typingTimers.set(
+        id,
+        setTimeout(() => this.ctx.emit({ type: 'typing', typing: { conversationId: id, peerName, isTyping: false } }), 11_000)
+      )
+    }
+  }
+
+  /** Mark our messages as read up to the latest point any other participant has seen. */
+  private applySeen(thread: IgThread, emit = true): void {
+    const id = conversationId(this.account.id, thread.thread_id)
+    const list = this.history.get(id)
+    if (!list?.length) return
+    let seenAt = 0
+    for (const [pk, seen] of Object.entries(thread.last_seen_at ?? {})) {
+      if (pk === this.mePk || !seen?.timestamp) continue
+      seenAt = Math.max(seenAt, Number(seen.timestamp) / 1000)
+    }
+    if (!seenAt) return
+    for (const message of list) {
+      if (!message.isOutgoing || message.status === 'read' || message.sentAt > seenAt + 1) continue
+      message.status = 'read'
+      if (emit) this.ctx.emit({ type: 'message:updated', message: { ...message } })
     }
   }
 
@@ -603,8 +678,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   private expire(err: SessionExpiredError): void {
+    if (this.account.status === 'needs_auth') return
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
+    this.realtime.stop()
     this.web.close()
     this.composer.close()
     this.setStatus('needs_auth', err.reason)
@@ -686,7 +763,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       reactions: [...reactions.values()],
       sentAt: Number(item.timestamp) / 1000,
       isOutgoing,
-      status: 'delivered'
+      status: isOutgoing ? 'sent' : 'delivered'
     }
     if (item.replied_to_message?.item_id) {
       const who = this.users.get(String(item.replied_to_message.user_id))

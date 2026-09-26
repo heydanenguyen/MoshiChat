@@ -3,6 +3,7 @@ import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import type { AddAccountInput, BridgeEvent, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
+import { browserUserAgent } from './user-agent'
 import { IPC } from '@shared/bridge'
 import { isMutedBy } from '@shared/types'
 import { Storage } from './storage'
@@ -194,7 +195,7 @@ async function openAttachment(conversationId: string, messageId: string, attachm
 }
 
 const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string; required: string[] }> = {
-  messenger: { url: 'https://www.facebook.com/login.php', domain: '.facebook.com', required: ['c_user', 'xs'] },
+  messenger: { url: 'https://www.facebook.com/', domain: '.facebook.com', required: ['c_user', 'xs'] },
   instagram: { url: 'https://www.instagram.com/accounts/login/', domain: '.instagram.com', required: ['sessionid', 'ds_user_id'] }
 }
 
@@ -215,6 +216,8 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
   }
   const spec = WEB_LOGIN[platform]
   const ses = session.fromPartition(`persist:login-${platform}`)
+  // Facebook sessions are shared with ws3-fca, which now uses this exact browser identity.
+  if (platform === 'messenger') ses.setUserAgent(browserUserAgent())
   if (fresh) {
     // Drop only the dead login cookies; keep device ids (datr, mid, ig_did) so the platform recognises this device.
     for (const name of spec.required) {
@@ -251,8 +254,14 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
       if (!loginWindow.isDestroyed()) loginWindow.close()
       err ? reject(err) : resolve(cookies ?? [])
     }
+    let loaded = false
+    loginWindow.webContents.on('did-finish-load', () => (loaded = true))
     const check = async (): Promise<void> => {
       try {
+        // Only trust cookies once the site itself has rendered a signed-in page (stale cookies still exist).
+        if (!loaded || loginWindow.isDestroyed()) return
+        const url = loginWindow.webContents.getURL()
+        if (/login|checkpoint|two_factor|challenge|recover/i.test(url)) return
         const cookies = await ses.cookies.get({ domain: spec.domain.replace(/^\./, '') })
         const names = new Set(cookies.map((c) => c.name))
         if (spec.required.every((n) => names.has(n))) {

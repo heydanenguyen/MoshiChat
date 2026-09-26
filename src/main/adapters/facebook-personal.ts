@@ -1,4 +1,7 @@
 import { createReadStream } from 'fs'
+import { createRequire } from 'module'
+import { dirname, join } from 'path'
+import { browserUserAgent } from '../user-agent'
 import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf } from './types'
@@ -71,14 +74,23 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
 
   async connect(): Promise<void> {
     this.setStatus('connecting')
+    pinUserAgent()
     const mod = (await import('ws3-fca')) as unknown as FcaModule & { default?: FcaModule['login'] }
     const login = (mod.login ?? mod.default) as FcaModule['login']
     const appState = this.secret.cookies.map((c) => ({ key: c.name, name: c.name, value: c.value, domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }))
     const api = await new Promise<FcaApi>((resolve, reject) => {
-      login({ appState } as never, { listenEvents: true, selfListen: true, updatePresence: false, autoReconnect: true, online: false } as never, (err, result) => {
+      login({ appState } as never, { listenEvents: true, selfListen: true, updatePresence: false, autoReconnect: true, online: false, userAgent: browserUserAgent(), randomUserAgent: false } as never, (err, result) => {
         if (err || !result) reject(new Error(typeof err === 'string' ? err : (err?.error ?? err?.message ?? 'Facebook login failed')))
         else resolve(result)
       })
+    }).catch((err: Error) => {
+      // ws3-fca reports a dead or rejected session as "Error retrieving userID".
+      if (/retrieving userID|login|checkpoint/i.test(err.message)) {
+        this.setStatus('needs_auth', 'logged_out')
+        throw new Error('Facebook did not accept this session. Sign in again to keep messaging.')
+      }
+      this.setStatus('error', err.message)
+      throw err
     })
     this.api = api
     this.meId = api.getCurrentUserID()
@@ -399,6 +411,32 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     this.account.error = error
     this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
   }
+}
+
+/**
+ * ws3-fca picks a random user agent (Windows or Mac, Chrome 124-126) for every
+ * request, so one session appears to hop between devices and Facebook logs it
+ * out. Pin it to the same browser identity used in the login window.
+ */
+let uaPinned = false
+function pinUserAgent(): void {
+  if (uaPinned) return
+  const req = createRequire(__filename)
+  const entry = req.resolve('ws3-fca')
+  const uaModule = req(join(dirname(entry), '..', 'src', 'utils', 'user-agents.js')) as { randomUserAgent: () => unknown; defaultUserAgent: string }
+  const ua = browserUserAgent()
+  const major = /Chrome\/(\d+)/.exec(ua)?.[1] ?? '130'
+  const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux'
+  const brands = `"Chromium";v="${major}", "Not?A_Brand";v="99"`
+  uaModule.randomUserAgent = () => ({
+    userAgent: ua,
+    secChUa: brands,
+    secChUaFullVersionList: `"Chromium";v="${major}.0.0.0", "Not?A_Brand";v="99.0.0.0"`,
+    secChUaPlatform: `"${platform}"`,
+    secChUaPlatformVersion: process.platform === 'win32' ? '"15.0.0"' : '"14.0.0"'
+  })
+  uaModule.defaultUserAgent = ua
+  uaPinned = true
 }
 
 function toAttachment(raw: Record<string, string | undefined>, id: string): Attachment {

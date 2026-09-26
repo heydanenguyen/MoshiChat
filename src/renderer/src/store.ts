@@ -210,8 +210,15 @@ export const useStore = create<State>((set, get) => ({
           for (const key of Object.keys(shared)) if (key.startsWith(event.message.conversationId + '|')) delete shared[key]
           const stats = { ...state.stats }
           delete stats[event.message.conversationId]
-          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared, stats })
-          else set({ shared, stats })
+          // The person finished typing: their message just arrived.
+          const typing = state.typing[event.message.conversationId] && !event.message.isOutgoing ? { ...state.typing } : state.typing
+          if (typing !== state.typing) {
+            delete typing[event.message.conversationId]
+            const timer = typingTimers.get(event.message.conversationId)
+            if (timer) clearTimeout(timer)
+          }
+          if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared, stats, typing })
+          else set({ shared, stats, typing })
           if (state.selectedId === event.message.conversationId && document.hasFocus() && !event.message.isOutgoing) {
             void bridge.conversations.markRead(event.message.conversationId)
           }
@@ -228,14 +235,14 @@ export const useStore = create<State>((set, get) => ({
           if (existing) clearTimeout(existing)
           const typing = { ...get().typing }
           if (isTyping) {
-            typing[conversationId] = { name: peerName, until: Date.now() + 6000 }
+            typing[conversationId] = { name: peerName, until: Date.now() + 10_000 }
             typingTimers.set(
               conversationId,
               setTimeout(() => {
                 const next = { ...get().typing }
                 delete next[conversationId]
                 set({ typing: next })
-              }, 6000)
+              }, 10_000)
             )
           } else {
             delete typing[conversationId]
