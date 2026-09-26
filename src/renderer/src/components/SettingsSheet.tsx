@@ -107,18 +107,25 @@ export function SettingsSheet(): JSX.Element {
                   <div className="settings-row-title">{t('accentColor')}</div>
                   <div className="settings-row-sub">{t('accentHint')}</div>
                 </div>
-                <div className="accent-picker">
-                  {ACCENTS.map((accent) => (
-                    <button
-                      key={accent.id}
-                      className={`accent-dot ${settings.accent === accent.id ? 'active' : ''}`}
-                      onClick={() => void setSettings({ accent: accent.id })}
-                      title={accent.name[language]}
-                      style={{ background: `linear-gradient(135deg, ${accent.from}, ${accent.to})` }}
-                    />
-                  ))}
-                </div>
               </div>
+              {[false, true].map((flat) => (
+                <div key={String(flat)} className="accent-group">
+                  <span className="accent-group-label">{flat ? t('accentFlat') : t('accentGradient')}</span>
+                  <div className="accent-picker" role="radiogroup" aria-label={flat ? t('accentFlat') : t('accentGradient')}>
+                    {ACCENTS.filter((accent) => !!accent.flat === flat).map((accent) => (
+                      <button
+                        key={accent.id}
+                        className={`accent-dot ${flat ? 'flat' : ''} ${settings.accent === accent.id ? 'active' : ''}`}
+                        role="radio"
+                        aria-checked={settings.accent === accent.id}
+                        onClick={() => void setSettings({ accent: accent.id })}
+                        title={accent.name[language]}
+                        style={{ background: flat ? accent.from : `linear-gradient(135deg, ${accent.from}, ${accent.to})`, ['--dot' as string]: accent.from } as React.CSSProperties}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
               <div className="settings-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('font')}</div>
@@ -136,6 +143,18 @@ export function SettingsSheet(): JSX.Element {
                     ))}
                   </div>
                 </div>
+              </div>
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('messageShadows')}</div>
+                  <div className="settings-row-sub">{t('messageShadowsHint')}</div>
+                </div>
+                <button
+                  className={`switch ${settings.messageShadows !== false ? 'on' : ''}`}
+                  role="switch"
+                  aria-checked={settings.messageShadows !== false}
+                  onClick={() => void setSettings({ messageShadows: settings.messageShadows === false })}
+                />
               </div>
               <div className="settings-row">
                 <div className="settings-row-text">

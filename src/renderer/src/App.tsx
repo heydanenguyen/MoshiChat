@@ -35,6 +35,7 @@ export default function App(): JSX.Element {
   const mesh = useStore((s) => s.settings.mesh)
   const accent = useStore((s) => s.settings.accent)
   const font = useStore((s) => s.settings.font)
+  const messageShadows = useStore((s) => s.settings.messageShadows)
 
   const narrow = useStore((s) => s.narrow)
   const setNarrow = useStore((s) => s.setNarrow)
@@ -69,7 +70,8 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.mesh = mesh
     document.documentElement.dataset.accent = accent
     document.documentElement.dataset.font = font
-  }, [mesh, accent, font])
+    document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
+  }, [mesh, accent, font, messageShadows])
 
   useEffect(() => {
     void init()
