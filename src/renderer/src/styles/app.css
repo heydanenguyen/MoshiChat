@@ -4089,105 +4089,182 @@ kbd {
 }
 
 /* ================================================================== tag pills
-   Pastel fill of the tag colour, soft raised edge (white top highlight, tinted bottom lip),
-   line icon + bold label in a deeper shade of the same colour. No tilt, just a gentle lift. */
+   Pastel "slab": a solid fill with NO outline. Depth comes from a light top highlight, a deeper
+   bottom lip and a soft tinted shadow underneath. Icon + label use the ink colour with a faint
+   emboss. Applied tags are raised; unapplied ones sit flat and paler. */
 
 .tag-pill {
-  --tag: #64748b;
-  --tag-ink: color-mix(in srgb, var(--tag) 80%, #0b1020);
+  --tag: #56657c;
+  --tag-fill: color-mix(in srgb, var(--tag) 22%, white);
+  --tag-ink: var(--tag);
+  --tag-top: color-mix(in srgb, var(--tag-fill) 70%, white);
+  --tag-lip: color-mix(in srgb, var(--tag-fill) 78%, var(--tag));
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 34px;
+  max-width: 100%;
   padding: 0 13px 0 11px;
-  border-radius: 11px;
+  border: 0;
+  border-radius: 9px;
   font-family: var(--font-display);
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  word-spacing: 0.06em;
   line-height: 1.25;
   white-space: nowrap;
   color: var(--tag-ink);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 9%, white) 0%, color-mix(in srgb, var(--tag) 19%, white) 100%);
-  border: 1px solid color-mix(in srgb, var(--tag) 24%, white);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  background: linear-gradient(180deg, var(--tag-top) 0%, var(--tag-fill) 55%, var(--tag-fill) 100%);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -2px 0 color-mix(in srgb, var(--tag) 13%, transparent),
-    0 1px 1px color-mix(in srgb, var(--tag) 10%, transparent),
-    0 6px 14px -8px color-mix(in srgb, var(--tag) 50%, transparent);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2.5px 0 var(--tag-lip),
+    0 1px 1.5px color-mix(in srgb, var(--tag) 22%, transparent),
+    0 5px 12px -5px color-mix(in srgb, var(--tag) 38%, transparent);
   transition:
     transform var(--duration-base) var(--ease-spring),
     box-shadow var(--duration-fast) ease,
-    filter var(--duration-fast) ease,
+    background var(--duration-fast) ease,
     opacity var(--duration-fast) ease;
 }
 .tag-pill .tag-glyph {
   flex-shrink: 0;
   color: var(--tag-ink);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.5));
 }
 .tag-pill .tag-glyph.emoji {
   line-height: 1;
+  filter: none;
 }
 .tag-pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
+.tag-pill-count {
+  margin-left: 1px;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 17px;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-shadow: none;
+  color: var(--tag-ink);
+  background: color-mix(in srgb, var(--tag) 13%, transparent);
+}
+.tag-pill-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-elevated);
+}
+.tag-pill-muted {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
 .tag-pill.interactive {
   cursor: pointer;
 }
 .tag-pill.interactive:hover {
   transform: translateY(-1px);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -2px 0 color-mix(in srgb, var(--tag) 16%, transparent),
-    0 1px 1px color-mix(in srgb, var(--tag) 12%, transparent),
-    0 10px 18px -8px color-mix(in srgb, var(--tag) 60%, transparent);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2.5px 0 var(--tag-lip),
+    0 2px 3px color-mix(in srgb, var(--tag) 22%, transparent),
+    0 9px 18px -6px color-mix(in srgb, var(--tag) 45%, transparent);
 }
 .tag-pill.interactive:active {
-  transform: translateY(0) scale(0.97);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 var(--tag-lip),
+    0 1px 2px color-mix(in srgb, var(--tag) 20%, transparent);
 }
-/* not applied / muted: an outline in the tag colour, still colourful but clearly off */
-.tag-pill.muted {
-  color: color-mix(in srgb, var(--tag-ink) 72%, transparent);
-  background: color-mix(in srgb, var(--tag) 4%, transparent);
-  border-color: color-mix(in srgb, var(--tag) 30%, transparent);
+.tag-pill:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tag) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* not applied: flat and paler, no lip, no shadow (still no outline) */
+.tag-pill.flat {
+  --tag-ink: color-mix(in srgb, var(--tag) 70%, var(--text-tertiary));
+  background: color-mix(in srgb, var(--tag-fill) 48%, transparent);
   box-shadow: none;
+  text-shadow: none;
 }
-.tag-pill.muted .tag-glyph {
-  color: inherit;
+.tag-pill.flat .tag-glyph {
+  filter: none;
 }
-.tag-pill.muted.interactive:hover {
-  color: var(--tag-ink);
-  background: color-mix(in srgb, var(--tag) 10%, transparent);
-  box-shadow: none;
-}
-:root[data-theme='dark'] .tag-pill.muted {
-  background: transparent;
-  border-color: color-mix(in srgb, var(--tag) 40%, transparent);
+.tag-pill.flat.interactive:hover {
+  --tag-ink: var(--tag);
+  transform: none;
+  background: color-mix(in srgb, var(--tag-fill) 78%, transparent);
   box-shadow: none;
 }
 
+/* current filter: pressed into the page with a soft ring */
+.tag-pill.selected {
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2.5px 0 var(--tag-lip),
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px color-mix(in srgb, var(--tag) 55%, transparent);
+}
+.tag-pill.selected.interactive:hover {
+  transform: none;
+}
+
 .tag-pill.lg {
-  height: 42px;
-  padding: 0 17px 0 14px;
+  height: 44px;
+  padding: 0 18px 0 15px;
   gap: 8px;
-  border-radius: 13px;
-  font-size: 19px;
+  border-radius: 11px;
+  font-size: 20px;
 }
 .tag-pill.sm {
-  height: 26px;
+  height: 27px;
   padding: 0 9px 0 8px;
   gap: 5px;
-  border-radius: 8px;
-  font-size: 12.5px;
+  border-radius: 7px;
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 0 var(--tag-lip),
+    0 1px 1px color-mix(in srgb, var(--tag) 20%, transparent),
+    0 4px 9px -4px color-mix(in srgb, var(--tag) 36%, transparent);
+}
+.tag-pill.sm.selected {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 0 var(--tag-lip),
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 3.5px color-mix(in srgb, var(--tag) 60%, transparent);
+}
+.tag-pill.sm.flat {
+  box-shadow: none;
 }
 .tag-pill.xs {
   height: 18px;
   padding: 0 5px;
   gap: 3px;
-  border-radius: 6px;
+  border-radius: 5px;
   font-size: 10.5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1.5px 0 var(--tag-lip);
 }
 .tag-pill.icon-only {
   padding: 0;
@@ -4197,35 +4274,48 @@ kbd {
   width: 20px;
 }
 .tag-pill.icon-only.sm {
-  width: 26px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
 }
 
+/* "+ new tag": a quiet dashed placeholder, the only pill with a line */
 .tag-pill.add {
   color: var(--text-tertiary);
   background: transparent;
-  border: 1px dashed var(--separator-strong);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
+  text-shadow: none;
   cursor: pointer;
 }
 .tag-pill.add:hover {
   color: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 :root[data-theme='dark'] .tag-pill {
-  --tag-ink: color-mix(in srgb, var(--tag) 55%, white);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 20%, #15172a) 0%, color-mix(in srgb, var(--tag) 30%, #15172a) 100%);
-  border-color: color-mix(in srgb, var(--tag) 42%, transparent);
+  --tag-ink: color-mix(in srgb, var(--tag-fill) 88%, white);
+  --tag-top: color-mix(in srgb, var(--tag) 34%, #15172a);
+  --tag-lip: color-mix(in srgb, var(--tag) 16%, #0b0c18);
+  text-shadow: none;
+  background: linear-gradient(180deg, var(--tag-top) 0%, color-mix(in srgb, var(--tag) 26%, #15172a) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 6px 14px -8px color-mix(in srgb, var(--tag) 60%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -2.5px 0 var(--tag-lip),
+    0 5px 12px -5px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme='dark'] .tag-pill .tag-glyph {
+  filter: none;
+}
+:root[data-theme='dark'] .tag-pill.flat {
+  --tag-ink: color-mix(in srgb, var(--tag-fill) 60%, var(--text-tertiary));
+  background: color-mix(in srgb, var(--tag) 12%, transparent);
+  box-shadow: none;
 }
 :root[data-theme='dark'] .tag-pill.add {
   background: transparent;
-  border-color: var(--separator-strong);
   color: var(--text-tertiary);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
 }
 
 .tag-chips {
@@ -4240,30 +4330,152 @@ kbd {
   vertical-align: -3px;
 }
 
-/* sidebar: pastel tile with the line icon */
-.nav-item-icon.tag-tile {
-  --tag: #64748b;
-  border-radius: 8px;
-  color: color-mix(in srgb, var(--tag) 80%, #0b1020);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 10%, white) 0%, color-mix(in srgb, var(--tag) 22%, white) 100%);
-  border: 1px solid color-mix(in srgb, var(--tag) 24%, white);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1.5px 0 color-mix(in srgb, var(--tag) 14%, transparent);
-}
-.nav-item-icon.tag-tile .tag-glyph {
+/* context menu: a pill per tag, calm hover instead of the accent fill */
+.context-menu-item.tag-row:hover {
+  background: var(--bg-hover);
   color: inherit;
 }
-:root[data-theme='dark'] .nav-item-icon.tag-tile {
-  color: color-mix(in srgb, var(--tag) 55%, white);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 20%, #15172a) 0%, color-mix(in srgb, var(--tag) 32%, #15172a) 100%);
-  border-color: color-mix(in srgb, var(--tag) 42%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-/* context menu rows hold a small pill */
 .context-menu-item .tag-pill {
   pointer-events: none;
+}
+.context-menu-item.danger {
+  color: var(--danger);
+}
+.context-menu-item.danger:hover,
+.context-menu-item.danger.confirm {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ================================================================== sidebar tags */
+
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+  margin-bottom: 8px;
+}
+.sidebar-section-head .sidebar-section-title {
+  margin-bottom: 0;
+}
+.section-add {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.section-add:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sidebar-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 6px;
+  padding: 2px var(--space-2) 4px var(--space-3);
+}
+.sidebar-tags.rail {
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0;
+  gap: 8px;
+}
+
+.tag-popover {
+  position: fixed;
+  z-index: 70;
+  width: 300px;
+  padding: 12px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--separator);
+  animation: sheet-in var(--duration-base) var(--ease-spring);
+}
+.tag-popover-title {
+  font-weight: 800;
+  font-size: var(--text-md);
+  padding: 2px 4px 0;
+}
+.tag-popover .tag-creator {
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+/* ================================================================== details: compact meta row */
+
+.details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--space-3);
+}
+.details-meta .details-chip {
+  margin-top: 0;
+}
+.details-chip.activity {
+  padding: 4px 11px 4px 8px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.details-chip.activity svg {
+  color: var(--accent);
+}
+
+/* tag creator colour swatches: a mini slab per palette pair */
+.tag-creator-color {
+  --tag: #56657c;
+  --tag-fill: color-mix(in srgb, var(--tag) 22%, white);
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tag-fill);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 0 color-mix(in srgb, var(--tag-fill) 78%, var(--tag));
+  position: relative;
+}
+.tag-creator-color::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 3px;
+  background: var(--tag);
+}
+.tag-creator-color.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--tag);
+}
+.tag-creator-icon.active {
+  color: var(--tag);
+  background: var(--tag-fill, color-mix(in srgb, var(--tag) 18%, white));
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 color-mix(in srgb, var(--tag-fill, white) 78%, var(--tag));
+}
+:root[data-theme='dark'] .tag-creator-icon.active {
+  color: var(--tag-fill, white);
+  background: color-mix(in srgb, var(--tag) 30%, transparent);
+  box-shadow: none;
+}
+.tag-creator-save {
+  background: var(--tag);
 }
 
 /* ================================================================== tag creator */
@@ -4353,38 +4565,11 @@ kbd {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-.tag-creator-icon.active {
-  color: color-mix(in srgb, var(--tag) 80%, #0b1020);
-  background: color-mix(in srgb, var(--tag) 16%, white);
-  border-color: color-mix(in srgb, var(--tag) 30%, white);
-}
-:root[data-theme='dark'] .tag-creator-icon.active {
-  color: color-mix(in srgb, var(--tag) 55%, white);
-  background: color-mix(in srgb, var(--tag) 25%, transparent);
-  border-color: color-mix(in srgb, var(--tag) 45%, transparent);
-}
 .tag-creator-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
   padding: 2px;
-}
-.tag-creator-color {
-  --tag: #64748b;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tag) 25%, white), color-mix(in srgb, var(--tag) 55%, white));
-  border: 2px solid var(--tag);
-  transition: transform var(--duration-fast) var(--ease-spring);
-}
-.tag-creator-color:hover {
-  transform: scale(1.12);
-}
-.tag-creator-color.active {
-  box-shadow:
-    0 0 0 2px var(--bg-elevated),
-    0 0 0 4px var(--tag);
 }
 .tag-creator-hint {
   font-size: var(--text-xs);

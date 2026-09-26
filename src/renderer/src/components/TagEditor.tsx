@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Check, Plus, Trash2, X } from 'lucide-react'
-import { TAG_COLORS, type TagMeta } from '@shared/types'
+import { TAG_PALETTE, type TagMeta } from '@shared/types'
 import { useStore, useT, useTagDefs } from '../store'
-import { TAG_ICONS, TagChip } from './Tag'
+import { TAG_ICONS, TagChip, tagStyle } from './Tag'
 
 const ICON_CHOICES = Object.keys(TAG_ICONS)
 
@@ -14,18 +14,18 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('sparkles')
   // Start with a colour no tag uses yet, so new tags look distinct.
-  const [color, setColor] = useState(() => TAG_COLORS.find((c) => !list.some((tag) => tag.color.toLowerCase() === c.toLowerCase())) ?? TAG_COLORS[0])
+  const [swatch, setSwatch] = useState(() => TAG_PALETTE.find((p) => !list.some((tag) => tag.color.toLowerCase() === p.color.toLowerCase())) ?? TAG_PALETTE[0])
   const [busy, setBusy] = useState(false)
   const trimmed = name.trim()
   const duplicate = list.some((tag) => tag.name.vi.toLowerCase() === trimmed.toLowerCase() || tag.name.en.toLowerCase() === trimmed.toLowerCase())
   const canSave = trimmed.length > 0 && !duplicate && !busy
-  const preview: TagMeta = { id: 'preview', icon, emoji: '', color, name: { vi: trimmed || t('tagNamePlaceholder'), en: trimmed || t('tagNamePlaceholder') } }
+  const preview: TagMeta = { id: 'preview', icon, emoji: '', color: swatch.color, fill: swatch.fill, name: { vi: trimmed || t('tagNamePlaceholder'), en: trimmed || t('tagNamePlaceholder') } }
 
   const save = async (): Promise<void> => {
     if (!canSave) return
     setBusy(true)
     try {
-      const tag = await createTag({ name: trimmed, icon, color })
+      const tag = await createTag({ name: trimmed, icon, color: swatch.color, fill: swatch.fill })
       setName('')
       onCreated?.(tag)
     } finally {
@@ -36,7 +36,7 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
   return (
     <div className="tag-creator">
       <div className="tag-creator-preview">
-        <TagChip tag={preview} size="lg" muted={!trimmed} />
+        <TagChip tag={preview} size="lg" flat={!trimmed} />
       </div>
       <div className="tag-creator-row">
         <input
@@ -51,9 +51,9 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
           maxLength={24}
           autoFocus={autoFocus}
           spellCheck={false}
-          style={{ ['--tag' as string]: color } as React.CSSProperties}
+          style={tagStyle(swatch)}
         />
-        <button className="tag-creator-save" style={{ ['--tag' as string]: color } as React.CSSProperties} onClick={() => void save()} disabled={!canSave} title={t('tagCreate')}>
+        <button className="tag-creator-save" style={tagStyle(swatch)} onClick={() => void save()} disabled={!canSave} title={t('tagCreate')}>
           <Check size={15} strokeWidth={2.6} />
         </button>
         {onCancel && (
@@ -62,7 +62,7 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
           </button>
         )}
       </div>
-      <div className="tag-creator-icons" style={{ ['--tag' as string]: color } as React.CSSProperties}>
+      <div className="tag-creator-icons" style={tagStyle(swatch)}>
         {ICON_CHOICES.map((key) => {
           const Icon = TAG_ICONS[key]
           return (
@@ -73,8 +73,8 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
         })}
       </div>
       <div className="tag-creator-colors">
-        {TAG_COLORS.map((c) => (
-          <button key={c} className={`tag-creator-color ${c === color ? 'active' : ''}`} style={{ ['--tag' as string]: c } as React.CSSProperties} onClick={() => setColor(c)} aria-label={c} />
+        {TAG_PALETTE.map((p) => (
+          <button key={p.color} className={`tag-creator-color ${p.color === swatch.color ? 'active' : ''}`} style={tagStyle(p)} onClick={() => setSwatch(p)} aria-label={p.color} />
         ))}
       </div>
       {duplicate && <div className="tag-creator-hint">{t('tagExists')}</div>}

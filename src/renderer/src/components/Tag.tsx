@@ -87,44 +87,62 @@ export function TagIcon({ tag, size = 15 }: { tag: TagMeta; size?: number }): JS
 
 type ChipSize = 'lg' | 'md' | 'sm' | 'xs'
 
+/** CSS variables for a tag: ink for label/icon, fill for the slab. */
+export function tagStyle(tag: Pick<TagMeta, 'color' | 'fill'>): React.CSSProperties {
+  return { ['--tag' as string]: tag.color, ...(tag.fill ? { ['--tag-fill' as string]: tag.fill } : {}) } as React.CSSProperties
+}
+
 /**
- * A tag pill: pastel fill of the tag colour with a soft raised edge, line icon and bold label in
- * a deeper shade of the same colour. `muted` renders it quiet (not applied / notifications off).
+ * A tag pill in the pastel "slab" style: solid fill with no outline, a light top highlight, a deeper
+ * bottom lip and a soft tinted shadow; line icon and label in the tag's ink colour.
+ * `flat` = not applied (paler, no lip), `selected` = the current filter.
  */
 export function TagChip({
   tag,
   size = 'md',
-  muted = false,
+  flat = false,
+  selected = false,
   iconOnly = false,
+  count,
+  dot = false,
   onClick,
+  onContextMenu,
   title,
   children
 }: {
   tag: TagMeta
   size?: ChipSize
-  muted?: boolean
+  flat?: boolean
+  selected?: boolean
   iconOnly?: boolean
+  /** Small number after the label (for example how many chats carry the tag). */
+  count?: number
+  /** Unread marker in the corner. */
+  dot?: boolean
   onClick?(): void
+  onContextMenu?(e: React.MouseEvent): void
   title?: string
   children?: React.ReactNode
 }): JSX.Element {
   const language = useStore((s) => s.settings.language)
-  const iconSize = size === 'lg' ? 18 : size === 'md' ? 15 : size === 'sm' ? 13 : 11
-  const className = `tag-pill ${size} ${muted ? 'muted' : ''} ${iconOnly ? 'icon-only' : ''} ${onClick ? 'interactive' : ''}`
-  const style = { ['--tag' as string]: tag.color } as React.CSSProperties
+  const iconSize = size === 'lg' ? 19 : size === 'md' ? 15 : size === 'sm' ? 13 : 11
+  const className = ['tag-pill', size, flat && 'flat', selected && 'selected', iconOnly && 'icon-only', onClick && 'interactive'].filter(Boolean).join(' ')
+  const label = tag.name[language]
   const content = (
     <>
       <TagIcon tag={tag} size={iconSize} />
-      {!iconOnly && <span className="tag-pill-label">{tag.name[language]}</span>}
+      {!iconOnly && <span className="tag-pill-label">{label}</span>}
+      {!iconOnly && count !== undefined && <span className="tag-pill-count">{count}</span>}
       {children}
+      {dot && <span className="tag-pill-dot" />}
     </>
   )
   return onClick ? (
-    <button type="button" className={className} style={style} onClick={onClick} title={title ?? tag.name[language]}>
+    <button type="button" className={className} style={tagStyle(tag)} onClick={onClick} onContextMenu={onContextMenu} title={title ?? label} aria-pressed={selected || !flat}>
       {content}
     </button>
   ) : (
-    <span className={className} style={style} title={title ?? tag.name[language]}>
+    <span className={className} style={tagStyle(tag)} title={title ?? label} onContextMenu={onContextMenu}>
       {content}
     </span>
   )
