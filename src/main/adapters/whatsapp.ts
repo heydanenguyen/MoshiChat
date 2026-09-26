@@ -176,7 +176,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
     for (const [index, file] of files.entries()) {
       const caption = index === files.length - 1 ? text : undefined
       if (file.voice) sent = await sock.sendMessage(jid, { audio: { url: file.path }, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: file.duration }, misc)
-      else if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
+      else if (file.gif && file.alternates?.some((alt) => alt.mime === 'video/mp4')) {
+        const mp4 = file.alternates.find((alt) => alt.mime === 'video/mp4')!
+        sent = await sock.sendMessage(jid, { video: { url: mp4.path }, gifPlayback: true, caption }, misc)
+      } else if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
       else if (file.mime.startsWith('video/')) sent = await sock.sendMessage(jid, { video: { url: file.path }, caption }, misc)
       else sent = await sock.sendMessage(jid, { document: { url: file.path }, mimetype: file.mime, fileName: file.name, caption }, misc)
     }
@@ -523,7 +526,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       const m = content.videoMessage
       text = m.caption ?? ''
       contextInfo = m.contextInfo
-      attachments.push({ id: `${raw.key.id}-vid`, kind: 'video', thumbnailUrl: thumb(m.jpegThumbnail), width: m.width ?? undefined, height: m.height ?? undefined })
+      attachments.push({ id: `${raw.key.id}-vid`, kind: 'video', thumbnailUrl: thumb(m.jpegThumbnail), width: m.width ?? undefined, height: m.height ?? undefined, gif: m.gifPlayback || undefined })
     } else if (content?.documentMessage) {
       const m = content.documentMessage
       text = m.caption ?? ''

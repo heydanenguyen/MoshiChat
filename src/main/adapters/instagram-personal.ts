@@ -300,7 +300,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       const aac = file.alternates?.find((alt) => alt.mime === 'audio/mp4')
       // Stickers: Instagram turns transparent PNGs into JPEGs, so use the copy on white.
       const opaque = file.sticker ? file.alternates?.find((alt) => alt.role === 'opaque') : undefined
-      const chosen = aac ?? opaque ?? { path: file.path, mime: file.mime }
+      // GIFs: Instagram's uploader takes MP4 but not GIF.
+      const mp4 = file.gif ? file.alternates?.find((alt) => alt.mime === 'video/mp4') : undefined
+      const chosen = aac ?? opaque ?? mp4 ?? { path: file.path, mime: file.mime }
       if (!/^(image\/(jpeg|png)|video\/(mp4|quicktime)|audio\/)/.test(chosen.mime)) {
         throw new Error(`Instagram can send JPEG/PNG photos, MP4/MOV videos and voice notes, not ${file.name}`)
       }

@@ -4,6 +4,7 @@ import { useStore, useT } from '../store'
 import { formatBytes } from '../utils'
 import { EmojiPicker } from './EmojiPicker'
 import { StickerPicker } from './StickerPicker'
+import { GifPicker } from './GifPicker'
 
 interface Props {
   disabled?: boolean
@@ -47,6 +48,8 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   const [elapsed, setElapsed] = useState(0)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [stickersOpen, setStickersOpen] = useState(false)
+  const [gifsOpen, setGifsOpen] = useState(false)
+  const sendGif = useStore((s) => s.sendGif)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const focusInput = (): void => ref.current?.focus({ preventScroll: true })
@@ -267,6 +270,30 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
                           showToast((err as Error).message, 'error')
                         }
                       })()
+                    }}
+                  />
+                )}
+              </span>
+            )}
+            {canAttach && (
+              <span className="emoji-anchor">
+                <button
+                  className={`icon-btn gif-btn ${gifsOpen ? 'active' : ''}`}
+                  onMouseDown={(e) => gifsOpen && e.stopPropagation()}
+                  onClick={() => setGifsOpen((o) => !o)}
+                  title="GIF"
+                  aria-label="GIF"
+                  disabled={disabled}
+                >
+                  <span className="gif-glyph">GIF</span>
+                </button>
+                {gifsOpen && (
+                  <GifPicker
+                    onClose={() => setGifsOpen(false)}
+                    onPick={(item) => {
+                      setGifsOpen(false)
+                      void sendGif(item)
+                      focusInput()
                     }}
                   />
                 )}

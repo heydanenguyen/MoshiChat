@@ -110,6 +110,8 @@ export interface Attachment {
   reel?: boolean
   /** Content that is gone (an expired story, a deleted post). */
   expired?: boolean
+  /** A GIF delivered as a silent looping video (Telegram animations, WhatsApp GIFs). */
+  gif?: boolean
 }
 
 /** Centered notices in a thread instead of a bubble. */
@@ -162,6 +164,36 @@ export interface OutgoingAttachment {
   alternates?: Array<{ path: string; mime: string; size: number; role?: 'opaque' }>
   /** Unison sticker id when this file is one of our stickers. */
   sticker?: string
+  /** An animated GIF from the GIF picker (alternates carry an MP4 copy). */
+  gif?: boolean
+  width?: number
+  height?: number
+}
+
+export type GifProvider = 'klipy' | 'giphy'
+
+export interface GifMedia {
+  url: string
+  width: number
+  height: number
+  size?: number
+}
+
+export interface GifItem {
+  id: string
+  title: string
+  provider: GifProvider
+  /** Small looping preview for the picker grid. */
+  preview: GifMedia
+  /** The GIF that gets sent. */
+  gif: GifMedia
+  mp4?: GifMedia
+}
+
+export interface GifPage {
+  items: GifItem[]
+  hasNext: boolean
+  page: number
 }
 
 export interface SendOptions {
@@ -398,6 +430,8 @@ export interface Settings {
   sendReadReceipts?: boolean
   /** Messages bookmarked to find again later (newest first). */
   savedMessages?: SavedMessage[]
+  /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
+  gif?: { provider: GifProvider; key: string }
 }
 
 /** A bookmarked message: enough to list it and jump back to it. */

@@ -20,7 +20,8 @@ import type {
   TagMeta,
   ContactOverride,
   CustomAccent,
-  SavedMessage
+  SavedMessage,
+  GifItem
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
@@ -95,7 +96,9 @@ interface State {
   jumpTo(messageId: string, maxPages?: number): Promise<void>
   toggleSaved(message: Message): Promise<void>
   openSaved(saved: SavedMessage): Promise<void>
-  send(text: string, files?: OutgoingAttachment[]): Promise<void>
+  /** `resolveFiles` prepares the real files after the optimistic bubble is shown (GIF downloads). */
+  send(text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
+  sendGif(item: GifItem): Promise<void>
   react(messageId: string, emoji: string): Promise<void>
   setReplyTo(message?: Message): void
   startForward(message?: Message): void
@@ -381,7 +384,7 @@ export const useStore = create<State>((set, get) => ({
     setTimeout(() => set({ highlightId: messageId }), 0)
   },
 
-  async send(text, files) {
+  async send(text, files, resolveFiles) {
     const { selectedId, messages, settings, replyTo } = get()
     const pendingFiles = files ?? get().pendingFiles
     const trimmed = text.trim()
@@ -413,9 +416,10 @@ export const useStore = create<State>((set, get) => ({
       pendingFiles: files ? get().pendingFiles : []
     })
     try {
+      const outgoing = resolveFiles ? await resolveFiles() : pendingFiles
       const sent = await window.unison.messages.send(selectedId, trimmed, {
         replyToId: replyTo?.id,
-        attachments: pendingFiles.length ? pendingFiles : undefined
+        attachments: outgoing.length ? outgoing : undefined
       })
       // Keep local previews for media the platform does not echo back.
       for (const [i, attachment] of sent.attachments.entries()) {
@@ -424,6 +428,11 @@ export const useStore = create<State>((set, get) => ({
         if (pendingFiles[i]?.sticker && attachment.kind === 'image') {
           attachment.kind = 'sticker'
           attachment.url = optimistic.attachments[i]?.url ?? attachment.url
+        }
+        // GIFs may come back as a video (Instagram, WhatsApp, Telegram): keep the looping GIF.
+        if (pendingFiles[i]?.gif && optimistic.attachments[i]?.url) {
+          attachment.kind = 'image'
+          attachment.url = optimistic.attachments[i].url
         }
       }
       const s = get()
@@ -434,6 +443,20 @@ export const useStore = create<State>((set, get) => ({
       set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], failed) ?? [] } })
       get().showToast(cleanError(err), 'error')
     }
+  },
+
+  async sendGif(item) {
+    const placeholder: OutgoingAttachment = {
+      path: '',
+      name: 'gif.gif',
+      mime: 'image/gif',
+      size: item.gif.size ?? 0,
+      preview: item.gif.url,
+      gif: true,
+      width: item.gif.width,
+      height: item.gif.height
+    }
+    await get().send('', [placeholder], async () => [await window.unison.app.gif(item)])
   },
 
   async react(messageId, emoji) {
