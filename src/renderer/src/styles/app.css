@@ -328,7 +328,7 @@ a {
   padding: 0 7px;
   border-radius: var(--radius-full);
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
   font-size: var(--text-xs);
   font-weight: 700;
   display: grid;
@@ -684,7 +684,7 @@ a {
   padding: 0 7px;
   border-radius: var(--radius-full);
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
   font-size: var(--text-xs);
   font-weight: 700;
   display: grid;
@@ -774,7 +774,7 @@ mark {
 
 .context-menu-item:hover {
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .context-menu-item.active {
@@ -1064,7 +1064,7 @@ mark {
 .bubble.out {
   background: var(--bubble-out);
   color: var(--bubble-out-text);
-  box-shadow: 0 8px 20px rgba(107, 125, 255, 0.28);
+  box-shadow: var(--bubble-out-shadow, 0 8px 20px rgba(107, 125, 255, 0.28));
 }
 
 .bubble.in.first:not(.last),
@@ -1374,7 +1374,7 @@ mark {
 
 .bubble.in .audio-play {
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .audio-track {
@@ -1557,7 +1557,7 @@ mark {
   place-items: center;
   font-size: 11px;
   font-weight: 800;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent-gradient);
 }
 .post-card-author {
@@ -2033,7 +2033,7 @@ mark {
   border-radius: var(--radius-full);
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent-gradient);
   box-shadow: 0 6px 16px rgba(91, 140, 255, 0.35);
   transform: scale(0.6);
@@ -2708,7 +2708,7 @@ mark {
   display: grid;
   place-items: center;
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
   margin-bottom: var(--space-2);
   box-shadow: 0 16px 40px rgba(107, 125, 255, 0.3);
 }
@@ -2818,11 +2818,11 @@ mark {
 
 .btn.primary {
   background: var(--accent-gradient);
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(91, 140, 255, 0.3);
+  color: var(--on-accent);
+  box-shadow: var(--accent-shadow, 0 8px 20px rgba(91, 140, 255, 0.3));
 }
 .btn.primary:hover {
-  box-shadow: 0 10px 26px rgba(91, 140, 255, 0.42);
+  box-shadow: var(--accent-shadow-strong, 0 10px 26px rgba(91, 140, 255, 0.42));
   transform: translateY(-1px);
 }
 
@@ -3250,7 +3250,7 @@ mark {
 
 .command-item.active {
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .command-item.active .command-item-sub {
@@ -3753,6 +3753,88 @@ kbd {
   --bubble-out: linear-gradient(135deg, #f7b733 0%, #fc4a1a 100%);
 }
 
+/* flat accents: solid logo colours, no gradients */
+:root[data-accent='tangerine'] {
+  --accent: #FF5B1F;
+  --accent-hover: #EC4C12;
+  --accent-2: #FF5B1F;
+  --accent-gradient: #FF5B1F;
+  --accent-soft: rgba(255, 91, 31, 0.14);
+  --accent-soft-2: rgba(255, 91, 31, 0.1);
+  --bubble-out: #FF5B1F;
+  --bubble-out-solid: #FF5B1F;
+  --bubble-out-shadow: 0 6px 16px rgba(255, 91, 31, 0.26);
+  --accent-shadow: 0 6px 16px rgba(255, 91, 31, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(255, 91, 31, 0.4);
+}
+:root[data-accent='sunflower'] {
+  --accent: #FFC21A;
+  --accent-hover: #F0B200;
+  --accent-2: #FFC21A;
+  --accent-gradient: #FFC21A;
+  --accent-soft: rgba(255, 194, 26, 0.14);
+  --accent-soft-2: rgba(255, 194, 26, 0.1);
+  --bubble-out: #FFC21A;
+  --bubble-out-solid: #FFC21A;
+  --bubble-out-shadow: 0 6px 16px rgba(255, 194, 26, 0.26);
+  --accent-shadow: 0 6px 16px rgba(255, 194, 26, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(255, 194, 26, 0.4);
+  --on-accent: #141414;
+  --bubble-out-text: #141414;
+}
+:root[data-accent='grass'] {
+  --accent: #10A862;
+  --accent-hover: #0D9656;
+  --accent-2: #10A862;
+  --accent-gradient: #10A862;
+  --accent-soft: rgba(16, 168, 98, 0.14);
+  --accent-soft-2: rgba(16, 168, 98, 0.1);
+  --bubble-out: #10A862;
+  --bubble-out-solid: #10A862;
+  --bubble-out-shadow: 0 6px 16px rgba(16, 168, 98, 0.26);
+  --accent-shadow: 0 6px 16px rgba(16, 168, 98, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(16, 168, 98, 0.4);
+}
+:root[data-accent='bubblegum'] {
+  --accent: #FF5FA8;
+  --accent-hover: #F24A96;
+  --accent-2: #FF5FA8;
+  --accent-gradient: #FF5FA8;
+  --accent-soft: rgba(255, 95, 168, 0.14);
+  --accent-soft-2: rgba(255, 95, 168, 0.1);
+  --bubble-out: #FF5FA8;
+  --bubble-out-solid: #FF5FA8;
+  --bubble-out-shadow: 0 6px 16px rgba(255, 95, 168, 0.26);
+  --accent-shadow: 0 6px 16px rgba(255, 95, 168, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(255, 95, 168, 0.4);
+}
+:root[data-accent='cobalt'] {
+  --accent: #1F6BFF;
+  --accent-hover: #1459E6;
+  --accent-2: #1F6BFF;
+  --accent-gradient: #1F6BFF;
+  --accent-soft: rgba(31, 107, 255, 0.14);
+  --accent-soft-2: rgba(31, 107, 255, 0.1);
+  --bubble-out: #1F6BFF;
+  --bubble-out-solid: #1F6BFF;
+  --bubble-out-shadow: 0 6px 16px rgba(31, 107, 255, 0.26);
+  --accent-shadow: 0 6px 16px rgba(31, 107, 255, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(31, 107, 255, 0.4);
+}
+:root[data-accent='grape'] {
+  --accent: #9B5DE5;
+  --accent-hover: #8A4AD6;
+  --accent-2: #9B5DE5;
+  --accent-gradient: #9B5DE5;
+  --accent-soft: rgba(155, 93, 229, 0.14);
+  --accent-soft-2: rgba(155, 93, 229, 0.1);
+  --bubble-out: #9B5DE5;
+  --bubble-out-solid: #9B5DE5;
+  --bubble-out-shadow: 0 6px 16px rgba(155, 93, 229, 0.26);
+  --accent-shadow: 0 6px 16px rgba(155, 93, 229, 0.3);
+  --accent-shadow-strong: 0 9px 22px rgba(155, 93, 229, 0.4);
+}
+
 /* ================================================================== font presets */
 
 :root[data-font='inter'] {
@@ -3849,7 +3931,7 @@ kbd {
   display: grid;
   place-items: center;
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent);
   flex-shrink: 0;
 }
 
@@ -4748,4 +4830,54 @@ kbd {
 .logo-option:not(.active) .buddy-eyes,
 .logo-option:not(.active) .buddy-pupils {
   animation: none;
+}
+
+/* ================================================================== accent groups & flat messages */
+
+.accent-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 var(--space-4) 12px;
+}
+.accent-group-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.accent-dot.flat {
+  border-radius: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 2px var(--bg-elevated);
+}
+.accent-dot.flat.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--dot);
+}
+.accent-dot.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--dot, var(--accent));
+}
+
+/* "Message shadows" off: everything in the thread sits flat */
+:root[data-message-shadows='off'] .bubble,
+:root[data-message-shadows='off'] .bubble.in,
+:root[data-message-shadows='off'] .bubble.out,
+:root[data-message-shadows='off'] .typing-bubble,
+:root[data-message-shadows='off'] .story-card,
+:root[data-message-shadows='off'] .story-card:not(:disabled):hover,
+:root[data-message-shadows='off'] .reaction-chip,
+:root[data-message-shadows='off'] .day-sep,
+:root[data-message-shadows='off'] .system-row {
+  box-shadow: none;
+}
+/* the author dot on a shared post must stand out from an outgoing (accent) bubble */
+.bubble.out .post-card-avatar {
+  background: rgba(255, 255, 255, 0.28);
+  color: var(--bubble-out-text);
 }

@@ -301,7 +301,7 @@ export type ThemePreference = 'system' | 'light' | 'dark'
 export type Language = 'vi' | 'en'
 
 export type MeshId = 'sunrise' | 'ocean' | 'candy' | 'forest' | 'lavender' | 'mono'
-export type AccentId = 'ocean' | 'violet' | 'rose' | 'coral' | 'mint' | 'sun'
+export type AccentId = 'ocean' | 'violet' | 'rose' | 'coral' | 'mint' | 'sun' | 'tangerine' | 'sunflower' | 'grass' | 'bubblegum' | 'cobalt' | 'grape'
 export type FontId = 'jakarta' | 'inter' | 'nunito' | 'system'
 
 export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatch: string[] }> = [
@@ -313,13 +313,20 @@ export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatc
   { id: 'mono', name: { vi: 'Tối giản', en: 'Mono' }, swatch: ['#eceef5', '#e3e6ef', '#f2f3f8', '#dfe3ee'] }
 ]
 
-export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string }> = [
+/** `flat` accents are single solid colours taken from the logo characters (no gradients anywhere). */
+export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string; flat?: boolean }> = [
   { id: 'ocean', name: { vi: 'Xanh biển', en: 'Ocean' }, from: '#5b8cff', to: '#8a6bff' },
   { id: 'violet', name: { vi: 'Tím', en: 'Violet' }, from: '#8b5cf6', to: '#d946ef' },
   { id: 'rose', name: { vi: 'Hồng', en: 'Rose' }, from: '#f45d8a', to: '#ff8a5b' },
   { id: 'coral', name: { vi: 'San hô', en: 'Coral' }, from: '#ff7a59', to: '#ffb347' },
   { id: 'mint', name: { vi: 'Bạc hà', en: 'Mint' }, from: '#22c1a3', to: '#4fa3ff' },
-  { id: 'sun', name: { vi: 'Nắng', en: 'Sun' }, from: '#f7b733', to: '#fc4a1a' }
+  { id: 'sun', name: { vi: 'Nắng', en: 'Sun' }, from: '#f7b733', to: '#fc4a1a' },
+  { id: 'tangerine', name: { vi: 'Quýt', en: 'Tangerine' }, from: '#FF5B1F', to: '#FF5B1F', flat: true },
+  { id: 'sunflower', name: { vi: 'Hướng dương', en: 'Sunflower' }, from: '#FFC21A', to: '#FFC21A', flat: true },
+  { id: 'grass', name: { vi: 'Cỏ non', en: 'Grass' }, from: '#10A862', to: '#10A862', flat: true },
+  { id: 'bubblegum', name: { vi: 'Kẹo hồng', en: 'Bubblegum' }, from: '#FF5FA8', to: '#FF5FA8', flat: true },
+  { id: 'cobalt', name: { vi: 'Xanh cobalt', en: 'Cobalt' }, from: '#1F6BFF', to: '#1F6BFF', flat: true },
+  { id: 'grape', name: { vi: 'Nho', en: 'Grape' }, from: '#9B5DE5', to: '#9B5DE5', flat: true }
 ]
 
 export const FONTS: Array<{ id: FontId; name: string; family: string }> = [
@@ -368,6 +375,8 @@ export interface Settings {
   pins?: Record<string, boolean>
   /** Logo character used in the app and as the window icon. */
   logo?: LogoId
+  /** Soft drop shadows under message bubbles (off = completely flat). */
+  messageShadows?: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
