@@ -14,6 +14,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
+import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
 import { NewChatSheet } from './components/NewChatSheet'
 
 export default function App(): JSX.Element {
@@ -34,6 +35,7 @@ export default function App(): JSX.Element {
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
   const mesh = useStore((s) => s.settings.mesh)
   const accent = useStore((s) => s.settings.accent)
+  const customAccents = useStore((s) => s.settings.customAccents)
   const font = useStore((s) => s.settings.font)
   const messageShadows = useStore((s) => s.settings.messageShadows)
 
@@ -68,10 +70,19 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     document.documentElement.dataset.mesh = mesh
-    document.documentElement.dataset.accent = accent
+    // Custom accents set their variables inline on :root; presets use the [data-accent] rules.
+    const root = document.documentElement
+    const custom = accent.startsWith('custom-') ? customAccents?.find((a) => a.id === accent) : undefined
+    for (const name of ACCENT_VAR_NAMES) root.style.removeProperty(name)
+    if (custom) {
+      root.dataset.accent = 'custom'
+      for (const [name, value] of Object.entries(accentVars(custom))) root.style.setProperty(name, value)
+    } else {
+      root.dataset.accent = accent.startsWith('custom-') ? 'ocean' : accent
+    }
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
-  }, [mesh, accent, font, messageShadows])
+  }, [mesh, accent, customAccents, font, messageShadows])
 
   useEffect(() => {
     void init()
