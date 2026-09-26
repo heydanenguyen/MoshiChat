@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, Bookmark, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagChip } from './Tag'
@@ -31,7 +31,6 @@ export function Sidebar(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
   const conversations = useStore((s) => s.conversations)
-  const savedCount = useStore((s) => s.settings.savedMessages?.length ?? 0)
   const { list: tagList } = useTagDefs()
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
@@ -120,13 +119,6 @@ export function Sidebar(): JSX.Element {
             {!collapsed && <span className="nav-item-label">{t('allInboxes')}</span>}
             {!collapsed && badge(unread.total)}
             {collapsed && unread.total > 0 && <span className="rail-dot" />}
-          </button>
-          <button className="nav-item" onClick={() => openSheet({ kind: 'saved' })} title={t('savedMessages')}>
-            <span className="nav-item-icon tile saved-tile">
-              <Bookmark size={14} strokeWidth={2.4} />
-            </span>
-            {!collapsed && <span className="nav-item-label">{t('savedMessages')}</span>}
-            {!collapsed && savedCount > 0 && <span className="nav-badge subtle">{savedCount}</span>}
           </button>
           {platforms.map((platform) => {
             const target: MuteTarget = { kind: 'platforms', id: platform }

@@ -36,9 +36,8 @@ export type Sheet =
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
   | { kind: 'new-chat' }
-  | { kind: 'saved' }
 
-export type DetailsTab = 'info' | 'search' | 'media' | 'links' | 'files'
+export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 
 export interface Toast {
   id: number
@@ -361,7 +360,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async openSaved(saved) {
-    get().select(saved.conversationId)
+    // Already open (clicked from its Moments tab): stay on that tab and just jump.
+    if (get().selectedId !== saved.conversationId) get().select(saved.conversationId)
     // Wait for the first page, then walk back until the message is loaded and highlight it.
     for (let i = 0; i < 50 && !get().messages[saved.conversationId]; i++) await new Promise((r) => setTimeout(r, 100))
     await get().jumpTo(saved.messageId, 40)

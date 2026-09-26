@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { WeatherInfo } from '@shared/types'
 import { useStore, useT, useUnreadCounts } from '../store'
 import { isMac } from '../utils'
-import { greetingFor, weatherLabel } from '../greetings'
+import { firstNameOf, greetingFor, weatherLabel } from '../greetings'
 
 const ROTATE_MS = 90_000
 
@@ -84,17 +84,7 @@ function Greeting(): JSX.Element | null {
     }
   }, [enabled])
 
-  // The person's first name, preferring a real account over sample data.
-  const firstName = useMemo(() => {
-    const list = Object.values(accounts)
-    const real = list.find((a) => !a.demo && a.displayName) ?? list[0]
-    const name = real?.displayName?.trim() ?? ''
-    if (!name) return ''
-    const parts = name.split(/\s+/)
-    // Vietnamese names put the given name last; western ones first.
-    const vietnamese = /[ăâđêôơưàáảãạèéẻẽẹìíỉĩịòóỏõọùúủũụỳýỷỹỵ]/i.test(name) || parts.length >= 3
-    return vietnamese ? parts[parts.length - 1] : parts[0]
-  }, [accounts])
+  const firstName = useMemo(() => firstNameOf(Object.values(accounts)), [accounts])
 
   const line = useMemo(() => (enabled ? greetingFor({ language, name: firstName, weather, unread: unread.total, tick }) : undefined), [enabled, language, firstName, weather, unread.total, tick])
 

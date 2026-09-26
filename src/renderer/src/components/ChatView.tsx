@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BellOff, Bookmark, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
+import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus, Sparkles } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
@@ -8,6 +8,7 @@ import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
+import { BuddyLoader } from './BuddyLoader'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -134,10 +135,10 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
 
       <div className="chat-scroll scroll" ref={scrollRef}>
         <div className="chat-scroll-inner">
-          {loading && !messages && <div className="chat-loading">…</div>}
+          {loading && !messages && <BuddyLoader size={56} label={t('loadingMessages')} className="chat-loading" />}
           {hasMore && messages && (
             <button className="load-more" onClick={() => loadMore(conversation.id)} disabled={loading}>
-              {t('loadMore')}
+              {loading ? <BuddyLoader size={20} inline /> : t('loadMore')}
             </button>
           )}
           {sections.map((section) => (
@@ -463,7 +464,7 @@ function Bubble({
             <Forward size={15} strokeWidth={2} />
           </button>
           <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
-            <Bookmark size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+            <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
           </button>
           {picker && (
             <div className="emoji-picker">
@@ -484,7 +485,7 @@ function Bubble({
         </div>
       )}
       <span className="bubble-time">
-        {saved && <Bookmark className="saved-mark" size={11} strokeWidth={2.4} fill="currentColor" />}
+        {saved && <Sparkles className="saved-mark" size={11} strokeWidth={2.4} fill="currentColor" />}
         {formatTime(message.sentAt, language)}
       </span>
     </div>

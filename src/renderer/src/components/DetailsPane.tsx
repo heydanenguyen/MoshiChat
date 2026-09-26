@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bell, BellOff, Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { Bell, BellOff, Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
@@ -9,10 +9,13 @@ import { isPinned, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { BuddyLoader } from './BuddyLoader'
+import { MomentsPreviewCard, MomentsTab } from './Moments'
 import { Highlight } from './ConversationList'
 
-const TABS: Array<{ id: DetailsTab; icon: JSX.Element; label: 'tabInfo' | 'tabSearch' | 'tabMedia' | 'tabLinks' | 'tabFiles' }> = [
+const TABS: Array<{ id: DetailsTab; icon: JSX.Element; label: 'tabInfo' | 'tabMoments' | 'tabSearch' | 'tabMedia' | 'tabLinks' | 'tabFiles' }> = [
   { id: 'info', icon: <Info size={16} strokeWidth={2.2} />, label: 'tabInfo' },
+  { id: 'moments', icon: <Sparkles size={16} strokeWidth={2.2} />, label: 'tabMoments' },
   { id: 'search', icon: <Search size={16} strokeWidth={2.2} />, label: 'tabSearch' },
   { id: 'media', icon: <Image size={16} strokeWidth={2.2} />, label: 'tabMedia' },
   { id: 'links', icon: <Link2 size={16} strokeWidth={2.2} />, label: 'tabLinks' },
@@ -46,6 +49,7 @@ export function DetailsPane(): JSX.Element | null {
       </div>
       <div className="details-body scroll">
         {tab === 'info' && <InfoTab conversationId={conversation.id} />}
+        {tab === 'moments' && <MomentsTab conversationId={conversation.id} />}
         {tab === 'search' && <SearchTab conversationId={conversation.id} />}
         {(tab === 'media' || tab === 'links' || tab === 'files') && <SharedTab conversationId={conversation.id} kind={tab} />}
       </div>
@@ -142,11 +146,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           </span>
           {conversation.updatedAt > 0 && <ActivityChip at={conversation.updatedAt} />}
         </div>
-        {profile === undefined && (
-          <div className="progress-row" style={{ marginTop: 10 }}>
-            <span className="spinner" />
-          </div>
-        )}
+        {profile === undefined && <BuddyLoader size={26} className="details-hero-loader" />}
       </div>
 
       <div className="quick-actions">
@@ -172,6 +172,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         </button>
       </div>
       {mutedByRule && <div className="field-hint centered details-hint">{t('mutedByRule')}</div>}
+
+      <MomentsPreviewCard conversationId={conversationId} />
 
       {customizing && (
         <div className="details-card plain">
@@ -331,11 +333,7 @@ function SearchTab({ conversationId }: { conversationId: string }): JSX.Element 
           )}
         </div>
       </div>
-      {busy && (
-        <div className="progress-row" style={{ justifyContent: 'center', padding: 12 }}>
-          <span className="spinner" />
-        </div>
-      )}
+      {busy && <BuddyLoader size={34} className="details-loader" />}
       {!busy && query.trim().length >= 2 && results.length === 0 && <div className="details-empty">{t('noResults')}</div>}
       {results.map((m) => (
         <button key={m.id} className="result-item" onClick={() => void jumpTo(m.id)} title={t('jumpToMessage')}>
@@ -396,9 +394,7 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
     return (
       <>
         {header}
-        <div className="progress-row" style={{ justifyContent: 'center', padding: 12 }}>
-          <span className="spinner" />
-        </div>
+        <BuddyLoader size={40} label={t('loading')} className="details-loader" />
       </>
     )
   }
