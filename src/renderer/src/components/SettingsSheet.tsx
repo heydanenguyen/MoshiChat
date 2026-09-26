@@ -1,6 +1,6 @@
-import { BellOff, Plus, RefreshCw, Trash2, X } from 'lucide-react'
-import type { Language, ThemePreference } from '@shared/types'
-import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER } from '@shared/types'
+import { BellOff, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import type { Language, TextSize, ThemePreference } from '@shared/types'
+import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
@@ -145,6 +145,43 @@ export function SettingsSheet(): JSX.Element {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('textSize')}</div>
+                  <div className="settings-row-sub">{t('textSizeHint')}</div>
+                </div>
+                <div className="segmented text-size-picker" role="radiogroup" aria-label={t('textSize')}>
+                  {(['sm', 'md', 'lg', 'xl'] as TextSize[]).map((size) => (
+                    <button
+                      key={size}
+                      role="radio"
+                      aria-checked={(settings.textSize ?? 'md') === size}
+                      className={`size-${size} ${(settings.textSize ?? 'md') === size ? 'active' : ''}`}
+                      onClick={() => void setSettings({ textSize: size })}
+                      title={t(`textSize_${size}`)}
+                    >
+                      Aa
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('zoom')}</div>
+                  <div className="settings-row-sub">{t('zoomHint')}</div>
+                </div>
+                <div className="zoom-stepper">
+                  <button className="icon-btn" onClick={() => void setSettings({ zoom: stepZoom(settings.zoom, -1) })} disabled={clampZoom(settings.zoom) <= ZOOM_STEPS[0]} aria-label={t('zoomOut')}>
+                    <Minus size={15} strokeWidth={2.6} />
+                  </button>
+                  <button className="zoom-value" onClick={() => void setSettings({ zoom: 1 })} title={t('zoomReset')}>
+                    {Math.round(clampZoom(settings.zoom) * 100)}%
+                  </button>
+                  <button className="icon-btn" onClick={() => void setSettings({ zoom: stepZoom(settings.zoom, 1) })} disabled={clampZoom(settings.zoom) >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} aria-label={t('zoomIn')}>
+                    <Plus size={15} strokeWidth={2.6} />
+                  </button>
                 </div>
               </div>
               <div className="settings-row">

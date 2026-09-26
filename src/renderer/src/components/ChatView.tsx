@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus, Sparkles } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
@@ -329,12 +329,12 @@ function albumable(m: Message): boolean {
   )
 }
 
-/** Consecutive photos/videos sent within two minutes become one album (like Instagram / Messenger). */
+/** Consecutive photos/videos sent within three minutes of each other become one album (like Instagram / Messenger). */
 function groupItems(messages: Message[]): GroupItem[] {
   const items: GroupItem[] = []
   for (const m of messages) {
     const last = items[items.length - 1]
-    if (albumable(m) && last?.type === 'album' && m.sentAt - last.messages[last.messages.length - 1].sentAt < 120_000) {
+    if (albumable(m) && last?.type === 'album' && m.sentAt - last.messages[last.messages.length - 1].sentAt < 180_000) {
       last.messages.push(m)
       continue
     }
@@ -345,37 +345,49 @@ function groupItems(messages: Message[]): GroupItem[] {
 }
 
 function Album({ messages, outgoing, highlightId, language }: { messages: Message[]; outgoing: boolean; highlightId?: string; language: 'vi' | 'en' }): JSX.Element {
-  const openLightbox = useStore((s) => s.openLightbox)
-  const shown = messages.slice(0, 9)
-  const extra = messages.length - shown.length
-  const cols = messages.length === 2 || messages.length === 4 ? 2 : 3
   return (
     <div className={`bubble-row album-row ${messages.some((m) => m.id === highlightId) ? 'highlight' : ''}`} data-message-id={messages[0].id}>
-      <div className={`album ${outgoing ? 'out' : 'in'} cols-${cols}`}>
-        {shown.map((m, i) => {
-          const a = m.attachments[0]
-          const src = a.thumbnailUrl ?? a.url
-          return (
-            <button
-              key={m.id}
-              className="album-tile"
-              data-message-id={m.id}
-              onClick={() =>
-                a.kind === 'video' && a.url ? openLightbox({ url: a.url, video: true, poster: a.thumbnailUrl }) : openLightbox({ url: a.url ?? src ?? '' })
-              }
-            >
-              <img src={src} alt="" draggable={false} loading="lazy" />
-              {a.kind === 'video' && (
-                <span className="album-play">
-                  <Play size={16} fill="currentColor" />
-                </span>
-              )}
-              {i === shown.length - 1 && extra > 0 && <span className="album-more">+{extra}</span>}
-            </button>
-          )
-        })}
-      </div>
+      <MediaGrid tiles={messages.map((m) => ({ id: m.id, messageId: m.id, attachment: m.attachments[0] }))} className={outgoing ? 'out' : 'in'} />
       <span className="bubble-time">{formatTime(messages[messages.length - 1].sentAt, language)}</span>
+    </div>
+  )
+}
+
+type Tile = { id: string; messageId: string; attachment: Attachment }
+
+/** Photos/videos with a playable or viewable source. */
+function gridable(a: Attachment): boolean {
+  return (a.kind === 'image' || a.kind === 'video') && !a.expired && !!(a.thumbnailUrl || a.url)
+}
+
+/**
+ * Several photos/videos as one tidy grid (like Messenger / iMessage): 2 side by side, 3 as one big
+ * plus two, 4 as 2×2, 5 as 2 + 3, more in rows of three (the 9th tile shows "+N").
+ * Clicking opens a gallery you can arrow through.
+ */
+function MediaGrid({ tiles, className = '' }: { tiles: Tile[]; className?: string }): JSX.Element {
+  const openLightbox = useStore((s) => s.openLightbox)
+  const shown = tiles.slice(0, 9)
+  const extra = tiles.length - shown.length
+  const layout = tiles.length >= 6 ? 'many' : `n${tiles.length}`
+  const gallery = tiles.map(({ attachment: a }) => ({ url: (a.kind === 'video' ? a.url : (a.url ?? a.thumbnailUrl)) ?? a.thumbnailUrl ?? '', video: a.kind === 'video' && !!a.url, poster: a.thumbnailUrl }))
+  return (
+    <div className={`album grid-${layout} ${className}`}>
+      {shown.map((tile, i) => {
+        const a = tile.attachment
+        const src = a.thumbnailUrl ?? a.url
+        return (
+          <button key={tile.id} className="album-tile" data-message-id={tile.messageId} onClick={() => openLightbox({ ...gallery[i], gallery, index: i })}>
+            <img src={src} alt="" draggable={false} loading="lazy" />
+            {a.kind === 'video' && (
+              <span className="album-play">
+                <Play size={16} fill="currentColor" />
+              </span>
+            )}
+            {i === shown.length - 1 && extra > 0 && <span className="album-more">+{extra}</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -407,6 +419,9 @@ function Bubble({
   const story = message.attachments.find((a) => a.kind === 'story')
   const inline = message.attachments.filter((a) => a.kind !== 'story')
   const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')
+  // Several photos in one message (Instagram, Messenger, Telegram albums) become a grid.
+  const grid = inline.filter(gridable)
+  const gridded = grid.length > 1 ? new Set(grid.map((a) => a.id)) : undefined
   // A story reaction is just the emoji on the story card; a share without words needs no bubble either.
   const bubbleless = !!story && (story.label === 'story_reaction' || !message.text.trim()) && inline.length === 0
   // Emoji-only messages render large without a bubble (like Instagram / iMessage).
@@ -415,6 +430,8 @@ function Bubble({
   if (jumbo) classes.push('jumbo', `e${jumbo}`)
   if (sticker) classes.push('sticker')
   else if (media) classes.push('media')
+  // Only photos, no words: the grid stands on its own like an album (no bubble frame).
+  if (gridded && !sticker && !message.text.trim() && !message.replyTo && inline.length === grid.length) classes.push('grid-only')
   if (message.status === 'failed') classes.push('failed')
   const mine = message.reactions.find((r) => r.byMe)?.emoji
 
@@ -441,7 +458,11 @@ function Bubble({
               </div>
             )}
             {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
-            {!sticker && inline.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} platform={platform} />)}
+            {!sticker && gridded && <MediaGrid tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
+            {!sticker &&
+              inline
+                .filter((attachment) => !gridded?.has(attachment.id))
+                .map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} platform={platform} />)}
             {message.text && (media ? <div className="bubble-caption"><Linkify text={message.text} /></div> : <Linkify text={message.text} />)}
             {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
             {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
@@ -517,7 +538,7 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
           alt={t('photo')}
           draggable={false}
           onClick={() => void viewImage()}
-          style={attachment.width && attachment.height ? { aspectRatio: `${attachment.width} / ${attachment.height}` } : undefined}
+          style={attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined}
         />
       ) : (
         <div className="attachment-image placeholder">{t('photo')}</div>

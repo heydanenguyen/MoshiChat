@@ -56,6 +56,9 @@ export interface Lightbox {
   /** The original on the platform (posts, reels, stories). */
   externalUrl?: string
   externalLabel?: string
+  /** Photos/videos of an album: arrows and ←/→ move through them. */
+  gallery?: Array<{ url: string; video?: boolean; poster?: string }>
+  index?: number
 }
 
 interface State {
