@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto'
 import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promises'
 import { join } from 'path'
-import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
+import { mapIgItem, type IgItem } from './instagram-items'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { DirectComposer } from '../direct-composer'
@@ -21,24 +22,6 @@ interface IgUser {
   full_name?: string
   profile_pic_url?: string
   is_verified?: boolean
-}
-
-interface IgItem {
-  item_id: string
-  user_id: number | string
-  timestamp: string | number
-  item_type: string
-  text?: string
-  link?: { text?: string; link_context?: { link_url?: string; link_title?: string } }
-  media?: { image_versions2?: { candidates?: Array<{ url: string; width?: number; height?: number }> }; video_versions?: Array<{ url: string }> }
-  visual_media?: { media?: IgItem['media'] }
-  animated_media?: { images?: { fixed_height?: { url?: string } } }
-  voice_media?: { media?: { audio?: { audio_src?: string; duration?: number } } }
-  media_share?: { code?: string; caption?: { text?: string }; image_versions2?: { candidates?: Array<{ url: string }> } }
-  clip?: { clip?: { code?: string; image_versions2?: { candidates?: Array<{ url: string }> } } }
-  reel_share?: { text?: string }
-  reactions?: { emojis?: Array<{ emoji: string; sender_id: number | string }> }
-  replied_to_message?: { item_id?: string; text?: string; user_id?: number | string }
 }
 
 interface IgThread {
@@ -142,7 +125,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     private secret: InstagramPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: false } }
+    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true } }
   }
 
   async connect(): Promise<void> {
@@ -215,7 +198,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const collected: Message[] = []
     for (let i = 0; i < Math.ceil(limit / PAGE_SIZE); i++) {
       const page = await this.page(threadId, cursor)
-      collected.push(...page.items.map((item) => this.toMessage(item, id)))
+      collected.push(...page.items.filter((item) => this.visible(item)).map((item) => this.toMessage(item, id)))
       cursor = page.hasOlder ? page.cursor : undefined
       if (!cursor) break
     }
@@ -240,7 +223,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   private async send(id: string, text: string, options: SendOptions): Promise<Message> {
-    if (options.attachments?.length) throw new Error('Personal Instagram supports text messages only for now')
+    if (options.attachments?.length) return this.sendAttachments(id, text, options)
     if (!text.trim()) throw new Error('Message is empty')
     const external = externalIdOf(id)
     const threadId = this.threadIdFor(id)
@@ -281,6 +264,48 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       status: 'sent'
     }
     this.remember(id, [message])
+    return message
+  }
+
+  /**
+   * Photos, videos and voice notes go through Instagram's own picker, then any text as its own
+   * message (Instagram has no captions in DMs). The returned message is read back from the thread.
+   */
+  private async sendAttachments(id: string, text: string, options: SendOptions): Promise<Message> {
+    const threadId = this.threadIdFor(id)
+    if (!threadId) throw new Error('Send a text message first to start this Instagram conversation')
+    const files = (options.attachments ?? []).map((file) => {
+      // Voice notes are recorded as Opus and AAC together; Instagram plays AAC (.m4a) natively.
+      const aac = file.alternates?.find((alt) => alt.mime === 'audio/mp4')
+      const chosen = aac ?? { path: file.path, mime: file.mime }
+      if (!/^(image\/(jpeg|png)|video\/(mp4|quicktime)|audio\/)/.test(chosen.mime)) {
+        throw new Error(`Instagram can send JPEG/PNG photos, MP4/MOV videos and voice notes, not ${file.name}`)
+      }
+      return chosen.path
+    })
+    const url = `https://www.instagram.com/direct/t/${threadId}/`
+    const sentAt = Date.now()
+    await this.composer.sendFiles(url, files)
+    if (text.trim()) await this.composer.send(url, text)
+
+    // Read back what Instagram stored (uploads can take a few seconds to show up).
+    let sent: IgItem | undefined
+    for (let attempt = 0; attempt < 12 && !sent; attempt++) {
+      await sleep(attempt ? 2500 : 1200)
+      try {
+        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?limit=8`, { headers: APP_HEADERS })
+        sent = (res.thread.items ?? [])
+          .filter((item) => String(item.user_id) === this.mePk && Number(item.timestamp) / 1000 >= sentAt - 5000 && item.item_type !== 'text')
+          .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))[0]
+      } catch {
+        /* keep waiting */
+      }
+    }
+    if (!sent) throw new Error('Instagram did not confirm the upload yet. Check the conversation before sending again')
+    const message = this.toMessage(sent, id)
+    this.remember(id, [message])
+    // Text sent right after shows up through the next refresh.
+    this.onRealtimeActivity()
     return message
   }
 
@@ -589,7 +614,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         if (!known || !lastId || known.some((m) => m.id === lastId)) continue
         const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
         const fresh = (res.thread.items ?? [])
-          .filter((item) => !known.some((m) => m.id === item.item_id))
+          .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
           .map((item) => this.toMessage(item, id))
           .sort((a, b) => a.sentAt - b.sentAt)
         this.remember(id, fresh)
@@ -724,29 +749,39 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       unreadCount: unread,
       muted: !!thread.muted,
       lastMessage: last
-        ? { id: last.item_id, text: itemText(last), senderName: lastMine ? this.account.displayName : (others[0]?.full_name || others[0]?.username || ''), isOutgoing: lastMine, sentAt: lastAt }
+        ? { id: last.item_id, ...this.previewOf(last), senderName: lastMine ? this.account.displayName : (others[0]?.full_name || others[0]?.username || ''), isOutgoing: lastMine, sentAt: lastAt }
         : undefined,
       updatedAt: lastAt || Date.now()
     }
   }
 
+  private mapContext = {
+    mePk: '',
+    nameOf: (pk: string): string | undefined => {
+      const user = this.users.get(pk)
+      return user?.full_name || user?.username
+    }
+  }
+
+  private mapped(item: IgItem): ReturnType<typeof mapIgItem> {
+    this.mapContext.mePk = this.mePk
+    return mapIgItem(item, this.mapContext)
+  }
+
+  /** Instagram's own bookkeeping rows (reaction logs, "call started") never show as messages. */
+  private visible(item: IgItem): boolean {
+    return !this.mapped(item).hidden
+  }
+
+  private previewOf(item: IgItem): { text: string; kind?: PreviewKind } {
+    const mapped = this.mapped(item)
+    return { text: mapped.text, kind: mapped.preview }
+  }
+
   private toMessage(item: IgItem, id: string): Message {
     const isOutgoing = String(item.user_id) === this.mePk
     const sender = this.users.get(String(item.user_id))
-    const attachments: Attachment[] = []
-    const media = item.media ?? item.visual_media?.media
-    const candidate = media?.image_versions2?.candidates?.[0]
-    if (candidate) {
-      attachments.push({ id: `${item.item_id}-m`, kind: media?.video_versions ? 'video' : 'image', url: media?.video_versions?.[0]?.url ?? candidate.url, thumbnailUrl: candidate.url, width: candidate.width, height: candidate.height })
-    }
-    if (item.animated_media?.images?.fixed_height?.url) attachments.push({ id: `${item.item_id}-g`, kind: 'image', url: item.animated_media.images.fixed_height.url })
-    const audio = item.voice_media?.media?.audio
-    if (audio?.audio_src) attachments.push({ id: `${item.item_id}-v`, kind: 'audio', url: audio.audio_src, name: 'Voice message', duration: audio.duration ? audio.duration / 1000 : undefined })
-    if (item.link?.link_context?.link_url) attachments.push({ id: `${item.item_id}-l`, kind: 'link', url: item.link.link_context.link_url, name: item.link.link_context.link_title })
-    const share = item.media_share ?? item.clip?.clip
-    if (share?.code) {
-      attachments.push({ id: `${item.item_id}-s`, kind: 'link', url: `https://www.instagram.com/p/${share.code}/`, name: (item.media_share?.caption?.text ?? 'Instagram post').slice(0, 80), thumbnailUrl: share.image_versions2?.candidates?.[0]?.url })
-    }
+    const mapped = this.mapped(item)
     const reactions = new Map<string, { emoji: string; count: number; byMe: boolean }>()
     for (const r of item.reactions?.emojis ?? []) {
       const entry = reactions.get(r.emoji) ?? { emoji: r.emoji, count: 0, byMe: false }
@@ -760,8 +795,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       senderId: String(item.user_id),
       senderName: isOutgoing ? this.account.displayName : (sender?.full_name || sender?.username || 'Instagram'),
       senderAvatarUrl: isOutgoing ? this.account.avatarUrl : sender?.profile_pic_url,
-      text: itemText(item),
-      attachments,
+      text: mapped.text,
+      attachments: mapped.attachments,
+      system: mapped.system,
       reactions: [...reactions.values()],
       sentAt: Number(item.timestamp) / 1000,
       isOutgoing,
@@ -796,32 +832,6 @@ function sessionMessage(err: SessionExpiredError): string {
   return err.reason === 'checkpoint'
     ? 'Instagram wants a security check. Sign in again to confirm it is you.'
     : 'Instagram signed this session out. Sign in again to keep messaging.'
-}
-
-function itemText(item: IgItem): string {
-  if (item.text) return item.text
-  if (item.link?.text) return item.link.text
-  switch (item.item_type) {
-    case 'like':
-      return '❤️'
-    case 'media':
-    case 'raven_media':
-    case 'visual_media':
-      return ''
-    case 'voice_media':
-      return ''
-    case 'media_share':
-    case 'clip':
-      return ''
-    case 'story_share':
-      return 'Shared a story'
-    case 'reel_share':
-      return item.reel_share?.text ?? 'Replied to a story'
-    case 'action_log':
-      return ''
-    default:
-      return ''
-  }
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

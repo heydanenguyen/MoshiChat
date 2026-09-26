@@ -6,7 +6,7 @@ import { LogLevel } from 'telegram/extensions/Logger'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery } from './types'
+import { conversationId, externalIdOf, matchesQuery, previewKindOf } from './types'
 
 export interface TelegramSecret {
   apiId: number
@@ -115,7 +115,8 @@ export class TelegramAdapter implements PlatformAdapter {
           text: last.text || describeAttachments(last.attachments),
           senderName: last.senderName,
           isOutgoing: last.isOutgoing,
-          sentAt: last.sentAt
+          sentAt: last.sentAt,
+          kind: previewKindOf(last)
         },
         updatedAt: (dialog.date ?? 0) * 1000
       }

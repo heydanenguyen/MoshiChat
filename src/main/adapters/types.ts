@@ -1,4 +1,4 @@
-import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 
 /** Services the manager hands to every adapter. */
 export interface AdapterContext {
@@ -128,12 +128,43 @@ export const describeAttachments = (attachments: Message['attachments']): string
   }
 }
 
+/** What the conversation list should label a message as, when it is not plain text. */
+export const previewKindOf = (message: Message): PreviewKind | undefined => {
+  if (message.system) {
+    if (message.system.kind === 'call' || message.system.kind === 'missed_call') return 'call'
+    if (message.system.kind === 'unavailable') return 'unavailable'
+    return undefined
+  }
+  const first = message.attachments[0]
+  switch (first?.kind) {
+    case undefined:
+      return undefined
+    case 'image':
+      return first.name === 'GIF' ? 'gif' : 'photo'
+    case 'video':
+      return 'video'
+    case 'audio':
+      return 'voice'
+    case 'sticker':
+      return 'sticker'
+    case 'link':
+      return message.text ? undefined : 'link'
+    case 'post':
+      return first.reel ? 'reel' : 'post'
+    case 'story':
+      return first.label ?? 'story_share'
+    default:
+      return 'file'
+  }
+}
+
 export const previewOf = (message: Message): Conversation['lastMessage'] => ({
   id: message.id,
   text: message.text || describeAttachments(message.attachments),
   senderName: message.senderName,
   isOutgoing: message.isOutgoing,
-  sentAt: message.sentAt
+  sentAt: message.sentAt,
+  kind: previewKindOf(message)
 })
 
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi
@@ -141,7 +172,7 @@ const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi
 /** URLs mentioned in the text plus link attachments. */
 export const linksOf = (message: Message): string[] => {
   const found = new Set<string>()
-  for (const a of message.attachments) if (a.kind === 'link' && a.url) found.add(a.url)
+  for (const a of message.attachments) if ((a.kind === 'link' || a.kind === 'post') && a.url) found.add(a.url)
   for (const m of message.text.matchAll(URL_RE)) found.add(m[0])
   return [...found]
 }

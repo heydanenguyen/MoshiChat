@@ -79,7 +79,7 @@ export interface UnisonBridge {
     /** Resolve a dropped or pasted File to an OutgoingAttachment (the path is only known in the preload). */
     describeFile(file: File): OutgoingAttachment
     /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
-    saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<OutgoingAttachment>
+    saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
     /** Local weather for the greeting line; undefined when offline. */
     weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform

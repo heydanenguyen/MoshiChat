@@ -102,6 +102,8 @@ export interface MessageGroup {
   senderAvatarUrl?: string
   isOutgoing: boolean
   messages: Message[]
+  /** A centered notice (call, event) rather than a sender's run of bubbles. */
+  system?: boolean
 }
 
 export interface DaySection {
@@ -123,7 +125,11 @@ export function sectionize(messages: Message[]): DaySection[] {
     }
     let group = section.groups[section.groups.length - 1]
     const last = group?.messages[group.messages.length - 1]
-    if (!group || group.senderId !== message.senderId || !last || message.sentAt - last.sentAt > GROUP_WINDOW) {
+    if (message.system) {
+      section.groups.push({ key: message.id, senderId: message.senderId, senderName: message.senderName, isOutgoing: message.isOutgoing, messages: [message], system: true })
+      continue
+    }
+    if (!group || group.system || group.senderId !== message.senderId || !last || message.sentAt - last.sentAt > GROUP_WINDOW) {
       group = {
         key: message.id,
         senderId: message.senderId,

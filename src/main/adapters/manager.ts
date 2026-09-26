@@ -140,6 +140,11 @@ export class AccountManager {
   }
 
   /** Fresh cookies for an existing personal Facebook/Instagram account, then reconnect. */
+  /** The cookies stored for a web-session account (the ones that stopped working). */
+  storedCookies(accountId: string): WebCookie[] {
+    return this.storage.readSecret<{ cookies?: WebCookie[] }>(accountId)?.cookies ?? []
+  }
+
   async reauthWebSession(accountId: string, cookies: WebCookie[]): Promise<Account> {
     const adapter = this.adapters.get(accountId) as (PlatformAdapter & { replaceCookies?(c: WebCookie[]): void }) | undefined
     if (!adapter?.replaceCookies) throw new Error('This account does not use a web session')

@@ -4,6 +4,7 @@ import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy, type Platform, type TagId } from
 import { useShowPlatformBadge, useStore, useT, useVisibleConversations } from '../store'
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
+import { PreviewText } from './MessageParts'
 import { ReconnectBanner } from './ChatView'
 
 interface TagMenuState {
@@ -145,7 +146,12 @@ export function ConversationList(): JSX.Element {
                       ? c.isGroup
                         ? t('typingIn', { name: typing[c.id].name })
                         : t('typing')
-                      : `${prefix}${preview?.text ?? ''}`}
+                      : (
+                        <>
+                          {prefix}
+                          <PreviewText kind={preview?.kind} text={preview?.text ?? ''} />
+                        </>
+                      )}
                   </span>
                   <span className="conv-meta">
                     {c.pinned && <Pin size={12} strokeWidth={2.2} />}

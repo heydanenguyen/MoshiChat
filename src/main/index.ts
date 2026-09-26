@@ -148,7 +148,7 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
 }
 
 /** Persist a MediaRecorder voice note as Ogg/Opus so platforms treat it as a voice message. */
-async function saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<OutgoingAttachment> {
+async function saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   let data: Uint8Array = bytes
   let ext = 'webm'
@@ -162,6 +162,12 @@ async function saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<Ou
   }
   const path = join(app.getPath('temp'), `unison-voice-${stamp}.${ext}`)
   await writeFile(path, data)
+  const alternates: OutgoingAttachment['alternates'] = []
+  if (aac?.length) {
+    const aacPath = join(app.getPath('temp'), `unison-voice-${stamp}.m4a`)
+    await writeFile(aacPath, aac)
+    alternates.push({ path: aacPath, mime: 'audio/mp4', size: aac.length })
+  }
   return {
     path,
     name: `voice-${stamp}.${ext}`,
@@ -169,6 +175,7 @@ async function saveVoice(bytes: Uint8Array, durationSeconds: number): Promise<Ou
     size: data.length,
     voice: true,
     duration: Math.round(durationSeconds),
+    alternates: alternates.length ? alternates : undefined,
     preview: data.length < 2_000_000 ? `data:${mime};base64,${Buffer.from(data).toString('base64')}` : undefined
   }
 }
@@ -206,7 +213,13 @@ const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string
  */
 const openLogins = new Map<string, BrowserWindow>()
 
-async function captureWebSession(platform: 'messenger' | 'instagram', fresh = false): Promise<WebCookie[]> {
+/**
+ * Open the platform's own sign-in page in an app window and return its cookies once the
+ * user is signed in. `dead` are cookies known to be rejected: only those exact values are
+ * dropped first, so a newer session already in the window (for example one the user just
+ * completed) is reused instead of forcing another sign-in.
+ */
+async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebCookie[] = []): Promise<WebCookie[]> {
   const existing = openLogins.get(platform)
   if (existing && !existing.isDestroyed()) {
     // Already waiting on this platform (for example a two-factor step): bring it back instead of opening another.
@@ -218,12 +231,12 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
   const ses = session.fromPartition(`persist:login-${platform}`)
   // Facebook sessions are shared with ws3-fca, which now uses this exact browser identity.
   if (platform === 'messenger') ses.setUserAgent(browserUserAgent())
-  if (fresh) {
-    // Drop only the dead login cookies; keep device ids (datr, mid, ig_did) so the platform recognises this device.
-    for (const name of spec.required) {
-      for (const c of await ses.cookies.get({ name })) {
-        await ses.cookies.remove(`https://${(c.domain ?? spec.domain).replace(/^\./, '')}${c.path ?? '/'}`, name).catch(() => undefined)
-      }
+  // Drop only the dead login cookies; keep device ids (datr, mid, ig_did) so the platform recognises this device.
+  for (const name of spec.required) {
+    const deadValues = new Set(dead.filter((c) => c.name === name).map((c) => c.value))
+    for (const c of await ses.cookies.get({ name })) {
+      if (!deadValues.has(c.value)) continue
+      await ses.cookies.remove(`https://${(c.domain ?? spec.domain).replace(/^\./, '')}${c.path ?? '/'}`, name).catch(() => undefined)
     }
   }
   return new Promise<WebCookie[]>((resolve, reject) => {
@@ -255,16 +268,23 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
       err ? reject(err) : resolve(cookies ?? [])
     }
     let loaded = false
+    let lastState = ''
     loginWindow.webContents.on('did-finish-load', () => (loaded = true))
     const check = async (): Promise<void> => {
       try {
         // Only trust cookies once the site itself has rendered a signed-in page (stale cookies still exist).
         if (!loaded || loginWindow.isDestroyed()) return
-        const url = loginWindow.webContents.getURL()
-        if (/login|checkpoint|two_factor|challenge|recover/i.test(url)) return
+        // Judge the page by its path only: query strings often carry words like "login" (?next=, ?lsrc=).
+        const path = new URL(loginWindow.webContents.getURL()).pathname
         const cookies = await ses.cookies.get({ domain: spec.domain.replace(/^\./, '') })
         const names = new Set(cookies.map((c) => c.name))
-        if (spec.required.every((n) => names.has(n))) {
+        const deadValues = new Set(dead.map((c) => c.name + '=' + c.value))
+        const signedIn = spec.required.every((n) => cookies.some((c) => c.name === n && !deadValues.has(n + '=' + c.value)))
+        const state = `${path} [${spec.required.filter((n) => names.has(n))}] signedIn=${signedIn}`
+        if (!app.isPackaged && state !== lastState) log(`login window (${platform}): ${state}`)
+        lastState = state
+        if (SIGN_IN_PATH.test(path)) return
+        if (signedIn) {
           finish(undefined, cookies.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, expirationDate: c.expirationDate })))
         }
       } catch {
@@ -278,6 +298,9 @@ async function captureWebSession(platform: 'messenger' | 'instagram', fresh = fa
     void loginWindow.loadURL(spec.url)
   })
 }
+
+/** Pages that are part of signing in (never a finished session), matched against the path only. */
+const SIGN_IN_PATH = /^\/(login|login\.php|checkpoint|two_step_verification|two_factor|recover|challenge|accounts\/login|auth_platform|confirmemail)/i
 
 const OAUTH_REDIRECT = 'https://www.facebook.com/connect/login_success.html'
 const PAGE_SCOPES = ['pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'instagram_basic', 'instagram_manage_messages']
@@ -334,7 +357,7 @@ function registerIpc(): void {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
     if (web && account && account.status !== 'connected') {
-      await manager.reauthWebSession(id, await captureWebSession(web, true))
+      await manager.reauthWebSession(id, await captureWebSession(web, manager.storedCookies(id)))
       return
     }
     await manager.reconnect(id)
@@ -369,7 +392,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
-  ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number) => saveVoice(bytes, duration))
+  ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
   ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!window) return

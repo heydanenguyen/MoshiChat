@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus } from 'lucide-react'
-import type { Account, Attachment, Conversation, Message } from '@shared/types'
+import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useShowPlatformBadge, useStore, useT } from '../store'
 import { formatBytes, formatDayLabel, formatTime, sectionize, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
+import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -169,7 +170,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
 
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
-      <Composer disabled={account?.status !== 'connected'} canAttach={features.attachments} />
+      <Composer disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
     </section>
   )
 }
@@ -235,6 +236,7 @@ function Group({
   const react = useStore((s) => s.react)
   const showSender = !group.isOutgoing && conversation.isGroup
   const peer = conversation.participants.find((p) => p.id === group.senderId)
+  if (group.system) return <SystemRow message={group.messages[0]} platform={conversation.platform} />
   return (
     <div className={`msg-group ${group.isOutgoing ? 'out' : 'in'}`}>
       {!group.isOutgoing && (
@@ -259,7 +261,7 @@ function Group({
                   : 'middle'
           return (
             <div key={message.id} style={{ display: 'contents' }}>
-              <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} />
+              <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={conversation.platform} />
               {message.reactions.length > 0 && (
                 <div className="reactions">
                   {message.reactions.map((r) => (
@@ -299,13 +301,15 @@ function Bubble({
   position,
   language,
   features,
-  highlighted
+  highlighted,
+  platform
 }: {
   message: Message
   position: 'single' | 'first' | 'middle' | 'last'
   language: 'vi' | 'en'
   features: Account['features']
   highlighted: boolean
+  platform: Platform
 }): JSX.Element {
   const t = useT()
   const setReplyTo = useStore((s) => s.setReplyTo)
@@ -314,7 +318,11 @@ function Bubble({
   const [picker, setPicker] = useState(false)
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && a.url)
-  const media = message.attachments.find((a) => (a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl))
+  const story = message.attachments.find((a) => a.kind === 'story')
+  const inline = message.attachments.filter((a) => a.kind !== 'story')
+  const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')
+  // A story reaction is just the emoji on the story card; a share without words needs no bubble either.
+  const bubbleless = !!story && (story.label === 'story_reaction' || !message.text.trim()) && inline.length === 0
   const classes = ['bubble', direction, position]
   if (sticker) classes.push('sticker')
   else if (media) classes.push('media')
@@ -333,19 +341,23 @@ function Bubble({
 
   return (
     <div className={`bubble-row ${highlighted ? 'highlight' : ''}`} data-message-id={message.id}>
-      <div className={classes.join(' ')}>
-        {message.replyTo && (message.replyTo.text || message.replyTo.senderName) && (
-          <div className="reply-quote">
-            <strong>{message.replyTo.senderName}</strong>
-            {message.replyTo.text}
+      <div className="bubble-stack">
+        {story && <StoryRef attachment={story} message={message} platform={platform} />}
+        {!bubbleless && (
+          <div className={classes.join(' ')}>
+            {message.replyTo && (message.replyTo.text || message.replyTo.senderName) && (
+              <div className="reply-quote">
+                <strong>{message.replyTo.senderName}</strong>
+                {message.replyTo.text}
+              </div>
+            )}
+            {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
+            {!sticker && inline.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} platform={platform} />)}
+            {message.text && (media ? <div className="bubble-caption"><Linkify text={message.text} /></div> : <Linkify text={message.text} />)}
+            {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
+            {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
           </div>
         )}
-        {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
-        {!sticker &&
-          message.attachments.map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} />)}
-        {message.text && (media ? <div className="bubble-caption"><Linkify text={message.text} /></div> : <Linkify text={message.text} />)}
-        {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
-        {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
       </div>
       {showActions && (
         <div className={`bubble-actions ${picker ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
@@ -385,7 +397,7 @@ function Bubble({
   )
 }
 
-function AttachmentView({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
+function AttachmentView({ attachment, message, platform }: { attachment: Attachment; message: Message; platform: Platform }): JSX.Element {
   const t = useT()
   const openLightbox = useStore((s) => s.openLightbox)
   const loadAttachment = useStore((s) => s.loadAttachment)
@@ -398,7 +410,10 @@ function AttachmentView({ attachment, message }: { attachment: Attachment; messa
     if (url) openLightbox({ url, name: attachment.name })
   }
   switch (attachment.kind) {
+    case 'post':
+      return <PostCard attachment={attachment} platform={platform} />
     case 'image': {
+      if (attachment.expired) return <GoneMedia />
       const src = attachment.url ?? attachment.thumbnailUrl
       return src ? (
         <img className="attachment-image" src={src} alt={t('photo')} draggable={false} onClick={() => void viewImage()} />
@@ -407,35 +422,11 @@ function AttachmentView({ attachment, message }: { attachment: Attachment; messa
       )
     }
     case 'video':
-      return (
-        <div style={{ position: 'relative' }} onClick={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))}>
-          {attachment.thumbnailUrl ? (
-            <img className="attachment-image" src={attachment.thumbnailUrl} alt={t('video')} draggable={false} />
-          ) : (
-            <div className="attachment-image placeholder">{t('video')}</div>
-          )}
-          <span
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              color: '#fff',
-              filter: 'drop-shadow(0 2px 6px rgba(0,0,0,.5))'
-            }}
-          >
-            <Play size={34} fill="currentColor" />
-          </span>
-        </div>
-      )
+      return <VideoThumb attachment={attachment} onFallback={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))} />
     case 'audio':
       return <AudioPlayer attachment={attachment} message={message} />
     case 'link':
-      return (
-        <a className="attachment-link" href={attachment.url} onClick={(e) => (e.preventDefault(), openExternal(attachment.url))}>
-          {attachment.name ?? attachment.url}
-        </a>
-      )
+      return <LinkCard attachment={attachment} />
     case 'sticker':
       return (
         <span>
@@ -489,6 +480,17 @@ function barsFor(seed: string): number[] {
   })
 }
 
+/** Resample a platform waveform (0..1) to the bar count, 4..22px tall. */
+function barsFromWaveform(waveform: number[]): number[] {
+  return Array.from({ length: BAR_COUNT }, (_, i) => {
+    const from = Math.floor((i * waveform.length) / BAR_COUNT)
+    const to = Math.max(from + 1, Math.floor(((i + 1) * waveform.length) / BAR_COUNT))
+    const slice = waveform.slice(from, to)
+    const peak = slice.length ? Math.max(...slice) : 0
+    return Math.round(4 + peak * 18)
+  })
+}
+
 function AudioPlayer({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
   const t = useT()
   const loadAttachment = useStore((s) => s.loadAttachment)
@@ -497,7 +499,7 @@ function AudioPlayer({ attachment, message }: { attachment: Attachment; message:
   const [progress, setProgress] = useState(0)
   const [loading, setLoading] = useState(false)
   const [duration, setDuration] = useState(attachment.duration ?? 0)
-  const bars = barsFor(attachment.id)
+  const bars = attachment.waveform?.length ? barsFromWaveform(attachment.waveform) : barsFor(attachment.id)
 
   const toggle = async (): Promise<void> => {
     const audio = audioRef.current

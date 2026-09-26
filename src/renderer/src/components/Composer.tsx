@@ -7,16 +7,28 @@ import { EmojiPicker } from './EmojiPicker'
 interface Props {
   disabled?: boolean
   canAttach: boolean
+  canVoice?: boolean
 }
 
 interface Recording {
   recorder: MediaRecorder
+  /** A second, AAC copy for platforms that play .m4a voice notes (Instagram, Messenger). */
+  aac?: { recorder: MediaRecorder; chunks: Blob[] }
   stream: MediaStream
   chunks: Blob[]
   startedAt: number
 }
 
-export function Composer({ disabled, canAttach }: Props): JSX.Element {
+const AAC_TYPE = 'audio/mp4;codecs=mp4a.40.2'
+
+const stopped = (recorder: MediaRecorder): Promise<void> =>
+  new Promise((resolve) => {
+    if (recorder.state === 'inactive') return resolve()
+    recorder.addEventListener('stop', () => resolve(), { once: true })
+    recorder.stop()
+  })
+
+export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): JSX.Element {
   const t = useT()
   const send = useStore((s) => s.send)
   const notifyTyping = useStore((s) => s.notifyTyping)
@@ -115,6 +127,12 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
       const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32_000 })
       const session: Recording = { recorder, stream, chunks: [], startedAt: Date.now() }
       recorder.ondataavailable = (e) => e.data.size && session.chunks.push(e.data)
+      if (MediaRecorder.isTypeSupported(AAC_TYPE)) {
+        const aac = { recorder: new MediaRecorder(stream, { mimeType: AAC_TYPE, audioBitsPerSecond: 64_000 }), chunks: [] as Blob[] }
+        aac.recorder.ondataavailable = (e) => e.data.size && aac.chunks.push(e.data)
+        aac.recorder.start()
+        session.aac = aac
+      }
       recorder.start(250)
       setElapsed(0)
       setRecording(session)
@@ -128,19 +146,20 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
     if (!session) return
     setRecording(undefined)
     const duration = (Date.now() - session.startedAt) / 1000
-    session.recorder.onstop = async () => {
+    void (async () => {
+      await Promise.all([stopped(session.recorder), session.aac ? stopped(session.aac.recorder) : Promise.resolve()])
       session.stream.getTracks().forEach((track) => track.stop())
       if (!sendIt || duration < 0.6) return
       try {
         const blob = new Blob(session.chunks, { type: session.recorder.mimeType })
         const bytes = new Uint8Array(await blob.arrayBuffer())
-        const voice = await window.unison.app.saveVoice(bytes, duration)
+        const aac = session.aac?.chunks.length ? new Uint8Array(await new Blob(session.aac.chunks, { type: 'audio/mp4' }).arrayBuffer()) : undefined
+        const voice = await window.unison.app.saveVoice(bytes, duration, aac)
         await send('', [voice])
       } catch (err) {
         showToast((err as Error).message, 'error')
       }
-    }
-    session.recorder.stop()
+    })()
   }
 
   const canSend = (text.trim().length > 0 || pendingFiles.length > 0) && !disabled
@@ -223,7 +242,7 @@ export function Composer({ disabled, canAttach }: Props): JSX.Element {
               </button>
               {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
             </span>
-            {canAttach && (
+            {canVoice && (
               <button className="icon-btn" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
                 <Mic size={18} strokeWidth={2} />
               </button>
