@@ -154,11 +154,13 @@ export class TelegramAdapter implements PlatformAdapter {
     const entity = await this.entityFor(id)
     const replyTo = options.replyToId ? Number(options.replyToId) : undefined
     const files = options.attachments ?? []
+    // Stickers go as photos, which Telegram recompresses without transparency: use the copy on white.
+    const pathFor = (f: (typeof files)[number]): string => (f.sticker ? (f.alternates?.find((alt) => alt.role === 'opaque')?.path ?? f.path) : f.path)
     let sent: Api.Message
     if (files.length) {
       const voice = files.length === 1 && files[0].voice
       const result = await client.sendFile(entity, {
-        file: files.length === 1 ? files[0].path : files.map((f) => f.path),
+        file: files.length === 1 ? pathFor(files[0]) : files.map(pathFor),
         caption: text || undefined,
         replyTo,
         voiceNote: !!voice,

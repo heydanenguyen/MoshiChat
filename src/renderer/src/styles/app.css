@@ -4881,3 +4881,78 @@ kbd {
   background: rgba(255, 255, 255, 0.28);
   color: var(--bubble-out-text);
 }
+
+/* ================================================================== sticker picker */
+
+.sticker-sheet {
+  width: 356px;
+  height: 392px;
+  right: -20px;
+}
+.sticker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--separator);
+}
+.sticker-tabs button {
+  flex: 1;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  transition:
+    background var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-spring);
+}
+.sticker-tabs button:hover {
+  background: var(--bg-hover);
+}
+.sticker-tabs button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sticker-tabs button.active .unison-mark {
+  transform: scale(1.12);
+}
+.sticker-title {
+  padding: 10px 14px 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.sticker-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 6px 10px 12px;
+  align-content: start;
+}
+.sticker-cell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  transition:
+    background var(--duration-fast) ease,
+    transform var(--duration-base) var(--ease-spring);
+}
+.sticker-cell:hover {
+  background: var(--bg-hover);
+  transform: scale(1.1) rotate(-3deg);
+}
+.sticker-cell:active {
+  transform: scale(0.94);
+}
+.sticker-art {
+  display: block;
+  overflow: visible;
+}
+/* sent stickers: no bubble, a friendly size */
+.bubble.sticker .attachment-sticker {
+  width: 132px;
+  height: 132px;
+}

@@ -54,6 +54,7 @@ const bridge: UnisonBridge = {
       size: file.size
     }),
     saveVoice: (bytes, durationSeconds, aac) => ipcRenderer.invoke(IPC.appSaveVoice, bytes, durationSeconds, aac),
+    sticker: (id) => ipcRenderer.invoke(IPC.appSticker, id),
     weather: (force) => ipcRenderer.invoke(IPC.appWeather, force),
     platform: process.platform,
     windowAction: (action) => ipcRenderer.send(IPC.appWindowAction, action)

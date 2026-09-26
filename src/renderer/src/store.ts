@@ -354,7 +354,7 @@ export const useStore = create<State>((set, get) => ({
       text: trimmed,
       attachments: pendingFiles.map((f, i) => ({
         id: `${tempId}-${i}`,
-        kind: f.mime.startsWith('image/') ? 'image' : f.mime.startsWith('video/') ? 'video' : f.mime.startsWith('audio/') ? 'audio' : 'file',
+        kind: f.sticker ? 'sticker' : f.mime.startsWith('image/') ? 'image' : f.mime.startsWith('video/') ? 'video' : f.mime.startsWith('audio/') ? 'audio' : 'file',
         url: f.preview,
         name: f.voice ? translate(settings.language, 'voice') : f.name,
         size: f.size,
@@ -379,6 +379,11 @@ export const useStore = create<State>((set, get) => ({
       // Keep local previews for media the platform does not echo back.
       for (const [i, attachment] of sent.attachments.entries()) {
         if (!attachment.url && optimistic.attachments[i]?.url) attachment.url = optimistic.attachments[i].url
+        // The platform echoes a sticker back as a photo; keep showing it as a sticker here.
+        if (pendingFiles[i]?.sticker && attachment.kind === 'image') {
+          attachment.kind = 'sticker'
+          attachment.url = optimistic.attachments[i]?.url ?? attachment.url
+        }
       }
       const s = get()
       set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], sent, tempId) ?? [] } })

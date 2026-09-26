@@ -85,6 +85,10 @@
       {
         "from": "resources/icons",
         "to": "icons"
+      },
+      {
+        "from": "resources/stickers",
+        "to": "stickers"
       }
     ]
   }

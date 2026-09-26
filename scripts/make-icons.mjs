@@ -9,10 +9,15 @@ import sharp from 'sharp'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { pathToFileURL } from 'url'
 
-const bundle = 'build/.logos.bundle.mjs'
-buildSync({ entryPoints: ['src/shared/logos.ts'], bundle: true, format: 'esm', platform: 'node', outfile: bundle, logLevel: 'error' })
-const { LOGO_ORDER, logoIconSvg } = await import(pathToFileURL(bundle).href)
-await rm(bundle, { force: true })
+const load = async (entry) => {
+  const bundle = `build/.${entry.replace(/\W/g, '_')}.bundle.mjs`
+  buildSync({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', outfile: bundle, logLevel: 'error' })
+  const mod = await import(pathToFileURL(bundle).href)
+  await rm(bundle, { force: true })
+  return mod
+}
+const { LOGO_ORDER, logoIconSvg } = await load('src/shared/logos.ts')
+const { stickerIds, stickerSvg } = await load('src/shared/stickers.ts')
 
 /** Rasterise an SVG string at 2x the target size, then downsample (density is relative to its viewBox). */
 async function render(svg, size) {
@@ -58,4 +63,12 @@ await writeFile('build/icon.ico', ico(images))
 
 await mkdir('resources/icons', { recursive: true })
 for (const id of LOGO_ORDER) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 256))
+// Stickers: transparent PNG plus a copy on white (Instagram/Telegram flatten transparency).
+await mkdir('resources/stickers', { recursive: true })
+for (const id of stickerIds()) {
+  const png = await render(stickerSvg(id), 384)
+  await writeFile(`resources/stickers/${id}.png`, png)
+  await writeFile(`resources/stickers/${id}-white.png`, await sharp(png).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
+}
+console.log(`stickers written: ${stickerIds().length} × 2`)
 console.log(`icons written: build/icon.png, build/icon.ico (${icoSizes.join(', ')}), resources/icon.png, resources/icons/{${LOGO_ORDER.join(',')}}.png`)
