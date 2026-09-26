@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import type { AddAccountInput, BridgeEvent, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
@@ -35,7 +35,8 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   const conversation = manager.listConversations().find((c) => c.id === event.message.conversationId)
   if (conversation?.muted) return
   if (conversation && isMutedBy(storage.settings, conversation)) return
-  const title = conversation?.isGroup ? `${event.message.senderName} in ${conversation.title}` : event.message.senderName
+  const nickname = storage.settings.contactOverrides?.[event.message.conversationId]?.nickname?.trim()
+  const title = conversation?.isGroup ? `${event.message.senderName} in ${nickname || conversation.title}` : nickname || event.message.senderName
   const notification = new Notification({
     title,
     body: event.message.text || 'Sent an attachment',
@@ -137,6 +138,35 @@ function createWindow(): void {
   }
 }
 
+/**
+ * unison-img://img/?u=<https url> re-fetches a profile picture through the platform's own session.
+ * Some Instagram/Facebook CDN links only load inside the signed-in site. Only image CDNs are allowed.
+ */
+protocol.registerSchemesAsPrivileged([{ scheme: 'unison-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+
+const IMAGE_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|t\.me|whatsapp\.net)$/i
+
+function registerImageProxy(): void {
+  protocol.handle('unison-img', async (request) => {
+    try {
+      const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
+      if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
+      const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
+      const ses = /fbcdn|cdninstagram|instagram/.test(target.hostname)
+        ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
+        : /facebook|fbsbx/.test(target.hostname)
+          ? session.fromPartition('persist:login-messenger')
+          : session.defaultSession
+      const res = await ses.fetch(target.toString(), { headers: { Referer: instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
+      const type = res.headers.get('content-type') ?? ''
+      if (!res.ok || !type.startsWith('image/')) return new Response('unavailable', { status: 404 })
+      return new Response(res.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'max-age=86400' } })
+    } catch {
+      return new Response('error', { status: 502 })
+    }
+  })
+}
+
 function hardenSession(): void {
   // In development Vite injects inline scripts (React Fast Refresh), so the policy is only applied to packaged builds.
   if (process.env.ELECTRON_RENDERER_URL) return
@@ -144,7 +174,7 @@ function hardenSession(): void {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https: file:",
+    "img-src 'self' data: https: file: unison-img:",
     "media-src 'self' data: https: file:",
     "connect-src 'self'"
   ].join('; ')
@@ -461,6 +491,7 @@ if (!gotLock) {
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()
+    registerImageProxy()
     registerIpc()
     createWindow()
     await manager.restore()

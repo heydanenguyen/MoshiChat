@@ -529,7 +529,7 @@ a {
   margin: 0 var(--space-3) var(--space-2);
 }
 
-.search-field svg {
+.search-field > svg {
   position: absolute;
   left: 11px;
   top: 50%;
@@ -567,11 +567,19 @@ a {
   transform: translateY(-50%);
   width: 18px;
   height: 18px;
+  padding: 0;
   border-radius: var(--radius-full);
-  background: var(--fill-primary);
+  background: var(--text-tertiary);
   color: var(--bg-elevated);
   display: grid;
   place-items: center;
+  transition: background var(--duration-fast) ease;
+}
+.search-clear:hover {
+  background: var(--text-secondary);
+}
+.search-clear svg {
+  display: block;
 }
 
 .conv-list {
@@ -5192,4 +5200,146 @@ kbd {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ================================================================== nickname & custom photo */
+
+.details-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  padding-left: 28px; /* balances the pencil so the name stays centred */
+}
+.details-name-row .details-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.details-edit {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  transition:
+    opacity var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.details-hero:hover .details-edit,
+.details-edit.active,
+.details-edit:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+}
+.details-original {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.contact-customizer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow-sm);
+  animation: sheet-in var(--duration-base) var(--ease-spring);
+}
+.contact-customizer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.contact-customizer-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+.contact-customizer-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--fill-tertiary);
+}
+.contact-customizer-preview-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.contact-customizer-preview-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-customizer-preview-text span {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.contact-customizer .field {
+  gap: 6px;
+}
+.contact-customizer .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.field-row .field-input {
+  flex: 1;
+}
+.field-hint.centered {
+  text-align: center;
+}
+.avatar-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.avatar-choice {
+  width: 44px;
+  height: 44px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    box-shadow var(--duration-fast) ease;
+}
+.avatar-choice:hover {
+  transform: scale(1.08);
+}
+.avatar-choice.active {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.avatar-choice.upload {
+  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
+}
+.avatar-choice.upload:hover {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.avatar-choice-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+}
+.contact-customizer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }

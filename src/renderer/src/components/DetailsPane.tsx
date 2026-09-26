@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Cake, Clock, File, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Play, Plus, RefreshCw, Search, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
+import { ContactCustomizer } from './ContactCustomizer'
 import { TagChip } from './Tag'
 import { isPinned, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
@@ -83,6 +84,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const togglePin = useStore((s) => s.togglePin)
   const { list: tagList, byId: tagById } = useTagDefs()
   const [creating, setCreating] = useState(false)
+  const [customizing, setCustomizing] = useState(false)
+  const custom = useStore((s) => s.settings.contactOverrides?.[conversationId])
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
   const allTags = useStore((s) => s.settings.tags)
@@ -92,17 +95,21 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   useEffect(() => {
     void loadProfile(conversationId)
     setCreating(false)
+    setCustomizing(false)
   }, [conversationId, loadProfile])
 
   if (!conversation) return <></>
   const pinned = isPinned(conversation, pins)
-  const name = profile?.name ?? conversation.title
-  const avatar = profile?.avatarUrl ?? conversation.avatarUrl
+  // A nickname / custom photo set in Unison wins over the platform profile.
+  const name = custom?.nickname ? conversation.title : (profile?.name ?? conversation.title)
+  const avatar = custom?.avatar ? conversation.avatarUrl : (profile?.avatarUrl ?? conversation.avatarUrl)
+  const originalName = conversation.originalTitle ? (profile?.name ?? conversation.originalTitle) : undefined
   const handle = profile?.handle ?? conversation.participants.find((p) => !p.isMe)?.handle
   const others = conversation.participants.filter((p) => !p.isMe)
   const facts: Array<{ icon: JSX.Element; label: string; value: string }> = []
   if (profile?.phone) facts.push({ icon: <Phone size={14} />, label: t('phone'), value: profile.phone })
   if (profile?.birthday) facts.push({ icon: <Cake size={14} />, label: t('birthday'), value: formatDate(profile.birthday, language) })
+  else if (custom?.birthday) facts.push({ icon: <Cake size={14} />, label: t('birthday'), value: `${formatDate(custom.birthday, language)} · ${t('setByYou')}` })
   if (profile?.gender) facts.push({ icon: <User size={14} />, label: t('gender'), value: profile.gender === 'male' ? t('male') : profile.gender === 'female' ? t('female') : profile.gender })
   for (const item of profile?.extra ?? []) facts.push({ icon: <Info size={14} />, label: item.label, value: item.value })
 
@@ -117,7 +124,13 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           className="details-avatar-large"
           onClick={() => avatar && openLightbox({ url: avatar, name })}
         />
-        <div className="details-name">{name}</div>
+        <div className="details-name-row">
+          <div className="details-name">{name}</div>
+          <button className={`icon-btn details-edit ${customizing ? 'active' : ''}`} onClick={() => setCustomizing((v) => !v)} title={t('customize')} aria-expanded={customizing}>
+            <Pencil size={14} strokeWidth={2.3} />
+          </button>
+        </div>
+        {originalName && originalName !== name && <div className="details-original">{t('originalName', { name: originalName })}</div>}
         {(handle || conversation.isGroup) && (
           <div className="details-handle">{conversation.isGroup ? t('members', { count: conversation.participants.length }) : handle}</div>
         )}
@@ -135,6 +148,12 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           </div>
         )}
       </div>
+
+      {customizing && (
+        <div className="details-section">
+          <ContactCustomizer conversation={conversation} onClose={() => setCustomizing(false)} />
+        </div>
+      )}
 
       <div className="details-section">
         <div className="details-section-title">{t('tags')}</div>

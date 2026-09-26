@@ -76,6 +76,9 @@ export interface Conversation {
   pinned?: boolean
   muted?: boolean
   lastMessage?: MessagePreview
+  /** Renderer only: the platform's name/photo when a nickname or custom photo is shown instead. */
+  originalTitle?: string
+  originalAvatarUrl?: string
   updatedAt: number
 }
 
@@ -389,6 +392,17 @@ export interface Settings {
   messageShadows?: boolean
   /** Accents created with the colour picker. */
   customAccents?: CustomAccent[]
+  /** Per conversation: nickname, custom photo, birthday set by the user. */
+  contactOverrides?: Record<string, ContactOverride>
+}
+
+/** What the user changed about a contact in Unison (never sent to the platform). */
+export interface ContactOverride {
+  nickname?: string
+  /** Data URL of an uploaded photo, or `logo:<LogoId>` for one of the Unison characters. */
+  avatar?: string
+  /** YYYY-MM-DD, or --MM-DD without the year. */
+  birthday?: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
