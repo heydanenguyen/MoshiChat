@@ -3,7 +3,7 @@ import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, Sen
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery, statsOf } from './types'
 import type { WebCookie } from './facebook-personal'
-import { WebClient } from '../web-client'
+import { SessionExpiredError, WebClient } from '../web-client'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -93,6 +93,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   async connect(): Promise<void> {
     this.setStatus('connecting')
+    this.skip = 0
+    this.backoff = 1
     try {
       await this.web.restoreCookies(this.secret.cookies)
       const pk = this.secret.cookies.find((c) => c.name === 'ds_user_id')?.value
@@ -107,13 +109,22 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       this.account.avatarUrl = me?.profile_pic_url
       this.secret = { cookies: await this.web.cookies(), username: me?.username ?? this.secret.username }
     } catch (err) {
-      this.setStatus('error', `Instagram: ${(err as Error).message}`)
       this.web.close()
+      if (err instanceof SessionExpiredError) {
+        this.expire(err)
+        throw new Error(sessionMessage(err))
+      }
+      this.setStatus('error', `Instagram: ${(err as Error).message}`)
       throw err
     }
     await this.ctx.saveSecret(this.secret)
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
     this.setStatus('connected')
+  }
+
+  /** New cookies from a fresh sign-in; takes effect on the next connect(). */
+  replaceCookies(cookies: WebCookie[]): void {
+    this.secret = { ...this.secret, cookies }
   }
 
   async disconnect(): Promise<void> {
@@ -128,7 +139,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     return inbox.map((thread) => this.toConversation(thread))
   }
 
-  async fetchMessages(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
+  async fetchMessages(id: string, options: FetchMessagesOptions): Promise<Message[]> {
+    return this.guard(() => this.fetchPage(id, options))
+  }
+
+  private async fetchPage(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
     const threadId = this.threadIdFor(id)
     if (!threadId) return this.history.get(id) ?? []
     const params = new URLSearchParams({ limit: String(Math.min(limit, 40)) })
@@ -147,6 +162,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
+    return this.guard(() => this.send(id, text, options))
+  }
+
+  private async send(id: string, text: string, options: SendOptions): Promise<Message> {
     if (options.attachments?.length) throw new Error('Personal Instagram supports text messages only for now')
     const external = externalIdOf(id)
     const threadId = this.threadIdFor(id)
@@ -316,6 +335,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
       this.backoff = 1
     } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        this.expire(err)
+        return
+      }
       const message = (err as Error).message
       if (/429|wait a few minutes|rate/i.test(message)) {
         this.skip = this.backoff
@@ -325,6 +348,26 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     } finally {
       this.polling = false
     }
+  }
+
+  /** Run a request; if Instagram ended the session, stop polling and ask the user to sign in again. */
+  private async guard<T>(task: () => Promise<T>): Promise<T> {
+    try {
+      return await task()
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        this.expire(err)
+        throw new Error(sessionMessage(err))
+      }
+      throw err
+    }
+  }
+
+  private expire(err: SessionExpiredError): void {
+    if (this.timer) clearInterval(this.timer)
+    this.timer = undefined
+    this.web.close()
+    this.setStatus('needs_auth', err.reason)
   }
 
   // ---- mapping ----------------------------------------------------------
@@ -428,6 +471,12 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     this.account.error = error
     this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
   }
+}
+
+function sessionMessage(err: SessionExpiredError): string {
+  return err.reason === 'checkpoint'
+    ? 'Instagram wants a security check. Sign in again to confirm it is you.'
+    : 'Instagram signed this session out. Sign in again to keep messaging.'
 }
 
 function itemText(item: IgItem): string {

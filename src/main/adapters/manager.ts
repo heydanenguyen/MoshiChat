@@ -139,6 +139,18 @@ export class AccountManager {
     return account
   }
 
+  /** Fresh cookies for an existing personal Facebook/Instagram account, then reconnect. */
+  async reauthWebSession(accountId: string, cookies: WebCookie[]): Promise<Account> {
+    const adapter = this.adapters.get(accountId) as (PlatformAdapter & { replaceCookies?(c: WebCookie[]): void }) | undefined
+    if (!adapter?.replaceCookies) throw new Error('This account does not use a web session')
+    await adapter.disconnect().catch(() => undefined)
+    adapter.replaceCookies(cookies)
+    await adapter.connect()
+    await this.storage.upsertAccount(adapter.account, { cookies })
+    await this.loadConversations(adapter)
+    return { ...adapter.account }
+  }
+
   /** Pages picked in the OAuth flow become Messenger (and optionally Instagram) accounts. */
   async addPages(pages: PageOption[], includeInstagram: boolean): Promise<Account[]> {
     const accounts: Account[] = []

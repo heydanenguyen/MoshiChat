@@ -3544,3 +3544,48 @@ kbd {
     transform: none;
   }
 }
+
+/* ================================================================== reconnect banner */
+
+.reconnect-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 var(--space-4);
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning) 14%, var(--glass-strong));
+  box-shadow: var(--shadow-sm);
+  font-size: var(--text-sm);
+  animation: bubble-in var(--duration-base) var(--ease-out);
+}
+
+.reconnect-banner.error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--glass-strong));
+}
+
+.reconnect-text {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.reconnect-banner .btn {
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.list-col .reconnect-banner {
+  margin: 0 var(--space-3) var(--space-2);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.list-col .reconnect-banner .status-dot {
+  display: none;
+}
+
+.list-col .reconnect-banner .btn {
+  align-self: flex-start;
+}

@@ -240,7 +240,7 @@ export function SettingsSheet(): JSX.Element {
                       <div className="settings-row-sub">
                         <span className={`status-dot ${account.status}`} style={{ display: 'inline-block', marginRight: 5 }} />
                         {PLATFORMS[account.platform].name} · {statusLabel(account.status)}
-                        {account.error && ` — ${account.error}`}
+                        {account.error && account.status === 'error' && ` — ${account.error}`}
                       </div>
                     </div>
                     <button className={`icon-btn ${muted ? 'active' : ''}`} title={muted ? t('unmute') : t('mute')} onClick={() => void toggleMute('accounts', account.id)}>

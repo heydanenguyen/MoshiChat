@@ -168,8 +168,51 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       </div>
 
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
+      {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       <Composer disabled={account?.status !== 'connected'} canAttach={features.attachments} />
     </section>
+  )
+}
+
+export function ReconnectBanner({ accountId, status, reason, label }: { accountId: string; status: string; reason?: string; label?: string }): JSX.Element {
+  const t = useT()
+  const reconnect = useStore((s) => s.reconnect)
+  const showToast = useStore((s) => s.showToast)
+  const [busy, setBusy] = useState(false)
+  const text =
+    status === 'connecting'
+      ? t('connecting')
+      : reason === 'checkpoint'
+        ? t('sessionCheckpoint')
+        : status === 'needs_auth'
+          ? t('sessionExpired')
+          : (reason ?? t('disconnected'))
+  return (
+    <div className={`reconnect-banner ${status}`}>
+      <span className={`status-dot ${status}`} />
+      <span className="reconnect-text">
+        {label && <strong>{label} · </strong>}
+        {text}
+      </span>
+      {status !== 'connecting' && (
+        <button
+          className="btn primary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await reconnect(accountId)
+            } catch (err) {
+              showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? t('waitingLogin') : t('signInAgain')}
+        </button>
+      )}
+    </div>
   )
 }
 

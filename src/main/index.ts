@@ -203,9 +203,17 @@ const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string
  * app window, then hand the session cookies to the adapter. Passwords are
  * typed into the platform's page only; Unison never sees them.
  */
-function captureWebSession(platform: 'messenger' | 'instagram'): Promise<WebCookie[]> {
+async function captureWebSession(platform: 'messenger' | 'instagram', fresh = false): Promise<WebCookie[]> {
   const spec = WEB_LOGIN[platform]
   const ses = session.fromPartition(`persist:login-${platform}`)
+  if (fresh) {
+    // Drop only the dead login cookies; keep device ids (datr, mid, ig_did) so the platform recognises this device.
+    for (const name of spec.required) {
+      for (const c of await ses.cookies.get({ name })) {
+        await ses.cookies.remove(`https://${(c.domain ?? spec.domain).replace(/^\./, '')}${c.path ?? '/'}`, name).catch(() => undefined)
+      }
+    }
+  }
   return new Promise<WebCookie[]>((resolve, reject) => {
     const loginWindow = new BrowserWindow({
       width: 480,
@@ -294,7 +302,15 @@ function registerIpc(): void {
   ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
   ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
   ipcMain.handle(IPC.accountsRemove, (_e, id: string) => manager.remove(id))
-  ipcMain.handle(IPC.accountsReconnect, (_e, id: string) => manager.reconnect(id))
+  ipcMain.handle(IPC.accountsReconnect, async (_e, id: string) => {
+    const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
+    const account = manager.listAccounts().find((a) => a.id === id)
+    if (web && account && account.status !== 'connected') {
+      await manager.reauthWebSession(id, await captureWebSession(web, true))
+      return
+    }
+    await manager.reconnect(id)
+  })
   ipcMain.handle(IPC.accountsAddDemo, () => manager.addDemo())
   ipcMain.handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => manager.addWebSession(platform, await captureWebSession(platform)))
   ipcMain.handle(IPC.accountsListPages, (_e, appId: string) => listPages(appId))

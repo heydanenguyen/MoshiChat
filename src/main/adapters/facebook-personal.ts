@@ -96,6 +96,11 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     this.setStatus('connected')
   }
 
+  /** New cookies from a fresh sign-in; takes effect on the next connect(). */
+  replaceCookies(cookies: WebCookie[]): void {
+    this.secret = { cookies }
+  }
+
   async disconnect(): Promise<void> {
     this.stopListening?.()
     this.stopListening = undefined

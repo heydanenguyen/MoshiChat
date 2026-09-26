@@ -1,6 +1,14 @@
 import { BrowserWindow, session } from 'electron'
 import type { WebCookie } from './adapters/facebook-personal'
 
+/** The platform logged this session out or wants a security check. */
+export class SessionExpiredError extends Error {
+  constructor(public readonly reason: 'logged_out' | 'checkpoint') {
+    super(reason === 'checkpoint' ? 'SESSION_CHECKPOINT' : 'SESSION_EXPIRED')
+    this.name = 'SessionExpiredError'
+  }
+}
+
 /**
  * Runs same-origin fetches inside a hidden window that shares the login
  * partition, so requests carry exactly the cookies, headers and TLS
@@ -76,9 +84,11 @@ export class WebClient {
       }
       const res = await fetch(req.path, { method: req.method, headers, body, credentials: 'include' });
       const text = await res.text();
-      return { status: res.status, text };
+      return { status: res.status, text, url: res.url };
     })()`
-    const result = (await this.window!.webContents.executeJavaScript(script, true)) as { status: number; text: string }
+    const result = (await this.window!.webContents.executeJavaScript(script, true)) as { status: number; text: string; url: string }
+    if (/\/challenge\/|\/checkpoint\//.test(result.url)) throw new SessionExpiredError('checkpoint')
+    if (/\/accounts\/login|\/login\.php/.test(result.url)) throw new SessionExpiredError('logged_out')
     let parsed: unknown
     try {
       parsed = JSON.parse(result.text)
@@ -86,6 +96,9 @@ export class WebClient {
       throw new Error(`HTTP ${result.status}: unexpected response`)
     }
     const obj = parsed as { status?: string; message?: string; error?: string }
+    if (obj.message === 'login_required' || obj.message === 'checkpoint_required' || obj.message === 'challenge_required') {
+      throw new SessionExpiredError(obj.message === 'login_required' ? 'logged_out' : 'checkpoint')
+    }
     if (result.status >= 400 || obj.status === 'fail') {
       throw new Error(obj.message || obj.error || `HTTP ${result.status}`)
     }

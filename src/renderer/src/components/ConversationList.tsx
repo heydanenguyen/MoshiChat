@@ -4,6 +4,7 @@ import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy, type Platform, type TagId } from
 import { useShowPlatformBadge, useStore, useT, useVisibleConversations } from '../store'
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
+import { ReconnectBanner } from './ChatView'
 
 interface TagMenuState {
   conversationId: string
@@ -91,6 +92,12 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
+      {Object.values(accounts)
+        .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
+        .filter((a) => filter === 'all' || filter === a.platform || filter === `account:${a.id}`)
+        .map((a) => (
+          <ReconnectBanner key={a.id} accountId={a.id} status={a.status} reason={a.error} label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`} />
+        ))}
       <div className="conv-list scroll">
         {conversations.length === 0 && (!searching || visibleHits.length === 0) && (
           <div className="conv-empty">
