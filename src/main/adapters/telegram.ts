@@ -157,7 +157,19 @@ export class TelegramAdapter implements PlatformAdapter {
     // Stickers go as photos, which Telegram recompresses without transparency: use the copy on white.
     const pathFor = (f: (typeof files)[number]): string => (f.sticker ? (f.alternates?.find((alt) => alt.role === 'opaque')?.path ?? f.path) : f.path)
     let sent: Api.Message
-    if (files.length) {
+    const gifMp4 = files.length === 1 && files[0].gif ? files[0].alternates?.find((alt) => alt.mime === 'video/mp4') : undefined
+    if (gifMp4) {
+      const gif = files[0]
+      sent = await client.sendFile(entity, {
+        file: gifMp4.path,
+        caption: text || undefined,
+        replyTo,
+        attributes: [
+          new Api.DocumentAttributeVideo({ duration: 0, w: gif.width ?? 0, h: gif.height ?? 0, supportsStreaming: true }),
+          new Api.DocumentAttributeAnimated()
+        ]
+      })
+    } else if (files.length) {
       const voice = files.length === 1 && files[0].voice
       const result = await client.sendFile(entity, {
         file: files.length === 1 ? pathFor(files[0]) : files.map(pathFor),
@@ -492,7 +504,8 @@ export class TelegramAdapter implements PlatformAdapter {
         size: Number(doc.size),
         width: video?.w,
         height: video?.h,
-        duration: audio?.duration ?? video?.duration
+        duration: audio?.duration ?? video?.duration,
+        gif: attrs.some((a) => a instanceof Api.DocumentAttributeAnimated) || undefined
       }
       if (sticker && doc.mimeType === 'image/webp') attachment.url = await this.downloadThumb(raw)
       if (video && !video.roundMessage) attachment.thumbnailUrl = await this.downloadThumb(raw)

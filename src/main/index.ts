@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
-import type { AddAccountInput, BridgeEvent, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
@@ -12,6 +12,7 @@ import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
+import { gifFile, searchGifs } from './gifs'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
@@ -496,6 +497,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
+  ipcMain.handle(IPC.appGifSearch, (_e, query: string, page: number) => {
+    const { gif, language } = storage.settings
+    return searchGifs(gif?.provider ?? 'klipy', gif?.key ?? '', String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)
+  })
+  ipcMain.handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
   ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {

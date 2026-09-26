@@ -14,7 +14,9 @@ import type {
   SharedKind,
   SendOptions,
   Settings,
-  WeatherInfo
+  WeatherInfo,
+  GifItem,
+  GifPage
 } from './types'
 
 /** The API exposed to the renderer through the preload script. */
@@ -82,6 +84,10 @@ export interface UnisonBridge {
     saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
     /** A Unison sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
+    /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
+    gifSearch(query: string, page: number): Promise<GifPage>
+    /** Download a picked GIF as a ready-to-send file. */
+    gif(item: GifItem): Promise<OutgoingAttachment>
     /** Local weather for the greeting line; undefined when offline. */
     weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform
@@ -123,6 +129,8 @@ export const IPC = {
   appPickFiles: 'app:pickFiles',
   appSaveVoice: 'app:saveVoice',
   appSticker: 'app:sticker',
+  appGifSearch: 'app:gifSearch',
+  appGif: 'app:gif',
   appWeather: 'app:weather',
   appWindowAction: 'app:windowAction',
   event: 'bridge:event'

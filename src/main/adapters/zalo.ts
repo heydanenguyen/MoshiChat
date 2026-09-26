@@ -4,6 +4,7 @@ import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User }
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
+import { imageMetadata } from '../media/image-size'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -69,7 +70,7 @@ export class ZaloAdapter implements PlatformAdapter {
   async connect(): Promise<void> {
     this.setStatus('connecting')
     const zca = (this.zca ??= await import('zca-js'))
-    const zalo = new zca.Zalo({ selfListen: true, checkUpdate: false, logging: false })
+    const zalo = new zca.Zalo({ selfListen: true, checkUpdate: false, logging: false, imageMetadataGetter: imageMetadata })
     let api: API
     try {
       if (this.secret.credentials) {

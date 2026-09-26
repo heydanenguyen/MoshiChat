@@ -9,6 +9,7 @@ import { LOGOS, LOGO_ORDER } from '@shared/logos'
 import { useStore, useT, useTagDefs } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { GifKeyForm } from './GifPicker'
 
 export function SettingsSheet(): JSX.Element {
   const t = useT()
@@ -210,6 +211,24 @@ export function SettingsSheet(): JSX.Element {
                 </div>
               </div>
               <TagManager />
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- GIFs */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              GIF
+            </div>
+            <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('gifSettingsTitle')}</div>
+                  <div className="settings-row-sub">{settings.gif?.key ? t('gifSettingsOn', { provider: settings.gif.provider === 'giphy' ? 'GIPHY' : 'KLIPY' }) : t('gifSetupHint')}</div>
+                </div>
+              </div>
+              <div className="settings-row">
+                <GifKeyForm />
+              </div>
             </div>
           </div>
 

@@ -175,6 +175,14 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
       })
     else onFallback()
   }
+  if (attachment.gif && playable && !failed) {
+    return (
+      <button className="video-thumb gif" onClick={play} title="GIF">
+        <video className="attachment-image" src={attachment.url} poster={attachment.thumbnailUrl} autoPlay loop muted playsInline onError={() => setFailed(true)} />
+        <span className="gif-badge">GIF</span>
+      </button>
+    )
+  }
   return (
     <button className="video-thumb" onClick={play} title={t('video')}>
       {attachment.thumbnailUrl && !failed ? (
@@ -182,10 +190,16 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
       ) : (
         <div className="attachment-image placeholder">{t('video')}</div>
       )}
-      <span className="video-play">
-        <Play size={22} fill="currentColor" />
-      </span>
-      {attachment.duration ? <span className="video-duration">{formatClock(attachment.duration)}</span> : null}
+      {attachment.gif ? (
+        <span className="gif-badge">GIF</span>
+      ) : (
+        <>
+          <span className="video-play">
+            <Play size={22} fill="currentColor" />
+          </span>
+          {attachment.duration ? <span className="video-duration">{formatClock(attachment.duration)}</span> : null}
+        </>
+      )}
     </button>
   )
 }
