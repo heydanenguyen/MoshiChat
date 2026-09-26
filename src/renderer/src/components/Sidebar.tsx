@@ -125,7 +125,7 @@ export function Sidebar(): JSX.Element {
                 onContextMenu={contextFor(target, PLATFORMS[platform].name)}
                 title={PLATFORMS[platform].name}
               >
-                <PlatformIcon platform={platform} size={26} variant="tile" className="nav-item-icon" />
+                <PlatformIcon platform={platform} size={26} className="nav-item-icon" />
                 {!collapsed && <span className="nav-item-label">{PLATFORMS[platform].name}</span>}
                 {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}
                 {!collapsed && badge(unread.byPlatform[platform])}

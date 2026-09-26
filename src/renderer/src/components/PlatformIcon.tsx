@@ -5,31 +5,25 @@ import { PLATFORMS } from '@shared/types'
 interface Props {
   platform: Platform
   size?: number
-  /**
-   * badge: white glyph on the brand gradient (avatars, small).
-   * tile: pastel rounded tile with the glyph in the brand color (sidebar, pickers).
-   */
-  variant?: 'badge' | 'tile'
   className?: string
   style?: CSSProperties
 }
 
-export function PlatformIcon({ platform, size = 16, variant = 'badge', className = '', style }: Props): JSX.Element {
+/**
+ * The one platform icon used everywhere (sidebar, avatar badges, chips, sheets): a pastel rounded
+ * tile with the glyph in the brand colour, matching the tag pills. Small sizes get a bolder glyph.
+ */
+export function PlatformIcon({ platform, size = 16, className = '', style }: Props): JSX.Element {
   const meta = PLATFORMS[platform]
-  if (variant === 'tile') {
-    return (
-      <span
-        className={`platform-icon tile ${className}`}
-        style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), ['--brand' as string]: meta.color, ...style } as CSSProperties}
-        aria-label={meta.name}
-      >
-        <Glyph platform={platform} size={size * 0.56} />
-      </span>
-    )
-  }
+  const glyph = size <= 20 ? size * 0.64 : size * 0.56
   return (
-    <span className={`platform-icon ${className}`} style={{ width: size, height: size, background: meta.gradient, ...style }} aria-label={meta.name}>
-      <Glyph platform={platform} size={size * 0.58} />
+    <span
+      className={`platform-icon tile ${className}`}
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), ['--brand' as string]: meta.color, ...style } as CSSProperties}
+      aria-label={meta.name}
+      role="img"
+    >
+      <Glyph platform={platform} size={glyph} />
     </span>
   )
 }
