@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { BellOff, Pin, Search, SquarePen, X } from 'lucide-react'
-import { PLATFORMS, TAGS, TAG_ORDER, isMutedBy, type Platform, type TagId } from '@shared/types'
-import { useShowPlatformBadge, useStore, useT, useVisibleConversations } from '../store'
+import { BellOff, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
+import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleConversations } from '../store'
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
 import { PreviewText } from './MessageParts'
@@ -28,6 +28,9 @@ export function ConversationList(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
   const toggleTag = useStore((s) => s.toggleTag)
+  const pins = useStore((s) => s.settings.pins)
+  const togglePin = useStore((s) => s.togglePin)
+  const { list: tagList, byId: tagById } = useTagDefs()
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
   const openSheet = useStore((s) => s.openSheet)
@@ -53,19 +56,18 @@ export function ConversationList(): JSX.Element {
       : filter.startsWith('account:')
         ? (accounts[filter.slice(8)]?.displayName ?? t('messages'))
         : filter.startsWith('tag:')
-          ? TAGS[filter.slice(4) as TagId].name[language]
+          ? (tagById[filter.slice(4)]?.name[language] ?? t('messages'))
           : PLATFORMS[filter as Platform].name
 
   const visibleHits = searchHits.filter((h) => {
     if (filter === 'all') return true
     if (filter.startsWith('account:')) return h.conversation.accountId === filter.slice(8)
-    if (filter.startsWith('tag:')) return (tags[h.conversation.id] ?? []).includes(filter.slice(4) as TagId)
+    if (filter.startsWith('tag:')) return (tags[h.conversation.id] ?? []).includes(filter.slice(4))
     return h.conversation.platform === filter
   })
 
   const ringFor = (id: string): string | undefined => {
-    const first = (tags[id] ?? [])[0]
-    return first ? TAGS[first].color : undefined
+    return (tags[id] ?? []).map((tag) => tagById[tag]).find(Boolean)?.color
   }
 
   return (
@@ -114,7 +116,8 @@ export function ConversationList(): JSX.Element {
             preview && !isTyping && (preview.isOutgoing || c.isGroup)
               ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: `
               : ''
-          const convTags = tags[c.id] ?? []
+          const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
+          const pinned = isPinned(c, pins)
           return (
             <button
               key={c.id}
@@ -131,14 +134,14 @@ export function ConversationList(): JSX.Element {
                   <span className="conv-title">
                     {c.title}
                     {convTags.length > 0 && (
-                      <span className="conv-tags" title={convTags.map((tag) => TAGS[tag].name[language]).join(', ')}>
+                      <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
                         {convTags.map((tag) => (
-                          <span key={tag}>{TAGS[tag].emoji}</span>
+                          <span key={tag}>{tagById[tag].emoji}</span>
                         ))}
                       </span>
                     )}
                   </span>
-                  <span className="conv-time">{formatListTime(c.updatedAt, language)}</span>
+                  <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
                 </span>
                 <span className="conv-bottom">
                   <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
@@ -154,11 +157,23 @@ export function ConversationList(): JSX.Element {
                       )}
                   </span>
                   <span className="conv-meta">
-                    {c.pinned && <Pin size={12} strokeWidth={2.2} />}
+                    {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
                     {(c.muted || isMutedBy({ muted, tags }, c)) && <BellOff size={12} strokeWidth={2.2} />}
                     {c.unreadCount > 0 && <span className="unread-pill">{c.unreadCount > 99 ? '99+' : c.unreadCount}</span>}
                   </span>
                 </span>
+              </span>
+              <span
+                className={`conv-pin-action ${pinned ? 'on' : ''}`}
+                role="button"
+                tabIndex={-1}
+                title={pinned ? t('unpin') : t('pin')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void togglePin(c.id)
+                }}
+              >
+                {pinned ? <PinOff size={14} strokeWidth={2.2} /> : <Pin size={14} strokeWidth={2.2} />}
               </span>
             </button>
           )
@@ -190,19 +205,23 @@ export function ConversationList(): JSX.Element {
 
       {menu && (
         <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          <button className="context-menu-item" onClick={() => { void togglePin(menu.conversationId); setMenu(undefined) }}>
+            {isPinned(conversations.find((c) => c.id === menu.conversationId), pins) ? <PinOff size={15} /> : <Pin size={15} />}
+            <span>{isPinned(conversations.find((c) => c.id === menu.conversationId), pins) ? t('unpin') : t('pin')}</span>
+          </button>
           <button className="context-menu-item" onClick={() => { void toggleMute('conversations', menu.conversationId); setMenu(undefined) }}>
             <BellOff size={15} />
             <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
           </button>
           <div className="context-menu-title">{t('tags')}</div>
-          {TAG_ORDER.map((tag) => {
-            const active = (tags[menu.conversationId] ?? []).includes(tag)
+          {tagList.map((tag) => {
+            const active = (tags[menu.conversationId] ?? []).includes(tag.id)
             return (
-              <button key={tag} className={`context-menu-item ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag)}>
-                <span className="tag-swatch" style={{ background: TAGS[tag].color }}>
-                  {TAGS[tag].emoji}
+              <button key={tag.id} className={`context-menu-item ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
+                <span className="tag-swatch" style={{ background: tag.color }}>
+                  {tag.emoji}
                 </span>
-                <span>{TAGS[tag].name[language]}</span>
+                <span>{tag.name[language]}</span>
                 {active && <span className="context-menu-check">✓</span>}
               </button>
             )

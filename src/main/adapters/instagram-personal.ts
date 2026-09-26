@@ -47,6 +47,8 @@ interface InboxResponse {
   viewer?: IgUser
 }
 
+/** Walking whole histories for counts/"talking since" is paused: too slow for what it shows. */
+const HISTORY_CRAWL = false
 /** Safety poll; realtime events trigger refreshes within a second. */
 const POLL_INTERVAL = 45_000
 /** Instagram silently truncates bigger pages (100 returns 75 and claims there is nothing older). */
@@ -439,6 +441,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    * throttled or signed-out session is left alone.
    */
   private ensureCrawl(threadId: string, id: string, background = false): void {
+    if (!HISTORY_CRAWL) return
     const existing = this.crawls.get(threadId)
     if (existing?.done && !this.crawling.has(threadId) && Date.now() - (this.crawledAt.get(threadId) ?? 0) < 60_000) return
     // Background work never overtakes something the user asked for, and finished threads need no pre-count.

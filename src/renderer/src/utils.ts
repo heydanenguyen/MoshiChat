@@ -60,6 +60,17 @@ export function formatSpan(from: number, to: number, lang: Language): string {
   return vi ? 'hôm nay' : 'today'
 }
 
+/** "vừa xong", "5 phút trước", "3 giờ trước", "2 tháng trước" / English equivalents. */
+export function formatAgo(ts: number, lang: Language, now = Date.now()): string {
+  const vi = lang === 'vi'
+  const minutes = Math.floor((now - ts) / 60_000)
+  if (minutes < 1) return vi ? 'vừa xong' : 'just now'
+  if (minutes < 60) return vi ? `${minutes} phút trước` : `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return vi ? `${hours} giờ trước` : `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+  return `${formatSpan(ts, now, lang)} ${vi ? 'trước' : 'ago'}`
+}
+
 export function formatCount(n: number, lang: Language): string {
   return n.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')
 }

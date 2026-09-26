@@ -1,7 +1,8 @@
 import { BellOff, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, ThemePreference } from '@shared/types'
-import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, TAGS } from '@shared/types'
-import { useStore, useT } from '../store'
+import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER } from '@shared/types'
+import { TagManager } from './TagEditor'
+import { useStore, useT, useTagDefs } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 
@@ -35,6 +36,7 @@ export function SettingsSheet(): JSX.Element {
 
   const mutedPlatforms = settings.muted.platforms
   const mutedTags = settings.muted.tags
+  const { list: tagList } = useTagDefs()
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && closeSheet()}>
@@ -145,6 +147,22 @@ export function SettingsSheet(): JSX.Element {
             </div>
           </div>
 
+          {/* ---------------------------------------------------------- tags */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('tags')}
+            </div>
+            <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('tagManage')}</div>
+                  <div className="settings-row-sub">{t('tagManageHint')}</div>
+                </div>
+              </div>
+              <TagManager />
+            </div>
+          </div>
+
           {/* ---------------------------------------------------------- notifications */}
           <div>
             <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
@@ -184,7 +202,7 @@ export function SettingsSheet(): JSX.Element {
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('muteByTag')}</div>
                   <div className="mute-chips">
-                    {Object.values(TAGS).map((tag) => {
+                    {tagList.map((tag) => {
                       const muted = mutedTags.includes(tag.id)
                       return (
                         <button key={tag.id} className={`mute-chip ${muted ? 'muted' : ''}`} onClick={() => void toggleMute('tags', tag.id)}>
