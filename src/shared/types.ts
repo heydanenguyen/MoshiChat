@@ -304,6 +304,14 @@ export type Language = 'vi' | 'en'
 
 export type MeshId = 'sunrise' | 'ocean' | 'candy' | 'forest' | 'lavender' | 'mono'
 export type AccentId = 'ocean' | 'violet' | 'rose' | 'coral' | 'mint' | 'sun' | 'tangerine' | 'sunflower' | 'grass' | 'bubblegum' | 'cobalt' | 'grape'
+/** Accents the user built in Settings: one colour, or a gradient when `to` is set. */
+export type CustomAccentId = `custom-${string}`
+export interface CustomAccent {
+  id: CustomAccentId
+  from: string
+  to?: string
+}
+
 export type FontId = 'jakarta' | 'inter' | 'nunito' | 'system'
 
 export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatch: string[] }> = [
@@ -366,7 +374,7 @@ export interface Settings {
   tags: Record<string, TagId[]>
   sidebarCollapsed: boolean
   mesh: MeshId
-  accent: AccentId
+  accent: AccentId | CustomAccentId
   font: FontId
   muted: MuteRules
   /** Cheerful rotating line (with local weather) in the title bar. */
@@ -379,6 +387,8 @@ export interface Settings {
   logo?: LogoId
   /** Soft drop shadows under message bubbles (off = completely flat). */
   messageShadows?: boolean
+  /** Accents created with the colour picker. */
+  customAccents?: CustomAccent[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {

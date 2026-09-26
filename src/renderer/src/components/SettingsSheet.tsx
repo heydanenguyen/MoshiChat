@@ -2,6 +2,7 @@ import { BellOff, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagManager } from './TagEditor'
+import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
 import { LogoMark } from './Logo'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
@@ -126,6 +127,7 @@ export function SettingsSheet(): JSX.Element {
                   </div>
                 </div>
               ))}
+              <CustomAccentRow />
               <div className="settings-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('font')}</div>
