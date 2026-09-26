@@ -116,3 +116,72 @@ export function greetingFor(ctx: Context): GreetingLine {
   const daySeed = new Date().getDate() * 7
   return pick(weighted, ctx.tick + daySeed)
 }
+
+/** The person's first name from their accounts, preferring a real account over sample data. */
+export function firstNameOf(accounts: Array<{ displayName?: string; demo?: boolean }>): string {
+  const real = accounts.find((a) => !a.demo && a.displayName) ?? accounts[0]
+  const name = real?.displayName?.trim() ?? ''
+  if (!name) return ''
+  const parts = name.split(/\s+/)
+  // Vietnamese names put the given name last; western ones first.
+  const vietnamese = /[ăâđêôơưàáảãạèéẻẽẹìíỉĩịòóỏõọùúủũụỳýỷỹỵ]/i.test(name) || parts.length >= 3
+  return vietnamese ? parts[parts.length - 1] : parts[0]
+}
+
+/**
+ * What the logo character says on the launch screen: a line for the time of day or a general
+ * friendly one. `pickSplashLine` chooses one at random each launch.
+ */
+export function splashLines(language: Language, name: string, hour: number): GreetingLine[] {
+  const vi = language === 'vi'
+  const you = name || (vi ? 'bạn' : 'friend')
+  const hi = name ? (vi ? `${name} ơi` : `Hi ${name}`) : vi ? 'Xin chào' : 'Hi there'
+  const lines: GreetingLine[] = []
+  const add = (emoji: string, v: string, e: string): void => void lines.push({ emoji, text: vi ? v : e })
+
+  if (hour < 5) {
+    add('🌙', `Khuya rồi đó ${you}, nhắn xíu rồi ngủ nha`, `It's late, ${you}. A few messages, then sleep`)
+    add('🦉', `Cú đêm ${you} đã quay lại!`, `The night owl is back, ${you}!`)
+    add('✨', `${hi}, sao đêm nay đẹp ghê`, `${hi}, the stars look lovely tonight`)
+  } else if (hour < 11) {
+    add('☀️', `Chào buổi sáng, ${you}!`, `Good morning, ${you}!`)
+    add('☕️', `Cà phê chưa ${you}? Mình pha sẵn tin nhắn rồi nè`, `Coffee yet, ${you}? Your messages are brewed`)
+    add('🌤️', `Một ngày mới xinh xắn đang chờ ${you} đó`, `A brand new day is waiting for you, ${you}`)
+    add('🥐', `${hi}, ăn sáng đầy đủ chưa đó?`, `${hi}, did you have breakfast?`)
+  } else if (hour < 14) {
+    add('🍜', `${hi}, trưa rồi, nhớ ăn cơm nha`, `${hi}, it's lunchtime. Don't skip it`)
+    add('😋', `Ăn trưa xong mình tám tiếp nhé ${you}`, `Lunch first, then let's chat, ${you}`)
+    add('🌞', `Nắng trưa rực rỡ như ${you} vậy`, `The midday sun is as bright as you, ${you}`)
+  } else if (hour < 18) {
+    add('⚡️', `Buổi chiều năng lượng nha ${you}!`, `Have an energetic afternoon, ${you}!`)
+    add('🧋', `${hi}, làm ly trà sữa cho tỉnh táo không?`, `${hi}, bubble tea break?`)
+    add('🌻', `Chiều nay có ai đang nhớ ${you} đó`, `Someone is thinking of you this afternoon, ${you}`)
+  } else if (hour < 22) {
+    add('🌆', `Chào buổi tối, ${you}!`, `Good evening, ${you}!`)
+    add('🍲', `${hi}, ăn tối chưa? Kể mình nghe hôm nay thế nào`, `${hi}, had dinner? Tell me about your day`)
+    add('🎶', `Tối nay thư giãn và trò chuyện thôi ${you}`, `Time to relax and catch up, ${you}`)
+  } else {
+    add('🌙', `${hi}, hôm nay ${you} làm tốt lắm rồi`, `${hi}, you did great today`)
+    add('🛌', `Nhắn nốt vài câu rồi đi ngủ sớm nha ${you}`, `A few more messages, then bedtime, ${you}`)
+    add('⭐️', `Chúc ${you} một buổi tối thật êm`, `Wishing you a cosy night, ${you}`)
+  }
+
+  add('👋', `${hi}! Mình nhớ bạn ghê`, `${hi}! I missed you`)
+  add('💛', `Yay, ${you} quay lại rồi!`, `Yay, you're back${name ? `, ${name}` : ''}!`)
+  add('🎈', `Chào mừng trở lại, ${you}!`, `Welcome back, ${you}!`)
+  add('🤗', `Ôm ${you} một cái nè`, `Here's a big hug, ${you}`)
+  add('💬', `Mọi người đang chờ ${you} đó, vào thôi!`, `Everyone's waiting for you, ${you}. Let's go!`)
+  add('🌈', `Hôm nay mình trò chuyện thật vui nha ${you}`, `Let's have fun conversations today, ${you}`)
+  add('🍀', `Chúc ${you} một ngày may mắn`, `Wishing you a lucky day, ${you}`)
+  add('😊', `${hi}, cười lên một cái nào`, `${hi}, give me a smile`)
+  add('🚀', `Sẵn sàng chưa ${you}? Mình gom hết tin nhắn rồi`, `Ready, ${you}? I've gathered all your messages`)
+  add('🫶', `Có ${you} ở đây vui hẳn`, `It's better with you here, ${you}`)
+  return lines
+}
+
+/** A random launch line, avoiding the text shown last time. */
+export function pickSplashLine(language: Language, name: string, hour: number, avoid?: string, random = Math.random): GreetingLine {
+  const lines = splashLines(language, name, hour)
+  const pool = lines.length > 1 && avoid ? lines.filter((l) => l.text !== avoid) : lines
+  return pool[Math.floor(random() * pool.length) % pool.length]
+}

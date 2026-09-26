@@ -44,6 +44,21 @@ export function formatDate(value: string, lang: Language): string {
   return value
 }
 
+/** "Tháng 9, 2026" / "September 2026". */
+export function formatMonthLabel(ts: number, lang: Language): string {
+  const date = new Date(ts)
+  if (lang === 'vi') return `Tháng ${date.getMonth() + 1}, ${date.getFullYear()}`
+  return date.toLocaleDateString(locale(lang), { month: 'long', year: 'numeric' })
+}
+
+/** "27 thg 9 · 21:40" (year added when it is not this year); `dateOnly` drops the time. */
+export function formatMomentDate(ts: number, lang: Language, dateOnly = false): string {
+  const date = new Date(ts)
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  const day = date.toLocaleDateString(locale(lang), { day: 'numeric', month: 'short', ...(sameYear && !dateOnly ? {} : { year: 'numeric' }) })
+  return dateOnly ? day : `${day} · ${formatTime(ts, lang)}`
+}
+
 /** "1 năm 3 tháng" / "2 years 1 month" style span between two timestamps. */
 export function formatSpan(from: number, to: number, lang: Language): string {
   const days = Math.max(0, Math.floor((to - from) / 86_400_000))

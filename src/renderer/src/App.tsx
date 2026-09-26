@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useStore } from './store'
 import { isMac } from './utils'
@@ -16,7 +16,8 @@ import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
 import { NewChatSheet } from './components/NewChatSheet'
-import { SavedSheet } from './components/SavedSheet'
+import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
+import { firstNameOf } from './greetings'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -39,6 +40,10 @@ export default function App(): JSX.Element {
   const customAccents = useStore((s) => s.settings.customAccents)
   const font = useStore((s) => s.settings.font)
   const messageShadows = useStore((s) => s.settings.messageShadows)
+  const logo = useStore((s) => s.settings.logo)
+  const accounts = useStore((s) => s.accounts)
+  const [splash, setSplash] = useState(true)
+  const hideSplash = useCallback(() => setSplash(false), [])
 
   const narrow = useStore((s) => s.narrow)
   const setNarrow = useStore((s) => s.setNarrow)
@@ -96,17 +101,25 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('focus', onFocus)
   }, [init])
 
-  // Resolve the effective theme and keep it in sync with the OS.
+  // Resolve the effective theme and keep it in sync with the OS. Until settings arrive, reuse the
+  // theme from the last run so the launch screen does not flash the wrong one.
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
-      const effective = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme
+      const cached = ready ? undefined : readSplashPrefs().theme
+      const effective = cached ?? (theme === 'system' ? (media.matches ? 'dark' : 'light') : theme)
       document.documentElement.dataset.theme = effective
+      if (ready) writeSplashPrefs({ theme: effective })
     }
     apply()
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
-  }, [theme])
+  }, [theme, ready])
+
+  // Remember what the launch screen needs next time (settings load after it appears).
+  useEffect(() => {
+    if (ready) writeSplashPrefs({ logo: logo ?? 'buddies', language, name: firstNameOf(Object.values(accounts)) })
+  }, [ready, logo, language, accounts])
 
   useEffect(() => {
     document.documentElement.lang = language
@@ -134,40 +147,43 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [sheet.kind, openSheet, closeSheet])
 
-  if (!ready) return <div className="shell" />
-
+  // One tree for both phases so the launch screen stays mounted while the app appears beneath it.
   return (
     <div className="shell">
-      <TitleBar />
-    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
-      <div className="mesh" aria-hidden>
-        <span className="mesh-blob b1" />
-        <span className="mesh-blob b2" />
-        <span className="mesh-blob b3" />
-        <span className="mesh-blob b4" />
-        <span className="mesh-blob b5" />
-      </div>
-      <Sidebar />
-      <ConversationList />
-      {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
-      {detailsOpen && selectedId ? <DetailsPane /> : <div />}
+      {splash && <Splash ready={ready} onDone={hideSplash} />}
+      {ready && (
+        <>
+          <TitleBar />
+          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
+            <div className="mesh" aria-hidden>
+              <span className="mesh-blob b1" />
+              <span className="mesh-blob b2" />
+              <span className="mesh-blob b3" />
+              <span className="mesh-blob b4" />
+              <span className="mesh-blob b5" />
+            </div>
+            <Sidebar />
+            <ConversationList />
+            {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
+            {detailsOpen && selectedId ? <DetailsPane /> : <div />}
 
-      {sheet.kind === 'settings' && <SettingsSheet />}
-      {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
-      {sheet.kind === 'command' && <CommandPalette />}
-      {sheet.kind === 'new-chat' && <NewChatSheet />}
-      {sheet.kind === 'saved' && <SavedSheet />}
-      {forwarding && <ForwardSheet message={forwarding} />}
-      {lightbox && <Lightbox {...lightbox} />}
-      {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
+            {sheet.kind === 'settings' && <SettingsSheet />}
+            {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
+            {sheet.kind === 'command' && <CommandPalette />}
+            {sheet.kind === 'new-chat' && <NewChatSheet />}
+            {forwarding && <ForwardSheet message={forwarding} />}
+            {lightbox && <Lightbox {...lightbox} />}
+            {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
 
-      {toast && (
-        <div className={`toast ${toast.kind}`}>
-          {toast.kind === 'error' && <AlertCircle size={16} />}
-          {toast.text}
-        </div>
+            {toast && (
+              <div className={`toast ${toast.kind}`}>
+                {toast.kind === 'error' && <AlertCircle size={16} />}
+                {toast.text}
+              </div>
+            )}
+          </div>
+        </>
       )}
-    </div>
     </div>
   )
 }

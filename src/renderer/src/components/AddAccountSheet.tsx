@@ -5,6 +5,7 @@ import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { BuddyLoader } from './BuddyLoader'
 
 const DOCS: Partial<Record<Platform, string>> = {
   telegram: 'https://my.telegram.org/apps',
@@ -148,7 +149,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
             {error && <div className="error-banner">{error}</div>}
             {busy && (
               <div className="progress-row">
-                <span className="spinner" /> {t('waitingLogin')}
+                <BuddyLoader size={22} inline /> {t('waitingLogin')}
               </div>
             )}
           </div>
@@ -174,7 +175,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               {error && <div className="error-banner">{error}</div>}
               {busy && (
                 <div className="progress-row">
-                  <span className="spinner" /> {t('waitingLogin')}
+                  <BuddyLoader size={22} inline /> {t('waitingLogin')}
                 </div>
               )}
             </div>
@@ -244,7 +245,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               {error && <div className="error-banner">{error}</div>}
               {busy && (
                 <div className="progress-row">
-                  <span className="spinner" /> {t('connectingAccount')}
+                  <BuddyLoader size={22} inline /> {t('connectingAccount')}
                 </div>
               )}
             </div>
@@ -287,7 +288,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               {error && <div className="error-banner">{error}</div>}
               {busy && (
                 <div className="progress-row">
-                  <span className="spinner" /> {t('connectingAccount')}
+                  <BuddyLoader size={22} inline /> {t('connectingAccount')}
                 </div>
               )}
             </div>
@@ -330,7 +331,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               {error && <div className="error-banner">{error}</div>}
               {busy && (
                 <div className="progress-row">
-                  <span className="spinner" /> {t('connectingAccount')}
+                  <BuddyLoader size={22} inline /> {t('connectingAccount')}
                 </div>
               )}
             </div>
@@ -363,7 +364,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               {error && <div className="error-banner">{error}</div>}
               {busy && (
                 <div className="progress-row">
-                  <span className="spinner" /> {t('qrWaiting')}
+                  <BuddyLoader size={22} inline /> {t('qrWaiting')}
                 </div>
               )}
             </div>

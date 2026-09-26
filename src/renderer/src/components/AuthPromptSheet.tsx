@@ -3,6 +3,7 @@ import type { AuthPrompt } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
 import { PlatformIcon } from './PlatformIcon'
+import { BuddyLoader } from './BuddyLoader'
 
 export function AuthPromptSheet({ prompt }: { prompt: AuthPrompt }): JSX.Element {
   const t = useT()
@@ -29,10 +30,10 @@ export function AuthPromptSheet({ prompt }: { prompt: AuthPrompt }): JSX.Element
               {t('qrHint', { app: PLATFORMS[prompt.platform].name })}
             </p>
             <div className="qr-frame">
-              {prompt.qrDataUrl ? <img src={prompt.qrDataUrl} alt="QR" draggable={false} /> : <span className="spinner" />}
+              {prompt.qrDataUrl ? <img src={prompt.qrDataUrl} alt="QR" draggable={false} /> : <BuddyLoader size={48} />}
             </div>
             <div className="progress-row" style={{ justifyContent: 'center' }}>
-              <span className="spinner" /> {prompt.note ?? t('qrWaiting')}
+              <BuddyLoader size={22} inline /> {prompt.note ?? t('qrWaiting')}
             </div>
           </div>
           <div className="sheet-footer">

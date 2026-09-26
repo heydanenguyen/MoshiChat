@@ -5,6 +5,7 @@ import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { BuddyLoader } from './BuddyLoader'
 
 /** Start a conversation with anyone from any connected account. */
 export function NewChatSheet(): JSX.Element {
@@ -116,9 +117,7 @@ export function NewChatSheet(): JSX.Element {
         )}
         <div className="command-list scroll">
           {contacts === undefined && (
-            <div className="progress-row" style={{ justifyContent: 'center', padding: 16 }}>
-              <span className="spinner" />
-            </div>
+            <BuddyLoader size={44} label={t('loadingContacts')} className="sheet-loader" />
           )}
           {contacts && results.length === 0 && <div className="conv-empty">{t('noContacts')}</div>}
           {grouped.map((group) => (
