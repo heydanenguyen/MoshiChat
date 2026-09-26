@@ -1,75 +1,114 @@
-import { readFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
 import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf } from './types'
+import { conversationId, externalIdOf, matchesQuery, statsOf } from './types'
 import type { WebCookie } from './facebook-personal'
+import { WebClient } from '../web-client'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
   username?: string
 }
 
-type IgClient = import('instagram-private-api').IgApiClient
-type IgThread = import('instagram-private-api').DirectInboxFeedResponseThreadsItem
-type IgItem = import('instagram-private-api').DirectThreadFeedResponseItemsItem
-
 interface IgUser {
   pk: number | string
+  pk_id?: string
   username: string
   full_name?: string
   profile_pic_url?: string
+  is_verified?: boolean
 }
 
-const POLL_INTERVAL = 10_000
+interface IgItem {
+  item_id: string
+  user_id: number | string
+  timestamp: string | number
+  item_type: string
+  text?: string
+  link?: { text?: string; link_context?: { link_url?: string; link_title?: string } }
+  media?: { image_versions2?: { candidates?: Array<{ url: string; width?: number; height?: number }> }; video_versions?: Array<{ url: string }> }
+  visual_media?: { media?: IgItem['media'] }
+  animated_media?: { images?: { fixed_height?: { url?: string } } }
+  voice_media?: { media?: { audio?: { audio_src?: string; duration?: number } } }
+  media_share?: { code?: string; caption?: { text?: string }; image_versions2?: { candidates?: Array<{ url: string }> } }
+  clip?: { clip?: { code?: string; image_versions2?: { candidates?: Array<{ url: string }> } } }
+  reel_share?: { text?: string }
+  reactions?: { emojis?: Array<{ emoji: string; sender_id: number | string }> }
+  replied_to_message?: { item_id?: string; text?: string; user_id?: number | string }
+}
+
+interface IgThread {
+  thread_id: string
+  thread_title?: string
+  is_group?: boolean
+  users: IgUser[]
+  items?: IgItem[]
+  last_permanent_item?: IgItem
+  last_activity_at?: number | string
+  read_state?: number
+  muted?: boolean
+  oldest_cursor?: string
+  has_older?: boolean
+  last_seen_at?: Record<string, { item_id?: string; timestamp?: string }>
+}
+
+interface InboxResponse {
+  inbox: { threads: IgThread[]; has_older?: boolean; oldest_cursor?: string }
+  viewer?: IgUser
+}
+
+const POLL_INTERVAL = 20_000
+const MAX_BACKOFF = 8
 const HISTORY_LIMIT = 300
+const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
 
 /**
- * Personal Instagram account through the private mobile API, reusing the
- * session the user created on instagram.com inside an app window. Messages
- * are polled every few seconds; no webhooks or business account needed.
+ * Personal Instagram through the same web endpoints instagram.com uses,
+ * executed inside the session the user created in the in-app login window.
+ * Messages are polled every few seconds.
  */
 export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
-  private ig?: IgClient
+  private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
   private mePk = ''
   private threads = new Map<string, IgThread>()
   private users = new Map<string, IgUser>()
   private history = new Map<string, Message[]>()
   private cursors = new Map<string, string | undefined>()
   private pendingPeers = new Map<string, string>()
+  private aliases = new Map<string, string>()
   private timer?: NodeJS.Timeout
   private polling = false
+  /** Polls to skip after Instagram answers 429; doubles on each hit. */
+  private skip = 0
+  private backoff = 1
 
   constructor(
     initialId: string,
     private secret: InstagramPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true } }
+    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: false } }
   }
 
   async connect(): Promise<void> {
     this.setStatus('connecting')
-    const { IgApiClient } = await import('instagram-private-api')
-    const ig = new IgApiClient()
-    const seed = this.secret.username ?? this.secret.cookies.find((c) => c.name === 'ds_user_id')?.value ?? 'unison'
-    ig.state.generateDevice(seed)
-    const jar = ig.state.cookieJar as unknown as { setCookie(cookie: string, uri: string): unknown }
-    for (const cookie of this.secret.cookies) {
-      const domain = cookie.domain?.replace(/^\./, '') ?? 'instagram.com'
-      jar.setCookie(`${cookie.name}=${cookie.value}; Domain=.${domain}; Path=${cookie.path ?? '/'}; Secure`, `https://www.${domain.replace(/^www\./, '')}/`)
-    }
-    this.ig = ig
     try {
-      const me = await ig.account.currentUser()
-      this.mePk = String(me.pk)
-      this.account.id = `instagram:ig-${this.mePk}`
-      this.account.displayName = me.full_name || me.username
-      this.account.handle = `@${me.username}`
-      this.account.avatarUrl = me.profile_pic_url
-      this.secret = { ...this.secret, username: me.username }
+      await this.web.restoreCookies(this.secret.cookies)
+      const pk = this.secret.cookies.find((c) => c.name === 'ds_user_id')?.value
+      if (!pk) throw new Error('Instagram session is missing the user id; please sign in again')
+      this.mePk = pk
+      // The settings form is the cheapest self lookup and is not rate limited like /users/{id}/info/.
+      const form = await this.web.json<{ form_data: { username: string; first_name?: string } }>('/api/v1/accounts/edit/web_form_data/', { headers: APP_HEADERS })
+      const me: IgUser = { pk, username: form.form_data.username, full_name: form.form_data.first_name }
+      this.account.id = `instagram:ig-${pk}`
+      this.account.displayName = me?.full_name || me?.username || this.secret.username || 'Instagram'
+      this.account.handle = me?.username ? `@${me.username}` : undefined
+      this.account.avatarUrl = me?.profile_pic_url
+      this.secret = { cookies: await this.web.cookies(), username: me?.username ?? this.secret.username }
     } catch (err) {
-      this.setStatus('error', `Instagram session rejected: ${(err as Error).message}`)
+      this.setStatus('error', `Instagram: ${(err as Error).message}`)
+      this.web.close()
       throw err
     }
     await this.ctx.saveSecret(this.secret)
@@ -80,70 +119,62 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   async disconnect(): Promise<void> {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
-    this.ig = undefined
+    this.web.close()
     this.setStatus('disconnected')
   }
 
   async listConversations(): Promise<Conversation[]> {
-    const ig = this.requireIg()
-    const threads = await ig.feed.directInbox().items()
-    const list: Conversation[] = []
-    for (const thread of threads) {
-      this.threads.set(thread.thread_id, thread)
-      for (const user of thread.users ?? []) this.users.set(String(user.pk), user as IgUser)
-      list.push(this.toConversation(thread))
-    }
-    return list
+    const inbox = await this.inbox()
+    return inbox.map((thread) => this.toConversation(thread))
   }
 
   async fetchMessages(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
-    const ig = this.requireIg()
     const threadId = this.threadIdFor(id)
-    if (!threadId) return []
-    const feed = ig.feed.directThread({ thread_id: threadId, oldest_cursor: beforeId ? this.cursors.get(id) : undefined } as never)
-    const items = await feed.items()
-    this.cursors.set(id, (feed as unknown as { cursor?: string }).cursor)
-    const messages = items.slice(0, limit).map((item) => this.toMessage(item, id))
+    if (!threadId) return this.history.get(id) ?? []
+    const params = new URLSearchParams({ limit: String(Math.min(limit, 40)) })
+    if (beforeId) {
+      const cursor = this.cursors.get(id)
+      if (!cursor) return []
+      params.set('cursor', cursor)
+    }
+    const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?${params}`, { headers: APP_HEADERS })
+    const thread = res.thread
+    this.absorbUsers(thread.users)
+    this.cursors.set(id, thread.has_older ? thread.oldest_cursor : undefined)
+    const messages = (thread.items ?? []).map((item) => this.toMessage(item, id))
     this.remember(id, messages)
     return messages.sort((a, b) => a.sentAt - b.sentAt)
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
-    const ig = this.requireIg()
+    if (options.attachments?.length) throw new Error('Personal Instagram supports text messages only for now')
     const external = externalIdOf(id)
-    const pendingPeer = this.pendingPeers.get(external)
-    const target = pendingPeer ? ig.entity.directThread([pendingPeer]) : ig.entity.directThread(external)
-    let itemId: string | undefined
-    let threadId: string | undefined
-    const files = options.attachments ?? []
-    for (const file of files) {
-      if (!file.mime.startsWith('image/')) throw new Error('Instagram direct messages accept photos only from Unison')
-      const response = await target.broadcastPhoto({ file: await readFile(file.path) })
-      const payload = unwrap(response)
-      itemId = payload.item_id ?? itemId
-      threadId = payload.thread_id ?? threadId
+    const threadId = this.threadIdFor(id)
+    const clientContext = randomUUID()
+    const form: Record<string, string> = { action: 'send_item', client_context: clientContext, mutation_token: clientContext, text }
+    if (threadId) form.thread_ids = JSON.stringify([threadId])
+    else {
+      const peer = this.pendingPeers.get(external)
+      if (!peer) throw new Error('Unknown Instagram recipient')
+      form.recipient_users = JSON.stringify([[peer]])
     }
-    if (text.trim() || !files.length) {
-      const response = await target.broadcastText(text)
-      const payload = unwrap(response)
-      itemId = payload.item_id ?? itemId
-      threadId = payload.thread_id ?? threadId
-    }
-    if (pendingPeer && threadId) {
-      this.pendingPeers.delete(external)
-      this.pendingPeers.set(external, pendingPeer)
-      this.aliasThread(external, threadId)
-    }
+    const res = await this.web.json<{ payload?: { item_id?: string; thread_id?: string; timestamp?: string } }>('/api/v1/direct_v2/threads/broadcast/text/', {
+      method: 'POST',
+      form,
+      headers: APP_HEADERS
+    })
+    const payload = res.payload ?? {}
+    if (!threadId && payload.thread_id) this.aliases.set(external, payload.thread_id)
     const message: Message = {
-      id: itemId ?? `local-${Date.now()}`,
+      id: payload.item_id ?? `local-${clientContext}`,
       conversationId: id,
       senderId: this.mePk,
       senderName: this.account.displayName,
       senderAvatarUrl: this.account.avatarUrl,
       text,
-      attachments: files.map((a, i) => ({ id: `${itemId ?? Date.now()}-${i}`, kind: 'image', url: a.preview, name: a.name, size: a.size })),
+      attachments: [],
       reactions: [],
-      sentAt: Date.now(),
+      sentAt: payload.timestamp ? Number(payload.timestamp) / 1000 : Date.now(),
       isOutgoing: true,
       status: 'sent'
     }
@@ -155,28 +186,31 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const threadId = this.threadIdFor(id)
     const last = (this.history.get(id) ?? []).filter((m) => !m.isOutgoing).at(-1)
     if (!threadId || !last) return
-    await this.requireIg().entity.directThread(threadId).markItemSeen(last.id).catch(() => undefined)
+    await this.web
+      .json(`/api/v1/direct_v2/threads/${threadId}/items/${last.id}/seen/`, { method: 'POST', form: { action: 'mark_seen', thread_id: threadId, item_id: last.id }, headers: APP_HEADERS })
+      .catch(() => undefined)
   }
 
   async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
     const thread = this.threads.get(this.threadIdFor(id) ?? '')
-    const other = thread?.users?.find((u) => String(u.pk) !== this.mePk) ?? (this.pendingPeers.get(externalIdOf(id)) ? this.users.get(this.pendingPeers.get(externalIdOf(id))!) : undefined)
-    if (!other) return undefined
+    const otherPk = thread?.users.find((u) => String(u.pk) !== this.mePk)?.pk ?? this.pendingPeers.get(externalIdOf(id))
+    if (!otherPk) return undefined
+    // /users/{id}/info/ is rate limited on the web; fall back to what the inbox already told us.
+    const info = await this.userInfo(String(otherPk)).catch(() => undefined)
+    const cached = this.users.get(String(otherPk))
+    const user = info ?? cached
+    if (!user) return undefined
+    const full = info as (IgUser & { biography?: string; follower_count?: number; hd_profile_pic_url_info?: { url?: string } }) | undefined
     const extra: PeerProfile['extra'] = []
-    try {
-      const info = await this.requireIg().user.info(String(other.pk))
-      extra.push({ label: 'Followers', value: Number(info.follower_count ?? 0).toLocaleString() })
-      if (info.is_verified) extra.push({ label: 'Verified', value: '✓' })
-      return {
-        id: String(other.pk),
-        name: info.full_name || info.username,
-        handle: `@${info.username}`,
-        avatarUrl: info.hd_profile_pic_url_info?.url ?? info.profile_pic_url,
-        bio: info.biography || undefined,
-        extra
-      }
-    } catch {
-      return { id: String(other.pk), name: other.full_name || other.username, handle: `@${other.username}`, avatarUrl: other.profile_pic_url, extra }
+    if (full?.follower_count !== undefined) extra.push({ label: 'Followers', value: full.follower_count.toLocaleString() })
+    if (user.is_verified) extra.push({ label: 'Verified', value: '✓' })
+    return {
+      id: String(user.pk),
+      name: user.full_name || user.username,
+      handle: `@${user.username}`,
+      avatarUrl: full?.hd_profile_pic_url_info?.url ?? user.profile_pic_url,
+      bio: full?.biography || undefined,
+      extra
     }
   }
 
@@ -184,14 +218,12 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const peers = new Map<string, Peer>()
     for (const user of this.users.values()) {
       if (String(user.pk) === this.mePk) continue
-      peers.set(String(user.pk), { id: String(user.pk), name: user.full_name || user.username, handle: `@${user.username}`, avatarUrl: user.profile_pic_url })
+      peers.set(String(user.pk), this.toPeer(user))
     }
     try {
-      const following = await this.requireIg().feed.accountFollowing(this.mePk).items()
-      for (const user of following.slice(0, 200) as IgUser[]) {
-        this.users.set(String(user.pk), user)
-        peers.set(String(user.pk), { id: String(user.pk), name: user.full_name || user.username, handle: `@${user.username}`, avatarUrl: user.profile_pic_url })
-      }
+      const res = await this.web.json<{ users: IgUser[] }>(`/api/v1/friendships/${this.mePk}/following/?count=100`, { headers: APP_HEADERS })
+      this.absorbUsers(res.users)
+      for (const user of res.users) peers.set(String(user.pk), this.toPeer(user))
     } catch (err) {
       this.ctx.log('instagram following failed', (err as Error).message)
     }
@@ -200,7 +232,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   async openConversation(peerId: string): Promise<Conversation> {
     for (const thread of this.threads.values()) {
-      if (!thread.is_group && thread.users?.length === 1 && String(thread.users[0].pk) === peerId) return this.toConversation(thread)
+      const others = thread.users.filter((u) => String(u.pk) !== this.mePk)
+      if (!thread.is_group && others.length === 1 && String(others[0].pk) === peerId) return this.toConversation(thread)
     }
     const user = this.users.get(peerId)
     const external = `u${peerId}`
@@ -212,10 +245,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       title: user?.full_name || user?.username || 'Instagram',
       avatarUrl: user?.profile_pic_url,
       isGroup: false,
-      participants: [
-        { id: this.mePk, name: this.account.displayName, isMe: true },
-        { id: peerId, name: user?.full_name || user?.username || '', handle: user ? `@${user.username}` : undefined, avatarUrl: user?.profile_pic_url }
-      ],
+      participants: [{ id: this.mePk, name: this.account.displayName, isMe: true }, ...(user ? [this.toPeer(user)] : [])],
       unreadCount: 0,
       updatedAt: Date.now()
     }
@@ -230,33 +260,68 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     return statsOf(this.history.get(id) ?? [])
   }
 
-  // ---- polling ----------------------------------------------------------
+  // ---- requests ---------------------------------------------------------
+
+  private async userInfo(pk: string): Promise<IgUser | undefined> {
+    try {
+      const res = await this.web.json<{ user: IgUser }>(`/api/v1/users/${pk}/info/`, { headers: APP_HEADERS })
+      if (res.user) this.users.set(String(res.user.pk), res.user)
+      return res.user
+    } catch (err) {
+      if (pk !== this.mePk) throw err
+      // Fallback for the signed-in account: the settings form always works on the web.
+      const form = await this.web.json<{ form_data: { username: string; first_name?: string } }>('/api/v1/accounts/edit/web_form_data/', { headers: APP_HEADERS })
+      return { pk, username: form.form_data.username, full_name: form.form_data.first_name }
+    }
+  }
+
+  private async inbox(): Promise<IgThread[]> {
+    const res = await this.web.json<InboxResponse>('/api/v1/direct_v2/inbox/?persistentBadging=true&folder=&limit=40&thread_message_limit=1', { headers: APP_HEADERS })
+    const threads = res.inbox?.threads ?? []
+    if (res.viewer?.profile_pic_url && this.account.avatarUrl !== res.viewer.profile_pic_url) {
+      this.account.avatarUrl = res.viewer.profile_pic_url
+      this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
+    }
+    for (const thread of threads) {
+      this.threads.set(thread.thread_id, thread)
+      this.absorbUsers(thread.users)
+    }
+    return threads
+  }
 
   private async poll(): Promise<void> {
-    if (this.polling || !this.ig) return
+    if (this.polling) return
+    if (this.skip > 0) {
+      this.skip -= 1
+      return
+    }
     this.polling = true
     try {
-      const threads = await this.ig.feed.directInbox().items()
+      const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
+      const threads = await this.inbox()
       for (const thread of threads) {
-        const previous = this.threads.get(thread.thread_id)
-        this.threads.set(thread.thread_id, thread)
-        for (const user of thread.users ?? []) this.users.set(String(user.pk), user as IgUser)
         const id = conversationId(this.account.id, thread.thread_id)
-        const lastId = thread.last_permanent_item?.item_id
+        const lastId = (thread.last_permanent_item ?? thread.items?.[0])?.item_id
+        if (before.get(thread.thread_id) === lastId) continue
+        this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
         const known = this.history.get(id)
-        if (!previous || previous.last_permanent_item?.item_id !== lastId) {
-          const conversation = this.toConversation(thread)
-          this.ctx.emit({ type: 'conversation:upserted', conversation })
-          if (previous && known && lastId && !known.some((m) => m.id === lastId)) {
-            const items = await this.ig.feed.directThread({ thread_id: thread.thread_id } as never).items()
-            const fresh = items.filter((item) => !known.some((m) => m.id === item.item_id)).map((item) => this.toMessage(item, id)).sort((a, b) => a.sentAt - b.sentAt)
-            this.remember(id, fresh)
-            for (const message of fresh) if (!message.isOutgoing) this.ctx.emit({ type: 'message:new', message })
-          }
-        }
+        if (!known || !lastId || known.some((m) => m.id === lastId)) continue
+        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
+        const fresh = (res.thread.items ?? [])
+          .filter((item) => !known.some((m) => m.id === item.item_id))
+          .map((item) => this.toMessage(item, id))
+          .sort((a, b) => a.sentAt - b.sentAt)
+        this.remember(id, fresh)
+        for (const message of fresh) if (!message.isOutgoing) this.ctx.emit({ type: 'message:new', message })
       }
+      this.backoff = 1
     } catch (err) {
-      this.ctx.log('instagram poll failed', (err as Error).message)
+      const message = (err as Error).message
+      if (/429|wait a few minutes|rate/i.test(message)) {
+        this.skip = this.backoff
+        this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF)
+      }
+      this.ctx.log('instagram poll failed', message)
     } finally {
       this.polling = false
     }
@@ -264,28 +329,28 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   // ---- mapping ----------------------------------------------------------
 
-  private aliasThread(external: string, threadId: string): void {
-    // Messages sent to a brand-new peer live under the virtual id until the thread shows up in the inbox.
-    this.pendingPeers.set(external, this.pendingPeers.get(external)!)
-    this.cursors.set(conversationId(this.account.id, external), undefined)
-    this.threadAliases.set(external, threadId)
-  }
-
-  private threadAliases = new Map<string, string>()
-
   private threadIdFor(id: string): string | undefined {
     const external = externalIdOf(id)
-    if (external.startsWith('u')) return this.threadAliases.get(external)
+    if (external.startsWith('u')) return this.aliases.get(external)
     return external
+  }
+
+  private absorbUsers(users?: IgUser[]): void {
+    for (const user of users ?? []) this.users.set(String(user.pk ?? user.pk_id), user)
+  }
+
+  private toPeer(user: IgUser): Peer {
+    return { id: String(user.pk), name: user.full_name || user.username, handle: `@${user.username}`, avatarUrl: user.profile_pic_url }
   }
 
   private toConversation(thread: IgThread): Conversation {
     const id = conversationId(this.account.id, thread.thread_id)
-    const others = (thread.users ?? []).filter((u) => String(u.pk) !== this.mePk)
-    const last = thread.last_permanent_item
-    const lastText = last ? itemText(last as unknown as IgItem) : ''
-    const lastAt = last ? Number(last.timestamp) / 1000 : Date.now()
+    const others = thread.users.filter((u) => String(u.pk) !== this.mePk)
+    const last = thread.last_permanent_item ?? thread.items?.[0]
+    const lastAt = last ? Number(last.timestamp) / 1000 : Number(thread.last_activity_at ?? 0) / 1000
     const lastMine = last ? String(last.user_id) === this.mePk : false
+    const seen = thread.last_seen_at?.[this.mePk]?.timestamp
+    const unread = last && !lastMine && (!seen || Number(seen) < Number(last.timestamp)) ? 1 : 0
     return {
       id,
       accountId: this.account.id,
@@ -293,16 +358,13 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       title: thread.thread_title || others.map((u) => u.full_name || u.username).join(', ') || 'Instagram',
       avatarUrl: others[0]?.profile_pic_url,
       isGroup: !!thread.is_group,
-      participants: [
-        { id: this.mePk, name: this.account.displayName, isMe: true },
-        ...others.map((u) => ({ id: String(u.pk), name: u.full_name || u.username, handle: `@${u.username}`, avatarUrl: u.profile_pic_url }))
-      ],
-      unreadCount: (thread as unknown as { read_state?: number }).read_state ? 1 : 0,
-      muted: !!(thread as unknown as { muted?: boolean }).muted,
+      participants: [{ id: this.mePk, name: this.account.displayName, isMe: true }, ...others.map((u) => this.toPeer(u))],
+      unreadCount: unread,
+      muted: !!thread.muted,
       lastMessage: last
-        ? { id: last.item_id, text: lastText, senderName: lastMine ? this.account.displayName : (others[0]?.full_name || others[0]?.username || ''), isOutgoing: lastMine, sentAt: lastAt }
+        ? { id: last.item_id, text: itemText(last), senderName: lastMine ? this.account.displayName : (others[0]?.full_name || others[0]?.username || ''), isOutgoing: lastMine, sentAt: lastAt }
         : undefined,
-      updatedAt: lastAt
+      updatedAt: lastAt || Date.now()
     }
   }
 
@@ -310,17 +372,27 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const isOutgoing = String(item.user_id) === this.mePk
     const sender = this.users.get(String(item.user_id))
     const attachments: Attachment[] = []
-    const raw = item as unknown as Record<string, any>
-    const media = raw.media ?? raw.raven_media
-    if (media?.image_versions2?.candidates?.[0]) {
-      const candidate = media.image_versions2.candidates[0]
-      attachments.push({ id: `${item.item_id}-m`, kind: media.video_versions ? 'video' : 'image', url: media.video_versions?.[0]?.url ?? candidate.url, thumbnailUrl: candidate.url, width: candidate.width, height: candidate.height })
+    const media = item.media ?? item.visual_media?.media
+    const candidate = media?.image_versions2?.candidates?.[0]
+    if (candidate) {
+      attachments.push({ id: `${item.item_id}-m`, kind: media?.video_versions ? 'video' : 'image', url: media?.video_versions?.[0]?.url ?? candidate.url, thumbnailUrl: candidate.url, width: candidate.width, height: candidate.height })
     }
-    if (raw.animated_media?.images?.fixed_height?.url) attachments.push({ id: `${item.item_id}-g`, kind: 'image', url: raw.animated_media.images.fixed_height.url })
-    if (raw.voice_media?.media?.audio?.audio_src) attachments.push({ id: `${item.item_id}-v`, kind: 'audio', url: raw.voice_media.media.audio.audio_src, name: 'Voice message', duration: raw.voice_media.media.audio.duration ? raw.voice_media.media.audio.duration / 1000 : undefined })
-    if (raw.link?.link_context?.link_url) attachments.push({ id: `${item.item_id}-l`, kind: 'link', url: raw.link.link_context.link_url, name: raw.link.link_context.link_title })
-    if (raw.media_share?.image_versions2?.candidates?.[0]) attachments.push({ id: `${item.item_id}-s`, kind: 'link', url: `https://www.instagram.com/p/${raw.media_share.code}/`, name: raw.media_share.caption?.text?.slice(0, 80) ?? 'Instagram post', thumbnailUrl: raw.media_share.image_versions2.candidates[0].url })
-    return {
+    if (item.animated_media?.images?.fixed_height?.url) attachments.push({ id: `${item.item_id}-g`, kind: 'image', url: item.animated_media.images.fixed_height.url })
+    const audio = item.voice_media?.media?.audio
+    if (audio?.audio_src) attachments.push({ id: `${item.item_id}-v`, kind: 'audio', url: audio.audio_src, name: 'Voice message', duration: audio.duration ? audio.duration / 1000 : undefined })
+    if (item.link?.link_context?.link_url) attachments.push({ id: `${item.item_id}-l`, kind: 'link', url: item.link.link_context.link_url, name: item.link.link_context.link_title })
+    const share = item.media_share ?? item.clip?.clip
+    if (share?.code) {
+      attachments.push({ id: `${item.item_id}-s`, kind: 'link', url: `https://www.instagram.com/p/${share.code}/`, name: (item.media_share?.caption?.text ?? 'Instagram post').slice(0, 80), thumbnailUrl: share.image_versions2?.candidates?.[0]?.url })
+    }
+    const reactions = new Map<string, { emoji: string; count: number; byMe: boolean }>()
+    for (const r of item.reactions?.emojis ?? []) {
+      const entry = reactions.get(r.emoji) ?? { emoji: r.emoji, count: 0, byMe: false }
+      entry.count += 1
+      if (String(r.sender_id) === this.mePk) entry.byMe = true
+      reactions.set(r.emoji, entry)
+    }
+    const message: Message = {
       id: item.item_id,
       conversationId: id,
       senderId: String(item.user_id),
@@ -328,11 +400,16 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       senderAvatarUrl: isOutgoing ? this.account.avatarUrl : sender?.profile_pic_url,
       text: itemText(item),
       attachments,
-      reactions: [],
+      reactions: [...reactions.values()],
       sentAt: Number(item.timestamp) / 1000,
       isOutgoing,
       status: 'delivered'
     }
+    if (item.replied_to_message?.item_id) {
+      const who = this.users.get(String(item.replied_to_message.user_id))
+      message.replyTo = { id: item.replied_to_message.item_id, senderName: who?.full_name || who?.username || '', text: item.replied_to_message.text ?? '' }
+    }
+    return message
   }
 
   private remember(id: string, messages: Message[]): void {
@@ -346,11 +423,6 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     this.history.set(id, list.slice(-HISTORY_LIMIT))
   }
 
-  private requireIg(): IgClient {
-    if (!this.ig) throw new Error('Instagram is not connected')
-    return this.ig
-  }
-
   private setStatus(status: Account['status'], error?: string): void {
     this.account.status = status
     this.account.error = error
@@ -359,17 +431,27 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 }
 
 function itemText(item: IgItem): string {
-  const raw = item as unknown as Record<string, any>
-  if (raw.text) return String(raw.text)
-  if (raw.link?.text) return String(raw.link.text)
-  if (item.item_type === 'like') return '❤️'
-  if (item.item_type === 'media_share') return raw.media_share?.caption?.text ? '' : 'Shared a post'
-  if (item.item_type === 'story_share') return 'Shared a story'
-  if (item.item_type === 'reel_share') return raw.reel_share?.text ?? 'Replied to a story'
-  return ''
-}
-
-function unwrap(response: unknown): { item_id?: string; thread_id?: string } {
-  const r = response as { payload?: { item_id?: string; thread_id?: string }; item_id?: string; thread_id?: string }
-  return r.payload ?? r
+  if (item.text) return item.text
+  if (item.link?.text) return item.link.text
+  switch (item.item_type) {
+    case 'like':
+      return '❤️'
+    case 'media':
+    case 'raven_media':
+    case 'visual_media':
+      return ''
+    case 'voice_media':
+      return ''
+    case 'media_share':
+    case 'clip':
+      return ''
+    case 'story_share':
+      return 'Shared a story'
+    case 'reel_share':
+      return item.reel_share?.text ?? 'Replied to a story'
+    case 'action_log':
+      return ''
+    default:
+      return ''
+  }
 }
