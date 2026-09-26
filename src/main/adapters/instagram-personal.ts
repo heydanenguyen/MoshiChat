@@ -285,8 +285,16 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    * message (Instagram has no captions in DMs). The returned message is read back from the thread.
    */
   private async sendAttachments(id: string, text: string, options: SendOptions): Promise<Message> {
-    const threadId = this.threadIdFor(id)
-    if (!threadId) throw new Error('Send a text message first to start this Instagram conversation')
+    const external = externalIdOf(id)
+    let threadId = this.threadIdFor(id)
+    let url: string
+    if (threadId) url = `https://www.instagram.com/direct/t/${threadId}/`
+    else {
+      // New contact: open Instagram's composer for them (ig.me), the thread appears after the first send.
+      const peer = this.users.get(this.pendingPeers.get(external) ?? '')
+      if (!peer?.username) throw new Error('Unknown Instagram recipient')
+      url = `https://ig.me/m/${peer.username}`
+    }
     const files = (options.attachments ?? []).map((file) => {
       // Voice notes are recorded as Opus and AAC together; Instagram plays AAC (.m4a) natively.
       const aac = file.alternates?.find((alt) => alt.mime === 'audio/mp4')
@@ -298,10 +306,34 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
       return chosen.path
     })
-    const url = `https://www.instagram.com/direct/t/${threadId}/`
     const sentAt = Date.now()
     await this.composer.sendFiles(url, files)
-    if (text.trim()) await this.composer.send(url, text)
+    if (!threadId) {
+      for (let attempt = 0; attempt < 6 && !threadId; attempt++) {
+        await sleep(1500)
+        threadId = await this.findThreadFor(external)
+      }
+      if (threadId) this.aliases.set(external, threadId)
+    }
+    if (text.trim()) await this.composer.send(threadId ? `https://www.instagram.com/direct/t/${threadId}/` : url, text)
+    if (!threadId) {
+      // Sent, but the new thread is not listed yet: show the local copy; the next refresh reconciles it.
+      const local: Message = {
+        id: `local-${randomUUID()}`,
+        conversationId: id,
+        senderId: this.mePk,
+        senderName: this.account.displayName,
+        senderAvatarUrl: this.account.avatarUrl,
+        text: '',
+        attachments: (options.attachments ?? []).map((f, i) => ({ id: `local-${i}`, kind: f.sticker ? 'sticker' : f.mime.startsWith('video/') ? 'video' : 'image', url: f.preview })),
+        reactions: [],
+        sentAt,
+        isOutgoing: true,
+        status: 'sent'
+      }
+      this.remember(id, [local])
+      return local
+    }
 
     // Read back what Instagram stored (uploads can take a few seconds to show up).
     let sent: IgItem | undefined

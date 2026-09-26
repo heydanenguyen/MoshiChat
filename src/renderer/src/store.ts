@@ -17,10 +17,12 @@ import type {
   Settings,
   SharedKind,
   TagId,
-  TagMeta
+  TagMeta,
+  ContactOverride
 } from '@shared/types'
 import { DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
+import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -106,6 +108,7 @@ interface State {
   createTag(input: { name: string; icon: string; color: string; fill?: string }): Promise<TagMeta>
   deleteTag(tag: TagId): Promise<void>
   togglePin(conversationId: string): Promise<void>
+  setContactOverride(conversationId: string, override: ContactOverride | undefined): Promise<void>
   toggleMute<K extends keyof MuteRules>(kind: K, id: MuteRules[K][number]): Promise<void>
   toggleSidebar(): Promise<void>
   setDetailsTab(tab: DetailsTab): void
@@ -548,6 +551,17 @@ export const useStore = create<State>((set, get) => ({
     if (filter === `tag:${tag}`) set({ filter: 'all' })
   },
 
+  async setContactOverride(conversationId, override) {
+    const overrides = { ...(get().settings.contactOverrides ?? {}) }
+    const clean: ContactOverride = {}
+    if (override?.nickname?.trim()) clean.nickname = override.nickname.trim().slice(0, 60)
+    if (override?.avatar) clean.avatar = override.avatar
+    if (override?.birthday) clean.birthday = override.birthday
+    if (Object.keys(clean).length) overrides[conversationId] = clean
+    else delete overrides[conversationId]
+    await get().setSettings({ contactOverrides: overrides })
+  },
+
   async togglePin(conversationId) {
     const { settings, conversations } = get()
     const pinned = isPinned(conversations[conversationId], settings.pins)
@@ -694,6 +708,54 @@ export const useStore = create<State>((set, get) => ({
   }
 }))
 
+// ---------------------------------------------------------------- nicknames & custom photos
+
+/** Image for a custom avatar value (uploaded data URL, or one of the logo characters). */
+export function customAvatarUrl(value?: string): string | undefined {
+  if (!value) return undefined
+  if (value.startsWith('data:image/')) return value
+  if (value.startsWith('logo:')) {
+    const id = value.slice(5) as LogoId
+    if (LOGO_ORDER.includes(id)) return `data:image/svg+xml;utf8,${encodeURIComponent(logoIconSvg(id, true))}`
+  }
+  return undefined
+}
+
+const decorated = new WeakSet<Conversation>()
+
+/** The conversation as shown: nickname and custom photo on top of the platform's own. */
+function withOverride(c: Conversation, override?: ContactOverride): Conversation {
+  const baseTitle = c.originalTitle ?? c.title
+  const baseAvatar = 'originalAvatarUrl' in c ? c.originalAvatarUrl : c.avatarUrl
+  const nickname = override?.nickname?.trim()
+  const avatar = customAvatarUrl(override?.avatar)
+  if (!nickname && !avatar) {
+    if (c.originalTitle === undefined && !('originalAvatarUrl' in c)) return c
+    const { originalTitle: _t, originalAvatarUrl: _a, ...rest } = c
+    return { ...rest, title: baseTitle, avatarUrl: baseAvatar }
+  }
+  return { ...c, title: nickname || baseTitle, avatarUrl: avatar ?? baseAvatar, originalTitle: baseTitle, originalAvatarUrl: baseAvatar }
+}
+
+// Every conversation that enters the store (and every change of overrides) is decorated once.
+useStore.subscribe((state, prev) => {
+  const overrides = state.settings.contactOverrides
+  const overridesChanged = overrides !== prev.settings.contactOverrides
+  if (state.conversations === prev.conversations && !overridesChanged) return
+  let changed = false
+  const next: Record<string, Conversation> = { ...state.conversations }
+  for (const [id, c] of Object.entries(state.conversations)) {
+    if (!overridesChanged && decorated.has(c)) continue
+    const shown = withOverride(c, overrides?.[id])
+    decorated.add(shown)
+    if (shown !== c) {
+      next[id] = shown
+      changed = true
+    }
+  }
+  if (changed) useStore.setState({ conversations: next })
+})
+
 /** Conversations for the current filter and search, pinned first then most recent. */
 export function useVisibleConversations(): Conversation[] {
   const conversations = useStore((s) => s.conversations)
@@ -738,6 +800,7 @@ export function computeVisible(
       if (!query) return true
       return (
         c.title.toLowerCase().includes(query) ||
+        (c.originalTitle?.toLowerCase().includes(query) ?? false) ||
         c.participants.some((p) => p.name.toLowerCase().includes(query) || p.handle?.toLowerCase().includes(query))
       )
     })
