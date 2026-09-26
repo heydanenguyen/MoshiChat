@@ -1,0 +1,366 @@
+/** Domain model shared between main, preload and renderer. */
+
+export type Platform = 'messenger' | 'instagram' | 'telegram' | 'zalo' | 'whatsapp'
+
+export type AccountStatus = 'connecting' | 'connected' | 'disconnected' | 'needs_auth' | 'error'
+
+/** What the platform lets us do from our side. The UI hides unsupported actions. */
+export interface AccountFeatures {
+  reply: boolean
+  react: boolean
+  attachments: boolean
+}
+
+export const ALL_FEATURES: AccountFeatures = { reply: true, react: true, attachments: true }
+
+export interface Account {
+  id: string
+  platform: Platform
+  displayName: string
+  handle?: string
+  avatarUrl?: string
+  status: AccountStatus
+  error?: string
+  features: AccountFeatures
+  /** Sample-data account used for the first-run experience. */
+  demo?: boolean
+}
+
+export interface Peer {
+  id: string
+  name: string
+  handle?: string
+  avatarUrl?: string
+  isMe?: boolean
+}
+
+export interface MessagePreview {
+  id: string
+  text: string
+  senderName: string
+  isOutgoing: boolean
+  sentAt: number
+}
+
+export interface Conversation {
+  id: string
+  accountId: string
+  platform: Platform
+  title: string
+  avatarUrl?: string
+  isGroup: boolean
+  participants: Peer[]
+  unreadCount: number
+  pinned?: boolean
+  muted?: boolean
+  lastMessage?: MessagePreview
+  updatedAt: number
+}
+
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'link'
+
+export interface Attachment {
+  id: string
+  kind: AttachmentKind
+  url?: string
+  thumbnailUrl?: string
+  name?: string
+  size?: number
+  width?: number
+  height?: number
+  /** Seconds, for audio and video. */
+  duration?: number
+}
+
+export interface Reaction {
+  emoji: string
+  count: number
+  byMe: boolean
+}
+
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+
+export interface Message {
+  id: string
+  conversationId: string
+  senderId: string
+  senderName: string
+  senderAvatarUrl?: string
+  text: string
+  attachments: Attachment[]
+  reactions: Reaction[]
+  replyTo?: { id: string; senderName: string; text: string }
+  sentAt: number
+  isOutgoing: boolean
+  status: MessageStatus
+  edited?: boolean
+}
+
+/** A local file the user wants to send. */
+export interface OutgoingAttachment {
+  path: string
+  name: string
+  mime: string
+  size: number
+  /** Data URL preview for images (and small voice notes), so the optimistic bubble can show it immediately. */
+  preview?: string
+  /** Recorded voice note: platforms mark it as push-to-talk. */
+  voice?: boolean
+  duration?: number
+}
+
+export interface SendOptions {
+  replyToId?: string
+  attachments?: OutgoingAttachment[]
+}
+
+export interface SearchHit {
+  message: Message
+  conversation: Conversation
+}
+
+/** Everything a platform is willing to tell us about the person on the other side. */
+export interface PeerProfile {
+  id: string
+  name: string
+  handle?: string
+  avatarUrl?: string
+  bio?: string
+  phone?: string
+  /** ISO date (YYYY-MM-DD) or partial (--MM-DD) when the year is hidden. */
+  birthday?: string
+  gender?: string
+  /** Extra platform-specific facts, already localised by the adapter. */
+  extra?: Array<{ label: string; value: string }>
+}
+
+export type SharedKind = 'media' | 'links' | 'files'
+
+/** How long and how much two people have been talking. */
+export interface ConversationStats {
+  firstMessageAt?: number
+  lastMessageAt?: number
+  messageCount?: number
+  /** True when the count is only what is cached locally, not the platform total. */
+  approximate?: boolean
+  /** The adapter is still walking back through history; numbers will grow. */
+  pending?: boolean
+}
+
+export type TagId = 'work' | 'friend' | 'love' | 'family' | 'vip' | 'fun'
+
+export interface TagMeta {
+  id: TagId
+  emoji: string
+  color: string
+  name: { vi: string; en: string }
+}
+
+export const TAGS: Record<TagId, TagMeta> = {
+  work: { id: 'work', emoji: '💼', color: '#0A84FF', name: { vi: 'Công việc', en: 'Work' } },
+  friend: { id: 'friend', emoji: '🤝', color: '#FF9F0A', name: { vi: 'Bạn thân', en: 'Best friend' } },
+  love: { id: 'love', emoji: '❤️', color: '#FF375F', name: { vi: 'Người yêu', en: 'Love' } },
+  family: { id: 'family', emoji: '🏡', color: '#30D158', name: { vi: 'Gia đình', en: 'Family' } },
+  vip: { id: 'vip', emoji: '⭐️', color: '#FFD60A', name: { vi: 'VIP', en: 'VIP' } },
+  fun: { id: 'fun', emoji: '🎉', color: '#BF5AF2', name: { vi: 'Vui vẻ', en: 'Fun' } }
+}
+
+export const TAG_ORDER: TagId[] = ['work', 'friend', 'love', 'family', 'vip', 'fun']
+
+export interface TypingEvent {
+  conversationId: string
+  peerName: string
+  isTyping: boolean
+}
+
+export type AuthPromptKind = 'phone' | 'code' | 'password' | 'qr'
+
+export interface AuthPrompt {
+  requestId: string
+  accountId: string
+  platform: Platform
+  kind: AuthPromptKind
+  message?: string
+  /** PNG data URL for QR sign-in. A new prompt with the same requestId replaces the code. */
+  qrDataUrl?: string
+  /** Free-form progress note, e.g. "scanned, confirm on your phone". */
+  note?: string
+}
+
+/** Someone you can start a new conversation with. */
+export interface Contact extends Peer {
+  accountId: string
+  platform: Platform
+}
+
+/** A Facebook Page (and its linked Instagram account) returned by the OAuth picker. */
+export interface PageOption {
+  id: string
+  name: string
+  accessToken: string
+  pictureUrl?: string
+  instagram?: { id: string; username: string }
+}
+
+/** Credentials supplied by the user when adding an account. Secrets never leave the main process after this. */
+export type AddAccountInput =
+  | { platform: 'telegram'; apiId: number; apiHash: string }
+  | { platform: 'messenger'; pageId: string; accessToken: string }
+  | { platform: 'instagram'; pageId: string; accessToken: string }
+  | { platform: 'zalo' }
+  | { platform: 'whatsapp' }
+
+export type ThemePreference = 'system' | 'light' | 'dark'
+export type Language = 'vi' | 'en'
+
+export type MeshId = 'sunrise' | 'ocean' | 'candy' | 'forest' | 'lavender' | 'mono'
+export type AccentId = 'ocean' | 'violet' | 'rose' | 'coral' | 'mint' | 'sun'
+export type FontId = 'jakarta' | 'inter' | 'nunito' | 'system'
+
+export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatch: string[] }> = [
+  { id: 'sunrise', name: { vi: 'Bình minh', en: 'Sunrise' }, swatch: ['#ffd6e0', '#d6e6ff', '#e7dbff', '#ffe8c9'] },
+  { id: 'ocean', name: { vi: 'Đại dương', en: 'Ocean' }, swatch: ['#cfe7ff', '#d2f4f1', '#dfe2ff', '#e6f7ff'] },
+  { id: 'candy', name: { vi: 'Kẹo ngọt', en: 'Candy' }, swatch: ['#ffd1e8', '#ffe1c9', '#f2d5ff', '#d6f0ff'] },
+  { id: 'forest', name: { vi: 'Rừng xanh', en: 'Forest' }, swatch: ['#d5f5e3', '#e9f7c9', '#d3ecff', '#fff1cf'] },
+  { id: 'lavender', name: { vi: 'Oải hương', en: 'Lavender' }, swatch: ['#e6dbff', '#f3d9ff', '#d9e2ff', '#ffe3f2'] },
+  { id: 'mono', name: { vi: 'Tối giản', en: 'Mono' }, swatch: ['#eceef5', '#e3e6ef', '#f2f3f8', '#dfe3ee'] }
+]
+
+export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string }> = [
+  { id: 'ocean', name: { vi: 'Xanh biển', en: 'Ocean' }, from: '#5b8cff', to: '#8a6bff' },
+  { id: 'violet', name: { vi: 'Tím', en: 'Violet' }, from: '#8b5cf6', to: '#d946ef' },
+  { id: 'rose', name: { vi: 'Hồng', en: 'Rose' }, from: '#f45d8a', to: '#ff8a5b' },
+  { id: 'coral', name: { vi: 'San hô', en: 'Coral' }, from: '#ff7a59', to: '#ffb347' },
+  { id: 'mint', name: { vi: 'Bạc hà', en: 'Mint' }, from: '#22c1a3', to: '#4fa3ff' },
+  { id: 'sun', name: { vi: 'Nắng', en: 'Sun' }, from: '#f7b733', to: '#fc4a1a' }
+]
+
+export const FONTS: Array<{ id: FontId; name: string; family: string }> = [
+  { id: 'jakarta', name: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans'" },
+  { id: 'inter', name: 'Inter', family: "'Inter'" },
+  { id: 'nunito', name: 'Nunito', family: "'Nunito'" },
+  { id: 'system', name: 'System', family: '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI"' }
+]
+
+/** Current conditions near the user, from Open-Meteo (WMO weather codes). */
+export interface WeatherInfo {
+  city: string
+  country: string
+  temperature: number
+  feelsLike?: number
+  code: number
+  isDay: boolean
+  fetchedAt: number
+}
+
+/** Where notifications are switched off. */
+export interface MuteRules {
+  conversations: string[]
+  tags: TagId[]
+  accounts: string[]
+  platforms: Platform[]
+}
+
+export interface Settings {
+  theme: ThemePreference
+  language: Language
+  notifications: boolean
+  sendOnEnter: boolean
+  /** Conversation id -> tags picked by the user. */
+  tags: Record<string, TagId[]>
+  sidebarCollapsed: boolean
+  mesh: MeshId
+  accent: AccentId
+  font: FontId
+  muted: MuteRules
+  /** Cheerful rotating line (with local weather) in the title bar. */
+  greetings: boolean
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  theme: 'system',
+  language: 'vi',
+  notifications: true,
+  sendOnEnter: true,
+  tags: {},
+  sidebarCollapsed: false,
+  mesh: 'sunrise',
+  accent: 'ocean',
+  font: 'jakarta',
+  muted: { conversations: [], tags: [], accounts: [], platforms: [] },
+  greetings: true
+}
+
+/** True when notifications for this conversation are switched off by any rule. */
+export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversation: Pick<Conversation, 'id' | 'accountId' | 'platform'>): boolean {
+  const m = settings.muted
+  if (!m) return false
+  if (m.conversations.includes(conversation.id)) return true
+  if (m.accounts.includes(conversation.accountId)) return true
+  if (m.platforms.includes(conversation.platform)) return true
+  const tags = settings.tags?.[conversation.id] ?? []
+  return tags.some((t) => m.tags.includes(t))
+}
+
+/** Events pushed from main to the renderer. */
+export type BridgeEvent =
+  | { type: 'account:updated'; account: Account }
+  | { type: 'account:removed'; accountId: string }
+  | { type: 'conversation:upserted'; conversation: Conversation }
+  | { type: 'conversations:reset'; accountId: string; conversations: Conversation[] }
+  | { type: 'message:new'; message: Message }
+  | { type: 'message:updated'; message: Message }
+  | { type: 'typing'; typing: TypingEvent }
+  | { type: 'auth:prompt'; prompt: AuthPrompt }
+  | { type: 'auth:cleared'; requestId: string }
+  | { type: 'focus-conversation'; conversationId: string }
+  | { type: 'window:state'; maximized: boolean }
+
+export interface PlatformMeta {
+  id: Platform
+  name: string
+  color: string
+  gradient: string
+  /** How the account is connected, shown on the platform picker. */
+  method: string
+}
+
+export const PLATFORM_ORDER: Platform[] = ['messenger', 'instagram', 'telegram', 'zalo', 'whatsapp']
+
+export const PLATFORMS: Record<Platform, PlatformMeta> = {
+  messenger: {
+    id: 'messenger',
+    name: 'Messenger',
+    color: '#0084FF',
+    gradient: 'linear-gradient(135deg, #00C6FF 0%, #0078FF 45%, #A033FF 100%)',
+    method: 'Meta Graph API'
+  },
+  instagram: {
+    id: 'instagram',
+    name: 'Instagram',
+    color: '#E1306C',
+    gradient: 'linear-gradient(135deg, #F9CE34 0%, #EE2A7B 50%, #6228D7 100%)',
+    method: 'Meta Graph API'
+  },
+  telegram: {
+    id: 'telegram',
+    name: 'Telegram',
+    color: '#2AABEE',
+    gradient: 'linear-gradient(135deg, #37AEE2 0%, #1E96C8 100%)',
+    method: 'MTProto'
+  },
+  zalo: {
+    id: 'zalo',
+    name: 'Zalo',
+    color: '#0068FF',
+    gradient: 'linear-gradient(135deg, #2F8CFF 0%, #0057D8 100%)',
+    method: 'QR code'
+  },
+  whatsapp: {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    color: '#25D366',
+    gradient: 'linear-gradient(135deg, #5DE68C 0%, #1FAF54 100%)',
+    method: 'QR code'
+  }
+}
