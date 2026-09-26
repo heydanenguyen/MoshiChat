@@ -9,6 +9,8 @@ export interface AccountFeatures {
   reply: boolean
   react: boolean
   attachments: boolean
+  /** Recorded voice notes; defaults to `attachments` when absent. */
+  voice?: boolean
 }
 
 export const ALL_FEATURES: AccountFeatures = { reply: true, react: true, attachments: true }
@@ -40,7 +42,26 @@ export interface MessagePreview {
   senderName: string
   isOutgoing: boolean
   sentAt: number
+  /** What the message carries when it is not plain text; the list shows an icon and a localized label. */
+  kind?: PreviewKind
 }
+
+export type PreviewKind =
+  | 'photo'
+  | 'video'
+  | 'voice'
+  | 'sticker'
+  | 'gif'
+  | 'link'
+  | 'file'
+  | 'post'
+  | 'reel'
+  | 'story_reply'
+  | 'story_reaction'
+  | 'story_mention'
+  | 'story_share'
+  | 'call'
+  | 'unavailable'
 
 export interface Conversation {
   id: string
@@ -57,7 +78,10 @@ export interface Conversation {
   updatedAt: number
 }
 
-export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'link'
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'link' | 'story' | 'post'
+
+/** Why a story card is attached, shown as a small localized label above it. */
+export type StoryLabel = 'story_reply' | 'story_reaction' | 'story_mention' | 'story_share'
 
 export interface Attachment {
   id: string
@@ -70,6 +94,27 @@ export interface Attachment {
   height?: number
   /** Seconds, for audio and video. */
   duration?: number
+  /** Voice notes: normalised amplitudes (0..1) as sent by the platform. */
+  waveform?: number[]
+  /** Link previews and shared posts: summary or caption. */
+  caption?: string
+  /** Shared posts and stories: whose content it is. */
+  author?: string
+  /** Story cards: reply, reaction, mention or share. */
+  label?: StoryLabel
+  /** Shared posts: reel (short video) rather than a feed post. */
+  reel?: boolean
+  /** Content that is gone (an expired story, a deleted post). */
+  expired?: boolean
+}
+
+/** Centered notices in a thread instead of a bubble. */
+export interface SystemNotice {
+  kind: 'call' | 'missed_call' | 'unavailable' | 'event'
+  /** Call length in seconds. */
+  seconds?: number
+  /** Audio-only call rather than video. */
+  audio?: boolean
 }
 
 export interface Reaction {
@@ -94,6 +139,8 @@ export interface Message {
   isOutgoing: boolean
   status: MessageStatus
   edited?: boolean
+  /** Rendered as a centered notice (calls, events, content only the official app can show). */
+  system?: SystemNotice
 }
 
 /** A local file the user wants to send. */
@@ -107,6 +154,8 @@ export interface OutgoingAttachment {
   /** Recorded voice note: platforms mark it as push-to-talk. */
   voice?: boolean
   duration?: number
+  /** The same recording in other formats (voice notes are recorded as Opus and AAC at once). */
+  alternates?: Array<{ path: string; mime: string; size: number }>
 }
 
 export interface SendOptions {

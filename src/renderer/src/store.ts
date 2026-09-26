@@ -41,6 +41,13 @@ export interface Toast {
 export interface Lightbox {
   url: string
   name?: string
+  /** Play as a video instead of showing an image. */
+  video?: boolean
+  /** Still frame shown while a video loads. */
+  poster?: string
+  /** The original on the platform (posts, reels, stories). */
+  externalUrl?: string
+  externalLabel?: string
 }
 
 interface State {
