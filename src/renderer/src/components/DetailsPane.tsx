@@ -4,7 +4,7 @@ import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { TagChip } from './Tag'
-import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, type DetailsTab } from '../store'
+import { isPinned, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -88,7 +88,6 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const allTags = useStore((s) => s.settings.tags)
   const language = useStore((s) => s.settings.language)
   const openLightbox = useStore((s) => s.openLightbox)
-  const showBadge = useShowPlatformBadge()
 
   useEffect(() => {
     void loadProfile(conversationId)
@@ -114,7 +113,6 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           name={name}
           url={avatar}
           size={96}
-          platform={showBadge ? conversation.platform : undefined}
           ring={tags.map((tag) => tagById[tag]).find(Boolean)?.color}
           className="details-avatar-large"
           onClick={() => avatar && openLightbox({ url: avatar, name })}
