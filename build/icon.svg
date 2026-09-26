@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Unison buddies: two chat-bubble friends talking in unison. Flat colours, no outlines. -->
+  <rect width="1024" height="1024" rx="228" fill="#CDBBFF"/>
+  <g transform="translate(528 516) scale(0.9) translate(-512 -505)">
+    <!-- pink flower buddy (behind), tail to the right -->
+    <g fill="#FF7AC0" stroke="#FF7AC0" stroke-width="34" stroke-linejoin="round">
+      <circle cx="652" cy="318" r="148" stroke="none"/>
+      <circle cx="564" cy="230" r="120" stroke="none"/>
+      <circle cx="740" cy="230" r="120" stroke="none"/>
+      <circle cx="564" cy="406" r="120" stroke="none"/>
+      <circle cx="740" cy="406" r="120" stroke="none"/>
+      <path d="M812 468 L884 566 L748 516 Z"/>
+    </g>
+    <g fill="none" stroke="#141414" stroke-width="19" stroke-linecap="round">
+      <path d="M598 270 q20 23 40 0"/>
+      <path d="M672 270 q20 23 40 0"/>
+      <path d="M606 318 q50 42 100 0"/>
+    </g>
+    <!-- orange speech-bubble buddy (front), tail to the left -->
+    <g fill="#FF5B1F" stroke="#FF5B1F" stroke-width="36" stroke-linejoin="round">
+      <rect x="150" y="440" width="570" height="400" rx="190" stroke="none"/>
+      <circle cx="262" cy="478" r="104" stroke="none"/>
+      <circle cx="404" cy="428" r="108" stroke="none"/>
+      <circle cx="552" cy="438" r="104" stroke="none"/>
+      <circle cx="662" cy="508" r="98" stroke="none"/>
+      <path d="M240 780 L182 900 L368 820 Z"/>
+    </g>
+    <circle cx="336" cy="610" r="76" fill="#fff"/>
+    <circle cx="540" cy="610" r="76" fill="#fff"/>
+    <circle cx="362" cy="592" r="41" fill="#141414"/>
+    <circle cx="566" cy="592" r="41" fill="#141414"/>
+    <path d="M360 704 H520 A80 74 0 0 1 360 704 Z" fill="#141414"/>
+    <rect x="408" y="702" width="30" height="34" rx="8" fill="#fff"/>
+    <rect x="444" y="702" width="30" height="34" rx="8" fill="#fff"/>
+  </g>
+</svg>
