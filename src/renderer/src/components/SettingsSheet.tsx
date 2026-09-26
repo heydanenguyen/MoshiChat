@@ -3,6 +3,8 @@ import type { Language, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { TagChip } from './Tag'
+import { LogoMark } from './Logo'
+import { LOGOS, LOGO_ORDER } from '@shared/logos'
 import { useStore, useT, useTagDefs } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -55,6 +57,32 @@ export function SettingsSheet(): JSX.Element {
               {t('personalize')}
             </div>
             <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('logo')}</div>
+                  <div className="settings-row-sub">{t('logoHint')}</div>
+                </div>
+              </div>
+              <div className="logo-picker" role="radiogroup" aria-label={t('logo')}>
+                {LOGO_ORDER.map((id) => {
+                  const active = (settings.logo ?? 'buddies') === id
+                  return (
+                    <button
+                      key={id}
+                      className={`logo-option ${active ? 'active' : ''}`}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => void setSettings({ logo: id })}
+                      title={LOGOS[id].name[language]}
+                    >
+                      <span className="logo-tile" style={{ background: LOGOS[id].background }}>
+                        <LogoMark logo={id} size={52} />
+                      </span>
+                      <span className="logo-option-name">{LOGOS[id].name[language]}</span>
+                    </button>
+                  )
+                })}
+              </div>
               <div className="settings-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('background')}</div>

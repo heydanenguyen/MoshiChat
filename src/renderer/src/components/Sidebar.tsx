@@ -3,7 +3,7 @@ import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 }
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagChip } from './Tag'
-import { UnisonMark } from './Logo'
+import { LogoMark } from './Logo'
 import { TagCreator } from './TagEditor'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
@@ -95,7 +95,7 @@ export function Sidebar(): JSX.Element {
       <div className="sidebar-top">
         {!collapsed && (
           <div className="brand">
-            <UnisonMark size={30} />
+            <LogoMark size={30} />
             <span className="brand-word">{t('appName')}</span>
           </div>
         )}

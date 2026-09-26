@@ -52,9 +52,17 @@ function applyTheme(theme: Settings['theme']): void {
   nativeTheme.themeSource = theme
 }
 
-function appIcon(): Electron.NativeImage | undefined {
-  const image = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
-  return image.isEmpty() ? undefined : image
+/** Window/taskbar icon for the chosen logo (rendered by scripts/make-icons.mjs into resources/icons). */
+function appIcon(logo: Settings['logo'] = storage.settings.logo): Electron.NativeImage | undefined {
+  const name = `${logo ?? 'buddies'}.png`
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'icons', name)]
+    : [join(__dirname, '../../resources/icons', name), join(__dirname, '../../resources/icon.png')]
+  for (const path of candidates) {
+    const image = nativeImage.createFromPath(path)
+    if (!image.isEmpty()) return image
+  }
+  return undefined
 }
 
 function createWindow(): void {
@@ -394,6 +402,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
+    if (patch.logo) {
+      const icon = appIcon(settings.logo)
+      if (icon && window && !window.isDestroyed()) window.setIcon(icon)
+    }
     return settings
   })
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))

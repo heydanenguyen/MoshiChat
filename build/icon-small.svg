@@ -1,17 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Small sizes (16-48px): only the orange buddy, bigger features. -->
-  <rect width="64" height="64" rx="15" fill="#CDBBFF"/>
-  <g fill="#FF5B1F" stroke="#FF5B1F" stroke-width="3" stroke-linejoin="round">
-    <rect x="7" y="17" width="50" height="36" rx="16" stroke="none"/>
-    <circle cx="16" cy="19" r="9" stroke="none"/>
-    <circle cx="29" cy="14" r="10" stroke="none"/>
-    <circle cx="42" cy="15" r="9" stroke="none"/>
-    <circle cx="51" cy="21" r="8" stroke="none"/>
-    <path d="M14 47 L9 59 L26 51 Z"/>
-  </g>
-  <circle cx="24" cy="31" r="7.5" fill="#fff"/>
-  <circle cx="41" cy="31" r="7.5" fill="#fff"/>
-  <circle cx="26.5" cy="29.5" r="4.2" fill="#141414"/>
-  <circle cx="43.5" cy="29.5" r="4.2" fill="#141414"/>
-  <path d="M26 40.5 H39 A6.5 6 0 0 1 26 40.5 Z" fill="#141414"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#CDBBFF"/><g transform="translate(32 32) scale(1) translate(-32 -32)"><g class="buddy-body"><g fill="#FF5B1F" stroke="#FF5B1F" stroke-width="3" stroke-linejoin="round"><rect x="7" y="17" width="50" height="36" rx="16" stroke="none"/><circle cx="16" cy="19" r="9" stroke="none"/><circle cx="29" cy="14" r="10" stroke="none"/><circle cx="42" cy="15" r="9" stroke="none"/><circle cx="51" cy="21" r="8" stroke="none"/><path d="M14 47 L9 59 L26 51 Z"/></g><g class="buddy-eyes"><circle cx="24" cy="31" r="7.5" fill="#fff"/><circle cx="41" cy="31" r="7.5" fill="#fff"/><g class="buddy-pupils"><circle cx="26.5" cy="29.5" r="4.2" fill="#141414"/><circle cx="43.5" cy="29.5" r="4.2" fill="#141414"/></g></g><path d="M26 40.5 H39 A6.5 6 0 0 1 26 40.5 Z" fill="#141414"/></g></g></svg>
