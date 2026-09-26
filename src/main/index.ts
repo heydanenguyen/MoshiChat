@@ -4,6 +4,7 @@ import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import type { AddAccountInput, BridgeEvent, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
+import { isStickerId } from '@shared/stickers'
 import { IPC } from '@shared/bridge'
 import { isMutedBy } from '@shared/types'
 import { Storage } from './storage'
@@ -50,6 +51,24 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
 
 function applyTheme(theme: Settings['theme']): void {
   nativeTheme.themeSource = theme
+}
+
+/** A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency. */
+async function stickerFile(id: string): Promise<OutgoingAttachment> {
+  if (!isStickerId(id)) throw new Error('Unknown sticker')
+  const dir = app.isPackaged ? join(process.resourcesPath, 'stickers') : join(__dirname, '../../resources/stickers')
+  const path = join(dir, `${id}.png`)
+  const opaque = join(dir, `${id}-white.png`)
+  const [data, opaqueInfo] = await Promise.all([readFile(path), stat(opaque).catch(() => undefined)])
+  return {
+    path,
+    name: `${id}.png`,
+    mime: 'image/png',
+    size: data.length,
+    sticker: id,
+    preview: `data:image/png;base64,${data.toString('base64')}`,
+    alternates: opaqueInfo ? [{ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' }] : undefined
+  }
 }
 
 /** Window/taskbar icon for the chosen logo (rendered by scripts/make-icons.mjs into resources/icons). */
@@ -410,6 +429,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
+  ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
   ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {

@@ -150,3 +150,8 @@ export function logoIconSvg(id: LogoId, small = false): string {
     `<g transform="translate(32 32) scale(${scale}) translate(-32 -32)">${logoMarkInner(id)}</g></svg>`
   )
 }
+
+/** A character's body without its face (stickers draw their own expressions on it). */
+export function logoBody(id: LogoId): string {
+  return (CHARACTERS[id] ?? CHARACTERS.buddies).body
+}

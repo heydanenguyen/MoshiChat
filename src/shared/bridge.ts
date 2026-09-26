@@ -80,6 +80,8 @@ export interface UnisonBridge {
     describeFile(file: File): OutgoingAttachment
     /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
     saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
+    /** A Unison sticker as a ready-to-send image file. */
+    sticker(id: string): Promise<OutgoingAttachment>
     /** Local weather for the greeting line; undefined when offline. */
     weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform
@@ -120,6 +122,7 @@ export const IPC = {
   appOpenExternal: 'app:openExternal',
   appPickFiles: 'app:pickFiles',
   appSaveVoice: 'app:saveVoice',
+  appSticker: 'app:sticker',
   appWeather: 'app:weather',
   appWindowAction: 'app:windowAction',
   event: 'bridge:event'

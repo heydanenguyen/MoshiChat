@@ -156,7 +156,9 @@ export interface OutgoingAttachment {
   voice?: boolean
   duration?: number
   /** The same recording in other formats (voice notes are recorded as Opus and AAC at once). */
-  alternates?: Array<{ path: string; mime: string; size: number }>
+  alternates?: Array<{ path: string; mime: string; size: number; role?: 'opaque' }>
+  /** Unison sticker id when this file is one of our stickers. */
+  sticker?: string
 }
 
 export interface SendOptions {

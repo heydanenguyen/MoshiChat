@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, File, Mic, Paperclip, Reply, Smile, Trash2, X } from 'lucide-react'
+import { ArrowUp, File, Mic, Paperclip, Reply, Smile, Sticker, Trash2, X } from 'lucide-react'
 import { useStore, useT } from '../store'
 import { formatBytes } from '../utils'
 import { EmojiPicker } from './EmojiPicker'
+import { StickerPicker } from './StickerPicker'
 
 interface Props {
   disabled?: boolean
@@ -45,6 +46,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   const [recording, setRecording] = useState<Recording | undefined>()
   const [elapsed, setElapsed] = useState(0)
   const [emojiOpen, setEmojiOpen] = useState(false)
+  const [stickersOpen, setStickersOpen] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const focusInput = (): void => ref.current?.focus({ preventScroll: true })
@@ -242,6 +244,34 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
               </button>
               {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
             </span>
+            {canAttach && (
+              <span className="emoji-anchor">
+                <button
+                  className={`icon-btn ${stickersOpen ? 'active' : ''}`}
+                  onMouseDown={(e) => stickersOpen && e.stopPropagation()}
+                  onClick={() => setStickersOpen((o) => !o)}
+                  title={t('stickers')}
+                  disabled={disabled}
+                >
+                  <Sticker size={18} strokeWidth={2} />
+                </button>
+                {stickersOpen && (
+                  <StickerPicker
+                    onClose={() => setStickersOpen(false)}
+                    onPick={(id) => {
+                      setStickersOpen(false)
+                      void (async () => {
+                        try {
+                          await send('', [await window.unison.app.sticker(id)])
+                        } catch (err) {
+                          showToast((err as Error).message, 'error')
+                        }
+                      })()
+                    }}
+                  />
+                )}
+              </span>
+            )}
             {canVoice && (
               <button className="icon-btn" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
                 <Mic size={18} strokeWidth={2} />

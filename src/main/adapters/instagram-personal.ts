@@ -290,7 +290,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const files = (options.attachments ?? []).map((file) => {
       // Voice notes are recorded as Opus and AAC together; Instagram plays AAC (.m4a) natively.
       const aac = file.alternates?.find((alt) => alt.mime === 'audio/mp4')
-      const chosen = aac ?? { path: file.path, mime: file.mime }
+      // Stickers: Instagram turns transparent PNGs into JPEGs, so use the copy on white.
+      const opaque = file.sticker ? file.alternates?.find((alt) => alt.role === 'opaque') : undefined
+      const chosen = aac ?? opaque ?? { path: file.path, mime: file.mime }
       if (!/^(image\/(jpeg|png)|video\/(mp4|quicktime)|audio\/)/.test(chosen.mime)) {
         throw new Error(`Instagram can send JPEG/PNG photos, MP4/MOV videos and voice notes, not ${file.name}`)
       }
