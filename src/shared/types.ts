@@ -172,6 +172,22 @@ export interface OutgoingAttachment {
 
 export type GifProvider = 'klipy' | 'giphy'
 
+export type TextSize = 'sm' | 'md' | 'lg' | 'xl'
+
+/** Interface zoom steps offered in Settings and by Ctrl +/- (1 = 100%). */
+export const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
+
+export function clampZoom(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(2, Math.max(0.8, value)) : 1
+}
+
+/** The next zoom step up (+1) or down (-1) from the current zoom. */
+export function stepZoom(current: number | undefined, direction: 1 | -1): number {
+  const zoom = clampZoom(current)
+  if (direction > 0) return ZOOM_STEPS.find((z) => z > zoom + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]
+  return [...ZOOM_STEPS].reverse().find((z) => z < zoom - 0.001) ?? ZOOM_STEPS[0]
+}
+
 export interface GifMedia {
   url: string
   width: number
@@ -430,6 +446,10 @@ export interface Settings {
   sendReadReceipts?: boolean
   /** Messages bookmarked to find again later (newest first). */
   savedMessages?: SavedMessage[]
+  /** Text size across the app (bigger for high-resolution screens). */
+  textSize?: TextSize
+  /** Whole-interface zoom, 0.8-2 (1 = 100%). */
+  zoom?: number
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
   gif?: { provider: GifProvider; key: string }
 }

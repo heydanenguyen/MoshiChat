@@ -6,7 +6,7 @@ import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
 import { IPC } from '@shared/bridge'
-import { isMutedBy } from '@shared/types'
+import { clampZoom, isMutedBy } from '@shared/types'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
@@ -144,6 +144,8 @@ function createWindow(): void {
     }
   })
 
+  // Interface zoom from Settings (large/4K screens); re-applied after every load.
+  window.webContents.on('did-finish-load', () => window?.webContents.setZoomFactor(clampZoom(storage.settings.zoom)))
   window.once('ready-to-show', () => window?.show())
   // Safety net: never leave the user with an invisible window if the first paint stalls.
   setTimeout(() => {
@@ -488,6 +490,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
+    if ('zoom' in patch && window && !window.isDestroyed()) window.webContents.setZoomFactor(clampZoom(settings.zoom))
     if (patch.logo) {
       const icon = appIcon(settings.logo)
       if (icon && window && !window.isDestroyed()) window.setIcon(icon)

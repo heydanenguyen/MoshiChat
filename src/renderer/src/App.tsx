@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useStore } from './store'
+import { translate } from './i18n'
 import { isMac } from './utils'
 import { Sidebar } from './components/Sidebar'
 import { ConversationList } from './components/ConversationList'
@@ -15,6 +16,7 @@ import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
+import { stepZoom } from '@shared/types'
 import { NewChatSheet } from './components/NewChatSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
@@ -40,6 +42,7 @@ export default function App(): JSX.Element {
   const customAccents = useStore((s) => s.settings.customAccents)
   const font = useStore((s) => s.settings.font)
   const messageShadows = useStore((s) => s.settings.messageShadows)
+  const textSize = useStore((s) => s.settings.textSize ?? 'md')
   const logo = useStore((s) => s.settings.logo)
   const accounts = useStore((s) => s.accounts)
   const [splash, setSplash] = useState(true)
@@ -88,7 +91,41 @@ export default function App(): JSX.Element {
     }
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
-  }, [mesh, accent, customAccents, font, messageShadows])
+    document.documentElement.dataset.textSize = textSize
+  }, [mesh, accent, customAccents, font, messageShadows, textSize])
+
+  // Ctrl +/-/0 and Ctrl + mouse wheel zoom the whole interface (saved in Settings).
+  useEffect(() => {
+    const zoomBy = (direction: 1 | -1 | 0): void => {
+      const { settings, setSettings, showToast } = useStore.getState()
+      const zoom = direction === 0 ? 1 : stepZoom(settings.zoom, direction)
+      if (zoom === (settings.zoom ?? 1)) return
+      void setSettings({ zoom })
+      showToast(`${translate(settings.language, 'zoom')} ${Math.round(zoom * 100)}%`)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return
+      if (e.key === '=' || e.key === '+') zoomBy(1)
+      else if (e.key === '-' || e.key === '_') zoomBy(-1)
+      else if (e.key === '0') zoomBy(0)
+      else return
+      e.preventDefault()
+    }
+    let last = 0
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      if (Date.now() - last < 180) return
+      last = Date.now()
+      zoomBy(e.deltaY < 0 ? 1 : -1)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onWheel)
+    }
+  }, [])
 
   useEffect(() => {
     void init()
