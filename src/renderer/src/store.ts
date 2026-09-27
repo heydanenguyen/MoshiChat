@@ -35,7 +35,7 @@ import { toggleReaction } from './utils'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
-export type LegalDoc = 'terms' | 'privacy' | 'credits'
+export type LegalDoc = 'notice' | 'license' | 'terms' | 'privacy' | 'credits'
 
 export type Sheet =
   | { kind: 'none' }

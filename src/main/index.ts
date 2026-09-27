@@ -90,7 +90,7 @@ function applyTheme(theme: Settings['theme']): void {
 }
 
 /** The legal documents shipped next to the app (Vietnamese first, English below). */
-const LEGAL_DOCS = { terms: 'TERMS.md', privacy: 'PRIVACY.md', credits: 'CREDITS.md' } as const
+const LEGAL_DOCS = { notice: 'NOTICE.md', license: 'LICENSE', terms: 'TERMS.md', privacy: 'PRIVACY.md', credits: 'CREDITS.md' } as const
 
 /** A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency. */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
@@ -598,7 +598,9 @@ function registerIpc(): void {
     const file = LEGAL_DOCS[name as keyof typeof LEGAL_DOCS]
     if (!file) throw new Error('Unknown document')
     const dir = app.isPackaged ? join(process.resourcesPath, 'legal') : join(__dirname, '../../resources/legal')
-    return readFile(join(dir, file), 'utf8')
+    // The GPL text lives at the repository root; the build copies it next to the other documents.
+    const path = name === 'license' && !app.isPackaged ? join(__dirname, '../../LICENSE') : join(dir, file)
+    return readFile(path, 'utf8')
   })
   ipcMain.handle(IPC.appGifSearch, (_e, query: string, page: number) => {
     const { gif, language } = storage.settings

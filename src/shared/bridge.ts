@@ -107,7 +107,7 @@ export interface UnisonBridge {
   app: {
     openExternal(url: string): Promise<void>
     /** A bundled legal document (Markdown): terms, privacy policy or third-party notices. */
-    legal(name: 'terms' | 'privacy' | 'credits'): Promise<string>
+    legal(name: 'notice' | 'license' | 'terms' | 'privacy' | 'credits'): Promise<string>
     pickFiles(): Promise<OutgoingAttachment[]>
     /** Resolve a dropped or pasted File to an OutgoingAttachment (the path is only known in the preload). */
     describeFile(file: File): OutgoingAttachment

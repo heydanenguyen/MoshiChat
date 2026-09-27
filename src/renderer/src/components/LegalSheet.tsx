@@ -3,7 +3,7 @@ import { ChevronLeft, X } from 'lucide-react'
 import { useStore, useT, type LegalDoc } from '../store'
 import { BuddyLoader } from './BuddyLoader'
 
-const TITLE_KEY = { terms: 'legalTerms', privacy: 'legalPrivacy', credits: 'legalCredits' } as const
+export const LEGAL_TITLE_KEY = { notice: 'legalNotice', license: 'legalLicense', terms: 'legalTerms', privacy: 'legalPrivacy', credits: 'legalCredits' } as const
 
 /** Bold, code and links inside one line of the legal documents. */
 function inline(text: string): ReactNode[] {
@@ -100,6 +100,8 @@ export function LegalText({ doc }: { doc: LegalDoc }): JSX.Element {
     }
   }, [doc])
   if (text === undefined) return <BuddyLoader size={26} className="details-loader" />
+  // The GPL is plain text laid out by hand; show it as is.
+  if (doc === 'license') return <pre className="legal-pre">{text}</pre>
   return <div className="legal-text">{render(text)}</div>
 }
 
@@ -110,12 +112,12 @@ export function LegalSheet({ doc }: { doc: LegalDoc }): JSX.Element {
   const openSheet = useStore((s) => s.openSheet)
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && closeSheet()}>
-      <div className="sheet" role="dialog" aria-label={t(TITLE_KEY[doc])}>
+      <div className="sheet" role="dialog" aria-label={t(LEGAL_TITLE_KEY[doc])}>
         <div className="sheet-header">
           <button className="icon-btn" onClick={() => openSheet({ kind: 'settings' })} title={t('back')}>
             <ChevronLeft size={18} strokeWidth={2.4} />
           </button>
-          <div className="sheet-title">{t(TITLE_KEY[doc])}</div>
+          <div className="sheet-title">{t(LEGAL_TITLE_KEY[doc])}</div>
           <button className="icon-btn" onClick={closeSheet} title={t('close')}>
             <X size={16} strokeWidth={2.4} />
           </button>

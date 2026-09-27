@@ -11,6 +11,7 @@ import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
 import { QuickReplyManager } from './QuickReplyManager'
+import { LEGAL_TITLE_KEY } from './LegalSheet'
 import { AiSettings } from './AiParts'
 import { SoundSettings } from './SoundSettings'
 
@@ -417,10 +418,10 @@ export function SettingsSheet(): JSX.Element {
               {t('legalSection')}
             </div>
             <div className="settings-group">
-              {(['terms', 'privacy', 'credits'] as const).map((doc) => (
+              {(['notice', 'license', 'terms', 'privacy', 'credits'] as const).map((doc) => (
                 <button key={doc} className="settings-row settings-row-btn" onClick={() => openSheet({ kind: 'legal', doc })}>
                   <div className="settings-row-text">
-                    <div className="settings-row-title">{t(doc === 'terms' ? 'legalTerms' : doc === 'privacy' ? 'legalPrivacy' : 'legalCredits')}</div>
+                    <div className="settings-row-title">{t(LEGAL_TITLE_KEY[doc])}</div>
                   </div>
                   <ChevronRight size={16} />
                 </button>
