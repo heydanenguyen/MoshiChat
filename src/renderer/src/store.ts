@@ -141,6 +141,9 @@ interface State {
   createTag(input: { name: string; icon: string; color: string; fill?: string }): Promise<TagMeta>
   deleteTag(tag: TagId): Promise<void>
   togglePin(conversationId: string): Promise<void>
+  /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
+  hideConversation(conversationId: string): Promise<void>
+  unhideConversation(conversationId: string): Promise<void>
   setContactOverride(conversationId: string, override: ContactOverride | undefined): Promise<void>
   toggleMute<K extends keyof MuteRules>(kind: K, id: MuteRules[K][number]): Promise<void>
   toggleSidebar(): Promise<void>
@@ -783,6 +786,21 @@ export const useStore = create<State>((set, get) => ({
     await get().setSettings({ pins: { ...(settings.pins ?? {}), [conversationId]: !pinned } })
   },
 
+  async hideConversation(conversationId) {
+    const { settings, selectedId, conversations } = get()
+    const muted = settings.muted.conversations.includes(conversationId) ? settings.muted.conversations : [...settings.muted.conversations, conversationId]
+    await get().setSettings({ hidden: { ...(settings.hidden ?? {}), [conversationId]: Date.now() }, muted: { ...settings.muted, conversations: muted } })
+    if (get().selectedId === selectedId && selectedId === conversationId) set({ selectedId: undefined, replyTo: undefined, pendingFiles: [] })
+    get().showToast(translate(settings.language, 'hiddenToast', { name: conversations[conversationId]?.title ?? '' }), 'info')
+  },
+
+  async unhideConversation(conversationId) {
+    const { settings } = get()
+    const hidden = { ...(settings.hidden ?? {}) }
+    delete hidden[conversationId]
+    await get().setSettings({ hidden, muted: { ...settings.muted, conversations: settings.muted.conversations.filter((id) => id !== conversationId) } })
+  },
+
   async toggleMute(kind, id) {
     const current = get().settings.muted[kind] as string[]
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
@@ -997,7 +1015,8 @@ export function useVisibleConversations(): Conversation[] {
   const search = useStore((s) => s.search)
   const tags = useStore((s) => s.settings.tags)
   const pins = useStore((s) => s.settings.pins)
-  return useMemo(() => computeVisible(conversations, filter, search, tags, pins), [conversations, filter, search, tags, pins])
+  const hidden = useStore((s) => s.settings.hidden)
+  return useMemo(() => computeVisible(conversations, filter, search, tags, pins, hidden), [conversations, filter, search, tags, pins, hidden])
 }
 
 /** Pinned in Unison, or on the platform when Unison has no say. */
@@ -1020,10 +1039,12 @@ export function computeVisible(
   filter: Filter,
   search: string,
   tags: Record<string, TagId[]> = {},
-  pins?: Record<string, boolean>
+  pins?: Record<string, boolean>,
+  hidden?: Record<string, number>
 ): Conversation[] {
   const query = search.trim().toLowerCase()
   return Object.values(conversations)
+    .filter((c) => !hidden?.[c.id])
     .filter((c) => {
       if (filter === 'all') return true
       if (filter.startsWith('account:')) return c.accountId === filter.slice(8)

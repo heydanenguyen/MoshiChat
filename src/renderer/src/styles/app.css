@@ -1876,7 +1876,7 @@ mark {
 
 /* ================================================================== quick pin on hover */
 
-.conv-pin-action {
+.conv-more {
   position: absolute;
   top: 7px;
   right: 8px;
@@ -1897,17 +1897,15 @@ mark {
     color var(--duration-fast) ease,
     background var(--duration-fast) ease;
 }
-.conv-item:hover .conv-pin-action {
+.conv-item:hover .conv-more {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
 }
-.conv-pin-action:hover {
+.conv-more:hover,
+.conv-more.open {
   color: var(--on-accent);
   background: var(--accent-gradient);
-}
-.conv-pin-action.on:hover {
-  background: var(--danger);
 }
 /* the time sits where the pin button appears */
 .conv-item:hover .conv-time {
@@ -5749,7 +5747,7 @@ kbd {
 .logo-tile,
 .video-play,
 .story-card,
-.conv-pin-action,
+.conv-more,
 .album-tile img,
 .media-cell img,
 .avatar.clickable,

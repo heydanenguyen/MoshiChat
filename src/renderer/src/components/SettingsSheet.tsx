@@ -12,6 +12,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
 import { QuickReplyManager } from './QuickReplyManager'
 import { LEGAL_TITLE_KEY } from './LegalSheet'
+import { formatListTime } from '../utils'
 import { AiSettings } from './AiParts'
 import { SoundSettings } from './SoundSettings'
 
@@ -25,6 +26,11 @@ export function SettingsSheet(): JSX.Element {
   const reconnect = useStore((s) => s.reconnect)
   const toggleMute = useStore((s) => s.toggleMute)
   const openSheet = useStore((s) => s.openSheet)
+  const conversationMap = useStore((s) => s.conversations)
+  const unhideConversation = useStore((s) => s.unhideConversation)
+  const strangers = Object.entries(settings.hidden ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, at]) => ({ id, at, conversation: conversationMap[id] }))
   const closeSheet = useStore((s) => s.closeSheet)
   const language = settings.language
 
@@ -409,6 +415,42 @@ export function SettingsSheet(): JSX.Element {
                   onClick={() => void setSettings({ sendOnEnter: !settings.sendOnEnter })}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- strangers: hidden chats */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('strangersSection')}
+            </div>
+            <div className="settings-group">
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <div className="settings-row-sub">{t('strangersHint')}</div>
+                </div>
+              </div>
+              {strangers.length === 0 && (
+                <div className="settings-row">
+                  <div className="settings-row-text" style={{ color: 'var(--text-secondary)' }}>
+                    {t('strangersEmpty')}
+                  </div>
+                </div>
+              )}
+              {strangers.map(({ id, at, conversation }) => (
+                <div className="settings-row" key={id}>
+                  <Avatar name={conversation?.title ?? '?'} url={conversation?.avatarUrl} size={34} platform={conversation?.platform} />
+                  <div className="settings-row-text">
+                    <div className="settings-row-title">{conversation?.title ?? id}</div>
+                    <div className="settings-row-sub">
+                      {conversation ? `${PLATFORMS[conversation.platform].name} · ` : ''}
+                      {formatListTime(at, settings.language)}
+                    </div>
+                  </div>
+                  <button className="btn secondary" onClick={() => void unhideConversation(id)}>
+                    {t('unhide')}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
