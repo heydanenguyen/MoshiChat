@@ -3,7 +3,7 @@ import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Plus, Reply, Sm
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
-import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, sectionize, type MessageGroup } from '../utils'
+import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
@@ -169,7 +169,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
           {isTyping && (
             <div className="msg-group in">
               <div className="msg-avatar-slot">
-                <Avatar name={typing.name} size={28} />
+                <Avatar {...personLook(conversation, { name: typing.name })} size={28} />
               </div>
               <div className="typing-bubble" aria-label={t('typing')}>
                 <span />
@@ -250,17 +250,12 @@ function Group({
   const t = useT()
   const react = useStore((s) => s.react)
   const showSender = !group.isOutgoing && conversation.isGroup
-  const peer = conversation.participants.find((p) => p.id === group.senderId)
   if (group.system) return <SystemRow message={group.messages[0]} platform={conversation.platform} />
   return (
     <div className={`msg-group ${group.isOutgoing ? 'out' : 'in'}`}>
       {!group.isOutgoing && (
         <div className="msg-avatar-slot">
-          <Avatar
-            name={group.senderName}
-            url={group.senderAvatarUrl ?? (conversation.isGroup ? peer?.avatarUrl : conversation.avatarUrl)}
-            size={28}
-          />
+          <Avatar {...personLook(conversation, { id: group.senderId, name: group.senderName, avatarUrl: group.senderAvatarUrl })} size={28} />
         </div>
       )}
       <div className="msg-group-body">
