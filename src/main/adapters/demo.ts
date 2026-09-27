@@ -289,7 +289,7 @@ const EXTRAS: SeedExtra[] = [
   { thread: 'messenger/team', from: 'Quốc Bảo', minutesAgo: 28, text: 'Concept 2', attachment: { id: 'x8', kind: 'image', url: svgImage('#BF5AF2', '#FF375F', 'Concept 2'), width: 640, height: 480 } },
   { thread: 'instagram/brand', from: 'Aurora Skincare', minutesAgo: 257, text: 'Moodboard', attachment: { id: 'x9', kind: 'image', url: svgImage('#F9CE34', '#EE2A7B', 'Aurora'), width: 640, height: 480 } },
   { thread: 'instagram/brand', from: 'Aurora Skincare', minutesAgo: 19, text: 'Brief chi tiết', attachment: { id: 'x10', kind: 'file', name: 'aurora-october-brief.pdf', size: 2_300_000 } },
-  { thread: 'telegram/dev', from: 'Priya', minutesAgo: 8, text: 'Release notes draft https://github.com/3hvn/unison/releases', attachment: { id: 'x11', kind: 'link', url: 'https://github.com/3hvn/unison/releases', name: 'Releases · 3hvn/unison' } },
+  { thread: 'telegram/dev', from: 'Priya', minutesAgo: 8, text: 'Release notes draft https://github.com/example/unison/releases', attachment: { id: 'x11', kind: 'link', url: 'https://github.com/example/unison/releases', name: 'Releases · example/unison' } },
   { thread: 'telegram/dev', from: 'Alex', minutesAgo: 118, text: 'Screenshot build', attachment: { id: 'x12', kind: 'image', url: svgImage('#37AEE2', '#1E96C8', 'Build 0.1.0'), width: 640, height: 480 } },
   { thread: 'zalo/khachhang', from: 'Chị Hạnh - Khách sỉ', minutesAgo: 24, text: 'Chuyển khoản rồi nha em', attachment: { id: 'x13', kind: 'image', url: svgImage('#2F8CFF', '#0057D8', 'Biên lai'), width: 640, height: 480 } },
   { thread: 'whatsapp/emma', from: 'Emma Watson (Client)', minutesAgo: 199, text: 'Campaign visuals', attachment: { id: 'x14', kind: 'image', url: svgImage('#5DE68C', '#1FAF54', 'Campaign'), width: 640, height: 480 } },
@@ -301,7 +301,7 @@ const EXTRA_CONTACTS: Record<Platform, Array<{ id: string; name: string; handle?
   messenger: [
     { id: 'bao', name: 'Quốc Bảo', handle: 'quocbao.design' },
     { id: 'ha', name: 'Thu Hà', handle: 'thuha.mkt' },
-    { id: 'nam', name: 'Hoàng Nam', handle: 'hoangnam.3hvn' },
+    { id: 'nam', name: 'Hoàng Nam', handle: 'hoangnam.dev' },
     { id: 'yen', name: 'Hải Yến', handle: 'haiyen.pham' }
   ],
   instagram: [
