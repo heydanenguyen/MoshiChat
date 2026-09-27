@@ -6,7 +6,7 @@ import { TagCreator } from './TagEditor'
 import { ContactCustomizer } from './ContactCustomizer'
 import { TagChip } from './Tag'
 import { isPinned, useStore, useT, useTagDefs, type DetailsTab } from '../store'
-import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo } from '../utils'
+import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo, personLook } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
@@ -260,6 +260,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 function SearchTab({ conversationId }: { conversationId: string }): JSX.Element {
   const t = useT()
   const searchIn = useStore((s) => s.searchIn)
+  const conversation = useStore((s) => s.conversations[conversationId])
   const jumpTo = useStore((s) => s.jumpTo)
   const language = useStore((s) => s.settings.language)
   const [query, setQuery] = useState('')
@@ -298,7 +299,7 @@ function SearchTab({ conversationId }: { conversationId: string }): JSX.Element 
       {!busy && query.trim().length >= 2 && results.length === 0 && <div className="details-empty">{t('noResults')}</div>}
       {results.map((m) => (
         <button key={m.id} className="result-item" onClick={() => void jumpTo(m.id)} title={t('jumpToMessage')}>
-          <Avatar name={m.senderName} url={m.senderAvatarUrl} size={26} />
+          <Avatar {...(conversation ? personLook(conversation, { id: m.senderId, name: m.senderName, avatarUrl: m.senderAvatarUrl, isOutgoing: m.isOutgoing }) : { name: m.senderName, url: m.senderAvatarUrl })} size={26} />
           <span className="result-text">
             <span className="result-meta">
               <strong>{m.senderName}</strong>

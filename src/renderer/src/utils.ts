@@ -1,4 +1,4 @@
-import type { Language, Message, Reaction } from '@shared/types'
+import type { Conversation, Language, Message, Reaction } from '@shared/types'
 
 const locale = (lang: Language): string => (lang === 'vi' ? 'vi-VN' : 'en-US')
 
@@ -198,4 +198,18 @@ export function toggleReaction(reactions: Reaction[], emoji: string): Reaction[]
     next = existing ? next.map((r) => (r === existing ? { ...r, count: r.count + 1, byMe: true } : r)) : [...next, { emoji, count: 1, byMe: true }]
   }
   return next
+}
+
+/**
+ * The face and name to show for someone in a chat. In a one-to-one chat the other person IS the chat, so the
+ * nickname and photo set in Unison win over what the platform attaches to each message (and to typing).
+ */
+export function personLook(
+  conversation: Pick<Conversation, 'isGroup' | 'title' | 'avatarUrl' | 'participants'> & { originalAvatarUrl?: string },
+  sender: { id?: string; name?: string; avatarUrl?: string; isOutgoing?: boolean }
+): { name: string; url?: string } {
+  const participant = conversation.participants.find((p) => (sender.id ? p.id === sender.id : !p.isMe && !!sender.name && p.name === sender.name))
+  if (sender.isOutgoing || conversation.isGroup) return { name: sender.name ?? participant?.name ?? '', url: sender.avatarUrl ?? participant?.avatarUrl }
+  const customPhoto = 'originalAvatarUrl' in conversation && conversation.avatarUrl !== conversation.originalAvatarUrl
+  return { name: conversation.title, url: customPhoto ? conversation.avatarUrl : (sender.avatarUrl ?? conversation.avatarUrl) }
 }

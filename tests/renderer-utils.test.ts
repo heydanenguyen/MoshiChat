@@ -78,3 +78,24 @@ describe('reaction toggling', () => {
     expect(toggleReaction(laughed, '😂')).toEqual([{ emoji: '😂', count: 2, byMe: false }])
   })
 })
+
+describe('personLook', () => {
+  const base = { isGroup: false, title: 'Mai', avatarUrl: 'platform.jpg', participants: [{ id: 'me', name: 'Me', isMe: true }, { id: 'p', name: 'Mai Anh', avatarUrl: 'p.jpg' }] }
+  it('keeps the platform photo when nothing is customised', async () => {
+    const { personLook } = await import('../src/renderer/src/utils')
+    expect(personLook(base, { id: 'p', name: 'Mai Anh', avatarUrl: 'msg.jpg' }).url).toBe('msg.jpg')
+    expect(personLook(base, { name: 'Mai Anh' }).url).toBe('platform.jpg')
+  })
+  it('uses the custom photo and nickname in one-to-one chats, also while typing', async () => {
+    const { personLook } = await import('../src/renderer/src/utils')
+    const custom = { ...base, title: 'Bé Mai', avatarUrl: 'custom.png', originalAvatarUrl: 'platform.jpg' }
+    expect(personLook(custom, { id: 'p', name: 'Mai Anh', avatarUrl: 'msg.jpg' })).toEqual({ name: 'Bé Mai', url: 'custom.png' })
+    expect(personLook(custom, { name: 'Mai Anh' })).toEqual({ name: 'Bé Mai', url: 'custom.png' })
+    expect(personLook(custom, { id: 'me', name: 'Me', avatarUrl: 'me.jpg', isOutgoing: true }).url).toBe('me.jpg')
+  })
+  it('shows each member in groups', async () => {
+    const { personLook } = await import('../src/renderer/src/utils')
+    const group = { ...base, isGroup: true, avatarUrl: 'group.png', originalAvatarUrl: 'g.jpg' }
+    expect(personLook(group, { name: 'Mai Anh' }).url).toBe('p.jpg')
+  })
+})
