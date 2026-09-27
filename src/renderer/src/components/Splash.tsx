@@ -46,7 +46,8 @@ export function writeSplashPrefs(patch: SplashPrefs): void {
 export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }): JSX.Element {
   const [prefs] = useState(readSplashPrefs)
   const logo = prefs.logo && LOGO_ORDER.includes(prefs.logo) ? prefs.logo : 'buddies'
-  const language = prefs.language ?? 'vi'
+  // Before the first run has saved a language: follow the system (English unless it is Vietnamese).
+  const language = prefs.language ?? (navigator.language.toLowerCase().startsWith('vi') ? 'vi' : 'en')
   // The very first launch (right after installing) gets a proper welcome; later ones a random greeting.
   const [line] = useState(() =>
     prefs.last

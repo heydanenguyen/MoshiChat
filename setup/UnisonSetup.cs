@@ -34,6 +34,9 @@ namespace UnisonSetup
         [STAThread]
         static int Main(string[] args)
         {
+            // --lang=vi / --lang=en overrides the Windows language (handy for checking both).
+            if (args.Contains("--lang=vi")) L.Vietnamese = true;
+            if (args.Contains("--lang=en")) L.Vietnamese = false;
             bool uninstall = args.Contains("--uninstall") || !Res.Has("payload.exe");
             if (uninstall && !args.Contains("--relaunched"))
             {
@@ -41,7 +44,7 @@ namespace UnisonSetup
                 string self = Assembly.GetExecutingAssembly().Location;
                 string copy = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "unison-goodbye-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
                 File.Copy(self, copy, true);
-                Process.Start(new ProcessStartInfo(copy, "--uninstall --relaunched") { UseShellExecute = false });
+                Process.Start(new ProcessStartInfo(copy, "--uninstall --relaunched" + (args.Contains("--lang=vi") ? " --lang=vi" : args.Contains("--lang=en") ? " --lang=en" : "")) { UseShellExecute = false });
                 return 0;
             }
             var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
@@ -49,6 +52,14 @@ namespace UnisonSetup
             app.MainWindow = ui.Window;
             return app.Run(ui.Window);
         }
+    }
+
+    /// <summary>English by default; Vietnamese when Windows itself is in Vietnamese.</summary>
+    static class L
+    {
+        public static bool Vietnamese = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "vi";
+
+        public static string T(string en, string vi) => Vietnamese ? vi : en;
     }
 
     /// <summary>Embedded resources.</summary>
@@ -196,7 +207,11 @@ namespace UnisonSetup
             blink.Source = Res.Image("duo-orange-blink.png");
             Find<Image>("CalmOrange").Source = Res.Image("calm-buddies.png");
             Find<Image>("CalmPink").Source = Res.Image("calm-blossom.png");
-            Find<TextBlock>("Version").Text = version.Length > 0 ? "Phiên bản " + version : "";
+            Find<TextBlock>("Version").Text = version.Length > 0 ? L.T("Version ", "Phiên bản ") + version : "";
+            Window.Title = uninstallMode ? L.T("Uninstall Unison", "Gỡ cài đặt Unison") : L.T("Unison Setup", "Cài đặt Unison");
+            minButton.ToolTip = L.T("Minimize", "Thu nhỏ");
+            closeButton.ToolTip = L.T("Close", "Đóng");
+            installButton.Content = L.T("Install", "Cài đặt");
             var icon = Res.Image("icon.png");
             if (icon != null) Window.Icon = icon;
 
@@ -235,7 +250,7 @@ namespace UnisonSetup
         {
             if (busy)
             {
-                Say("Đợi mình xíu nhé!");
+                Say(L.T("Hang on a sec!", "Đợi mình xíu nhé!"));
                 return;
             }
             Window.Close();
@@ -445,19 +460,19 @@ namespace UnisonSetup
         void Welcome()
         {
             var existing = InstallEntry.Find();
-            bubbleText.Text = "Xin chào!";
+            bubbleText.Text = L.T("Hi there!", "Xin chào!");
             Steps(0);
-            finePrint.Text = "Cài cho riêng bạn · không cần quyền quản trị";
+            finePrint.Text = L.T("Just for you · no admin rights needed", "Cài cho riêng bạn · không cần quyền quản trị");
             if (existing != null)
             {
-                installButton.Content = "Cập nhật";
-                Show(null, "Chào bạn quay lại!", existing.Version != null && existing.Version != version
-                    ? "Unison " + existing.Version + " đã có trên máy. Cập nhật lên " + version + " nhé, tài khoản và khoảnh khắc vẫn còn nguyên."
-                    : "Unison đã có trên máy. Cài lại để sửa lỗi hoặc làm mới, dữ liệu của bạn vẫn còn nguyên.", "welcome", null, null, () => Begin(), null);
+                installButton.Content = L.T("Update", "Cập nhật");
+                Show(null, L.T("Welcome back!", "Chào bạn quay lại!"), existing.Version != null && existing.Version != version
+                    ? L.T("Unison " + existing.Version + " is already here. Update to " + version + " and your accounts and moments stay put.", "Unison " + existing.Version + " đã có trên máy. Cập nhật lên " + version + " nhé, tài khoản và khoảnh khắc vẫn còn nguyên.")
+                    : L.T("Unison is already installed. Reinstall to repair or refresh it; your data stays put.", "Unison đã có trên máy. Cài lại để sửa lỗi hoặc làm mới, dữ liệu của bạn vẫn còn nguyên."), "welcome", null, null, () => Begin(), null);
             }
             else
             {
-                Show(null, "Chào bạn, mình là Unison!", "Bộ đôi sẽ gom Messenger, Instagram, Telegram, Zalo và WhatsApp về chung một nhà, để bạn không bỏ lỡ ai.", "welcome", null, null, () => Begin(), null);
+                Show(null, L.T("Hi, we're Unison!", "Chào bạn, mình là Unison!"), L.T("The Buddies bring Messenger, Instagram, Telegram, Zalo and WhatsApp under one roof, so you never miss anyone.", "Bộ đôi sẽ gom Messenger, Instagram, Telegram, Zalo và WhatsApp về chung một nhà, để bạn không bỏ lỡ ai."), "welcome", null, null, () => Begin(), null);
             }
         }
 
@@ -468,7 +483,7 @@ namespace UnisonSetup
         bool AskToCloseApp(Action then)
         {
             if (RunningApp().Length == 0) return false;
-            Show("Ơ, khoan đã!", "Unison đang mở", "Mình cần đóng Unison một chút để cài. Tin nhắn của bạn vẫn an toàn.", "pair", "Đóng Unison và tiếp tục", "Để sau", () =>
+            Show(L.T("Oops, one sec!", "Ơ, khoan đã!"), L.T("Unison is open", "Unison đang mở"), L.T("We need to close Unison for a moment. Your messages are safe.", "Mình cần đóng Unison một chút để cài. Tin nhắn của bạn vẫn an toàn."), "pair", L.T("Close Unison and continue", "Đóng Unison và tiếp tục"), L.T("Later", "Để sau"), () =>
             {
                 foreach (var p in RunningApp())
                 {
@@ -492,11 +507,11 @@ namespace UnisonSetup
 
         static readonly string[] Tips =
         {
-            "Mẹo: Ctrl K mở bảng lệnh, tìm gì cũng nhanh.",
-            "Mẹo: rê chuột vào tin nhắn rồi bấm lấp lánh để lưu khoảnh khắc.",
-            "Mẹo: gắn tag cho từng người để lọc cuộc trò chuyện trong một chạm.",
-            "Mẹo: nút GIF và bộ sticker riêng nằm ngay cạnh ô soạn tin.",
-            "Mẹo: Ctrl + và Ctrl − để phóng to giao diện trên màn 4K."
+            L.T("Tip: Ctrl K opens the command palette, so you can find anything fast.", "Mẹo: Ctrl K mở bảng lệnh, tìm gì cũng nhanh."),
+            L.T("Tip: hover a message and tap the sparkle to keep it as a moment.", "Mẹo: rê chuột vào tin nhắn rồi bấm lấp lánh để lưu khoảnh khắc."),
+            L.T("Tip: tag people to filter your chats in one click.", "Mẹo: gắn tag cho từng người để lọc cuộc trò chuyện trong một chạm."),
+            L.T("Tip: GIFs and our own stickers are right next to the message box.", "Mẹo: nút GIF và bộ sticker riêng nằm ngay cạnh ô soạn tin."),
+            L.T("Tip: Ctrl + and Ctrl − zoom the interface on 4K screens.", "Mẹo: Ctrl + và Ctrl − để phóng to giao diện trên màn 4K.")
         };
 
         async Task Install()
@@ -505,8 +520,8 @@ namespace UnisonSetup
             closeButton.IsEnabled = false;
             Steps(1);
             Working();
-            Show("Chờ xíu nhé...", "Bộ đôi đang dọn nhà cho Unison", Tips[0], "progress");
-            progressText.Text = "Đang chuẩn bị";
+            Show(L.T("Just a moment...", "Chờ xíu nhé..."), L.T("The Buddies are moving Unison in", "Bộ đôi đang dọn nhà cho Unison"), Tips[0], "progress");
+            progressText.Text = L.T("Getting ready", "Đang chuẩn bị");
             SetProgress(0.02);
 
             string temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "unison-setup-" + Guid.NewGuid().ToString("N").Substring(0, 8));
@@ -531,7 +546,7 @@ namespace UnisonSetup
                     double byTime = 1 - Math.Exp(-seconds / 7.0);
                     double bySize = expectedBytes > 0 && fresh ? (await Task.Run(() => FolderSize(dir))) / (double)expectedBytes : 0;
                     SetProgress(Math.Min(0.96, Math.Max(0.04, Math.Max(byTime * 0.9, bySize * 0.96))));
-                    progressText.Text = seconds < 1.2 ? "Đang mở hộp" : "Đang sắp xếp đồ đạc";
+                    progressText.Text = seconds < 1.2 ? L.T("Unpacking", "Đang mở hộp") : L.T("Putting things in place", "Đang sắp xếp đồ đạc");
                     int t = (int)(seconds / 3.2) % Tips.Length;
                     if (t != tip)
                     {
@@ -560,7 +575,7 @@ namespace UnisonSetup
             busy = false;
             closeButton.IsEnabled = true;
             if (exit == 0 && installedDir != null) Done();
-            else Failed(error ?? "Mã lỗi " + exit);
+            else Failed(error ?? L.T("Error code ", "Mã lỗi ") + exit);
         }
 
         /// <summary>After NSIS: put our uninstaller next to the app and point "Apps & features" at it.</summary>
@@ -609,7 +624,7 @@ namespace UnisonSetup
             Hop(orangeHost, 0, 2);
             Hop(pink, 200, 2);
             Celebrate();
-            Show("Xong rồi!", "Cả nhà đã sẵn sàng", "Mở Unison, kết nối tài khoản đầu tiên và mọi cuộc trò chuyện sẽ về chung một chỗ.", "pair", "Mở Unison", "Để sau", () =>
+            Show(L.T("All done!", "Xong rồi!"), L.T("The whole gang is ready", "Cả nhà đã sẵn sàng"), L.T("Open Unison, connect your first account, and every conversation lands in one place.", "Mở Unison, kết nối tài khoản đầu tiên và mọi cuộc trò chuyện sẽ về chung một chỗ."), "pair", L.T("Open Unison", "Mở Unison"), L.T("Later", "Để sau"), () =>
             {
                 try
                 {
@@ -630,7 +645,7 @@ namespace UnisonSetup
         void Failed(string detail)
         {
             Idle();
-            Show("Ơ...", "Có gì đó chưa ổn", "Cài đặt chưa xong (" + detail + "). Thử lại nhé, nếu vẫn lỗi hãy khởi động lại máy rồi chạy lại bộ cài.", "pair", "Thử lại", "Đóng", () => Begin(), () => Window.Close());
+            Show(L.T("Uh-oh...", "Ơ..."), L.T("Something went wrong", "Có gì đó chưa ổn"), L.T("Setup didn't finish (" + detail + "). Try again, and if it keeps failing, restart your PC and run the installer again.", "Cài đặt chưa xong (" + detail + "). Thử lại nhé, nếu vẫn lỗi hãy khởi động lại máy rồi chạy lại bộ cài."), "pair", L.T("Try again", "Thử lại"), L.T("Close", "Đóng"), () => Begin(), () => Window.Close());
         }
 
         /// <summary>Confetti in the characters' colours, falling with a little drift and spin.</summary>
@@ -669,15 +684,15 @@ namespace UnisonSetup
 
         void Goodbye()
         {
-            bubbleText.Text = "Tạm biệt nhé...";
+            bubbleText.Text = L.T("Bye for now...", "Tạm biệt nhé...");
             Steps(0);
             var entry = InstallEntry.Find();
             if (entry == null)
             {
-                Show(null, "Không thấy Unison trên máy", "Có vẻ Unison đã được gỡ rồi.", "pair", "Đóng", null, () => Window.Close());
+                Show(null, L.T("Unison isn't installed", "Không thấy Unison trên máy"), L.T("It looks like Unison has already been removed.", "Có vẻ Unison đã được gỡ rồi."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
                 return;
             }
-            Show(null, "Bạn định chia tay Unison thật sao?", "Bộ đôi sẽ nhớ bạn lắm. Tài khoản, cài đặt và khoảnh khắc vẫn được giữ lại, lần sau cài là dùng tiếp ngay.", "pair", "Giữ lại Unison", "Gỡ cài đặt", () => Window.Close(), () => BeginUninstall());
+            Show(null, L.T("Leaving Unison already?", "Bạn định chia tay Unison thật sao?"), L.T("The Buddies will miss you. Your accounts, settings and moments are kept, so you can pick up right where you left off.", "Bộ đôi sẽ nhớ bạn lắm. Tài khoản, cài đặt và khoảnh khắc vẫn được giữ lại, lần sau cài là dùng tiếp ngay."), "pair", L.T("Keep Unison", "Giữ lại Unison"), L.T("Uninstall", "Gỡ cài đặt"), () => Window.Close(), () => BeginUninstall());
         }
 
         void BeginUninstall()
@@ -701,8 +716,8 @@ namespace UnisonSetup
             closeButton.IsEnabled = false;
             Steps(1);
             Working();
-            Show("Đang thu dọn...", "Đang gỡ Unison", "Chỉ vài giây thôi.", "progress");
-            progressText.Text = "Đang thu dọn";
+            Show(L.T("Tidying up...", "Đang thu dọn..."), L.T("Uninstalling Unison", "Đang gỡ Unison"), L.T("Just a few seconds.", "Chỉ vài giây thôi."), "progress");
+            progressText.Text = L.T("Tidying up", "Đang thu dọn");
             SetProgress(0.05);
             string error = null;
             try
@@ -747,8 +762,8 @@ namespace UnisonSetup
             SetProgress(1);
             Steps(2);
             Idle();
-            if (error != null) Show("Ơ...", "Gỡ chưa xong", "Có lỗi khi gỡ (" + error + "). Bạn thử lại nhé.", "pair", "Thử lại", "Đóng", () => BeginUninstall(), () => Window.Close());
-            else Show("Hẹn gặp lại!", "Đã gỡ Unison", "Cảm ơn bạn đã dùng Unison. Khi nào nhớ tụi mình thì cài lại nhé, mọi thứ vẫn chờ bạn.", "pair", "Đóng", null, () => Window.Close());
+            if (error != null) Show(L.T("Uh-oh...", "Ơ..."), L.T("Uninstall didn't finish", "Gỡ chưa xong"), L.T("Something went wrong (" + error + "). Please try again.", "Có lỗi khi gỡ (" + error + "). Bạn thử lại nhé."), "pair", L.T("Try again", "Thử lại"), L.T("Close", "Đóng"), () => BeginUninstall(), () => Window.Close());
+            else Show(L.T("See you soon!", "Hẹn gặp lại!"), L.T("Unison is uninstalled", "Đã gỡ Unison"), L.T("Thanks for using Unison. Whenever you miss us, just install it again. Everything will be waiting.", "Cảm ơn bạn đã dùng Unison. Khi nào nhớ tụi mình thì cài lại nhé, mọi thứ vẫn chờ bạn."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
             Window.Closed += (s, e) => ScheduleSelfDelete();
         }
 

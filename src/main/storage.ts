@@ -23,6 +23,12 @@ interface StoreShape {
 
 const EMPTY: StoreShape = { version: 1, accounts: [], settings: DEFAULT_SETTINGS }
 
+/** First run: English, unless Windows (or macOS) itself is set to Vietnamese. */
+function systemLanguage(): Settings['language'] {
+  const preferred = (app.getPreferredSystemLanguages?.()[0] ?? app.getLocale() ?? '').toLowerCase()
+  return preferred.startsWith('vi') ? 'vi' : 'en'
+}
+
 /**
  * Tiny JSON store. Secrets are encrypted with the OS keychain (DPAPI on Windows,
  * Keychain on macOS) through Electron's safeStorage before touching disk.
@@ -39,10 +45,16 @@ export class Storage {
       this.data = {
         version: 1,
         accounts: parsed.accounts ?? [],
-        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}), muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) } }
+        settings: {
+          ...DEFAULT_SETTINGS,
+          language: systemLanguage(),
+          ...(parsed.settings ?? {}),
+          muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) }
+        }
       }
     } catch {
       this.data = structuredClone(EMPTY)
+      this.data.settings.language = systemLanguage()
     }
   }
 
