@@ -1,4 +1,4 @@
-import { ArchiveRestore, BellOff, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { ArchiveRestore, BellOff, ChevronRight, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
@@ -408,6 +408,23 @@ export function SettingsSheet(): JSX.Element {
                   onClick={() => void setSettings({ sendOnEnter: !settings.sendOnEnter })}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- legal */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('legalSection')}
+            </div>
+            <div className="settings-group">
+              {(['terms', 'privacy', 'credits'] as const).map((doc) => (
+                <button key={doc} className="settings-row settings-row-btn" onClick={() => openSheet({ kind: 'legal', doc })}>
+                  <div className="settings-row-text">
+                    <div className="settings-row-title">{t(doc === 'terms' ? 'legalTerms' : doc === 'privacy' ? 'legalPrivacy' : 'legalCredits')}</div>
+                  </div>
+                  <ChevronRight size={16} />
+                </button>
+              ))}
             </div>
           </div>
 

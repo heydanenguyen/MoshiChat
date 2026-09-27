@@ -493,6 +493,8 @@ export interface Settings {
   savedMessages?: SavedMessage[]
   /** Unison stickers you sent, so they stay stickers after the platform echoes them back as photos. */
   sentStickers?: SentSticker[]
+  /** When the person accepted the unofficial-connection notice for a platform (ms since epoch). */
+  acceptedUnofficial?: Partial<Record<Platform, number>>
   /** Text size across the app (bigger for high-resolution screens). */
   textSize?: TextSize
   /** Whole-interface zoom, 0.8-2 (1 = 100%). */

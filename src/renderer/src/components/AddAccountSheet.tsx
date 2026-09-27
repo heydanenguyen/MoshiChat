@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Building2, ChevronLeft, ExternalLink, KeyRound, ShieldAlert, User, X } from 'lucide-react'
 import type { PageOption, Platform } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
-import { useStore, useT } from '../store'
+import { useStore, useT, type LegalDoc } from '../store'
+import { LegalText } from './LegalSheet'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
@@ -41,6 +42,12 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
   const [withInstagram, setWithInstagram] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
+  // Unofficial connections (personal Messenger / Instagram, Zalo, WhatsApp) start with a notice the person accepts once per platform.
+  const accepted = useStore((s) => s.settings.acceptedUnofficial)
+  const setSettings = useStore((s) => s.setSettings)
+  const [consent, setConsent] = useState<{ platform: Platform; task: () => Promise<void> } | undefined>()
+  const [agreed, setAgreed] = useState(false)
+  const [reading, setReading] = useState<LegalDoc | undefined>()
 
   const isMeta = platform === 'messenger' || platform === 'instagram'
   const isQr = platform === 'zalo' || platform === 'whatsapp'
@@ -58,6 +65,24 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
     }
   }
 
+  const withConsent = (p: Platform, task: () => Promise<void>): void => {
+    if (accepted?.[p]) {
+      void run(task)
+      return
+    }
+    setAgreed(false)
+    setReading(undefined)
+    setConsent({ platform: p, task })
+  }
+
+  const acceptConsent = (): void => {
+    if (!consent) return
+    const { platform: p, task } = consent
+    setConsent(undefined)
+    void setSettings({ acceptedUnofficial: { ...(accepted ?? {}), [p]: Date.now() } })
+    void run(task)
+  }
+
   const openDocs = (url?: string) => (e: React.MouseEvent): void => {
     e.preventDefault()
     if (url) void window.unison.app.openExternal(url)
@@ -65,7 +90,8 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
 
   const back = (): void => {
     setError(undefined)
-    if (pages) setPages(undefined)
+    if (consent) setConsent(undefined)
+    else if (pages) setPages(undefined)
     else if (mode) setMode(undefined)
     else setPlatform(undefined)
   }
@@ -89,6 +115,50 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
           )}
         </div>
 
+        {/* ------------------------------------------------ unofficial connection: read and accept */}
+        {consent && (
+          <>
+            <div className="sheet-body scroll">
+              <div className="consent-head">
+                <ShieldAlert size={22} />
+                <div>
+                  <div className="consent-title">{t('consentTitle', { app: PLATFORMS[consent.platform].name })}</div>
+                  <div className="consent-intro">{t('consentIntro')}</div>
+                </div>
+              </div>
+              <ul className="consent-list">
+                {(['consentPoint1', 'consentPoint2', 'consentPoint3', 'consentPoint4', 'consentPoint5'] as const).map((key) => (
+                  <li key={key}>{t(key, { app: PLATFORMS[consent.platform].name })}</li>
+                ))}
+              </ul>
+              <div className="consent-links">
+                {(['terms', 'privacy'] as const).map((doc) => (
+                  <button key={doc} className={`link-btn ${reading === doc ? 'active' : ''}`} onClick={() => setReading(reading === doc ? undefined : doc)}>
+                    {t(doc === 'terms' ? 'legalTerms' : 'legalPrivacy')}
+                  </button>
+                ))}
+              </div>
+              {reading && (
+                <div className="consent-doc scroll">
+                  <LegalText doc={reading} />
+                </div>
+              )}
+              <label className="consent-check">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+                <span>{t('consentAgree')}</span>
+              </label>
+            </div>
+            <div className="sheet-footer">
+              <button className="btn secondary" onClick={() => setConsent(undefined)}>
+                {t('cancel')}
+              </button>
+              <button className="btn primary" disabled={!agreed} onClick={acceptConsent}>
+                {t('consentContinue')}
+              </button>
+            </div>
+          </>
+        )}
+
         {/* ------------------------------------------------ platform picker */}
         {!platform && (
           <div className="sheet-body">
@@ -108,13 +178,13 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
         )}
 
         {/* ------------------------------------------------ Facebook / Instagram: choose how */}
-        {isMeta && !mode && (
+        {isMeta && !mode && !consent && (
           <div className="sheet-body">
             <p className="sheet-intro" style={{ margin: 0 }}>
               {t('metaChooseMode')}
             </p>
             <div className="mode-list">
-              <button className="mode-card" onClick={() => void run(() => connectWeb(platform))} disabled={busy}>
+              <button className="mode-card" onClick={() => withConsent(platform, () => connectWeb(platform))} disabled={busy}>
                 <span className="mode-icon">
                   <User size={20} />
                 </span>
@@ -351,7 +421,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
         )}
 
         {/* ------------------------------------------------ Zalo / WhatsApp */}
-        {isQr && (
+        {isQr && !consent && (
           <>
             <div className="sheet-body">
               <p className="sheet-intro" style={{ margin: 0 }}>
@@ -372,7 +442,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
               <button className="btn secondary" onClick={closeSheet} disabled={busy}>
                 {t('cancel')}
               </button>
-              <button className="btn primary" disabled={busy} onClick={() => void run(() => addAccount({ platform }))}>
+              <button className="btn primary" disabled={busy} onClick={() => withConsent(platform, () => addAccount({ platform }))}>
                 {t('showQr')}
               </button>
             </div>
