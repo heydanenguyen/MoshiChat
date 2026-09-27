@@ -21,6 +21,8 @@ import { NewChatSheet } from './components/NewChatSheet'
 import { BackupSheet } from './components/BackupSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
+import { AiSetupSheet } from './components/AiParts'
+import { useAi } from './aiStore'
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -129,7 +131,7 @@ export default function App(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    void init()
+    void init().then(() => useAi.getState().init())
     // Catch up on unread messages in the open thread when the window regains focus.
     const onFocus = (): void => {
       const { selectedId, conversations } = useStore.getState()
@@ -210,6 +212,7 @@ export default function App(): JSX.Element {
             {sheet.kind === 'command' && <CommandPalette />}
             {sheet.kind === 'new-chat' && <NewChatSheet />}
             {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
+            <AiSetupSheet />
             {forwarding && <ForwardSheet message={forwarding} />}
             {lightbox && <Lightbox {...lightbox} />}
             {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}

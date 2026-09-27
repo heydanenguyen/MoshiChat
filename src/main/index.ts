@@ -14,6 +14,8 @@ import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
+import { AiService, readMedia } from './ai/service'
+import type { AiKind } from '@shared/ai'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
 import { BACKUP_EXTENSION } from './backup-format'
 
@@ -30,6 +32,13 @@ const emit = (event: BridgeEvent): void => {
 }
 
 const manager = new AccountManager(storage, emit, log)
+
+const ai = new AiService(
+  () => storage.settings.voiceModel ?? 'turbo',
+  () => storage.settings.language,
+  (progress) => emit({ type: 'ai:progress', progress }),
+  log
+)
 
 const scheduler = new Scheduler(
   storage,
@@ -521,6 +530,15 @@ function registerIpc(): void {
     }
     return settings
   })
+  ipcMain.handle(IPC.aiStatus, () => ai.status())
+  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind) => ai.prepare(kind === 'translate' ? 'translate' : 'voice'))
+  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' ? 'translate' : 'voice'))
+  ipcMain.handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
+  ipcMain.handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
+    ai.transcribe(String(key), pcm, typeof language === 'string' && /^[a-z]{2}$/.test(language) ? language : undefined)
+  )
+  ipcMain.handle(IPC.aiTranslate, (_e, key: string, text: string) => ai.translate(String(key), String(text ?? '').slice(0, 5000)))
+  ipcMain.handle(IPC.aiCached, () => ai.cached())
   ipcMain.handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
     const day = new Date().toISOString().slice(0, 10)
     const vi = storage.settings.language === 'vi'
@@ -625,6 +643,7 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     scheduler.stop()
+    ai.stop()
     void manager.shutdown()
   })
 }

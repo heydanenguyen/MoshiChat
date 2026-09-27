@@ -11,6 +11,7 @@ import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
 import { QuickReplyManager } from './QuickReplyManager'
+import { AiSettings } from './AiParts'
 
 export function SettingsSheet(): JSX.Element {
   const t = useT()
@@ -249,6 +250,16 @@ export function SettingsSheet(): JSX.Element {
                 </div>
               </div>
               <TagManager />
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- on-device AI */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('aiSection')}
+            </div>
+            <div className="settings-group">
+              <AiSettings />
             </div>
           </div>
 

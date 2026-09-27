@@ -1,3 +1,4 @@
+import type { AiKind, AiStatus } from './ai'
 import type {
   Account,
   AddAccountInput,
@@ -72,6 +73,18 @@ export interface UnisonBridge {
     respond(requestId: string, value: string): Promise<void>
     cancel(requestId: string): Promise<void>
   }
+  ai: {
+    status(): Promise<AiStatus>
+    /** Download (first time) and load a model; progress arrives as ai:progress events. */
+    prepare(kind: AiKind): Promise<boolean>
+    remove(kind: AiKind): Promise<void>
+    /** Raw bytes of a voice note (decoded to 16 kHz in the renderer). */
+    readMedia(url: string): Promise<Uint8Array>
+    /** `language`: ISO code of what is probably spoken (Whisper otherwise assumes English). */
+    transcribe(key: string, pcm: Float32Array, language?: string): Promise<string>
+    translate(key: string, text: string): Promise<{ text: string; from: string; same?: boolean }>
+    cached(): Promise<{ transcripts: Record<string, string>; translations: Record<string, string> }>
+  }
   backup: {
     /** Ask where to save, then write an encrypted backup. Null when the user cancels. */
     create(input: { password: string; includeSessions: boolean }): Promise<{ path: string; bytes: number } | null>
@@ -139,6 +152,13 @@ export const IPC = {
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
+  aiStatus: 'ai:status',
+  aiPrepare: 'ai:prepare',
+  aiRemove: 'ai:remove',
+  aiReadMedia: 'ai:readMedia',
+  aiTranscribe: 'ai:transcribe',
+  aiTranslate: 'ai:translate',
+  aiCached: 'ai:cached',
   backupCreate: 'backup:create',
   backupPick: 'backup:pick',
   backupRestore: 'backup:restore',

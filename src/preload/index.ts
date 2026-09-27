@@ -40,6 +40,15 @@ const bridge: UnisonBridge = {
     respond: (requestId, value) => ipcRenderer.invoke(IPC.authRespond, requestId, value),
     cancel: (requestId) => ipcRenderer.invoke(IPC.authCancel, requestId)
   },
+  ai: {
+    status: () => ipcRenderer.invoke(IPC.aiStatus),
+    prepare: (kind) => ipcRenderer.invoke(IPC.aiPrepare, kind),
+    remove: (kind) => ipcRenderer.invoke(IPC.aiRemove, kind),
+    readMedia: (url) => ipcRenderer.invoke(IPC.aiReadMedia, url),
+    transcribe: (key, pcm, language) => ipcRenderer.invoke(IPC.aiTranscribe, key, pcm, language),
+    translate: (key, text) => ipcRenderer.invoke(IPC.aiTranslate, key, text),
+    cached: () => ipcRenderer.invoke(IPC.aiCached)
+  },
   backup: {
     create: (input) => ipcRenderer.invoke(IPC.backupCreate, input),
     pick: () => ipcRenderer.invoke(IPC.backupPick),

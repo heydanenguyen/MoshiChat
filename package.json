@@ -20,6 +20,7 @@
     "setup": "node scripts/build-setup.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "instagram-private-api": "^1.46.1",
     "lucide-react": "^0.475.0",
@@ -53,7 +54,10 @@
     },
     "files": [
       "out/**",
-      "package.json"
+      "package.json",
+      "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "!node_modules/onnxruntime-web/**"
     ],
     "win": {
       "target": [
@@ -98,7 +102,10 @@
     "npmRebuild": false,
     "asarUnpack": [
       "node_modules/@whiskeysockets/baileys/**",
-      "node_modules/zca-js/**"
+      "node_modules/zca-js/**",
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
     ],
     "extraResources": [
       {
