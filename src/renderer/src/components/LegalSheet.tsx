@@ -5,10 +5,11 @@ import { BuddyLoader } from './BuddyLoader'
 
 export const LEGAL_TITLE_KEY = { notice: 'legalNotice', license: 'legalLicense', terms: 'legalTerms', privacy: 'legalPrivacy', credits: 'legalCredits' } as const
 
-/** Bold, code and links inside one line of the legal documents. */
+/** Bold, italics, code and links inside one line of the legal documents. */
 function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|<?https?:\/\/[^\s)|>]+>?)/).map((part, i) => {
+  return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|<?https?:\/\/[^\s)|>]+>?)/).map((part, i) => {
     if (part.startsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>
+    if (part.startsWith('*')) return <em key={i}>{part.slice(1, -1)}</em>
     if (part.startsWith('`')) return <code key={i}>{part.slice(1, -1)}</code>
     if (/^<?https?:\/\//.test(part)) {
       const url = part.replace(/^<|>$/g, '')
