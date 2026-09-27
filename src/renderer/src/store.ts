@@ -37,6 +37,7 @@ export type Sheet =
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
   | { kind: 'new-chat' }
+  | { kind: 'backup'; mode: 'create' | 'restore' }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 

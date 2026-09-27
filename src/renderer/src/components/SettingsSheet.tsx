@@ -1,4 +1,4 @@
-import { BellOff, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { ArchiveRestore, BellOff, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
@@ -249,6 +249,29 @@ export function SettingsSheet(): JSX.Element {
                 </div>
               </div>
               <TagManager />
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- backup */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('backupSection')}
+            </div>
+            <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('backupSectionTitle')}</div>
+                  <div className="settings-row-sub">{t('backupSectionHint')}</div>
+                </div>
+              </div>
+              <div className="settings-row backup-buttons">
+                <button className="btn primary" onClick={() => openSheet({ kind: 'backup', mode: 'create' })}>
+                  <FileArchive size={15} strokeWidth={2.2} /> {t('backupCreate')}
+                </button>
+                <button className="btn" onClick={() => openSheet({ kind: 'backup', mode: 'restore' })}>
+                  <ArchiveRestore size={15} strokeWidth={2.2} /> {t('restoreTitle')}
+                </button>
+              </div>
             </div>
           </div>
 

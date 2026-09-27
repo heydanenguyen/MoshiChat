@@ -15,6 +15,7 @@ import type {
   SendOptions,
   Settings,
   WeatherInfo,
+  BackupInfo,
   GifItem,
   GifPage
 } from './types'
@@ -70,6 +71,15 @@ export interface UnisonBridge {
   auth: {
     respond(requestId: string, value: string): Promise<void>
     cancel(requestId: string): Promise<void>
+  }
+  backup: {
+    /** Ask where to save, then write an encrypted backup. Null when the user cancels. */
+    create(input: { password: string; includeSessions: boolean }): Promise<{ path: string; bytes: number } | null>
+    /** Pick a backup file and read its header. Null when the user cancels. */
+    pick(): Promise<BackupInfo | null>
+    /** Replace this device's data with the backup, then Unison restarts. Rejects with BACKUP_PASSWORD on a wrong password. */
+    restore(input: { path: string; password: string }): Promise<void>
+    reveal(path: string): Promise<void>
   }
   scheduled: {
     add(input: { conversationId: string; text: string; sendAt: number; replyToId?: string }): Promise<Settings>
@@ -129,6 +139,10 @@ export const IPC = {
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
+  backupCreate: 'backup:create',
+  backupPick: 'backup:pick',
+  backupRestore: 'backup:restore',
+  backupReveal: 'backup:reveal',
   scheduledAdd: 'scheduled:add',
   scheduledCancel: 'scheduled:cancel',
   scheduledSendNow: 'scheduled:sendNow',

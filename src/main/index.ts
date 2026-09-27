@@ -14,6 +14,8 @@ import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
+import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
+import { BACKUP_EXTENSION } from './backup-format'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
@@ -519,6 +521,48 @@ function registerIpc(): void {
     }
     return settings
   })
+  ipcMain.handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
+    const day = new Date().toISOString().slice(0, 10)
+    const vi = storage.settings.language === 'vi'
+    // Development only: UNISON_BACKUP_SAVE_PATH skips the dialog (automated tests).
+    const testPath = !app.isPackaged ? process.env.UNISON_BACKUP_SAVE_PATH : undefined
+    const picked = testPath ? { canceled: false, filePath: testPath } : await dialog.showSaveDialog(window!, {
+      title: vi ? 'Lưu bản sao lưu Unison' : 'Save Unison backup',
+      defaultPath: join(app.getPath('documents'), `Unison-backup-${day}.${BACKUP_EXTENSION}`),
+      filters: [{ name: 'Unison backup', extensions: [BACKUP_EXTENSION] }]
+    })
+    if (picked.canceled || !picked.filePath) return null
+    const result = await createBackup(storage, picked.filePath, String(input.password ?? ''), !!input.includeSessions)
+    log('backup written:', result.bytes, 'bytes')
+    return result
+  })
+  ipcMain.handle(IPC.backupPick, async () => {
+    const vi = storage.settings.language === 'vi'
+    const testPick = !app.isPackaged ? process.env.UNISON_BACKUP_OPEN_PATH : undefined
+    const picked = testPick ? { canceled: false, filePaths: [testPick] } : await dialog.showOpenDialog(window!, {
+      title: vi ? 'Chọn bản sao lưu Unison' : 'Choose a Unison backup',
+      defaultPath: app.getPath('documents'),
+      properties: ['openFile'],
+      filters: [{ name: 'Unison backup', extensions: [BACKUP_EXTENSION] }]
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    return inspectBackup(picked.filePaths[0])
+  })
+  ipcMain.handle(IPC.backupRestore, async (_e, input: { path: string; password: string }) => {
+    const { safetyCopy } = await restoreBackup(storage, String(input.path), String(input.password ?? ''), async () => {
+      scheduler.stop()
+      await manager.shutdown()
+    })
+    log('backup restored; previous data kept in', safetyCopy)
+    // Start fresh with the restored data (in development, restart the dev server by hand).
+    setTimeout(() => {
+      if (!process.env.ELECTRON_RENDERER_URL) app.relaunch()
+      app.exit(0)
+    }, 600)
+  })
+  ipcMain.handle(IPC.backupReveal, (_e, path: string) => {
+    if (typeof path === 'string' && path.toLowerCase().endsWith(`.${BACKUP_EXTENSION}`)) shell.showItemInFolder(path)
+  })
   ipcMain.handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
   ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
   ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
@@ -561,6 +605,7 @@ if (!gotLock) {
     await storage.load()
     await pruneOrphanedSettings()
     void scheduler.start()
+    void pruneSafetyCopies()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()
