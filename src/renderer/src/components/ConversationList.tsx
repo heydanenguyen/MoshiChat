@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { BellOff, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
 import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
 import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleConversations } from '../store'
@@ -31,6 +31,8 @@ export function ConversationList(): JSX.Element {
   const tags = useStore((s) => s.settings.tags)
   const toggleTag = useStore((s) => s.toggleTag)
   const overrides = useStore((s) => s.settings.contactOverrides)
+  const prefetch = useStore((s) => s.prefetch)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pins = useStore((s) => s.settings.pins)
   const togglePin = useStore((s) => s.togglePin)
   const { list: tagList, byId: tagById } = useTagDefs()
@@ -126,6 +128,14 @@ export function ConversationList(): JSX.Element {
               key={c.id}
               className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${c.unreadCount ? 'unread' : ''}`}
               onClick={() => select(c.id)}
+              onMouseEnter={() => {
+                // Resting on a chat for a moment starts loading it, so opening feels instant.
+                if (hoverTimer.current) clearTimeout(hoverTimer.current)
+                hoverTimer.current = setTimeout(() => void prefetch(c.id), 250)
+              }}
+              onMouseLeave={() => {
+                if (hoverTimer.current) clearTimeout(hoverTimer.current)
+              }}
               onContextMenu={(e) => {
                 e.preventDefault()
                 setMenu({ conversationId: c.id, x: e.clientX, y: e.clientY })

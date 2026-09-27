@@ -74,7 +74,8 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   const notification = new Notification({
     title,
     body: event.message.text || 'Sent an attachment',
-    silent: false
+    // Unison plays its own sound for new messages (renderer/src/sounds.ts) unless it is turned off.
+    silent: storage.settings.sound !== 'off'
   })
   notification.on('click', () => {
     window?.show()
@@ -173,7 +174,9 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: true,
-      webSecurity: true
+      webSecurity: true,
+      // Message sounds must play while the window is in the background.
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 

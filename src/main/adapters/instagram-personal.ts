@@ -77,6 +77,8 @@ interface CrawlState {
 }
 const MAX_BACKOFF = 8
 const HISTORY_LIMIT = 300
+/** Chats whose newest page is kept on disk for an instant first open. */
+const THREAD_CACHE_CHATS = 60
 const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
 
 /**
@@ -107,6 +109,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private users = new Map<string, IgUser>()
   private history = new Map<string, Message[]>()
   private cursors = new Map<string, string | undefined>()
+  /** Chats already refreshed from the server this session (the rest may show cached messages first). */
+  private refreshed = new Set<string>()
+  private refreshing = new Map<string, Promise<void>>()
+  private threadCacheFile = ''
+  private threadCacheTimer?: NodeJS.Timeout
   private pendingPeers = new Map<string, string>()
   private aliases = new Map<string, string>()
   private timer?: NodeJS.Timeout
@@ -166,6 +173,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     await this.ctx.saveSecret(this.secret)
     await this.loadCrawls()
+    await this.loadThreadCache()
     this.realtime.start()
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
     this.setStatus('connected')
@@ -201,14 +209,37 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private async fetchPage(id: string, { limit, beforeId }: FetchMessagesOptions): Promise<Message[]> {
     const threadId = this.threadIdFor(id)
     if (!threadId) return this.history.get(id) ?? []
+    // Opening a chat we already know (this session or from the disk cache): show it at once and
+    // refresh quietly; new or changed messages arrive as updates.
+    if (!beforeId && !this.refreshed.has(id)) {
+      const cached = this.history.get(id)
+      if (cached?.length) {
+        this.refreshed.add(id)
+        const refresh = this.guard(() => this.refreshThread(id, threadId))
+          .catch((err) => {
+            this.refreshed.delete(id)
+            this.ctx.log('instagram refresh failed', (err as Error).message)
+          })
+          .finally(() => this.refreshing.delete(id))
+        this.refreshing.set(id, refresh)
+        return cached.slice().sort((a, b) => a.sentAt - b.sentAt)
+      }
+    }
+    if (!beforeId) this.refreshed.add(id)
     let cursor: string | undefined
     if (beforeId) {
+      // Scrolling up right after opening: wait for the refresh that knows where older pages start.
+      await this.refreshing.get(id)
       cursor = this.cursors.get(id)
       if (!cursor) return []
     }
     const collected: Message[] = []
-    for (let i = 0; i < Math.ceil(limit / PAGE_SIZE); i++) {
+    // One page per call: the first screen shows sooner; scrolling up loads the next page.
+    for (let i = 0; i < Math.max(1, Math.ceil(Math.min(limit, PAGE_SIZE) / PAGE_SIZE)); i++) {
+      // The Slide lookup does not depend on the page, so both requests run at once.
+      const warm = cursor ? undefined : this.warmSlides(threadId)
       const page = await this.page(threadId, cursor)
+      await warm
       await this.resolveSlide(threadId, page.items)
       collected.push(...page.items.filter((item) => this.visible(item)).map((item) => this.toMessage(item, id)))
       cursor = page.hasOlder ? page.cursor : undefined
@@ -827,6 +858,78 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    * placeholders. The web client reads them through GraphQL (IGDThreadDetailQuery, newest 20),
    * so do the same and remember the result per item.
    */
+  /** The newest Slide messages of a thread (the web client's own thread query). */
+  private async fetchSlideNodes(threadId: string, v2: string): Promise<{ at: number; nodes: Map<string, SlideNode> } | undefined> {
+    try {
+      const res = await this.realtime.graphql('IGDThreadDetailQuery', {
+        min_uq_seq_id: null,
+        thread_fbid: v2,
+        __relay_internal__pv__IGDEnableOffMsysChatThemesQErelayprovider: true,
+        __relay_internal__pv__IGDInitialMessagePageCountrelayprovider: 20
+      })
+      const cached = { at: Date.now(), nodes: new Map(slideNodesOf(res).flatMap((n) => (n.message_id ? [[n.message_id, n] as const] : []))) }
+      this.slideCache.set(threadId, cached)
+      this.slideFailures = 0
+      return cached
+    } catch (err) {
+      this.slideFailures += 1
+      this.ctx.log('instagram slide lookup failed', (err as Error).message)
+      return undefined
+    }
+  }
+
+  /** Start the Slide lookup early, alongside the page request (opening a chat is then one round trip). */
+  private async warmSlides(threadId: string): Promise<void> {
+    const v2 = this.threads.get(threadId)?.thread_v2_id ?? this.v2Ids.get(threadId)
+    if (!v2 || this.slideFailures >= 5) return
+    const cached = this.slideCache.get(threadId)
+    if (cached && Date.now() - cached.at < 5_000) return
+    await this.fetchSlideNodes(threadId, v2)
+  }
+
+  /** Newest page from the server for a chat that was shown from cache; changes go out as updates. */
+  private async refreshThread(id: string, threadId: string): Promise<void> {
+    const warm = this.warmSlides(threadId)
+    const page = await this.page(threadId)
+    await warm
+    await this.resolveSlide(threadId, page.items)
+    const fresh = page.items.filter((item) => this.visible(item)).map((item) => this.toMessage(item, id))
+    this.cursors.set(id, page.hasOlder ? page.cursor : undefined)
+    const before = new Map((this.history.get(id) ?? []).map((m) => [m.id, JSON.stringify(m)]))
+    this.remember(id, fresh)
+    // Updates, not "new": these are not new arrivals and must not notify.
+    for (const message of fresh) if (before.get(message.id) !== JSON.stringify(message)) this.ctx.emit({ type: 'message:updated', message })
+  }
+
+  private async loadThreadCache(): Promise<void> {
+    this.threadCacheFile = join(this.ctx.dataDir(), `threads-${this.mePk}.json`)
+    try {
+      const raw = JSON.parse(await readFileAsync(this.threadCacheFile, 'utf8')) as Record<string, Message[]>
+      for (const [id, list] of Object.entries(raw)) if (!this.history.has(id) && Array.isArray(list)) this.history.set(id, list)
+    } catch {
+      /* first run */
+    }
+  }
+
+  /** The newest page of the most recent chats, so reopening after a restart is instant. */
+  private saveThreadCache(): void {
+    if (!this.threadCacheFile) return
+    if (this.threadCacheTimer) clearTimeout(this.threadCacheTimer)
+    this.threadCacheTimer = setTimeout(() => {
+      const slim = (m: Message): Message => ({
+        ...m,
+        // Local previews of sent photos can be large data URLs; the server copy replaces them anyway.
+        attachments: m.attachments.map((a) => (a.url?.startsWith('data:') && a.url.length > 20_000 ? { ...a, url: undefined } : a))
+      })
+      const entries = [...this.history.entries()]
+        .filter(([, list]) => list.length)
+        .sort((a, b) => (b[1].at(-1)?.sentAt ?? 0) - (a[1].at(-1)?.sentAt ?? 0))
+        .slice(0, THREAD_CACHE_CHATS)
+        .map(([id, list]) => [id, list.slice(-PAGE_SIZE).map(slim)] as const)
+      void writeFileAsync(this.threadCacheFile, JSON.stringify(Object.fromEntries(entries))).catch(() => undefined)
+    }, 3_000)
+  }
+
   private async resolveSlide(threadId: string, items: IgItem[]): Promise<void> {
     const pending = items.filter((item) => item.item_type === 'placeholder' && item.message_id && !this.slideResolved.has(item.item_id))
     if (!pending.length || this.slideFailures >= 5) return
@@ -835,21 +938,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     let cached = this.slideCache.get(threadId)
     const missing = (c?: { nodes: Map<string, SlideNode> }): boolean => pending.some((item) => !c?.nodes.has(item.message_id!))
     if (!cached || (missing(cached) && Date.now() - cached.at > 5_000)) {
-      try {
-        const res = await this.realtime.graphql('IGDThreadDetailQuery', {
-          min_uq_seq_id: null,
-          thread_fbid: v2,
-          __relay_internal__pv__IGDEnableOffMsysChatThemesQErelayprovider: true,
-          __relay_internal__pv__IGDInitialMessagePageCountrelayprovider: 20
-        })
-        cached = { at: Date.now(), nodes: new Map(slideNodesOf(res).flatMap((n) => (n.message_id ? [[n.message_id, n] as const] : []))) }
-        this.slideCache.set(threadId, cached)
-        this.slideFailures = 0
-      } catch (err) {
-        this.slideFailures += 1
-        this.ctx.log('instagram slide lookup failed', (err as Error).message)
-        return
-      }
+      cached = await this.fetchSlideNodes(threadId, v2)
+      if (!cached) return
     }
     for (const item of pending) {
       const node = cached.nodes.get(item.message_id!)
@@ -919,6 +1009,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     list.sort((a, b) => a.sentAt - b.sentAt)
     this.history.set(id, list.slice(-HISTORY_LIMIT))
+    this.saveThreadCache()
   }
 
   private setStatus(status: Account['status'], error?: string): void {
