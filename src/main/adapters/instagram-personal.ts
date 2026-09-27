@@ -686,16 +686,26 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     this.polling = true
     try {
       const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
+      const activity = new Map([...this.threads].map(([k, t]) => [k, String(t.last_activity_at ?? '')]))
       const threads = await this.inbox()
       for (const thread of threads) {
         const id = conversationId(this.account.id, thread.thread_id)
         const lastId = (thread.last_permanent_item ?? thread.items?.[0])?.item_id
-        if (before.get(thread.thread_id) === lastId) continue
+        if (before.get(thread.thread_id) === lastId) {
+          // No new message, but something happened (a reaction, taken back, an edit): refresh what is on screen.
+          const moved = activity.has(thread.thread_id) && activity.get(thread.thread_id) !== String(thread.last_activity_at ?? '')
+          if (moved && this.history.get(id)?.length) {
+            const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=${PAGE_SIZE}`, { headers: APP_HEADERS })
+            this.syncReactions(id, res.thread.items ?? [])
+          }
+          continue
+        }
         this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
         const known = this.history.get(id)
         if (!known || !lastId || known.some((m) => m.id === lastId)) continue
         const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
         await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
+        this.syncReactions(id, res.thread.items ?? [])
         const fresh = (res.thread.items ?? [])
           .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
           .map((item) => this.toMessage(item, id))
@@ -972,13 +982,6 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const isOutgoing = String(item.user_id) === this.mePk
     const sender = this.users.get(String(item.user_id))
     const mapped = this.mapped(item)
-    const reactions = new Map<string, { emoji: string; count: number; byMe: boolean }>()
-    for (const r of item.reactions?.emojis ?? []) {
-      const entry = reactions.get(r.emoji) ?? { emoji: r.emoji, count: 0, byMe: false }
-      entry.count += 1
-      if (String(r.sender_id) === this.mePk) entry.byMe = true
-      reactions.set(r.emoji, entry)
-    }
     const message: Message = {
       id: item.item_id,
       conversationId: id,
@@ -988,7 +991,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       text: mapped.text,
       attachments: mapped.attachments,
       system: mapped.system,
-      reactions: [...reactions.values()],
+      reactions: this.reactionsOf(item),
       sentAt: Number(item.timestamp) / 1000,
       isOutgoing,
       status: isOutgoing ? 'sent' : 'delivered'
@@ -998,6 +1001,34 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       message.replyTo = { id: item.replied_to_message.item_id, senderName: who?.full_name || who?.username || '', text: item.replied_to_message.text ?? '' }
     }
     return message
+  }
+
+  /** Instagram changes reactions in place on messages already shown; pass the changes on. */
+  private syncReactions(id: string, items: IgItem[]): void {
+    const known = this.history.get(id)
+    if (!known) return
+    let changed = false
+    for (const item of items) {
+      const index = known.findIndex((m) => m.id === item.item_id)
+      if (index < 0) continue
+      const reactions = this.reactionsOf(item)
+      if (JSON.stringify(reactions) === JSON.stringify(known[index].reactions)) continue
+      known[index] = { ...known[index], reactions }
+      changed = true
+      this.ctx.emit({ type: 'message:reactions', conversationId: id, messageId: item.item_id, reactions })
+    }
+    if (changed) this.saveThreadCache()
+  }
+
+  private reactionsOf(item: IgItem): Message['reactions'] {
+    const reactions = new Map<string, { emoji: string; count: number; byMe: boolean }>()
+    for (const r of item.reactions?.emojis ?? []) {
+      const entry = reactions.get(r.emoji) ?? { emoji: r.emoji, count: 0, byMe: false }
+      entry.count += 1
+      if (String(r.sender_id) === this.mePk) entry.byMe = true
+      reactions.set(r.emoji, entry)
+    }
+    return [...reactions.values()]
   }
 
   private remember(id: string, messages: Message[]): void {

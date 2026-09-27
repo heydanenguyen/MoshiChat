@@ -574,6 +574,8 @@ export type BridgeEvent =
   | { type: 'conversations:reset'; accountId: string; conversations: Conversation[] }
   | { type: 'message:new'; message: Message }
   | { type: 'message:updated'; message: Message }
+  /** Reactions on a message changed (someone reacted or took it back); nothing else about it did. */
+  | { type: 'message:reactions'; conversationId: string; messageId: string; reactions: Reaction[] }
   | { type: 'typing'; typing: TypingEvent }
   | { type: 'auth:prompt'; prompt: AuthPrompt }
   | { type: 'auth:cleared'; requestId: string }
