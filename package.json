@@ -12,11 +12,12 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --win",
+    "dist": "electron-vite build && electron-builder --win && node scripts/build-setup.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
-    "installer-art": "node scripts/make-installer-art.mjs"
+    "installer-art": "node scripts/make-installer-art.mjs",
+    "setup": "node scripts/build-setup.mjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14",
@@ -79,7 +80,7 @@
       "shortcutName": "Unison",
       "uninstallDisplayName": "Unison",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Unison-Setup-${version}.exe"
+      "artifactName": "unison-core-${version}.exe"
     },
     "mac": {
       "target": [

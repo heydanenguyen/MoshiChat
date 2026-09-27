@@ -1,0 +1,284 @@
+<!-- Unison setup window. Loaded at runtime (XamlReader) by UnisonSetup.cs; named elements are wired in code. -->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cài đặt Unison" Width="668" Height="548"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="Segoe UI Variable Display, Segoe UI" Foreground="#141414">
+  <Window.Resources>
+    <SolidColorBrush x:Key="Ink" Color="#141414"/>
+    <SolidColorBrush x:Key="Muted" Color="#6E6A85"/>
+    <LinearGradientBrush x:Key="Brand" StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#FF6A2B" Offset="0"/>
+      <GradientStop Color="#FF5FA8" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Primary pill: brand gradient, soft coloured shadow; hover brightens, press sinks a touch. -->
+    <Style x:Key="Primary" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="46"/>
+      <Setter Property="MinWidth" Value="196"/>
+      <Setter Property="Padding" Value="30,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid x:Name="root" RenderTransformOrigin="0.5,0.5">
+              <Border x:Name="bg" CornerRadius="23" Background="{StaticResource Brand}">
+                <Border.Effect>
+                  <DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.32" Color="#FF5A6E"/>
+                </Border.Effect>
+              </Border>
+              <Border x:Name="sheen" CornerRadius="23" Background="White" Opacity="0"/>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="sheen" Storyboard.TargetProperty="Opacity" To="0.14" Duration="0:0:0.16"/>
+                      <DoubleAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" To="0.45" Duration="0:0:0.16"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="sheen" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22"/>
+                      <DoubleAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" To="0.32" Duration="0:0:0.22"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="root" Property="Margin" Value="0,2,0,-2"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="root" Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Quiet text button. -->
+    <Style x:Key="Ghost" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="46"/>
+      <Setter Property="Padding" Value="22,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="23" Background="#00FFFFFF">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#147A5CFF"/>
+                <Setter Property="Foreground" Value="#141414"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Title-bar circles (minimise / close). -->
+    <Style x:Key="Chrome" TargetType="Button">
+      <Setter Property="Width" Value="32"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="16" Background="#00FFFFFF">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#1A6A4BFF"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Opacity" Value="0.35"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid x:Name="Root" Margin="24" RenderTransformOrigin="0.5,0.5">
+    <Grid.RenderTransform>
+      <ScaleTransform x:Name="RootScale" ScaleX="1" ScaleY="1"/>
+    </Grid.RenderTransform>
+
+    <!-- card + shadow -->
+    <Border CornerRadius="24" Background="#FBFAFF">
+      <Border.Effect>
+        <DropShadowEffect BlurRadius="30" ShadowDepth="8" Direction="270" Opacity="0.24" Color="#3A2A80"/>
+      </Border.Effect>
+    </Border>
+
+    <Grid x:Name="Surface" Width="620" Height="500">
+      <Grid.Clip>
+        <RectangleGeometry Rect="0,0,620,500" RadiusX="24" RadiusY="24"/>
+      </Grid.Clip>
+
+      <!-- soft pastel mesh + dot lattice -->
+      <Canvas IsHitTestVisible="False">
+        <Rectangle Width="620" Height="500">
+          <Rectangle.Fill>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+              <GradientStop Color="#FDFCFF" Offset="0"/>
+              <GradientStop Color="#F3EFFF" Offset="1"/>
+            </LinearGradientBrush>
+          </Rectangle.Fill>
+        </Rectangle>
+        <Ellipse x:Name="BlobA" Width="460" Height="360" Canvas.Left="80" Canvas.Top="-40">
+          <Ellipse.Fill>
+            <RadialGradientBrush>
+              <GradientStop Color="#B8CDBBFF" Offset="0"/>
+              <GradientStop Color="#00CDBBFF" Offset="1"/>
+            </RadialGradientBrush>
+          </Ellipse.Fill>
+          <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        </Ellipse>
+        <Ellipse x:Name="BlobB" Width="340" Height="280" Canvas.Left="390" Canvas.Top="-110">
+          <Ellipse.Fill>
+            <RadialGradientBrush>
+              <GradientStop Color="#E6FFD3EA" Offset="0"/>
+              <GradientStop Color="#00FFD3EA" Offset="1"/>
+            </RadialGradientBrush>
+          </Ellipse.Fill>
+          <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        </Ellipse>
+        <Ellipse x:Name="BlobC" Width="380" Height="300" Canvas.Left="-140" Canvas.Top="260">
+          <Ellipse.Fill>
+            <RadialGradientBrush>
+              <GradientStop Color="#D9FFE2CC" Offset="0"/>
+              <GradientStop Color="#00FFE2CC" Offset="1"/>
+            </RadialGradientBrush>
+          </Ellipse.Fill>
+          <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        </Ellipse>
+        <Rectangle Width="620" Height="500">
+          <Rectangle.Fill>
+            <DrawingBrush TileMode="Tile" Viewport="0,0,14,14" ViewportUnits="Absolute" Viewbox="0,0,14,14" ViewboxUnits="Absolute">
+              <DrawingBrush.Drawing>
+                <DrawingGroup>
+                  <GeometryDrawing Brush="#00FFFFFF">
+                    <GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,14,14"/></GeometryDrawing.Geometry>
+                  </GeometryDrawing>
+                  <GeometryDrawing Brush="#166A4BFF">
+                    <GeometryDrawing.Geometry><EllipseGeometry Center="7,7" RadiusX="0.9" RadiusY="0.9"/></GeometryDrawing.Geometry>
+                  </GeometryDrawing>
+                </DrawingGroup>
+              </DrawingBrush.Drawing>
+            </DrawingBrush>
+          </Rectangle.Fill>
+        </Rectangle>
+      </Canvas>
+
+      <!-- celebration layer (behind the words and buttons) -->
+      <Canvas x:Name="Confetti" IsHitTestVisible="False"/>
+
+      <!-- top bar -->
+      <Grid x:Name="TopBar" Height="56" VerticalAlignment="Top" Background="#00FFFFFF">
+        <StackPanel Orientation="Horizontal" Margin="22,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left">
+          <Image x:Name="LogoSmall" Width="24" Height="24" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <TextBlock Text="Unison" FontWeight="Bold" FontSize="15" Margin="8,0,0,1" VerticalAlignment="Center"/>
+        </StackPanel>
+        <StackPanel x:Name="Steps" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Border x:Name="Step1" Height="6" Width="22" CornerRadius="3" Margin="3,0" Background="#FF6A2B"/>
+          <Border x:Name="Step2" Height="6" Width="6" CornerRadius="3" Margin="3,0" Background="#D9D2F2"/>
+          <Border x:Name="Step3" Height="6" Width="6" CornerRadius="3" Margin="3,0" Background="#D9D2F2"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0">
+          <Button x:Name="MinButton" Style="{StaticResource Chrome}" ToolTip="Thu nhỏ">
+            <Path Data="M0,0 L10,0" Stroke="#6E6A85" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          </Button>
+          <Button x:Name="CloseButton" Style="{StaticResource Chrome}" Margin="2,0,0,0" ToolTip="Đóng">
+            <Path Data="M0,0 L9,9 M9,0 L0,9" Stroke="#6E6A85" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <!-- stage: the characters, their shadow and the speech bubble -->
+      <Canvas x:Name="Stage" Width="620" Height="236" VerticalAlignment="Top" Margin="0,46,0,0" IsHitTestVisible="False">
+        <Ellipse x:Name="Floor" Width="170" Height="18" Canvas.Left="225" Canvas.Top="212">
+          <Ellipse.Fill>
+            <RadialGradientBrush>
+              <GradientStop Color="#383A2A80" Offset="0"/>
+              <GradientStop Color="#003A2A80" Offset="1"/>
+            </RadialGradientBrush>
+          </Ellipse.Fill>
+          <Ellipse.RenderTransform><ScaleTransform CenterX="85" CenterY="9"/></Ellipse.RenderTransform>
+        </Ellipse>
+        <!-- the Buddies duo (setup) -->
+        <Grid x:Name="Duo" Canvas.Left="228" Canvas.Top="44" Width="164" Height="176">
+          <Image x:Name="Pink" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <Grid x:Name="OrangeHost">
+            <Image x:Name="Orange" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <Image x:Name="Blink" Opacity="0" RenderOptions.BitmapScalingMode="HighQuality"/>
+          </Grid>
+        </Grid>
+        <!-- calm pair (uninstall) -->
+        <StackPanel x:Name="Pair" Orientation="Horizontal" Canvas.Left="226" Canvas.Top="96" Visibility="Collapsed">
+          <Image x:Name="CalmOrange" Width="104" Height="104" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <Image x:Name="CalmPink" Width="80" Height="80" Margin="-12,0,0,4" VerticalAlignment="Bottom" RenderOptions.BitmapScalingMode="HighQuality"/>
+        </StackPanel>
+        <Grid x:Name="Bubble" Canvas.Left="356" Canvas.Top="14" RenderTransformOrigin="0.1,1">
+          <Grid.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.14" Color="#3A2A80"/>
+          </Grid.Effect>
+          <Border Background="White" CornerRadius="17" Padding="16,8,16,9">
+            <TextBlock x:Name="BubbleText" FontSize="17" FontWeight="Bold"/>
+          </Border>
+          <Path Data="M0,0 L16,0 L3,11 Z" Fill="White" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16,0,0,-10"/>
+        </Grid>
+      </Canvas>
+
+      <!-- words and actions -->
+      <StackPanel x:Name="Content" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,286,0,0" Width="540">
+        <StackPanel.RenderTransform><TranslateTransform/></StackPanel.RenderTransform>
+        <TextBlock x:Name="Heading" FontSize="25" FontWeight="Bold" TextAlignment="Center"/>
+        <TextBlock x:Name="Subtitle" FontSize="14" TextAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
+                   Margin="0,8,0,0" LineHeight="21" Height="44"/>
+        <Grid Margin="0,16,0,0" Height="80">
+          <StackPanel x:Name="WelcomeActions" HorizontalAlignment="Center">
+            <Button x:Name="InstallButton" Style="{StaticResource Primary}" Content="Cài đặt"/>
+            <TextBlock x:Name="FinePrint" FontSize="12" Foreground="#9A96B0" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+          </StackPanel>
+          <StackPanel x:Name="ProgressPanel" Width="380" HorizontalAlignment="Center" Visibility="Collapsed" Margin="0,8,0,0">
+            <Grid Height="10">
+              <Border CornerRadius="5" Background="#E7E1FB"/>
+              <Border x:Name="ProgressFill" CornerRadius="5" HorizontalAlignment="Left" Width="0" Background="{StaticResource Brand}"/>
+            </Grid>
+            <Grid Margin="0,12,0,0">
+              <TextBlock x:Name="ProgressText" FontSize="12.5" Foreground="{StaticResource Muted}" HorizontalAlignment="Left"/>
+              <TextBlock x:Name="Percent" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
+            </Grid>
+          </StackPanel>
+          <StackPanel x:Name="PairActions" Orientation="Horizontal" HorizontalAlignment="Center" Visibility="Collapsed" VerticalAlignment="Top">
+            <Button x:Name="PrimaryButton" Style="{StaticResource Primary}"/>
+            <Button x:Name="SecondaryButton" Style="{StaticResource Ghost}" Margin="8,0,0,0"/>
+          </StackPanel>
+        </Grid>
+      </StackPanel>
+
+      <TextBlock x:Name="Version" FontSize="11" Foreground="#AAA6C0" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="22,0,0,16"/>
+
+    </Grid>
+  </Grid>
+</Window>
