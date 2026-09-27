@@ -7711,3 +7711,201 @@ button.moment-card:hover {
   align-items: center;
   gap: 6px;
 }
+
+/* ================================================================== on-device AI */
+
+/* under a voice note */
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.75;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth),
+    background-color var(--duration-fast) var(--ease-smooth);
+}
+.ai-chip:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.ai-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 320px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-align: left;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.ai-note svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  opacity: 0.7;
+}
+.ai-note.busy {
+  align-items: center;
+  opacity: 0.8;
+}
+.ai-note.error {
+  color: var(--danger);
+}
+.ai-note.transcript span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* under a translated message */
+.bubble-translation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  text-align: left;
+}
+.bubble-translation.busy,
+.bubble-translation.error {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  opacity: 0.8;
+}
+.bubble-translation.error {
+  color: var(--danger);
+  opacity: 1;
+}
+.bubble-translation-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bubble-translation-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.6;
+  transition: opacity var(--duration-fast) var(--ease-smooth);
+}
+.bubble-translation-meta:hover {
+  opacity: 1;
+}
+.bubble-actions .icon-btn.active {
+  color: var(--accent);
+}
+
+/* first-use sheet */
+.ai-sheet {
+  width: 440px;
+}
+.ai-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px 2px;
+  text-align: center;
+}
+.ai-setup p {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+.ai-setup-buddy {
+  filter: drop-shadow(0 10px 18px rgba(255, 91, 31, 0.22));
+}
+.ai-setup-buddy .buddy-body {
+  animation: buddy-bob 3.4s ease-in-out infinite;
+}
+.ai-points {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--bg-hover);
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.ai-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ai-points svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.ai-setup .backup-actions {
+  width: 100%;
+}
+.ai-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.ai-progress.inline {
+  margin-top: 8px;
+  max-width: 320px;
+}
+.ai-progress-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fill-tertiary);
+  overflow: hidden;
+}
+.ai-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent-gradient);
+  transition: width 300ms var(--ease-smooth);
+}
+
+/* settings */
+.ai-row {
+  align-items: flex-start;
+}
+.ai-status {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+  color: var(--text-tertiary);
+  background: var(--fill-tertiary);
+}
+.ai-status.ready {
+  color: #059669;
+  background: color-mix(in srgb, #10b981 16%, transparent);
+}
+.ai-quality {
+  margin-top: 8px;
+}
+.ai-quality button {
+  font-size: var(--text-xs);
+}

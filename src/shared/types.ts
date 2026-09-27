@@ -1,3 +1,4 @@
+import type { AiProgress, VoiceModel } from './ai'
 import type { LogoId } from './logos'
 /** Domain model shared between main, preload and renderer. */
 
@@ -484,6 +485,8 @@ export interface Settings {
   quickReplies?: QuickReply[]
   /** Messages to send later; only the main process edits this list. */
   scheduled?: ScheduledMessage[]
+  /** On-device voice-to-text model: most accurate (turbo) or light (small). */
+  voiceModel?: VoiceModel
   /** Word effects (birthday confetti, hearts...). Default on. */
   effects?: boolean
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
@@ -555,6 +558,7 @@ export type BridgeEvent =
   | { type: 'focus-conversation'; conversationId: string }
   | { type: 'window:state'; maximized: boolean }
   | { type: 'settings:updated'; settings: Settings }
+  | { type: 'ai:progress'; progress: AiProgress }
 
 export interface PlatformMeta {
   id: Platform

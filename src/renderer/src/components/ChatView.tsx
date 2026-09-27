@@ -11,6 +11,7 @@ import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from '
 import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
+import { TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -473,6 +474,7 @@ function Bubble({
                 .filter((attachment) => !gridded?.has(attachment.id))
                 .map((attachment) => <AttachmentView key={attachment.id} attachment={attachment} message={message} platform={platform} />)}
             {message.text && (media ? <div className="bubble-caption"><Linkify text={message.text} /></div> : <Linkify text={message.text} />)}
+            {message.text && !message.system && <TranslationBlock message={message} />}
             {!message.text && !message.attachments.length && <span style={{ opacity: 0.6 }}>…</span>}
             {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
           </div>
@@ -493,6 +495,7 @@ function Bubble({
           <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
             <Forward size={15} strokeWidth={2} />
           </button>
+          <TranslateButton message={message} />
           <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
             <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
           </button>
@@ -556,7 +559,12 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
     case 'video':
       return <VideoThumb attachment={attachment} onFallback={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))} />
     case 'audio':
-      return <AudioPlayer attachment={attachment} message={message} />
+      return (
+        <>
+          <AudioPlayer attachment={attachment} message={message} />
+          <VoiceTranscript message={message} attachment={attachment} />
+        </>
+      )
     case 'link':
       return <LinkCard attachment={attachment} />
     case 'sticker':
