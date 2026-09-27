@@ -20,7 +20,9 @@
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
     "installer-art": "node scripts/make-installer-art.mjs",
-    "setup": "node scripts/build-setup.mjs"
+    "setup": "node scripts/build-setup.mjs",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win && node scripts/build-setup.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
@@ -57,15 +59,19 @@
     "files": [
       "out/**",
       "package.json",
-      "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
       "!node_modules/onnxruntime-web/**"
     ],
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+        "!node_modules/@img/sharp-{darwin,linux,linuxmusl}*/**",
+        "!node_modules/@img/sharp-libvips-{darwin,linux,linuxmusl}*/**"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -90,10 +96,38 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "category": "public.app-category.social-networking",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "Unison-${version}-mac-${arch}.${ext}",
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Unison uses the microphone only while you record a voice message.",
+        "NSCameraUsageDescription": "Unison does not use the camera."
+      },
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**",
+        "!node_modules/@img/sharp-{win32,linux,linuxmusl}*/**",
+        "!node_modules/@img/sharp-libvips-{win32,linux,linuxmusl}*/**"
+      ]
     },
     "linux": {
       "target": [
@@ -126,6 +160,27 @@
         "from": "LICENSE",
         "to": "legal/LICENSE"
       }
-    ]
+    ],
+    "dmg": {
+      "title": "Unison",
+      "iconSize": 96,
+      "window": {
+        "width": 560,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 420,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   }
 }

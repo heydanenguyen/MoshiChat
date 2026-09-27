@@ -1,0 +1,80 @@
+# Builds installers for every platform on GitHub's own machines (free for public repositories).
+# Run it by hand from the Actions tab, or push a tag like v0.2.0. Downloads appear under the run's "Artifacts";
+# tagged runs also attach them to a draft GitHub Release.
+#
+# Signing is optional: without the secrets below, macOS builds are unsigned (users right-click → Open once)
+# and Windows builds are unsigned (SmartScreen warning). To sign macOS: add CSC_LINK (base64 .p12),
+# CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID as repository secrets.
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unison-windows
+          path: dist/Unison-Setup-*.exe
+
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest # Apple Silicon
+            arch: arm64
+          - runner: macos-15-intel # Intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    env:
+      # Only try to sign when a certificate is configured.
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unison-mac-${{ matrix.arch }}
+          path: |
+            dist/Unison-*-mac-*.dmg
+            dist/Unison-*-mac-*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/*
