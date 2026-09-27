@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
-import { existsSync, renameSync } from 'fs'
+import { migrateLegacyProfile } from './profile-migration'
 import type { AddAccountInput, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
@@ -25,17 +25,10 @@ const isWindows = process.platform === 'win32'
 
 let window: BrowserWindow | undefined
 // The app used to be called Unison: carry an existing profile over once, before anything in it is opened.
-{
-  const legacy = join(app.getPath('appData'), 'Unison')
-  const current = app.getPath('userData')
-  if (existsSync(join(legacy, 'unison.json')) && !existsSync(join(current, 'unison.json'))) {
-    try {
-      if (existsSync(current)) renameSync(current, `${current}.empty-${Date.now()}`)
-      renameSync(legacy, current)
-    } catch (err) {
-      console.log('[moshi] could not move the Unison profile:', (err as Error).message)
-    }
-  }
+try {
+  if (migrateLegacyProfile(app.getPath('appData'), app.getPath('userData')) === 'moved') console.log('[moshi] moved the Unison profile to', app.getPath('userData'))
+} catch (err) {
+  console.log('[moshi] could not move the Unison profile:', (err as Error).message)
 }
 
 const storage = new Storage()
