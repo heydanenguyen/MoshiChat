@@ -26,7 +26,7 @@ Bạn chỉ dùng Unison để nhắn tin cá nhân như khi dùng ứng dụng 
 - truy cập tài khoản không phải của bạn hoặc không được phép;
 - làm bất kỳ việc gì trái pháp luật.
 
-Unison có giới hạn tốc độ gửi để giữ mức sử dụng ở ngưỡng của người thật. Bạn không được tìm cách gỡ bỏ các giới hạn này.
+Bản Unison chính thức có giới hạn tốc độ gửi để giữ mức sử dụng ở ngưỡng của người thật. Mã nguồn mở nên bạn có quyền sửa đổi, nhưng bản sửa đổi bỏ các giới hạn này làm tăng nguy cơ tài khoản bị khoá, và tác giả không chịu trách nhiệm cho các bản sửa đổi.
 
 ## 5. Dữ liệu và bảo mật
 
@@ -44,7 +44,11 @@ Unison được cung cấp **nguyên trạng**, miễn phí, không có bất k�
 
 Trong phạm vi pháp luật cho phép, tác giả Unison không chịu trách nhiệm cho bất kỳ thiệt hại nào phát sinh từ việc dùng Unison, bao gồm mất tài khoản, mất dữ liệu, mất tin nhắn hoặc gián đoạn liên lạc.
 
-## 9. Thay đổi
+## 9. Giấy phép phần mềm
+
+Unison là phần mềm tự do theo GNU GPL phiên bản 3 hoặc mới hơn. Điều khoản này nói về việc *dùng* Unison với các nền tảng; nó không thu hẹp bất kỳ quyền nào GPL trao cho bạn đối với *mã nguồn*. Tên Unison, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép GPL. Xem *Cài đặt → Pháp lý → Giấy phép và mã nguồn*.
+
+## 10. Thay đổi
 
 Điều khoản này có thể được cập nhật cùng với các phiên bản mới của Unison. Tiếp tục dùng Unison sau khi cập nhật nghĩa là bạn chấp nhận bản mới.
 
@@ -78,7 +82,7 @@ Use Unison only for personal messaging, the way you would use the original apps.
 - access accounts that are not yours or that you are not allowed to use;
 - do anything unlawful.
 
-Unison limits how fast messages can be sent so that usage stays at a human pace. You may not remove or circumvent these limits.
+The official Unison builds limit how fast messages can be sent so that usage stays at a human pace. The source is open, so you are free to modify it, but builds that remove these limits raise the risk of losing your account, and the authors take no responsibility for modified builds.
 
 ## 5. Data and security
 
@@ -96,6 +100,10 @@ Unison is provided **as is**, free of charge, without any warranty that it will 
 
 To the extent permitted by law, the authors of Unison are not liable for any damage arising from the use of Unison, including loss of accounts, data or messages, or interrupted communication.
 
-## 9. Changes
+## 9. Software license
+
+Unison is free software under the GNU GPL version 3 or later. These terms are about *using* Unison with the platforms; they do not narrow any right the GPL gives you over the *source code*. The Unison name, icon and characters are separate identity marks, not covered by the GPL. See *Settings → Legal → License and source code*.
+
+## 10. Changes
 
 These terms may be updated together with new versions of Unison. Continuing to use Unison after an update means you accept the new version.

@@ -87,7 +87,11 @@ Mỗi nền tảng là một `PlatformAdapter` (connect, listConversations, fetc
 - `Ctrl/⌘ ,` – cài đặt
 - `Enter` gửi, `Shift+Enter` xuống dòng (đổi được trong cài đặt), `Esc` huỷ reply / đóng sheet
 
-## Pháp lý và giấy phép
+## Giấy phép
+
+Unison © 2026 Dane Nguyen, phát hành theo **GNU GPL v3 hoặc mới hơn** (xem `LICENSE`). Bạn được dùng, sửa và phân phối lại theo GPL. Tên **Unison**, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép: bản fork phải dùng tên và biểu tượng khác (GPL v3 §7e). Địa chỉ kho mã nguồn công khai sẽ được điền vào `resources/legal/NOTICE.md` trước khi phát hành bộ cài.
+
+## Pháp lý và nền tảng
 
 - Chỉ **Telegram** dùng API chính thức. Messenger, Instagram, Zalo và WhatsApp (tài khoản cá nhân) đi qua giao thức web không chính thức và **có thể trái điều khoản của nền tảng**; người dùng phải đọc và chấp nhận cảnh báo trong app trước khi kết nối. Không dùng Unison để gửi hàng loạt.
 - Điều khoản sử dụng, Chính sách riêng tư và danh sách giấy phép bên thứ ba nằm trong `resources/legal/` và hiện trong app tại *Cài đặt → Pháp lý*.
