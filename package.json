@@ -182,5 +182,13 @@
         }
       ]
     }
+  },
+  "homepage": "https://github.com/heydanenguyen/MoshiChat",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heydanenguyen/MoshiChat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/heydanenguyen/MoshiChat/issues"
   }
 }
