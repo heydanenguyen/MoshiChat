@@ -111,7 +111,7 @@ async function stickerFile(id: string): Promise<OutgoingAttachment> {
 }
 
 /**
- * Drop per-chat settings (tags, pins, nicknames, saved messages, mutes) that belong to accounts
+ * Drop per-chat settings (tags, pins, hidden chats, nicknames, saved messages, mutes) that belong to accounts
  * which no longer exist, so counts and lists never include chats that are gone.
  */
 async function pruneOrphanedSettings(): Promise<void> {
@@ -128,6 +128,8 @@ async function pruneOrphanedSettings(): Promise<void> {
   if (Object.keys(tags).length !== Object.keys(settings.tags ?? {}).length) patch.tags = tags
   const pins = keep(settings.pins)
   if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
+  const hidden = keep(settings.hidden)
+  if (hidden && Object.keys(hidden).length !== Object.keys(settings.hidden ?? {}).length) patch.hidden = hidden
   const overrides = keep(settings.contactOverrides)
   if (overrides && Object.keys(overrides).length !== Object.keys(settings.contactOverrides ?? {}).length) patch.contactOverrides = overrides
   const saved = settings.savedMessages?.filter((m) => owned(m.conversationId))

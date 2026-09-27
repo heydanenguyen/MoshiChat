@@ -495,6 +495,8 @@ export interface Settings {
   sentStickers?: SentSticker[]
   /** When the person accepted the unofficial-connection notice for a platform (ms since epoch). */
   acceptedUnofficial?: Partial<Record<Platform, number>>
+  /** Chats hidden from the list ("Strangers" in Settings): conversation id -> when it was hidden. Hidden chats are muted too. */
+  hidden?: Record<string, number>
   /** Text size across the app (bigger for high-resolution screens). */
   textSize?: TextSize
   /** Whole-interface zoom, 0.8-2 (1 = 100%). */

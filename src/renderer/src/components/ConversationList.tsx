@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import { BellOff, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { BellOff, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
 import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
 import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleConversations } from '../store'
 import { formatListTime } from '../utils'
@@ -13,6 +14,8 @@ interface TagMenuState {
   conversationId: string
   x: number
   y: number
+  /** Opened by resting on the "…" button: closes again when the pointer leaves it and the menu. */
+  hover?: boolean
 }
 
 export function ConversationList(): JSX.Element {
@@ -42,6 +45,19 @@ export function ConversationList(): JSX.Element {
   const openSheet = useStore((s) => s.openSheet)
   const showBadge = useShowPlatformBadge()
   const [menu, setMenu] = useState<TagMenuState | undefined>()
+  const hidden = useStore((s) => s.settings.hidden)
+  const hideConversation = useStore((s) => s.hideConversation)
+  const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  /** The "…" button opens the same menu as a right-click, hanging under the button and kept inside the window. */
+  const openMenuAt = (el: HTMLElement, conversationId: string, hover = false): void => {
+    if (menuTimer.current) clearTimeout(menuTimer.current)
+    const r = el.getBoundingClientRect()
+    setMenu({ conversationId, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4, hover })
+  }
+  const closeHoverMenu = (): void => {
+    if (menuTimer.current) clearTimeout(menuTimer.current)
+    menuTimer.current = setTimeout(() => setMenu((m) => (m?.hover ? undefined : m)), 180)
+  }
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
 
@@ -66,6 +82,7 @@ export function ConversationList(): JSX.Element {
           : PLATFORMS[filter as Platform].name
 
   const visibleHits = searchHits.filter((h) => {
+    if (hidden?.[h.conversation.id]) return false
     if (filter === 'all') return true
     if (filter.startsWith('account:')) return h.conversation.accountId === filter.slice(8)
     if (filter.startsWith('tag:')) return (tags[h.conversation.id] ?? []).includes(filter.slice(4))
@@ -87,13 +104,7 @@ export function ConversationList(): JSX.Element {
 
       <div className="search-field">
         <Search size={14} strokeWidth={2.4} />
-        <input
-          type="text"
-          placeholder={t('searchPlaceholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          spellCheck={false}
-        />
+        <input type="text" placeholder={t('searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} spellCheck={false} />
         {search && (
           <button className="search-clear" onClick={() => setSearch('')} aria-label={t('close')}>
             <X size={11} strokeWidth={3} />
@@ -105,7 +116,13 @@ export function ConversationList(): JSX.Element {
         .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
         .filter((a) => filter === 'all' || filter === a.platform || filter === `account:${a.id}`)
         .map((a) => (
-          <ReconnectBanner key={a.id} accountId={a.id} status={a.status} reason={a.error} label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`} />
+          <ReconnectBanner
+            key={a.id}
+            accountId={a.id}
+            status={a.status}
+            reason={a.error}
+            label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`}
+          />
         ))}
       <div className="conv-list scroll">
         {conversations.length === 0 && (!searching || visibleHits.length === 0) && (
@@ -119,9 +136,7 @@ export function ConversationList(): JSX.Element {
           const isTyping = typing[c.id] && typing[c.id].until > Date.now()
           const preview = c.lastMessage
           const prefix =
-            preview && !isTyping && (preview.isOutgoing || c.isGroup)
-              ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: `
-              : ''
+            preview && !isTyping && (preview.isOutgoing || c.isGroup) ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: ` : ''
           const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
           const pinned = isPinned(c, pins)
           return (
@@ -168,16 +183,18 @@ export function ConversationList(): JSX.Element {
                       <>
                         <span className="conv-draft">{t('draft')}</span> {drafts[c.id]}
                       </>
-                    ) : isTyping
-                      ? c.isGroup
-                        ? t('typingIn', { name: typing[c.id].name })
-                        : t('typing')
-                      : (
-                        <>
-                          {prefix}
-                          <PreviewText kind={preview?.kind} text={preview?.text ?? ''} />
-                        </>
-                      )}
+                    ) : isTyping ? (
+                      c.isGroup ? (
+                        t('typingIn', { name: typing[c.id].name })
+                      ) : (
+                        t('typing')
+                      )
+                    ) : (
+                      <>
+                        {prefix}
+                        <PreviewText kind={preview?.kind} text={preview?.text ?? ''} />
+                      </>
+                    )}
                   </span>
                   <span className="conv-meta">
                     {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
@@ -187,16 +204,18 @@ export function ConversationList(): JSX.Element {
                 </span>
               </span>
               <span
-                className={`conv-pin-action ${pinned ? 'on' : ''}`}
+                className={`conv-more ${menu?.conversationId === c.id ? 'open' : ''}`}
                 role="button"
                 tabIndex={-1}
-                title={pinned ? t('unpin') : t('pin')}
+                title={t('moreActions')}
                 onClick={(e) => {
                   e.stopPropagation()
-                  void togglePin(c.id)
+                  openMenuAt(e.currentTarget, c.id)
                 }}
+                onMouseEnter={(e) => openMenuAt(e.currentTarget, c.id, true)}
+                onMouseLeave={closeHoverMenu}
               >
-                {pinned ? <PinOff size={14} strokeWidth={2.2} /> : <Pin size={14} strokeWidth={2.2} />}
+                <MoreHorizontal size={16} strokeWidth={2.4} />
               </span>
             </button>
           )
@@ -226,28 +245,81 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
-      {menu && (
-        <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
-          <button className="context-menu-item" onClick={() => { void togglePin(menu.conversationId); setMenu(undefined) }}>
-            {isPinned(conversations.find((c) => c.id === menu.conversationId), pins) ? <PinOff size={15} /> : <Pin size={15} />}
-            <span>{isPinned(conversations.find((c) => c.id === menu.conversationId), pins) ? t('unpin') : t('pin')}</span>
-          </button>
-          <button className="context-menu-item" onClick={() => { void toggleMute('conversations', menu.conversationId); setMenu(undefined) }}>
-            <BellOff size={15} />
-            <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
-          </button>
-          <div className="context-menu-title">{t('tags')}</div>
-          {tagList.map((tag) => {
-            const active = (tags[menu.conversationId] ?? []).includes(tag.id)
-            return (
-              <button key={tag.id} className={`context-menu-item tag-row ${active ? "active" : ""}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
-                <TagChip tag={tag} size="sm" flat={!active} />
-                {active && <span className="context-menu-check">✓</span>}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {/* Rendered at the document root: the glass column would otherwise clip a fixed menu. */}
+      {menu &&
+        createPortal(
+          <div
+            className="context-menu"
+            style={{ left: menu.x, top: menu.y }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={() => {
+              if (menuTimer.current) clearTimeout(menuTimer.current)
+            }}
+            onMouseLeave={() => {
+              if (menu.hover) closeHoverMenu()
+            }}
+          >
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                void togglePin(menu.conversationId)
+                setMenu(undefined)
+              }}
+            >
+              {isPinned(
+                conversations.find((c) => c.id === menu.conversationId),
+                pins
+              ) ? (
+                <PinOff size={15} />
+              ) : (
+                <Pin size={15} />
+              )}
+              <span>
+                {isPinned(
+                  conversations.find((c) => c.id === menu.conversationId),
+                  pins
+                )
+                  ? t('unpin')
+                  : t('pin')}
+              </span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                void toggleMute('conversations', menu.conversationId)
+                setMenu(undefined)
+              }}
+            >
+              <BellOff size={15} />
+              <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                void hideConversation(menu.conversationId)
+                setMenu(undefined)
+              }}
+            >
+              <EyeOff size={15} />
+              <span>{t('hide')}</span>
+            </button>
+            <div className="context-menu-title">{t('tags')}</div>
+            {tagList.map((tag) => {
+              const active = (tags[menu.conversationId] ?? []).includes(tag.id)
+              return (
+                <button
+                  key={tag.id}
+                  className={`context-menu-item tag-row ${active ? 'active' : ''}`}
+                  onClick={() => void toggleTag(menu.conversationId, tag.id)}
+                >
+                  <TagChip tag={tag} size="sm" flat={!active} />
+                  {active && <span className="context-menu-check">✓</span>}
+                </button>
+              )
+            })}
+          </div>,
+          document.body
+        )}
     </section>
   )
 }
