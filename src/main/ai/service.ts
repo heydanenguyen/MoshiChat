@@ -8,7 +8,7 @@ const IDLE_MS = 10 * 60 * 1000
 const CACHE_LIMIT = 3000
 const MEDIA_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|whatsapp\.net)$/i
 
-type Pending = { resolve(value: unknown): void; reject(err: Error): void }
+type Pending = { resolve(value: unknown): void; reject(err: Error): void; message: Record<string, unknown>; retried?: boolean }
 type Cache = { transcripts: Record<string, string>; translations: Record<string, string> }
 
 const modelsDir = (): string => join(app.getPath('userData'), 'models')
@@ -45,6 +45,8 @@ export class AiService {
   private cache: Cache = { transcripts: {}, translations: {} }
   private cacheLoaded = false
   private saveTimer: ReturnType<typeof setTimeout> | undefined
+  /** DirectML crashed this machine's worker once: voice stays on the CPU from then on. */
+  private gpuBroken: boolean | undefined
 
   constructor(
     private voiceModel: () => VoiceModel,
@@ -79,10 +81,33 @@ export class AiService {
     this.saveTimer = setTimeout(() => void writeFile(this.cacheFile, JSON.stringify(this.cache)).catch(() => undefined), 1500)
   }
 
+  private get gpuFile(): string {
+    return join(app.getPath('userData'), 'ai-gpu.json')
+  }
+
+  private async voiceDevice(): Promise<'dml' | 'cpu'> {
+    if (process.platform !== 'win32') return 'cpu'
+    if (this.gpuBroken === undefined) {
+      try {
+        this.gpuBroken = (JSON.parse(await readFile(this.gpuFile, 'utf8')) as { broken?: boolean }).broken === true
+      } catch {
+        this.gpuBroken = false
+      }
+    }
+    return this.gpuBroken ? 'cpu' : 'dml'
+  }
+
+  private markGpuBroken(): void {
+    if (this.gpuBroken) return
+    this.gpuBroken = true
+    this.log('[ai] the GPU (DirectML) crashed the AI worker; voice notes now use the CPU')
+    void writeFile(this.gpuFile, JSON.stringify({ broken: true, at: new Date().toISOString() })).catch(() => undefined)
+  }
+
   async status(): Promise<AiStatus> {
     const model = this.voiceModel()
     return {
-      voice: { model, ready: await present(AI_MODELS.voice[model]) },
+      voice: { model, ready: await present(AI_MODELS.voice[model]), gpu: (await this.voiceDevice()) === 'dml' },
       translate: { ready: await present(AI_MODELS.translate) },
       bytes: await folderSize(modelsDir())
     }
@@ -105,20 +130,28 @@ export class AiService {
     })
     worker.on('exit', () => {
       this.worker = undefined
-      for (const p of this.pending.values()) p.reject(new Error('The AI worker stopped'))
+      const pending = [...this.pending.values()]
       this.pending.clear()
+      // A native crash while the GPU was in use: remember it and run those requests again on the CPU.
+      const onGpu = pending.filter((p) => p.message.device === 'dml')
+      if (onGpu.length) this.markGpuBroken()
+      for (const p of pending) {
+        if (p.message.device === 'dml' && !p.retried) {
+          this.request({ ...p.message, device: 'cpu' }, true).then(p.resolve, p.reject)
+        } else p.reject(new Error('The AI worker stopped'))
+      }
     })
     worker.postMessage({ type: 'init', cacheDir: modelsDir() })
     this.worker = worker
     return worker
   }
 
-  private request<T>(message: Record<string, unknown>): Promise<T> {
+  private request<T>(message: Record<string, unknown>, retried = false): Promise<T> {
     const worker = this.spawn()
     const id = this.nextId++
     if (this.idleTimer) clearTimeout(this.idleTimer)
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, message, retried })
       worker.postMessage({ ...message, id })
     }).finally(() => {
       if (this.idleTimer) clearTimeout(this.idleTimer)
@@ -132,8 +165,8 @@ export class AiService {
   }
 
   /** Download (first time) and load a model. */
-  prepare(kind: AiKind): Promise<boolean> {
-    return this.request<boolean>({ type: 'prepare', kind, voiceModel: this.voiceModel() })
+  async prepare(kind: AiKind): Promise<boolean> {
+    return this.request<boolean>({ type: 'prepare', kind, voiceModel: this.voiceModel(), device: kind === 'voice' ? await this.voiceDevice() : 'cpu' })
   }
 
   async remove(kind: AiKind): Promise<void> {
@@ -145,7 +178,13 @@ export class AiService {
   async transcribe(key: string, pcm: Float32Array, language?: string): Promise<string> {
     const cache = await this.cached()
     if (cache.transcripts[key] !== undefined) return cache.transcripts[key]
-    const text = await this.request<string>({ type: 'transcribe', voiceModel: this.voiceModel(), audio: pcm, language: language ?? this.language() })
+    const text = await this.request<string>({
+      type: 'transcribe',
+      voiceModel: this.voiceModel(),
+      device: await this.voiceDevice(),
+      audio: pcm,
+      language: language ?? this.language()
+    })
     this.remember('transcripts', key, text)
     return text
   }

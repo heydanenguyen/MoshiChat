@@ -22,7 +22,7 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
 }
 
 export interface AiStatus {
-  voice: { model: VoiceModel; ready: boolean }
+  voice: { model: VoiceModel; ready: boolean; gpu: boolean }
   translate: { ready: boolean }
   /** Space the downloaded models take. */
   bytes: number
