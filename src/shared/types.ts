@@ -175,6 +175,9 @@ export type GifProvider = 'klipy' | 'giphy'
 
 export type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
+/** Unison's own message sounds (synthesised in renderer/src/sounds.ts). */
+export type SoundId = 'bubbles' | 'chirp' | 'boing' | 'twinkle' | 'marimba' | 'smooch'
+
 /** A snippet typed with "/shortcut" in the composer. `{name}` becomes the other person's first name. */
 export interface QuickReply {
   id: string
@@ -487,6 +490,12 @@ export interface Settings {
   scheduled?: ScheduledMessage[]
   /** On-device voice-to-text model: most accurate (turbo) or light (small). */
   voiceModel?: VoiceModel
+  /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */
+  sound?: SoundId | 'off'
+  /** 0..1, default 0.7. */
+  soundVolume?: number
+  /** A soft whoosh when sending. Default on. */
+  sendSound?: boolean
   /** Word effects (birthday confetti, hearts...). Default on. */
   effects?: boolean
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */

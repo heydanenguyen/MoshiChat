@@ -28,6 +28,7 @@ import { translate, type TKey } from './i18n'
 import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
 import { accentVars, type AccentSpec } from '@shared/accent'
 import { previewKindOf } from '@shared/preview'
+import { playSent, playSound } from './sounds'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -119,6 +120,8 @@ interface State {
   addFiles(files: OutgoingAttachment[]): void
   addDroppedFiles(files: File[]): void
   removeFile(path: string): void
+  /** Load a chat's first page without opening it (hover in the list); `quiet` skips error toasts. */
+  prefetch(conversationId: string, quiet?: boolean): Promise<void>
   loadMore(conversationId: string): Promise<void>
   openSheet(sheet: Sheet): void
   closeSheet(): void
@@ -159,6 +162,19 @@ const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const cleanError = (err: unknown): string =>
   (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+
+let prefetchesInFlight = 0
+
+/** A new incoming message plays the chosen sound, unless the chat is muted; softer in the open chat. */
+function maybePlaySound(message: Message): void {
+  const { settings, conversations, selectedId } = useStore.getState()
+  const sound = settings.sound ?? 'bubbles'
+  if (sound === 'off' || message.isOutgoing || message.system || Date.now() - message.sentAt > 60_000) return
+  const conversation = conversations[message.conversationId]
+  if (!conversation || conversation.muted || settings.muted.conversations.includes(conversation.id) || isMutedBy(settings, conversation)) return
+  const watching = document.hasFocus() && selectedId === message.conversationId
+  playSound(sound, (settings.soundVolume ?? 0.7) * (watching ? 0.45 : 1))
+}
 
 function upsertMessage(list: Message[] | undefined, message: Message, replaceId?: string): Message[] | undefined {
   if (!list) return list
@@ -238,6 +254,7 @@ export const useStore = create<State>((set, get) => ({
           break
         }
         case 'message:new': {
+          maybePlaySound(event.message)
           const list = upsertMessage(state.messages[event.message.conversationId], event.message)
           const shared = { ...state.shared }
           for (const key of Object.keys(shared)) if (key.startsWith(event.message.conversationId + '|')) delete shared[key]
@@ -310,23 +327,7 @@ export const useStore = create<State>((set, get) => ({
     if (!id) return
     const conversation = state.conversations[id]
     if (conversation?.unreadCount) void window.unison.conversations.markRead(id)
-    if (!state.messages[id] && !state.loading[id]) {
-      set({ loading: { ...state.loading, [id]: true } })
-      window.unison.messages
-        .list(id)
-        .then((messages) => {
-          const s = get()
-          set({
-            messages: { ...s.messages, [id]: messages },
-            hasMore: { ...s.hasMore, [id]: messages.length > 0 },
-            loading: { ...s.loading, [id]: false }
-          })
-        })
-        .catch((err: Error) => {
-          set({ loading: { ...get().loading, [id]: false } })
-          get().showToast(err.message, 'error')
-        })
-    }
+    void get().prefetch(id, false)
   },
 
   setFilter(filter) {
@@ -423,6 +424,7 @@ export const useStore = create<State>((set, get) => ({
       isOutgoing: true,
       status: 'sending'
     }
+    if (settings.sendSound !== false && settings.sound !== 'off') playSent(settings.soundVolume ?? 0.7)
     set({
       messages: { ...messages, [selectedId]: [...(messages[selectedId] ?? []), optimistic] },
       replyTo: undefined,
@@ -558,6 +560,30 @@ export const useStore = create<State>((set, get) => ({
 
   removeFile(path) {
     set({ pendingFiles: get().pendingFiles.filter((f) => f.path !== path) })
+  },
+
+  async prefetch(id, quiet = true) {
+    const state = get()
+    if (state.messages[id] || state.loading[id]) return
+    // Hover prefetch: one at a time, so a quick sweep over the list does not flood the platforms.
+    if (quiet && prefetchesInFlight > 0) return
+    if (quiet) prefetchesInFlight += 1
+    set({ loading: { ...state.loading, [id]: true } })
+    try {
+      const messages = await window.unison.messages.list(id)
+      const s = get()
+      set({
+        messages: { ...s.messages, [id]: messages },
+        hasMore: { ...s.hasMore, [id]: messages.length > 0 },
+        loading: { ...s.loading, [id]: false }
+      })
+    } catch (err) {
+      set({ loading: { ...get().loading, [id]: false } })
+      // A failed hover prefetch stays quiet; opening the chat tries again and reports errors.
+      if (!quiet || get().selectedId === id) get().showToast((err as Error).message, 'error')
+    } finally {
+      if (quiet) prefetchesInFlight -= 1
+    }
   },
 
   async loadMore(conversationId) {

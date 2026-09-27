@@ -12,6 +12,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
 import { QuickReplyManager } from './QuickReplyManager'
 import { AiSettings } from './AiParts'
+import { SoundSettings } from './SoundSettings'
 
 export function SettingsSheet(): JSX.Element {
   const t = useT()
@@ -382,6 +383,7 @@ export function SettingsSheet(): JSX.Element {
                   </div>
                 </div>
               </div>
+              <SoundSettings />
               <div className="settings-row">
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('readReceipts')}</div>
