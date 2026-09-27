@@ -480,7 +480,7 @@ export interface ContactOverride {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
-  language: 'vi',
+  language: 'en',
   notifications: true,
   sendOnEnter: true,
   tags: {},
