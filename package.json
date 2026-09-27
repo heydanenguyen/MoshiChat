@@ -22,7 +22,6 @@
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
-    "instagram-private-api": "^1.46.1",
     "lucide-react": "^0.475.0",
     "opus-recorder": "^8.0.5",
     "pino": "^10.3.1",
@@ -115,6 +114,10 @@
       {
         "from": "resources/stickers",
         "to": "stickers"
+      },
+      {
+        "from": "resources/legal",
+        "to": "legal"
       }
     ]
   }

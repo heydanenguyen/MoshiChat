@@ -1,3 +1,4 @@
+import { SendLimiter } from '../rate-limit'
 import { randomUUID } from 'crypto'
 import { app } from 'electron'
 import { join } from 'path'
@@ -51,6 +52,8 @@ export class AccountManager {
   private adapters = new Map<string, PlatformAdapter>()
   private conversations = new Map<string, Conversation>()
   private messages = new Map<string, Map<string, Message>>()
+  /** Keeps every account sending at a human pace (see rate-limit.ts). */
+  private limiter = new SendLimiter()
   private pendingAuth = new Map<string, PendingAuth>()
   private contactCache = new Map<string, { at: number; list: Contact[] }>()
 
@@ -279,6 +282,7 @@ export class AccountManager {
     const adapter = this.adapterFor(conversationId)
     if (adapter.account.status === 'needs_auth') throw new Error('This account needs you to sign in again before sending')
     if (adapter.account.status === 'connecting') throw new Error('Still connecting, try again in a moment')
+    if (!adapter.account.demo) this.limiter.take(adapter.account.id)
     const message = await adapter.sendMessage(conversationId, text, options)
     this.trackSent(message)
     return message
@@ -293,6 +297,7 @@ export class AccountManager {
     const from = this.adapterFor(fromConversationId)
     const to = this.adapterFor(toConversationId)
     if (from === to && from.forward) {
+      if (!from.account.demo) this.limiter.takeForward(from.account.id, messageId, toConversationId)
       const message = await from.forward(fromConversationId, messageId, toConversationId)
       this.trackSent(message)
       return message

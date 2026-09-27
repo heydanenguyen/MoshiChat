@@ -23,7 +23,7 @@ Icon được sinh bằng `node scripts/make-icon.mjs` (không cần thư viện
 | **WhatsApp** | Giao thức WhatsApp Web multi-device qua [Baileys](https://github.com/WhiskeySockets/Baileys). Quét QR trong WhatsApp → *Thiết bị đã liên kết*, giống WhatsApp Desktop. Lịch sử đồng bộ từ điện thoại trong phút đầu. | Điện thoại để quét QR | ✓ / ✓ / ✓ / ✓ push-to-talk / ✓ native |
 | **Zalo** | Giao thức Zalo Web qua [zca-js](https://github.com/RFS-ADRENO/zca-js). Quét QR trong app Zalo, giống chat.zalo.me. | Điện thoại để quét QR | ✓ / ✓ (7 cảm xúc) / ✓ / gửi dạng tệp / ✓ văn bản |
 | **Facebook cá nhân** | Giao thức Messenger web qua [ws3-fca](https://www.npmjs.com/package/ws3-fca). Bấm *Tài khoản cá nhân*, đăng nhập facebook.com ngay trong cửa sổ app, Unison chỉ giữ cookie phiên. Thread list, lịch sử, gửi/nhận real-time (MQTT), typing, seen, reaction. Beta. | Đăng nhập trong app | ✓ / ✓ / ✓ / gửi dạng tệp / ✓ văn bản |
-| **Instagram cá nhân** | API riêng của app Instagram qua [instagram-private-api](https://www.npmjs.com/package/instagram-private-api) với phiên đăng nhập instagram.com trong app. Polling 10 giây, ảnh, voice, link, bài chia sẻ. Beta. | Đăng nhập trong app | ✗ / ✗ / ảnh / ✗ / ✓ văn bản |
+| **Instagram cá nhân** | Giao thức web của instagram.com trong phiên đăng nhập của app: đọc qua cùng các địa chỉ trang web dùng, gửi bằng chính khung soạn của Instagram trong một cửa sổ ẩn. Real-time, ảnh, voice, link, bài chia sẻ, reaction hiển thị. Beta. | Đăng nhập trong app | ✗ / ✗ / ảnh / ✗ / ✓ văn bản |
 | **Messenger** | Meta Graph API (Messenger Platform) cho **Fanpage**. Có thể bấm *Đăng nhập với Facebook* (cần App ID) để chọn Page thay vì nhập token. Polling 8 giây, gửi/nhận text + ảnh + file, mark seen, typing. | `Page ID` + `Page Access Token` có quyền `pages_messaging`, `pages_manage_metadata` | ✗ / ✗ / ✓ / gửi dạng tệp / ✓ văn bản |
 | **Instagram** | Instagram Messaging API cho tài khoản **Professional** đã liên kết Fanpage. | Page token có thêm `instagram_basic`, `instagram_manage_messages` | ✗ / ✗ / ✓ / gửi dạng tệp / ✓ văn bản |
 
@@ -86,3 +86,9 @@ Mỗi nền tảng là một `PlatformAdapter` (connect, listConversations, fetc
 - `Ctrl/⌘ K` – nhảy nhanh đến hội thoại
 - `Ctrl/⌘ ,` – cài đặt
 - `Enter` gửi, `Shift+Enter` xuống dòng (đổi được trong cài đặt), `Esc` huỷ reply / đóng sheet
+
+## Pháp lý và giấy phép
+
+- Chỉ **Telegram** dùng API chính thức. Messenger, Instagram, Zalo và WhatsApp (tài khoản cá nhân) đi qua giao thức web không chính thức và **có thể trái điều khoản của nền tảng**; người dùng phải đọc và chấp nhận cảnh báo trong app trước khi kết nối. Không dùng Unison để gửi hàng loạt.
+- Điều khoản sử dụng, Chính sách riêng tư và danh sách giấy phép bên thứ ba nằm trong `resources/legal/` và hiện trong app tại *Cài đặt → Pháp lý*.
+- Lưu ý giấy phép khi phân phối: Baileys kéo theo `libsignal` (GPL-3.0) và gramjs kéo theo `@cryptography/aes` (GPL-3.0-or-later). Bản phát hành kèm hai gói này cần phát hành mã nguồn Unison theo giấy phép tương thích GPL-3.0. Mô hình dịch NLLB-200 là CC BY-NC 4.0 (phi thương mại).

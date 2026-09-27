@@ -35,6 +35,8 @@ import { toggleReaction } from './utils'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
+export type LegalDoc = 'terms' | 'privacy' | 'credits'
+
 export type Sheet =
   | { kind: 'none' }
   | { kind: 'settings' }
@@ -42,6 +44,7 @@ export type Sheet =
   | { kind: 'command' }
   | { kind: 'new-chat' }
   | { kind: 'backup'; mode: 'create' | 'restore' }
+  | { kind: 'legal'; doc: LegalDoc }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 
@@ -168,8 +171,14 @@ let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-const cleanError = (err: unknown): string =>
-  (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+const cleanError = (err: unknown): string => {
+  const raw = (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+  // Errors the main process raises with a code get a translated, friendlier text.
+  const language = useStore.getState().settings.language
+  if (raw.startsWith('RATE_LIMIT_SEND:')) return translate(language, 'rateLimitSend')
+  if (raw.startsWith('RATE_LIMIT_FORWARD:')) return translate(language, 'rateLimitForward')
+  return raw
+}
 
 let prefetchesInFlight = 0
 

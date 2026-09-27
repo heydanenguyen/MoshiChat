@@ -89,6 +89,9 @@ function applyTheme(theme: Settings['theme']): void {
   nativeTheme.themeSource = theme
 }
 
+/** The legal documents shipped next to the app (Vietnamese first, English below). */
+const LEGAL_DOCS = { terms: 'TERMS.md', privacy: 'PRIVACY.md', credits: 'CREDITS.md' } as const
+
 /** A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency. */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
   if (!isStickerId(id)) throw new Error('Unknown sticker')
@@ -591,6 +594,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
+  ipcMain.handle(IPC.appLegal, (_e, name: string) => {
+    const file = LEGAL_DOCS[name as keyof typeof LEGAL_DOCS]
+    if (!file) throw new Error('Unknown document')
+    const dir = app.isPackaged ? join(process.resourcesPath, 'legal') : join(__dirname, '../../resources/legal')
+    return readFile(join(dir, file), 'utf8')
+  })
   ipcMain.handle(IPC.appGifSearch, (_e, query: string, page: number) => {
     const { gif, language } = storage.settings
     return searchGifs(gif?.provider ?? 'klipy', gif?.key ?? '', String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)

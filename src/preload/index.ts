@@ -67,6 +67,7 @@ const bridge: UnisonBridge = {
   },
   app: {
     openExternal: (url) => ipcRenderer.invoke(IPC.appOpenExternal, url),
+    legal: (name) => ipcRenderer.invoke(IPC.appLegal, name),
     pickFiles: () => ipcRenderer.invoke(IPC.appPickFiles),
     describeFile: (file) => ({
       path: webUtils.getPathForFile(file),
