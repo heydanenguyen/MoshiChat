@@ -322,6 +322,15 @@ export const useStore = create<State>((set, get) => ({
           if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list } })
           break
         }
+        case 'message:reactions': {
+          const list = state.messages[event.conversationId]
+          const index = list?.findIndex((m) => m.id === event.messageId) ?? -1
+          if (!list || index < 0) break
+          const next = list.slice()
+          next[index] = { ...list[index], reactions: event.reactions }
+          set({ messages: { ...state.messages, [event.conversationId]: next } })
+          break
+        }
         case 'settings:updated':
           set({ settings: { ...DEFAULT_SETTINGS, ...event.settings } })
           break

@@ -562,6 +562,9 @@ export class AccountManager {
           for (const c of event.conversations) this.conversations.set(c.id, c)
         } else if (event.type === 'message:updated') {
           this.cache([event.message])
+        } else if (event.type === 'message:reactions') {
+          const cached = this.messages.get(event.conversationId)?.get(event.messageId)
+          if (cached) cached.reactions = event.reactions
         } else if (event.type === 'message:new') {
           this.cache([event.message])
           const conversation = this.conversations.get(event.message.conversationId)
