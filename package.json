@@ -15,14 +15,14 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --win && node scripts/build-setup.mjs",
+    "dist": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
     "installer-art": "node scripts/make-installer-art.mjs",
     "setup": "node scripts/build-setup.mjs",
-    "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:win": "electron-vite build && electron-builder --win && node scripts/build-setup.mjs"
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
