@@ -2,7 +2,7 @@
 # Run it by hand from the Actions tab, or push a tag like v0.2.0. Downloads appear under the run's "Artifacts";
 # tagged runs also attach them to a draft GitHub Release.
 #
-# Signing is optional: without the secrets below, macOS builds are unsigned (users right-click → Open once)
+# Signing is optional: without certificate secrets, macOS builds are unsigned (users right-click → Open once)
 # and Windows builds are unsigned (SmartScreen warning). To sign macOS: add CSC_LINK (base64 .p12),
 # CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID as repository secrets.
 name: Build
@@ -50,13 +50,9 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.runner }}
     env:
-      # Only try to sign when a certificate is configured.
-      CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
-      CSC_LINK: ${{ secrets.CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Unsigned until a certificate exists. To sign: add CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
+      # APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID as secrets, pass them here and drop this line.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -72,7 +68,7 @@ jobs:
         # On failure the last 50 log lines become an annotation, readable without signing in.
         run: |
           set -o pipefail
-          npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }} 2>&1 | tee build.log || { echo "::error title=macOS build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
+          npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee build.log || { echo "::error title=macOS build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: Moshi-mac-${{ matrix.arch }}
