@@ -19,11 +19,13 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      # The lockfile is written by npm 11; the runner ships npm 10, which resolves peers differently.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
       - run: npm run dist
@@ -51,11 +53,13 @@ jobs:
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      # The lockfile is written by npm 11; the runner ships npm 10, which resolves peers differently.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
       - run: npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }}
