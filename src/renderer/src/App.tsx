@@ -18,6 +18,7 @@ import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
 import { stepZoom } from '@shared/types'
 import { NewChatSheet } from './components/NewChatSheet'
+import { BackupSheet } from './components/BackupSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 
@@ -208,6 +209,7 @@ export default function App(): JSX.Element {
             {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
             {sheet.kind === 'command' && <CommandPalette />}
             {sheet.kind === 'new-chat' && <NewChatSheet />}
+            {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
             {forwarding && <ForwardSheet message={forwarding} />}
             {lightbox && <Lightbox {...lightbox} />}
             {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}

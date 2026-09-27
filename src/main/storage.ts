@@ -23,10 +23,13 @@ interface StoreShape {
 
 const EMPTY: StoreShape = { version: 1, accounts: [], settings: DEFAULT_SETTINGS }
 
-/** First run: English, unless Windows (or macOS) itself is set to Vietnamese. */
+/**
+ * First run: English, unless the system's display language is Vietnamese. (Not the first of the user's
+ * preferred languages: Windows can list Vietnamese first while showing everything in English. The
+ * setup window follows the same display language.)
+ */
 function systemLanguage(): Settings['language'] {
-  const preferred = (app.getPreferredSystemLanguages?.()[0] ?? app.getLocale() ?? '').toLowerCase()
-  return preferred.startsWith('vi') ? 'vi' : 'en'
+  return (app.getLocale() || '').toLowerCase().startsWith('vi') ? 'vi' : 'en'
 }
 
 /**
@@ -100,6 +103,24 @@ export class Storage {
 
   async removeAccount(accountId: string): Promise<void> {
     this.data.accounts = this.data.accounts.filter((a) => a.id !== accountId)
+    await this.persist()
+  }
+
+/** Accounts with secrets decrypted (for an encrypted backup) plus settings. */
+  exportPortable(): { accounts: Array<Omit<StoredAccount, 'secret'> & { secret?: unknown }>; settings: Settings } {
+    return {
+      accounts: this.data.accounts.map((a) => ({ ...a, secret: a.secret ? decrypt<unknown>(a.secret) : undefined })),
+      settings: structuredClone(this.data.settings)
+    }
+  }
+
+  /** Replace everything with restored data; secrets are encrypted again for this device. */
+  async importPortable(data: { accounts: Array<Omit<StoredAccount, 'secret'> & { secret?: unknown }>; settings: Settings }): Promise<void> {
+    this.data = {
+      version: 1,
+      accounts: data.accounts.map((a) => ({ ...a, secret: a.secret === undefined || a.secret === null ? undefined : encrypt(a.secret) })),
+      settings: data.settings
+    }
     await this.persist()
   }
 

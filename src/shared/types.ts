@@ -181,6 +181,16 @@ export interface QuickReply {
   text: string
 }
 
+/** What a backup file says about itself before it is unlocked. */
+export interface BackupInfo {
+  path: string
+  bytes: number
+  createdAt: number
+  appVersion: string
+  includesSessions: boolean
+  accounts: number
+}
+
 /** A message waiting to be sent later (see main/scheduler.ts). */
 export interface ScheduledMessage {
   id: string
