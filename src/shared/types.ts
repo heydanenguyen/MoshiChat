@@ -113,6 +113,10 @@ export interface Attachment {
   expired?: boolean
   /** A GIF delivered as a silent looping video (Telegram animations, WhatsApp GIFs). */
   gif?: boolean
+  /** One of Unison's own stickers (drawn from the app's pack, transparent and crisp). */
+  sticker?: string
+  /** A sticker the platform handed back on a white square (Instagram, Telegram). */
+  flattened?: boolean
 }
 
 /** Centered notices in a thread instead of a bubble. */
@@ -450,6 +454,13 @@ export interface MuteRules {
   platforms: Platform[]
 }
 
+export interface SentSticker {
+  conversationId: string
+  messageId: string
+  sticker: string
+  sentAt: number
+}
+
 export interface Settings {
   theme: ThemePreference
   language: Language
@@ -480,6 +491,8 @@ export interface Settings {
   sendReadReceipts?: boolean
   /** Messages bookmarked to find again later (newest first). */
   savedMessages?: SavedMessage[]
+  /** Unison stickers you sent, so they stay stickers after the platform echoes them back as photos. */
+  sentStickers?: SentSticker[]
   /** Text size across the app (bigger for high-resolution screens). */
   textSize?: TextSize
   /** Whole-interface zoom, 0.8-2 (1 = 100%). */

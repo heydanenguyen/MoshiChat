@@ -1213,8 +1213,8 @@ mark {
 }
 
 .attachment-sticker {
-  width: 160px;
-  height: 160px;
+  width: 120px;
+  height: 120px;
   object-fit: contain;
   display: block;
 }
@@ -4959,10 +4959,26 @@ kbd {
   display: block;
   overflow: visible;
 }
-/* sent stickers: no bubble, a friendly size */
+/* stickers: no bubble, no frame, no background, about half a photo */
 .bubble.sticker .attachment-sticker {
-  width: 132px;
-  height: 132px;
+  width: 120px;
+  height: 120px;
+}
+.attachment-sticker svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* an older sticker the platform flattened onto white, until it is recognised and redrawn */
+.attachment-sticker.flattened {
+  border-radius: 28px;
+  opacity: 0.001;
+  animation: sticker-reveal 0.2s ease 0.6s forwards;
+}
+@keyframes sticker-reveal {
+  to {
+    opacity: 1;
+  }
 }
 
 /* ================================================================== custom accents */
