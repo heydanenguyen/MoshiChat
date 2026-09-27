@@ -40,6 +40,12 @@ const bridge: UnisonBridge = {
     respond: (requestId, value) => ipcRenderer.invoke(IPC.authRespond, requestId, value),
     cancel: (requestId) => ipcRenderer.invoke(IPC.authCancel, requestId)
   },
+  scheduled: {
+    add: (input) => ipcRenderer.invoke(IPC.scheduledAdd, input),
+    cancel: (id) => ipcRenderer.invoke(IPC.scheduledCancel, id),
+    sendNow: (id) => ipcRenderer.invoke(IPC.scheduledSendNow, id),
+    reschedule: (id, sendAt) => ipcRenderer.invoke(IPC.scheduledReschedule, id, sendAt)
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     set: (patch) => ipcRenderer.invoke(IPC.settingsSet, patch)

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus, Sparkles } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
@@ -9,6 +9,8 @@ import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
 import { BuddyLoader } from './BuddyLoader'
+import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
+import { useWallpaper } from './Wallpaper'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -43,6 +45,9 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const prevHeight = useRef(0)
   const prevFirstId = useRef<string | undefined>(undefined)
   const [dragging, setDragging] = useState(0)
+  const [effect, setEffect] = useMessageEffects(messages)
+  const wallpaper = useWallpaper(conversation.id)
+  const celebrate = useCallback(() => setEffect({ kind: 'birthday', key: `bday-${conversation.id}` }), [setEffect, conversation.id])
 
   const isTyping = !!typing && typing.until > Date.now()
   const sections = sectionize(messages ?? [])
@@ -102,8 +107,8 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
 
   return (
     <section
-      className="chat-col"
-      style={bubbleVars}
+      className={`chat-col ${wallpaper.attr ? 'has-wallpaper' : ''}`}
+      style={{ ...bubbleVars, ...wallpaper.style }}
       onDragEnter={(e) => {
         e.preventDefault()
         if (features.attachments) setDragging((d) => d + 1)
@@ -112,6 +117,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
+      {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
       <header className="chat-header drag">
         {narrow && (
           <button className="icon-btn no-drag" onClick={() => select(undefined)} title={t('back')}>
@@ -133,6 +139,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
         </div>
       </header>
 
+      <BirthdayBanner conversation={conversation} canSendStickers={features.attachments} onCelebrate={celebrate} />
       <div className="chat-scroll scroll" ref={scrollRef}>
         <div className="chat-scroll-inner">
           {loading && !messages && <BuddyLoader size={56} label={t('loadingMessages')} className="chat-loading" />}
@@ -174,6 +181,8 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
 
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
+      {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
+      <ScheduledStrip conversationId={conversation.id} />
       <Composer disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
     </section>
   )

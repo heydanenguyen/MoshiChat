@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, File, Mic, Paperclip, Reply, Smile, Sticker, Trash2, X } from 'lucide-react'
+import { AlarmClock, ArrowUp, File, Mic, Paperclip, Reply, Smile, Sticker, Trash2, X } from 'lucide-react'
 import { useStore, useT } from '../store'
 import { formatBytes } from '../utils'
 import { EmojiPicker } from './EmojiPicker'
 import { StickerPicker } from './StickerPicker'
 import { GifPicker } from './GifPicker'
+import { QuickReplyMenu, SchedulePicker, matchQuickReplies, useQuickReplies } from './ComposerExtras'
+import { fillQuickReply, givenName } from '@shared/extras'
+import type { QuickReply } from '@shared/types'
 
 interface Props {
   disabled?: boolean
@@ -49,6 +52,15 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [stickersOpen, setStickersOpen] = useState(false)
   const [gifsOpen, setGifsOpen] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const scheduleMessage = useStore((s) => s.scheduleMessage)
+  const composerDraft = useStore((s) => s.composerDraft)
+  const partnerName = useStore((s) => (s.selectedId ? s.conversations[s.selectedId]?.title : undefined))
+  const quickReplies = useQuickReplies()
+  // "/query" right before the caret opens the quick replies menu.
+  const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null)
+  const [slashIndex, setSlashIndex] = useState(0)
+  const slashItems = slash ? matchQuickReplies(quickReplies, slash.query) : []
   const sendGif = useStore((s) => s.sendGif)
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -63,6 +75,51 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   useEffect(() => {
     if (replyTo) focusInput()
   }, [replyTo])
+
+  // Something else asked the composer to take over a draft (e.g. the birthday banner).
+  useEffect(() => {
+    if (!composerDraft) return
+    setText(composerDraft.text)
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus({ preventScroll: true })
+      el.setSelectionRange(composerDraft.text.length, composerDraft.text.length)
+    })
+  }, [composerDraft])
+
+  const updateSlash = (value: string, caret: number): void => {
+    const m = /(^|\s)\/([\p{L}\p{N}_-]{0,24})$/u.exec(value.slice(0, caret))
+    if (!m || !quickReplies.length) {
+      setSlash(null)
+      return
+    }
+    setSlash({ start: caret - m[2].length - 1, end: caret, query: m[2] })
+    setSlashIndex(0)
+  }
+
+  const insertQuickReply = (reply: QuickReply): void => {
+    if (!slash) return
+    const filled = fillQuickReply(reply.text, givenName(partnerName ?? '') || (partnerName ?? ''))
+    const next = text.slice(0, slash.start) + filled + text.slice(slash.end)
+    const caret = slash.start + filled.length
+    setText(next)
+    setSlash(null)
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus({ preventScroll: true })
+      el.setSelectionRange(caret, caret)
+    })
+  }
+
+  const scheduleCurrent = (sendAt: number): void => {
+    setScheduleOpen(false)
+    const value = text
+    setText('')
+    void scheduleMessage(value, sendAt)
+    focusInput()
+  }
 
   useEffect(() => {
     const el = ref.current
@@ -85,6 +142,23 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (slash && slashItems.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        setSlashIndex((i) => (i + step + slashItems.length) % slashItems.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertQuickReply(slashItems[Math.min(slashIndex, slashItems.length - 1)])
+        return
+      }
+    }
+    if (e.key === 'Escape' && slash) {
+      setSlash(null)
+      return
+    }
     if (e.key === 'Escape' && replyTo) {
       setReplyTo(undefined)
       return
@@ -221,6 +295,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
         </div>
       ) : (
         <div className="composer-box">
+          {slash && <QuickReplyMenu items={slashItems} active={Math.min(slashIndex, Math.max(0, slashItems.length - 1))} onPick={insertQuickReply} onHover={setSlashIndex} />}
           {canAttach && (
             <button className="icon-btn composer-attach" onClick={() => void pick()} title={t('attach')} disabled={disabled}>
               <Paperclip size={18} strokeWidth={2} />
@@ -235,8 +310,10 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
             disabled={disabled}
             onChange={(e) => {
               setText(e.target.value)
+              updateSlash(e.target.value, e.target.selectionStart ?? e.target.value.length)
               if (e.target.value) notifyTyping()
             }}
+            onBlur={() => setSlash(null)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
           />
@@ -304,7 +381,31 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
                 <Mic size={18} strokeWidth={2} />
               </button>
             )}
-            <button className={`composer-send visible ${canSend ? '' : 'idle'}`} onClick={submit} title={t('send')} disabled={!canSend}>
+            {text.trim() && !pendingFiles.length && (
+              <span className="emoji-anchor">
+                <button
+                  className={`icon-btn ${scheduleOpen ? 'active' : ''}`}
+                  onMouseDown={(e) => scheduleOpen && e.stopPropagation()}
+                  onClick={() => setScheduleOpen((o) => !o)}
+                  title={t('scheduleSend')}
+                  disabled={disabled}
+                >
+                  <AlarmClock size={18} strokeWidth={2} />
+                </button>
+                {scheduleOpen && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}
+              </span>
+            )}
+            <button
+              className={`composer-send visible ${canSend ? '' : 'idle'}`}
+              onClick={submit}
+              onContextMenu={(e) => {
+                if (!text.trim() || pendingFiles.length) return
+                e.preventDefault()
+                setScheduleOpen(true)
+              }}
+              title={t('send')}
+              disabled={!canSend}
+            >
               <ArrowUp size={18} strokeWidth={2.6} />
             </button>
           </div>

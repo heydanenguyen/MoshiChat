@@ -67,7 +67,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   }
 
   const reset = async (): Promise<void> => {
-    await setContactOverride(conversation.id, override?.bubble ? { bubble: override.bubble } : undefined)
+    await setContactOverride(conversation.id, override?.bubble || override?.wallpaper ? { bubble: override.bubble, wallpaper: override.wallpaper } : undefined)
     onClose()
   }
 

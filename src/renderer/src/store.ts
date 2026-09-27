@@ -100,6 +100,12 @@ interface State {
   toggleSaved(message: Message): Promise<void>
   openSaved(saved: SavedMessage): Promise<void>
   /** `resolveFiles` prepares the real files after the optimistic bubble is shown (GIF downloads). */
+  /** Text the composer should take over (birthday wishes, …); nonce makes repeats count. */
+  composerDraft?: { text: string; nonce: number }
+  setComposerDraft(text: string): void
+  /** Settings pushed from main (scheduled messages) or returned by an IPC call. */
+  applySettings(settings: Settings): void
+  scheduleMessage(text: string, sendAt: number): Promise<void>
   send(text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
   sendGif(item: GifItem): Promise<void>
   react(messageId: string, emoji: string): Promise<void>
@@ -255,6 +261,9 @@ export const useStore = create<State>((set, get) => ({
           if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list } })
           break
         }
+        case 'settings:updated':
+          set({ settings: { ...DEFAULT_SETTINGS, ...event.settings } })
+          break
         case 'typing': {
           const { conversationId, peerName, isTyping } = event.typing
           const existing = typingTimers.get(conversationId)
@@ -577,6 +586,28 @@ export const useStore = create<State>((set, get) => ({
 
   closeSheet() {
     set({ sheet: { kind: 'none' }, forwarding: undefined, lightbox: undefined })
+  },
+
+  setComposerDraft(text) {
+    set({ composerDraft: { text, nonce: Date.now() } })
+  },
+
+  applySettings(settings) {
+    set({ settings: { ...DEFAULT_SETTINGS, ...settings } })
+  },
+
+  async scheduleMessage(text, sendAt) {
+    const { selectedId, replyTo } = get()
+    if (!selectedId || !text.trim()) return
+    try {
+      const settings = await window.unison.scheduled.add({ conversationId: selectedId, text, sendAt, replyToId: replyTo?.id })
+      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, replyTo: undefined })
+      const when = new Date(sendAt)
+      const time = when.toLocaleString(get().settings.language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit', ...(when.toDateString() === new Date().toDateString() ? {} : { weekday: 'short', day: 'numeric', month: 'numeric' }) })
+      get().showToast(translate(get().settings.language, 'scheduledToast', { time }))
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
   },
 
   async setSettings(patch) {

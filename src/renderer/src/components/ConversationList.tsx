@@ -7,6 +7,7 @@ import { Avatar } from './Avatar'
 import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
+import { isBirthdayToday } from '@shared/extras'
 
 interface TagMenuState {
   conversationId: string
@@ -29,6 +30,7 @@ export function ConversationList(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
   const toggleTag = useStore((s) => s.toggleTag)
+  const overrides = useStore((s) => s.settings.contactOverrides)
   const pins = useStore((s) => s.settings.pins)
   const togglePin = useStore((s) => s.togglePin)
   const { list: tagList, byId: tagById } = useTagDefs()
@@ -134,6 +136,11 @@ export function ConversationList(): JSX.Element {
                 <span className="conv-top">
                   <span className="conv-title">
                     {c.title}
+                    {isBirthdayToday(overrides?.[c.id]?.birthday) && (
+                      <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
+                        🎂
+                      </span>
+                    )}
                     {convTags.length > 0 && (
                       <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
                         {convTags.map((tag) => (
