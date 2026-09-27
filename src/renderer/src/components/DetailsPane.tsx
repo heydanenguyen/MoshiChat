@@ -12,6 +12,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
 import { MomentsPreviewCard, MomentsTab } from './Moments'
 import { Highlight } from './ConversationList'
+import { WallpaperRow } from './Wallpaper'
 
 const TABS: Array<{ id: DetailsTab; icon: JSX.Element; label: 'tabInfo' | 'tabMoments' | 'tabSearch' | 'tabMedia' | 'tabLinks' | 'tabFiles' }> = [
   { id: 'info', icon: <Info size={16} strokeWidth={2.2} />, label: 'tabInfo' },
@@ -209,6 +210,11 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       <div className="details-card">
         <div className="details-card-title">{t('bubbleColor')}</div>
         <BubbleColorRow conversationId={conversationId} />
+      </div>
+
+      <div className="details-card">
+        <div className="details-card-title">{t('wallpaper')}</div>
+        <WallpaperRow conversationId={conversationId} />
       </div>
 
       {facts.length > 0 && (

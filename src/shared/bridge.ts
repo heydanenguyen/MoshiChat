@@ -71,6 +71,12 @@ export interface UnisonBridge {
     respond(requestId: string, value: string): Promise<void>
     cancel(requestId: string): Promise<void>
   }
+  scheduled: {
+    add(input: { conversationId: string; text: string; sendAt: number; replyToId?: string }): Promise<Settings>
+    cancel(id: string): Promise<Settings>
+    sendNow(id: string): Promise<Settings>
+    reschedule(id: string, sendAt: number): Promise<Settings>
+  }
   settings: {
     get(): Promise<Settings>
     set(patch: Partial<Settings>): Promise<Settings>
@@ -123,6 +129,10 @@ export const IPC = {
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
+  scheduledAdd: 'scheduled:add',
+  scheduledCancel: 'scheduled:cancel',
+  scheduledSendNow: 'scheduled:sendNow',
+  scheduledReschedule: 'scheduled:reschedule',
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   appOpenExternal: 'app:openExternal',

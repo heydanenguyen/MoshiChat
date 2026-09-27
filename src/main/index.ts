@@ -13,6 +13,7 @@ import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
+import { Scheduler } from './scheduler'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
@@ -27,6 +28,27 @@ const emit = (event: BridgeEvent): void => {
 }
 
 const manager = new AccountManager(storage, emit, log)
+
+const scheduler = new Scheduler(
+  storage,
+  manager,
+  emit,
+  (item) => {
+    if (!Notification.isSupported()) return
+    const vi = storage.settings.language === 'vi'
+    const n = new Notification({
+      title: vi ? 'Tin hẹn giờ chưa gửi được' : "A scheduled message wasn't sent",
+      body: item.text.slice(0, 120),
+      silent: false
+    })
+    n.on('click', () => {
+      window?.show()
+      window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId: item.conversationId })
+    })
+    n.show()
+  },
+  log
+)
 
 function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   if (!storage.settings.notifications || !Notification.isSupported()) return
@@ -497,6 +519,10 @@ function registerIpc(): void {
     }
     return settings
   })
+  ipcMain.handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
+  ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
+  ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
+  ipcMain.handle(IPC.scheduledReschedule, (_e, id: string, sendAt: number) => scheduler.reschedule(id, sendAt))
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
@@ -534,6 +560,7 @@ if (!gotLock) {
     if (isWindows) app.setAppUserModelId('com.3hvn.unison')
     await storage.load()
     await pruneOrphanedSettings()
+    void scheduler.start()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()
@@ -552,6 +579,7 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
+    scheduler.stop()
     void manager.shutdown()
   })
 }

@@ -174,6 +174,26 @@ export type GifProvider = 'klipy' | 'giphy'
 
 export type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
+/** A snippet typed with "/shortcut" in the composer. `{name}` becomes the other person's first name. */
+export interface QuickReply {
+  id: string
+  shortcut: string
+  text: string
+}
+
+/** A message waiting to be sent later (see main/scheduler.ts). */
+export interface ScheduledMessage {
+  id: string
+  conversationId: string
+  text: string
+  sendAt: number
+  createdAt: number
+  replyToId?: string
+  /** pending: waiting; failed: sending went wrong; missed: fell due long ago while Unison was closed. */
+  status: 'pending' | 'failed' | 'missed'
+  error?: string
+}
+
 /** Interface zoom steps offered in Settings and by Ctrl +/- (1 = 100%). */
 export const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 
@@ -450,6 +470,12 @@ export interface Settings {
   textSize?: TextSize
   /** Whole-interface zoom, 0.8-2 (1 = 100%). */
   zoom?: number
+  /** Snippets inserted by typing "/" in the composer. Undefined = the starter set. */
+  quickReplies?: QuickReply[]
+  /** Messages to send later; only the main process edits this list. */
+  scheduled?: ScheduledMessage[]
+  /** Word effects (birthday confetti, hearts...). Default on. */
+  effects?: boolean
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
   gif?: { provider: GifProvider; key: string }
 }
@@ -476,6 +502,8 @@ export interface ContactOverride {
   birthday?: string
   /** Outgoing bubble colour for this chat: a preset or custom accent id. */
   bubble?: string
+  /** Chat wallpaper: a preset id (see shared/extras.ts WALLPAPERS) or an uploaded photo (data URL). */
+  wallpaper?: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -516,6 +544,7 @@ export type BridgeEvent =
   | { type: 'auth:cleared'; requestId: string }
   | { type: 'focus-conversation'; conversationId: string }
   | { type: 'window:state'; maximized: boolean }
+  | { type: 'settings:updated'; settings: Settings }
 
 export interface PlatformMeta {
   id: Platform

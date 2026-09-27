@@ -10,6 +10,7 @@ import { useStore, useT, useTagDefs } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
+import { QuickReplyManager } from './QuickReplyManager'
 
 export function SettingsSheet(): JSX.Element {
   const t = useT()
@@ -248,6 +249,34 @@ export function SettingsSheet(): JSX.Element {
                 </div>
               </div>
               <TagManager />
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- messaging extras */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('quickReplies')}
+            </div>
+            <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('quickReplies')}</div>
+                  <div className="settings-row-sub">{t('quickRepliesHint')}</div>
+                </div>
+              </div>
+              <QuickReplyManager />
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('effects')}</div>
+                  <div className="settings-row-sub">{t('effectsHint')}</div>
+                </div>
+                <button
+                  className={`switch ${settings.effects !== false ? 'on' : ''}`}
+                  role="switch"
+                  aria-checked={settings.effects !== false}
+                  onClick={() => void setSettings({ effects: settings.effects === false })}
+                />
+              </div>
             </div>
           </div>
 
