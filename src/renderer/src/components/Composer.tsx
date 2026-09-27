@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowUp, File, Mic, Paperclip, Reply, Smile, Sticker, Trash2, X } from 'lucide-react'
-import { useStore, useT } from '../store'
+import { readDraft, useStore, useT } from '../store'
 import { formatBytes } from '../utils'
 import { EmojiPicker } from './EmojiPicker'
 import { StickerPicker } from './StickerPicker'
@@ -66,11 +66,23 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
 
   const focusInput = (): void => ref.current?.focus({ preventScroll: true })
 
+  const setDraft = useStore((s) => s.setDraft)
+  // Each chat keeps its own unsent text (restored when you come back, even after a restart).
+  // The save below skips the render where the chat just switched: its text still belongs to the previous chat.
+  const switching = useRef(false)
   useEffect(() => {
-    setText('')
+    switching.current = true
+    setText(selectedId ? readDraft(selectedId) : '')
     setEmojiOpen(false)
     focusInput()
   }, [selectedId])
+  useEffect(() => {
+    if (switching.current) {
+      switching.current = false
+      return
+    }
+    if (selectedId) setDraft(selectedId, text)
+  }, [text, selectedId, setDraft])
 
   useEffect(() => {
     if (replyTo) focusInput()

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Reply, SmilePlus, Sparkles } from 'lucide-react'
+import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
@@ -12,6 +12,7 @@ import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
 import { TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
+import { EmojiPicker } from './EmojiPicker'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -424,6 +425,26 @@ function Bubble({
   const toggleSaved = useStore((s) => s.toggleSaved)
   const saved = useStore((s) => !!s.settings.savedMessages?.some((m) => m.messageId === message.id && m.conversationId === message.conversationId))
   const [picker, setPicker] = useState(false)
+  const [moreEmoji, setMoreEmoji] = useState(false)
+  // Keep the full emoji sheet inside the chat column, whichever side the bubble is on.
+  const fitInChat = useCallback((anchor: HTMLSpanElement | null) => {
+    const sheet = anchor?.firstElementChild as HTMLElement | null
+    const bounds = anchor?.closest('.chat-scroll')?.getBoundingClientRect()
+    if (!sheet || !bounds) return
+    const r = sheet.getBoundingClientRect()
+    const dx = Math.min(0, bounds.right - 8 - r.right) || Math.max(0, bounds.left + 8 - r.left)
+    const dy = Math.max(0, bounds.top + 8 - r.top)
+    sheet.style.translate = `${dx}px ${dy}px`
+  }, [])
+  const [burst, setBurst] = useState(0)
+  // Double-click a message to heart it (like Instagram).
+  const heart = (e: React.MouseEvent): void => {
+    if (!features.react || message.status === 'sending' || message.status === 'failed') return
+    if ((e.target as HTMLElement).closest('a, button, img, video, audio, .album, .link-card, .post-card')) return
+    window.getSelection()?.removeAllRanges()
+    if (mine !== '❤️') setBurst(Date.now())
+    void react(message.id, '❤️')
+  }
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && a.url)
   const story = message.attachments.find((a) => a.kind === 'story')
@@ -460,7 +481,12 @@ function Bubble({
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
-          <div className={classes.join(' ')}>
+          <div className={classes.join(' ')} onDoubleClick={heart}>
+            {burst > 0 && (
+              <span key={burst} className="heart-burst" aria-hidden onAnimationEnd={() => setBurst(0)}>
+                ❤️
+              </span>
+            )}
             {message.replyTo && (message.replyTo.text || message.replyTo.senderName) && (
               <div className="reply-quote">
                 <strong>{message.replyTo.senderName}</strong>
@@ -481,7 +507,7 @@ function Bubble({
         )}
       </div>
       {showActions && (
-        <div className={`bubble-actions ${picker ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`bubble-actions ${picker || moreEmoji ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
           {features.react && (
             <button className="icon-btn" title={t('react')} onClick={() => setPicker((p) => !p)}>
               <SmilePlus size={15} strokeWidth={2} />
@@ -500,7 +526,7 @@ function Bubble({
             <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
           </button>
           {picker && (
-            <div className="emoji-picker">
+            <div className="emoji-picker reaction-bar">
               {QUICK_REACTIONS.map((emoji) => (
                 <button
                   key={emoji}
@@ -513,7 +539,28 @@ function Bubble({
                   {emoji}
                 </button>
               ))}
+              <button
+                className="reaction-more"
+                title={t('moreReactions')}
+                onClick={() => {
+                  setPicker(false)
+                  setMoreEmoji(true)
+                }}
+              >
+                <Plus size={16} strokeWidth={2.4} />
+              </button>
             </div>
+          )}
+          {moreEmoji && (
+            <span className="reaction-emoji-anchor" ref={fitInChat}>
+              <EmojiPicker
+                onPick={(emoji) => {
+                  setMoreEmoji(false)
+                  void react(message.id, emoji)
+                }}
+                onClose={() => setMoreEmoji(false)}
+              />
+            </span>
           )}
         </div>
       )}

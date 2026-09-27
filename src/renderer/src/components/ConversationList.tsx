@@ -32,6 +32,7 @@ export function ConversationList(): JSX.Element {
   const toggleTag = useStore((s) => s.toggleTag)
   const overrides = useStore((s) => s.settings.contactOverrides)
   const prefetch = useStore((s) => s.prefetch)
+  const drafts = useStore((s) => s.drafts)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pins = useStore((s) => s.settings.pins)
   const togglePin = useStore((s) => s.togglePin)
@@ -163,7 +164,11 @@ export function ConversationList(): JSX.Element {
                 </span>
                 <span className="conv-bottom">
                   <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
-                    {isTyping
+                    {!isTyping && drafts[c.id] && selectedId !== c.id ? (
+                      <>
+                        <span className="conv-draft">{t('draft')}</span> {drafts[c.id]}
+                      </>
+                    ) : isTyping
                       ? c.isGroup
                         ? t('typingIn', { name: typing[c.id].name })
                         : t('typing')

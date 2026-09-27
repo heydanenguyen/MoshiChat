@@ -1,4 +1,4 @@
-import type { Language, Message } from '@shared/types'
+import type { Language, Message, Reaction } from '@shared/types'
 
 const locale = (lang: Language): string => (lang === 'vi' ? 'vi-VN' : 'en-US')
 
@@ -187,4 +187,15 @@ export function jumboEmojiCount(text: string): number {
   if (!segments.length || segments.length > 3) return 0
   const allEmoji = segments.every((g) => EMOJI_GRAPHEME.test(g) && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g))
   return allEmoji ? segments.length : 0
+}
+
+/** My reaction toggled: the same emoji again removes it, another one replaces it. */
+export function toggleReaction(reactions: Reaction[], emoji: string): Reaction[] {
+  const mine = reactions.find((r) => r.byMe)
+  let next = reactions.map((r) => (r.byMe ? { ...r, count: r.count - 1, byMe: false } : r)).filter((r) => r.count > 0)
+  if (mine?.emoji !== emoji) {
+    const existing = next.find((r) => r.emoji === emoji)
+    next = existing ? next.map((r) => (r === existing ? { ...r, count: r.count + 1, byMe: true } : r)) : [...next, { emoji, count: 1, byMe: true }]
+  }
+  return next
 }

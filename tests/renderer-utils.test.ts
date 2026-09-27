@@ -66,3 +66,15 @@ describe('translate', () => {
     expect(translate('vi', 'forwarded', { name: 'Nam' })).toBe('Đã chuyển tiếp đến Nam')
   })
 })
+
+describe('reaction toggling', () => {
+  it('adds, switches and removes my reaction', async () => {
+    const { toggleReaction } = await import('../src/renderer/src/utils')
+    const start = [{ emoji: '😂', count: 2, byMe: false }]
+    const hearted = toggleReaction(start, '❤️')
+    expect(hearted).toEqual([{ emoji: '😂', count: 2, byMe: false }, { emoji: '❤️', count: 1, byMe: true }])
+    const laughed = toggleReaction(hearted, '😂')
+    expect(laughed).toEqual([{ emoji: '😂', count: 3, byMe: true }])
+    expect(toggleReaction(laughed, '😂')).toEqual([{ emoji: '😂', count: 2, byMe: false }])
+  })
+})
