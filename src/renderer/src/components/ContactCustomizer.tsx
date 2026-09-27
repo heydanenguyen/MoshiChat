@@ -32,8 +32,8 @@ async function toAvatarDataUrl(file: File, size = 256): Promise<string> {
 }
 
 /**
- * Nickname, custom photo (upload or a Unison character) and birthday for one conversation.
- * Only Unison shows them; nothing is sent to the platform.
+ * Nickname, custom photo (upload or a Moshi character) and birthday for one conversation.
+ * Only Moshi shows them; nothing is sent to the platform.
  */
 export function ContactCustomizer({ conversation, onClose }: { conversation: Conversation; onClose(): void }): JSX.Element {
   const t = useT()

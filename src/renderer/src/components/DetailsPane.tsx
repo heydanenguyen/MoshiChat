@@ -105,7 +105,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
   if (!conversation) return <></>
   const pinned = isPinned(conversation, pins)
-  // A nickname / custom photo set in Unison wins over the platform profile.
+  // A nickname / custom photo set in Moshi wins over the platform profile.
   const name = custom?.nickname ? conversation.title : (profile?.name ?? conversation.title)
   const avatar = custom?.avatar ? conversation.avatarUrl : (profile?.avatarUrl ?? conversation.avatarUrl)
   const originalName = conversation.originalTitle ? (profile?.name ?? conversation.originalTitle) : undefined

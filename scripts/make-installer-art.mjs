@@ -96,7 +96,7 @@ const welcome = page(
   <div class="index"><span class="n">01 / 03</span><span>xin chào</span></div>
   <div class="bubble" style="top: 58px">Xin chào!</div>
   <div class="figure" style="top: 104px">${duoSvg(118)}<div class="shadow"></div></div>
-  <div class="name" style="top: 256px">Unison</div>
+  <div class="name" style="top: 256px">Moshi</div>
   <div class="caption" style="top: 281px">mọi cuộc trò chuyện · một nơi</div>`,
   `.mesh { background:
      radial-gradient(70% 45% at 50% 44%, rgba(255, 255, 255, 0.75), transparent 70%),
@@ -131,7 +131,7 @@ const goodbye = page(
   <div class="index"><span class="n">01 / 02</span><span>tạm biệt</span></div>
   <div class="bubble" style="top: 70px">Hẹn gặp lại!</div>
   <div class="figure pair" style="top: 124px"><div class="row">${mark('buddies', 62, 'calm')}${mark('blossom', 50, 'calm')}</div><div class="shadow"></div></div>
-  <div class="name" style="top: 256px">Unison</div>
+  <div class="name" style="top: 256px">Moshi</div>
   <div class="caption" style="top: 281px">bộ đôi sẽ nhớ bạn lắm</div>`,
   `.mesh { background:
      radial-gradient(70% 45% at 50% 46%, rgba(255, 255, 255, 0.7), transparent 70%),

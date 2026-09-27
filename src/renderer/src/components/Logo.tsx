@@ -6,7 +6,7 @@ import { useStore } from '../store'
  * passed. Markup comes from static strings in logos.ts (no user input). Eyes blink and glance;
  * motion stops under prefers-reduced-motion.
  */
-export function LogoMark({ size = 28, mood = 'happy', logo, className = '', title = 'Unison' }: { size?: number; mood?: LogoMood; logo?: LogoId; className?: string; title?: string }): JSX.Element {
+export function LogoMark({ size = 28, mood = 'happy', logo, className = '', title = 'Moshi' }: { size?: number; mood?: LogoMood; logo?: LogoId; className?: string; title?: string }): JSX.Element {
   const chosen = useStore((s) => s.settings.logo)
   const id = logo ?? chosen ?? 'buddies'
   return (
@@ -34,7 +34,7 @@ export function LogoHero({ size = 160, className = '' }: { size?: number; classN
       height={size * hero.ratio}
       viewBox={hero.viewBox}
       role="img"
-      aria-label="Unison"
+      aria-label="Moshi"
       dangerouslySetInnerHTML={{ __html: hero.inner }}
     />
   )

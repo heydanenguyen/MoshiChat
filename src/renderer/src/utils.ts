@@ -202,7 +202,7 @@ export function toggleReaction(reactions: Reaction[], emoji: string): Reaction[]
 
 /**
  * The face and name to show for someone in a chat. In a one-to-one chat the other person IS the chat, so the
- * nickname and photo set in Unison win over what the platform attaches to each message (and to typing).
+ * nickname and photo set in Moshi win over what the platform attaches to each message (and to typing).
  */
 export function personLook(
   conversation: Pick<Conversation, 'isGroup' | 'title' | 'avatarUrl' | 'participants'> & { originalAvatarUrl?: string },
@@ -214,7 +214,7 @@ export function personLook(
   return { name: conversation.title, url: customPhoto ? conversation.avatarUrl : (sender.avatarUrl ?? conversation.avatarUrl) }
 }
 
-/** Unison stickers are 384×384 PNGs; a platform photo of exactly that size from you is one of them. */
+/** Moshi stickers are 384×384 PNGs; a platform photo of exactly that size from you is one of them. */
 const STICKER_PIXELS = 384
 
 /**

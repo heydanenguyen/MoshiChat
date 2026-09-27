@@ -1,5 +1,5 @@
 /**
- * Unison's own notification sounds, synthesised with Web Audio (no audio files, nothing licensed):
+ * Moshi's own notification sounds, synthesised with Web Audio (no audio files, nothing licensed):
  * short, bright and playful like the logo characters. Each sound is a few enveloped oscillators and
  * noise bursts through a soft room echo.
  */

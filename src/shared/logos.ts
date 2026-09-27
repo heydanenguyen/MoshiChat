@@ -1,5 +1,5 @@
 /**
- * Unison's logo characters, one source for the app (inline SVG) and for the icon files
+ * Moshi's logo characters, one source for the app (inline SVG) and for the icon files
  * (scripts/make-icons.mjs). Flat colours, black features, no outlines; every character is a
  * chat bubble with a face. Marks use a 64x64 canvas; app icons put a mark on a coloured tile.
  * Class names (buddy-body / buddy-eyes / buddy-pupils) drive the blink and glance animations.

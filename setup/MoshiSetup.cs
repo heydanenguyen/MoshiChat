@@ -1,4 +1,4 @@
-// Unison setup / uninstall front end (WPF on .NET Framework 4.8, present on every Windows 10/11).
+// Moshi setup / uninstall front end (WPF on .NET Framework 4.8, present on every Windows 10/11).
 // The real work is done by the electron-builder NSIS package, run silently underneath:
 //   setup:     payload.exe /S          (per-user, no admin), progress = install folder size vs expected size
 //   uninstall: <nsis uninstaller> /S   (the Windows "Uninstall" entry points to this program instead)
@@ -22,12 +22,12 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Unison Setup")]
-[assembly: AssemblyProduct("Unison")]
+[assembly: AssemblyTitle("Moshi Setup")]
+[assembly: AssemblyProduct("Moshi")]
 [assembly: AssemblyCompany("3HVN Media")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]
 
-namespace UnisonSetup
+namespace MoshiSetup
 {
     static class Program
     {
@@ -42,7 +42,7 @@ namespace UnisonSetup
             {
                 // The uninstaller lives in the folder it removes: run a copy from %TEMP% instead.
                 string self = Assembly.GetExecutingAssembly().Location;
-                string copy = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "unison-goodbye-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
+                string copy = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "moshi-goodbye-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
                 File.Copy(self, copy, true);
                 Process.Start(new ProcessStartInfo(copy, "--uninstall --relaunched" + (args.Contains("--lang=vi") ? " --lang=vi" : args.Contains("--lang=en") ? " --lang=en" : "")) { UseShellExecute = false });
                 return 0;
@@ -106,7 +106,12 @@ namespace UnisonSetup
         public string Location;
         public string Version;
 
-        public static InstallEntry Find()
+        public static InstallEntry Find() => FindByName("Moshi");
+
+        /// <summary>The entry left by versions that were still called Unison.</summary>
+        public static InstallEntry FindLegacy() => FindByName("Unison");
+
+        static InstallEntry FindByName(string displayName)
         {
             using (var root = Registry.CurrentUser.OpenSubKey(UninstallRoot))
             {
@@ -115,7 +120,7 @@ namespace UnisonSetup
                 {
                     using (var key = root.OpenSubKey(name))
                     {
-                        if (key == null || (key.GetValue("DisplayName") as string) != "Unison") continue;
+                        if (key == null || (key.GetValue("DisplayName") as string) != displayName) continue;
                         return new InstallEntry
                         {
                             KeyPath = UninstallRoot + "\\" + name,
@@ -147,7 +152,7 @@ namespace UnisonSetup
         readonly bool uninstallMode;
         readonly string version;
         readonly long expectedBytes;
-        readonly string defaultDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Unison");
+        readonly string defaultDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Moshi");
 
         // named elements
         readonly Grid duo, orangeHost, bubble;
@@ -208,7 +213,7 @@ namespace UnisonSetup
             Find<Image>("CalmOrange").Source = Res.Image("calm-buddies.png");
             Find<Image>("CalmPink").Source = Res.Image("calm-blossom.png");
             Find<TextBlock>("Version").Text = version.Length > 0 ? L.T("Version ", "Phiên bản ") + version : "";
-            Window.Title = uninstallMode ? L.T("Uninstall Unison", "Gỡ cài đặt Unison") : L.T("Unison Setup", "Cài đặt Unison");
+            Window.Title = uninstallMode ? L.T("Uninstall Moshi", "Gỡ cài đặt Moshi") : L.T("Moshi Setup", "Cài đặt Moshi");
             minButton.ToolTip = L.T("Minimize", "Thu nhỏ");
             closeButton.ToolTip = L.T("Close", "Đóng");
             installButton.Content = L.T("Install", "Cài đặt");
@@ -467,23 +472,49 @@ namespace UnisonSetup
             {
                 installButton.Content = L.T("Update", "Cập nhật");
                 Show(null, L.T("Welcome back!", "Chào bạn quay lại!"), existing.Version != null && existing.Version != version
-                    ? L.T("Unison " + existing.Version + " is already here. Update to " + version + " and your accounts and moments stay put.", "Unison " + existing.Version + " đã có trên máy. Cập nhật lên " + version + " nhé, tài khoản và khoảnh khắc vẫn còn nguyên.")
-                    : L.T("Unison is already installed. Reinstall to repair or refresh it; your data stays put.", "Unison đã có trên máy. Cài lại để sửa lỗi hoặc làm mới, dữ liệu của bạn vẫn còn nguyên."), "welcome", null, null, () => Begin(), null);
+                    ? L.T("Moshi " + existing.Version + " is already here. Update to " + version + " and your accounts and moments stay put.", "Moshi " + existing.Version + " đã có trên máy. Cập nhật lên " + version + " nhé, tài khoản và khoảnh khắc vẫn còn nguyên.")
+                    : L.T("Moshi is already installed. Reinstall to repair or refresh it; your data stays put.", "Moshi đã có trên máy. Cài lại để sửa lỗi hoặc làm mới, dữ liệu của bạn vẫn còn nguyên."), "welcome", null, null, () => Begin(), null);
             }
             else
             {
-                Show(null, L.T("Hi, we're Unison!", "Chào bạn, mình là Unison!"), L.T("The Buddies bring Messenger, Instagram, Telegram, Zalo and WhatsApp under one roof, so you never miss anyone.", "Bộ đôi sẽ gom Messenger, Instagram, Telegram, Zalo và WhatsApp về chung một nhà, để bạn không bỏ lỡ ai."), "welcome", null, null, () => Begin(), null);
+                Show(null, L.T("Hi, we're Moshi!", "Chào bạn, mình là Moshi!"), L.T("The Buddies bring Messenger, Instagram, Telegram, Zalo and WhatsApp under one roof, so you never miss anyone.", "Bộ đôi sẽ gom Messenger, Instagram, Telegram, Zalo và WhatsApp về chung một nhà, để bạn không bỏ lỡ ai."), "welcome", null, null, () => Begin(), null);
             }
         }
 
         static Process[] RunningApp() =>
-            Process.GetProcessesByName("Unison").Where(p => p.Id != Process.GetCurrentProcess().Id).ToArray();
+            Process.GetProcessesByName("Moshi").Concat(Process.GetProcessesByName("Unison")).Where(p => p.Id != Process.GetCurrentProcess().Id).ToArray();
 
-        /// <summary>Unison has to be closed before its files can be replaced.</summary>
+        /// <summary>The app used to be called Unison: its program files go, its data folder stays (Moshi moves it over on first start).</summary>
+        static void RemoveLegacy(InstallEntry legacy)
+        {
+            try
+            {
+                string core = legacy.Get("UnisonCoreUninstall") ?? legacy.Get("QuietUninstallString") ?? legacy.Get("UninstallString");
+                string dir = legacy.Location;
+                if (core != null)
+                {
+                    string exe = core.StartsWith("\"") ? core.Substring(1, core.IndexOf('"', 1) - 1) : core.Split(' ')[0];
+                    if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetDirectoryName(exe);
+                    if (File.Exists(exe) && !exe.EndsWith("Unison Uninstall.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var p = Process.Start(new ProcessStartInfo(exe, "/S _?=" + dir) { UseShellExecute = false, CreateNoWindow = true });
+                        p.WaitForExit();
+                    }
+                }
+                bool isAppDir = dir != null && System.IO.Path.GetFileName(dir.TrimEnd('\\')).Equals("Unison", StringComparison.OrdinalIgnoreCase)
+                    && dir.IndexOf(@"\Programs\", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isAppDir && Directory.Exists(dir)) Directory.Delete(dir, true);
+                using (var uninstall = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall", true))
+                    uninstall?.DeleteSubKeyTree(legacy.KeyPath.Substring(legacy.KeyPath.LastIndexOf('\\') + 1), false);
+            }
+            catch { }
+        }
+
+        /// <summary>Moshi has to be closed before its files can be replaced.</summary>
         bool AskToCloseApp(Action then)
         {
             if (RunningApp().Length == 0) return false;
-            Show(L.T("Oops, one sec!", "Ơ, khoan đã!"), L.T("Unison is open", "Unison đang mở"), L.T("We need to close Unison for a moment. Your messages are safe.", "Mình cần đóng Unison một chút để cài. Tin nhắn của bạn vẫn an toàn."), "pair", L.T("Close Unison and continue", "Đóng Unison và tiếp tục"), L.T("Later", "Để sau"), () =>
+            Show(L.T("Oops, one sec!", "Ơ, khoan đã!"), L.T("Moshi is open", "Moshi đang mở"), L.T("We need to close Moshi for a moment. Your messages are safe.", "Mình cần đóng Moshi một chút để cài. Tin nhắn của bạn vẫn an toàn."), "pair", L.T("Close Moshi and continue", "Đóng Moshi và tiếp tục"), L.T("Later", "Để sau"), () =>
             {
                 foreach (var p in RunningApp())
                 {
@@ -520,18 +551,20 @@ namespace UnisonSetup
             closeButton.IsEnabled = false;
             Steps(1);
             Working();
-            Show(L.T("Just a moment...", "Chờ xíu nhé..."), L.T("The Buddies are moving Unison in", "Bộ đôi đang dọn nhà cho Unison"), Tips[0], "progress");
+            Show(L.T("Just a moment...", "Chờ xíu nhé..."), L.T("The Buddies are moving Moshi in", "Bộ đôi đang dọn nhà cho Moshi"), Tips[0], "progress");
             progressText.Text = L.T("Getting ready", "Đang chuẩn bị");
             SetProgress(0.02);
 
-            string temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "unison-setup-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "moshi-setup-" + Guid.NewGuid().ToString("N").Substring(0, 8));
             Directory.CreateDirectory(temp);
-            string payload = System.IO.Path.Combine(temp, "unison-core.exe");
+            string payload = System.IO.Path.Combine(temp, "moshi-core.exe");
             int exit = -1;
             string error = null;
             try
             {
                 await Task.Run(() => Res.Save("payload.exe", payload));
+                var legacy = InstallEntry.FindLegacy();
+                if (legacy != null) await Task.Run(() => RemoveLegacy(legacy));
                 var existing = InstallEntry.Find();
                 string dir = existing?.Location ?? defaultDir;
                 long baseline = await Task.Run(() => FolderSize(dir));
@@ -583,15 +616,15 @@ namespace UnisonSetup
         {
             var entry = InstallEntry.Find();
             string dir = entry?.Location ?? defaultDir;
-            if (!File.Exists(System.IO.Path.Combine(dir, "Unison.exe"))) return null;
+            if (!File.Exists(System.IO.Path.Combine(dir, "Moshi.exe"))) return null;
             if (entry != null && Res.Has("uninstaller.exe"))
             {
-                string goodbye = System.IO.Path.Combine(dir, "Unison Uninstall.exe");
+                string goodbye = System.IO.Path.Combine(dir, "Moshi Uninstall.exe");
                 Res.Save("uninstaller.exe", goodbye);
                 // electron-builder leaves InstallLocation empty for per-user installs; the uninstaller needs it.
                 if (string.IsNullOrEmpty(entry.Location)) entry.Set("InstallLocation", dir);
                 string current = entry.Get("UninstallString");
-                if (current != null && !current.Contains("Unison Uninstall.exe")) entry.Set("UnisonCoreUninstall", current);
+                if (current != null && !current.Contains("Moshi Uninstall.exe")) entry.Set("MoshiCoreUninstall", current);
                 entry.Set("UninstallString", "\"" + goodbye + "\" --uninstall");
             }
             return dir;
@@ -624,11 +657,11 @@ namespace UnisonSetup
             Hop(orangeHost, 0, 2);
             Hop(pink, 200, 2);
             Celebrate();
-            Show(L.T("All done!", "Xong rồi!"), L.T("The whole gang is ready", "Cả nhà đã sẵn sàng"), L.T("Open Unison, connect your first account, and every conversation lands in one place.", "Mở Unison, kết nối tài khoản đầu tiên và mọi cuộc trò chuyện sẽ về chung một chỗ."), "pair", L.T("Open Unison", "Mở Unison"), L.T("Later", "Để sau"), () =>
+            Show(L.T("All done!", "Xong rồi!"), L.T("The whole gang is ready", "Cả nhà đã sẵn sàng"), L.T("Open Moshi, connect your first account, and every conversation lands in one place.", "Mở Moshi, kết nối tài khoản đầu tiên và mọi cuộc trò chuyện sẽ về chung một chỗ."), "pair", L.T("Open Moshi", "Mở Moshi"), L.T("Later", "Để sau"), () =>
             {
                 try
                 {
-                    Process.Start(new ProcessStartInfo(System.IO.Path.Combine(installedDir, "Unison.exe")) { UseShellExecute = true, WorkingDirectory = installedDir });
+                    Process.Start(new ProcessStartInfo(System.IO.Path.Combine(installedDir, "Moshi.exe")) { UseShellExecute = true, WorkingDirectory = installedDir });
                 }
                 catch { }
                 Window.Close();
@@ -689,10 +722,10 @@ namespace UnisonSetup
             var entry = InstallEntry.Find();
             if (entry == null)
             {
-                Show(null, L.T("Unison isn't installed", "Không thấy Unison trên máy"), L.T("It looks like Unison has already been removed.", "Có vẻ Unison đã được gỡ rồi."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
+                Show(null, L.T("Moshi isn't installed", "Không thấy Moshi trên máy"), L.T("It looks like Moshi has already been removed.", "Có vẻ Moshi đã được gỡ rồi."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
                 return;
             }
-            Show(null, L.T("Leaving Unison already?", "Bạn định chia tay Unison thật sao?"), L.T("The Buddies will miss you. Your accounts, settings and moments are kept, so you can pick up right where you left off.", "Bộ đôi sẽ nhớ bạn lắm. Tài khoản, cài đặt và khoảnh khắc vẫn được giữ lại, lần sau cài là dùng tiếp ngay."), "pair", L.T("Keep Unison", "Giữ lại Unison"), L.T("Uninstall", "Gỡ cài đặt"), () => Window.Close(), () => BeginUninstall());
+            Show(null, L.T("Leaving Moshi already?", "Bạn định chia tay Moshi thật sao?"), L.T("The Buddies will miss you. Your accounts, settings and moments are kept, so you can pick up right where you left off.", "Bộ đôi sẽ nhớ bạn lắm. Tài khoản, cài đặt và khoảnh khắc vẫn được giữ lại, lần sau cài là dùng tiếp ngay."), "pair", L.T("Keep Moshi", "Giữ lại Moshi"), L.T("Uninstall", "Gỡ cài đặt"), () => Window.Close(), () => BeginUninstall());
         }
 
         void BeginUninstall()
@@ -704,7 +737,7 @@ namespace UnisonSetup
         async Task Uninstall()
         {
             var entry = InstallEntry.Find();
-            string core = entry?.Get("UnisonCoreUninstall") ?? entry?.Get("QuietUninstallString");
+            string core = entry?.Get("MoshiCoreUninstall") ?? entry?.Get("QuietUninstallString");
             string dir = entry?.Location;
             if (string.IsNullOrEmpty(dir) && core != null)
             {
@@ -716,7 +749,7 @@ namespace UnisonSetup
             closeButton.IsEnabled = false;
             Steps(1);
             Working();
-            Show(L.T("Tidying up...", "Đang thu dọn..."), L.T("Uninstalling Unison", "Đang gỡ Unison"), L.T("Just a few seconds.", "Chỉ vài giây thôi."), "progress");
+            Show(L.T("Tidying up...", "Đang thu dọn..."), L.T("Uninstalling Moshi", "Đang gỡ Moshi"), L.T("Just a few seconds.", "Chỉ vài giây thôi."), "progress");
             progressText.Text = L.T("Tidying up", "Đang thu dọn");
             SetProgress(0.05);
             string error = null;
@@ -730,7 +763,7 @@ namespace UnisonSetup
                 {
                     if (core != null)
                     {
-                        // "C:\...\Uninstall Unison.exe" /currentuser  ->  run in place (_?=) so we can wait for it.
+                        // "C:\...\Uninstall Moshi.exe" /currentuser  ->  run in place (_?=) so we can wait for it.
                         string exe = core.StartsWith("\"") ? core.Substring(1, core.IndexOf('"', 1) - 1) : core.Split(' ')[0];
                         string rest = core.Substring(core.StartsWith("\"") ? core.IndexOf('"', 1) + 1 : exe.Length).Trim();
                         rest = rest.Replace("/S", "").Trim();
@@ -741,8 +774,8 @@ namespace UnisonSetup
                         }
                     }
                     // Whatever is left (the NSIS uninstaller itself, our copy) goes too.
-                    // Safety: only ever remove the app folder itself (...\Programs\Unison), never anything wider.
-                    bool isAppDir = dir != null && System.IO.Path.GetFileName(dir.TrimEnd('\\')).Equals("Unison", StringComparison.OrdinalIgnoreCase)
+                    // Safety: only ever remove the app folder itself (...\Programs\Moshi), never anything wider.
+                    bool isAppDir = dir != null && System.IO.Path.GetFileName(dir.TrimEnd('\\')).Equals("Moshi", StringComparison.OrdinalIgnoreCase)
                         && dir.IndexOf("Programs", StringComparison.OrdinalIgnoreCase) >= 0;
                     for (int i = 0; i < 6 && isAppDir && Directory.Exists(dir); i++)
                     {
@@ -763,7 +796,7 @@ namespace UnisonSetup
             Steps(2);
             Idle();
             if (error != null) Show(L.T("Uh-oh...", "Ơ..."), L.T("Uninstall didn't finish", "Gỡ chưa xong"), L.T("Something went wrong (" + error + "). Please try again.", "Có lỗi khi gỡ (" + error + "). Bạn thử lại nhé."), "pair", L.T("Try again", "Thử lại"), L.T("Close", "Đóng"), () => BeginUninstall(), () => Window.Close());
-            else Show(L.T("See you soon!", "Hẹn gặp lại!"), L.T("Unison is uninstalled", "Đã gỡ Unison"), L.T("Thanks for using Unison. Whenever you miss us, just install it again. Everything will be waiting.", "Cảm ơn bạn đã dùng Unison. Khi nào nhớ tụi mình thì cài lại nhé, mọi thứ vẫn chờ bạn."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
+            else Show(L.T("See you soon!", "Hẹn gặp lại!"), L.T("Moshi is uninstalled", "Đã gỡ Moshi"), L.T("Thanks for using Moshi. Whenever you miss us, just install it again. Everything will be waiting.", "Cảm ơn bạn đã dùng Moshi. Khi nào nhớ tụi mình thì cài lại nhé, mọi thứ vẫn chờ bạn."), "pair", L.T("Close", "Đóng"), null, () => Window.Close());
             Window.Closed += (s, e) => ScheduleSelfDelete();
         }
 
@@ -771,7 +804,7 @@ namespace UnisonSetup
         {
             string self = Assembly.GetExecutingAssembly().Location;
             // Only the temporary copy made in Main (never the installed program).
-            if (!System.IO.Path.GetFileName(self).StartsWith("unison-goodbye-", StringComparison.OrdinalIgnoreCase)) return;
+            if (!System.IO.Path.GetFileName(self).StartsWith("moshi-goodbye-", StringComparison.OrdinalIgnoreCase)) return;
             try
             {
                 Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 > nul & del /q \"" + self + "\"") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });

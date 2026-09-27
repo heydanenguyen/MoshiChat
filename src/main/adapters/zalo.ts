@@ -287,7 +287,7 @@ export class ZaloAdapter implements PlatformAdapter {
     const raw = this.rawMessage(externalIdOf(fromId), messageId)
     if (!raw) throw new Error('Message not found')
     const text = textOf(raw)
-    if (!text) throw new Error('Zalo can only forward text messages from Unison')
+    if (!text) throw new Error('Zalo can only forward text messages from Moshi')
     const toThread = externalIdOf(toId)
     const type = this.threadTypes.get(toThread) ?? 0
     const result = await this.requireApi().forwardMessage({ message: text }, [toThread], type)

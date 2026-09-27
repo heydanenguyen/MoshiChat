@@ -1,5 +1,5 @@
 // Generates the app icon procedurally (no native deps): a rounded squircle with
-// the Unison gradient and two overlapping chat bubbles. Writes build/icon.png
+// the Moshi gradient and two overlapping chat bubbles. Writes build/icon.png
 // (512) and resources/icon.png (256).
 import { deflateSync } from 'zlib'
 import { writeFileSync, mkdirSync } from 'fs'

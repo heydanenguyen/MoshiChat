@@ -27,7 +27,7 @@ export interface FetchMessagesOptions {
 }
 
 /**
- * Every platform plugs into Unison through this interface. Adapters own the
+ * Every platform plugs into Moshi through this interface. Adapters own the
  * network connection and translate platform objects into the shared model.
  */
 export interface PlatformAdapter {

@@ -1,6 +1,6 @@
-# Unison
+# Moshi
 
-Mọi cuộc trò chuyện, một nơi duy nhất. Unison gom **Messenger, Instagram, Telegram, Zalo và WhatsApp** vào một hộp thư desktop với giao diện chuẩn Apple HIG: bố cục ba cột, vibrancy/Mica, bong bóng tin nhắn kiểu Messages.app, dark mode, ⌘K, reply, reaction, chuyển tiếp, voice note, đính kèm và tìm kiếm nội dung tin nhắn.
+Mọi cuộc trò chuyện, một nơi duy nhất. Moshi gom **Messenger, Instagram, Telegram, Zalo và WhatsApp** vào một hộp thư desktop với giao diện chuẩn Apple HIG: bố cục ba cột, vibrancy/Mica, bong bóng tin nhắn kiểu Messages.app, dark mode, ⌘K, reply, reaction, chuyển tiếp, voice note, đính kèm và tìm kiếm nội dung tin nhắn.
 
 ## Chạy thử
 
@@ -22,16 +22,16 @@ Icon được sinh bằng `node scripts/make-icon.mjs` (không cần thư viện
 | **Telegram** | MTProto qua [gramjs](https://gram.js.org), đăng nhập như Telegram Desktop (SĐT → mã → mật khẩu 2 lớp). Real-time, đầy đủ lịch sử, ảnh, sticker, reaction, read receipt, typing, **tìm kiếm phía máy chủ** toàn bộ lịch sử. | `API ID` + `API Hash` tạo tại <https://my.telegram.org/apps> | ✓ / ✓ / ✓ / ✓ voice note / ✓ native |
 | **WhatsApp** | Giao thức WhatsApp Web multi-device qua [Baileys](https://github.com/WhiskeySockets/Baileys). Quét QR trong WhatsApp → *Thiết bị đã liên kết*, giống WhatsApp Desktop. Lịch sử đồng bộ từ điện thoại trong phút đầu. | Điện thoại để quét QR | ✓ / ✓ / ✓ / ✓ push-to-talk / ✓ native |
 | **Zalo** | Giao thức Zalo Web qua [zca-js](https://github.com/RFS-ADRENO/zca-js). Quét QR trong app Zalo, giống chat.zalo.me. | Điện thoại để quét QR | ✓ / ✓ (7 cảm xúc) / ✓ / gửi dạng tệp / ✓ văn bản |
-| **Facebook cá nhân** | Giao thức Messenger web qua [ws3-fca](https://www.npmjs.com/package/ws3-fca). Bấm *Tài khoản cá nhân*, đăng nhập facebook.com ngay trong cửa sổ app, Unison chỉ giữ cookie phiên. Thread list, lịch sử, gửi/nhận real-time (MQTT), typing, seen, reaction. Beta. | Đăng nhập trong app | ✓ / ✓ / ✓ / gửi dạng tệp / ✓ văn bản |
+| **Facebook cá nhân** | Giao thức Messenger web qua [ws3-fca](https://www.npmjs.com/package/ws3-fca). Bấm *Tài khoản cá nhân*, đăng nhập facebook.com ngay trong cửa sổ app, Moshi chỉ giữ cookie phiên. Thread list, lịch sử, gửi/nhận real-time (MQTT), typing, seen, reaction. Beta. | Đăng nhập trong app | ✓ / ✓ / ✓ / gửi dạng tệp / ✓ văn bản |
 | **Instagram cá nhân** | Giao thức web của instagram.com trong phiên đăng nhập của app: đọc qua cùng các địa chỉ trang web dùng, gửi bằng chính khung soạn của Instagram trong một cửa sổ ẩn. Real-time, ảnh, voice, link, bài chia sẻ, reaction hiển thị. Beta. | Đăng nhập trong app | ✗ / ✗ / ảnh / ✗ / ✓ văn bản |
 | **Messenger** | Meta Graph API (Messenger Platform) cho **Fanpage**. Có thể bấm *Đăng nhập với Facebook* (cần App ID) để chọn Page thay vì nhập token. Polling 8 giây, gửi/nhận text + ảnh + file, mark seen, typing. | `Page ID` + `Page Access Token` có quyền `pages_messaging`, `pages_manage_metadata` | ✗ / ✗ / ✓ / gửi dạng tệp / ✓ văn bản |
 | **Instagram** | Instagram Messaging API cho tài khoản **Professional** đã liên kết Fanpage. | Page token có thêm `instagram_basic`, `instagram_manage_messages` | ✗ / ✗ / ✓ / gửi dạng tệp / ✓ văn bản |
 
 Chuyển tiếp trong cùng tài khoản dùng cơ chế native của nền tảng (giữ ảnh, nguồn gốc). Chuyển tiếp sang tài khoản/nền tảng khác chỉ mang theo phần văn bản.
 
-> **Lưu ý về tài khoản cá nhân.** Meta không có API chính thức cho tin nhắn cá nhân Facebook/Instagram nên Unison chỉ hỗ trợ Page / Professional bằng API chính thức. WhatsApp và Zalo cũng không có API cá nhân chính thức; Unison dùng đúng giao thức web mà ứng dụng desktop của họ dùng (Baileys, zca-js). Đây là giải pháp phổ biến (Beeper, Texts.com dùng cách tương tự) nhưng không được nhà cung cấp bảo chứng, hãy dùng có chừng mực và tránh gửi hàng loạt để không bị hạn chế tài khoản.
+> **Lưu ý về tài khoản cá nhân.** Meta không có API chính thức cho tin nhắn cá nhân Facebook/Instagram nên Moshi chỉ hỗ trợ Page / Professional bằng API chính thức. WhatsApp và Zalo cũng không có API cá nhân chính thức; Moshi dùng đúng giao thức web mà ứng dụng desktop của họ dùng (Baileys, zca-js). Đây là giải pháp phổ biến (Beeper, Texts.com dùng cách tương tự) nhưng không được nhà cung cấp bảo chứng, hãy dùng có chừng mực và tránh gửi hàng loạt để không bị hạn chế tài khoản.
 
-Token, session và cookie được mã hoá bằng `safeStorage` của Electron (DPAPI trên Windows, Keychain trên macOS) trước khi ghi xuống `%APPDATA%/Unison/unison.json`. Khoá Signal của WhatsApp nằm trong `%APPDATA%/Unison/adapters/whatsapp/`.
+Token, session và cookie được mã hoá bằng `safeStorage` của Electron (DPAPI trên Windows, Keychain trên macOS) trước khi ghi xuống `%APPDATA%/Moshi/unison.json`. Khoá Signal của WhatsApp nằm trong `%APPDATA%/Moshi/adapters/whatsapp/`.
 
 ## Voice note không cần ffmpeg
 
@@ -89,10 +89,12 @@ Mỗi nền tảng là một `PlatformAdapter` (connect, listConversations, fetc
 
 ## Giấy phép
 
-Unison © 2026 Dane Nguyen, phát hành theo **GNU GPL v3 hoặc mới hơn** (xem `LICENSE`). Bạn được dùng, sửa và phân phối lại theo GPL. Tên **Unison**, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép: bản fork phải dùng tên và biểu tượng khác (GPL v3 §7e). Địa chỉ kho mã nguồn công khai sẽ được điền vào `resources/legal/NOTICE.md` trước khi phát hành bộ cài.
+Trước phiên bản 0.2.0 ứng dụng tên là **Unison**. Bộ cài Moshi tự gỡ bản Unison cũ, và Moshi tự chuyển thư mục dữ liệu `%APPDATA%\Unison` sang `%APPDATA%\Moshi` ở lần mở đầu; tệp sao lưu `.unisonbackup` vẫn khôi phục được.
+
+Moshi © 2026 Dane Nguyen, phát hành theo **GNU GPL v3 hoặc mới hơn** (xem `LICENSE`). Bạn được dùng, sửa và phân phối lại theo GPL. Tên **Moshi**, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép: bản fork phải dùng tên và biểu tượng khác (GPL v3 §7e). Địa chỉ kho mã nguồn công khai sẽ được điền vào `resources/legal/NOTICE.md` trước khi phát hành bộ cài.
 
 ## Pháp lý và nền tảng
 
-- Chỉ **Telegram** dùng API chính thức. Messenger, Instagram, Zalo và WhatsApp (tài khoản cá nhân) đi qua giao thức web không chính thức và **có thể trái điều khoản của nền tảng**; người dùng phải đọc và chấp nhận cảnh báo trong app trước khi kết nối. Không dùng Unison để gửi hàng loạt.
+- Chỉ **Telegram** dùng API chính thức. Messenger, Instagram, Zalo và WhatsApp (tài khoản cá nhân) đi qua giao thức web không chính thức và **có thể trái điều khoản của nền tảng**; người dùng phải đọc và chấp nhận cảnh báo trong app trước khi kết nối. Không dùng Moshi để gửi hàng loạt.
 - Điều khoản sử dụng, Chính sách riêng tư và danh sách giấy phép bên thứ ba nằm trong `resources/legal/` và hiện trong app tại *Cài đặt → Pháp lý*.
-- Lưu ý giấy phép khi phân phối: Baileys kéo theo `libsignal` (GPL-3.0) và gramjs kéo theo `@cryptography/aes` (GPL-3.0-or-later). Bản phát hành kèm hai gói này cần phát hành mã nguồn Unison theo giấy phép tương thích GPL-3.0. Mô hình dịch NLLB-200 là CC BY-NC 4.0 (phi thương mại).
+- Lưu ý giấy phép khi phân phối: Baileys kéo theo `libsignal` (GPL-3.0) và gramjs kéo theo `@cryptography/aes` (GPL-3.0-or-later). Bản phát hành kèm hai gói này cần phát hành mã nguồn Moshi theo giấy phép tương thích GPL-3.0. Mô hình dịch NLLB-200 là CC BY-NC 4.0 (phi thương mại).

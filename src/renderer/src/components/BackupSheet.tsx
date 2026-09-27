@@ -30,7 +30,7 @@ function PasswordField({ value, onChange, placeholder, autoFocus, onEnter }: { v
   )
 }
 
-/** Backup to an encrypted file, or restore one (replaces this device's data, then Unison restarts). */
+/** Backup to an encrypted file, or restore one (replaces this device's data, then Moshi restarts). */
 export function BackupSheet({ mode }: { mode: 'create' | 'restore' }): JSX.Element {
   const t = useT()
   const closeSheet = useStore((s) => s.closeSheet)

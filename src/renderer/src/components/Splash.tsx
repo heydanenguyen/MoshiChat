@@ -52,7 +52,7 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
   const [line] = useState(() =>
     prefs.last
       ? pickSplashLine(language, prefs.name ?? '', new Date().getHours(), prefs.last)
-      : { emoji: '🎉', text: language === 'en' ? 'Welcome to Unison! We are your chat buddies' : 'Chào mừng đến với Unison! Tụi mình là bộ đôi của bạn' }
+      : { emoji: '🎉', text: language === 'en' ? 'Welcome to Moshi! We are your chat buddies' : 'Chào mừng đến với Moshi! Tụi mình là bộ đôi của bạn' }
   )
   const [minElapsed, setMinElapsed] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -91,7 +91,7 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
           <span className="splash-shadow" />
         </div>
         <div className="splash-word" aria-hidden>
-          Unison
+          Moshi
           <span className="splash-dots">
             <i />
             <i />

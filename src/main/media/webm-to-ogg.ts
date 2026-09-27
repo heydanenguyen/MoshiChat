@@ -244,7 +244,7 @@ function opusHead(channels: number, preSkip: number): Uint8Array {
 }
 
 function opusTags(): Uint8Array {
-  const vendor = new TextEncoder().encode('Unison')
+  const vendor = new TextEncoder().encode('Moshi')
   const tags = new Uint8Array(8 + 4 + vendor.length + 4)
   const view = new DataView(tags.buffer)
   tags.set(new TextEncoder().encode('OpusTags'), 0)

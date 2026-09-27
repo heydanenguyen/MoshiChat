@@ -1019,7 +1019,7 @@ export function useVisibleConversations(): Conversation[] {
   return useMemo(() => computeVisible(conversations, filter, search, tags, pins, hidden), [conversations, filter, search, tags, pins, hidden])
 }
 
-/** Pinned in Unison, or on the platform when Unison has no say. */
+/** Pinned in Moshi, or on the platform when Moshi has no say. */
 export function isPinned(conversation: Pick<Conversation, 'id' | 'pinned'> | undefined, pins?: Record<string, boolean>): boolean {
   if (!conversation) return false
   return pins?.[conversation.id] ?? !!conversation.pinned

@@ -22,7 +22,7 @@ import type {
 } from './types'
 
 /** The API exposed to the renderer through the preload script. */
-export interface UnisonBridge {
+export interface MoshiBridge {
   accounts: {
     list(): Promise<Account[]>
     add(input: AddAccountInput): Promise<Account>
@@ -90,7 +90,7 @@ export interface UnisonBridge {
     create(input: { password: string; includeSessions: boolean }): Promise<{ path: string; bytes: number } | null>
     /** Pick a backup file and read its header. Null when the user cancels. */
     pick(): Promise<BackupInfo | null>
-    /** Replace this device's data with the backup, then Unison restarts. Rejects with BACKUP_PASSWORD on a wrong password. */
+    /** Replace this device's data with the backup, then Moshi restarts. Rejects with BACKUP_PASSWORD on a wrong password. */
     restore(input: { path: string; password: string }): Promise<void>
     reveal(path: string): Promise<void>
   }
@@ -113,7 +113,7 @@ export interface UnisonBridge {
     describeFile(file: File): OutgoingAttachment
     /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
     saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
-    /** A Unison sticker as a ready-to-send image file. */
+    /** A Moshi sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
     gifSearch(query: string, page: number): Promise<GifPage>

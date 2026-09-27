@@ -28,7 +28,7 @@ export function StickerArt({ id, size = 72 }: { id: StickerId; size?: number }):
   return <svg className="sticker-art" width={size} height={size} viewBox={STICKER_VIEWBOX} aria-hidden dangerouslySetInnerHTML={{ __html: stickerInner(id) }} />
 }
 
-/** Unison sticker pack: one tab per logo character, twelve expressions each. */
+/** Moshi sticker pack: one tab per logo character, twelve expressions each. */
 export function StickerPicker({ onPick, onClose }: { onPick(id: StickerId): void; onClose(): void }): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)

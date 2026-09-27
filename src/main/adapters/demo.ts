@@ -200,7 +200,7 @@ const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThrea
     threads: [
       {
         key: 'dev',
-        title: 'Unison Dev Team',
+        title: 'Moshi Dev Team',
         isGroup: true,
         participants: ['Alex', 'Priya', 'Tuấn'],
         unread: 4,

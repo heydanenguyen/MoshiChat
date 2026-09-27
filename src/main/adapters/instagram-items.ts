@@ -2,7 +2,7 @@ import type { Attachment, PreviewKind, StoryLabel, SystemNotice } from '@shared/
 
 /**
  * Instagram web (direct_v2) item shapes, as observed on real threads in 2026.
- * Only the fields Unison reads are declared.
+ * Only the fields Moshi reads are declared.
  */
 export interface IgMedia {
   id?: string
