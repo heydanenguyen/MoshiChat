@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Cake, ImagePlus, RotateCcw, X } from 'lucide-react'
+import { Cake, Image as ImageIcon, ImagePlus, Palette, RotateCcw, X } from 'lucide-react'
 import type { Conversation } from '@shared/types'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
 import { customAvatarUrl, useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { LogoMark } from './Logo'
+import { BubbleColorRow } from './BubbleColorRow'
+import { WallpaperRow } from './Wallpaper'
 
 /** Square-crop and shrink an image file to a small WebP data URL (kept in settings). */
 async function toAvatarDataUrl(file: File, size = 256): Promise<string> {
@@ -67,7 +69,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   }
 
   const reset = async (): Promise<void> => {
-    await setContactOverride(conversation.id, override?.bubble || override?.wallpaper ? { bubble: override.bubble, wallpaper: override.wallpaper } : undefined)
+    await setContactOverride(conversation.id, undefined)
     onClose()
   }
 
@@ -154,6 +156,20 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
         </span>
         <span className="field-hint">{t('birthdayHint')}</span>
       </label>
+
+      <div className="field customizer-looks">
+        <span className="field-label">
+          <Palette size={13} strokeWidth={2.2} /> {t('bubbleColor')}
+        </span>
+        <BubbleColorRow conversationId={conversation.id} />
+      </div>
+      <div className="field customizer-looks">
+        <span className="field-label">
+          <ImageIcon size={13} strokeWidth={2.2} /> {t('wallpaper')}
+        </span>
+        <WallpaperRow conversationId={conversation.id} />
+        <span className="field-hint">{t('looksInstantHint')}</span>
+      </div>
 
       <div className="contact-customizer-actions">
         {override && (

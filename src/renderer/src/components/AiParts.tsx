@@ -199,6 +199,7 @@ export function AiSettings(): JSX.Element {
           <div className="settings-row-title">
             {title}
             <span className={`ai-status ${ready ? 'ready' : ''}`}>{ready ? t('aiReady') : t('aiNotDownloaded')}</span>
+            {kind === 'voice' && ready && status?.voice.gpu && <span className='ai-status gpu' title={t('aiGpuHint')}>GPU</span>}
           </div>
           <div className="settings-row-sub">{hint}</div>
           {kind === 'voice' && (

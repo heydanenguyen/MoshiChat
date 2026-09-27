@@ -1,15 +1,18 @@
 /**
  * On-device AI worker, run as an Electron utility process (its own process, so the app never stalls).
- * Loads transformers.js pipelines lazily: Whisper for voice notes, NLLB for translation, on the CPU
- * (quantised models). Models are downloaded once from Hugging Face into
- * <userData>/models.
+ * Loads transformers.js pipelines lazily: Whisper for voice notes, NLLB for translation. The service
+ * picks the device per request: Whisper runs on the GPU through DirectML when the machine can,
+ * NLLB always on the CPU (its int8 model crashes DirectML natively). Models are downloaded once from
+ * Hugging Face into <userData>/models.
  */
 import { AI_MODELS, type AiKind, type VoiceModel } from '@shared/ai'
 
+export type Device = 'dml' | 'cpu'
+
 type Request =
   | { type: 'init'; cacheDir: string }
-  | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel }
-  | { type: 'transcribe'; id: number; voiceModel: VoiceModel; audio: Float32Array; language?: string }
+  | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel; device: Device }
+  | { type: 'transcribe'; id: number; voiceModel: VoiceModel; device: Device; audio: Float32Array; language?: string }
   | { type: 'translate'; id: number; texts: string[]; src: string; tgt: string }
 
 type Pipe = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>
@@ -31,9 +34,9 @@ async function lib(cacheDir?: string): Promise<typeof import('@huggingface/trans
 }
 
 /** Build (or reuse) a pipeline, reporting download progress for this kind of model. */
-function pipe(kind: AiKind, voiceModel: VoiceModel): Promise<Pipe> {
+function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device): Promise<Pipe> {
   const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : AI_MODELS.translate
-  const key = spec.repo
+  const key = `${spec.repo}|${device}`
   const existing = pipes.get(key)
   if (existing) return existing
   const task = kind === 'voice' ? 'automatic-speech-recognition' : 'translation'
@@ -52,9 +55,10 @@ function pipe(kind: AiKind, voiceModel: VoiceModel): Promise<Pipe> {
   }
   const load = async (): Promise<Pipe> => {
     const { pipeline } = await lib()
-    // CPU only: DirectML crashed the whole process natively on some GPUs (nothing to catch), and the
-    // quantised models run fast enough on the CPU.
-    const result = (await pipeline(task as never, spec.repo, { dtype: spec.dtype as never, device: 'cpu', progress_callback } as never)) as unknown as Pipe
+    // The service is told before a GPU load starts: if DirectML crashes the process, it knows why.
+    if (device === 'dml') send({ type: 'gpu-load', kind })
+    const result = (await pipeline(task as never, spec.repo, { dtype: spec.dtype as never, device, progress_callback } as never)) as unknown as Pipe
+    if (device === 'dml') send({ type: 'gpu-ok', kind })
     send({ type: 'progress', kind, phase: 'ready', progress: 1 })
     return result
   }
@@ -73,12 +77,12 @@ port.on('message', async ({ data }) => {
     }
     if (request.type === 'prepare') {
       send({ type: 'progress', kind: request.kind, phase: 'loading' })
-      await pipe(request.kind, request.voiceModel)
+      await pipe(request.kind, request.voiceModel, request.kind === 'voice' ? request.device : 'cpu')
       send({ type: 'result', id: request.id, value: true })
       return
     }
     if (request.type === 'transcribe') {
-      const asr = await pipe('voice', request.voiceModel)
+      const asr = await pipe('voice', request.voiceModel, request.device)
       const audio = request.audio instanceof Float32Array ? request.audio : new Float32Array(request.audio as ArrayLike<number>)
       const output = (await asr(audio, {
         task: 'transcribe',
@@ -92,7 +96,7 @@ port.on('message', async ({ data }) => {
       return
     }
     if (request.type === 'translate') {
-      const translator = await pipe('translate', 'turbo')
+      const translator = await pipe('translate', 'turbo', 'cpu')
       const out: string[] = []
       for (const text of request.texts) {
         const result = (await translator(text, { src_lang: request.src, tgt_lang: request.tgt, max_new_tokens: 512 })) as Array<{ translation_text?: string }>
