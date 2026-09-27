@@ -361,8 +361,27 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
       ],
       unreadCount: thread.unreadCount ?? 0,
       muted: !!thread.muteUntil && (thread.muteUntil === -1 || thread.muteUntil * 1000 > Date.now()),
-      lastMessage: last && previewOf(last),
+      lastMessage: last ? previewOf(last) : this.snippetPreview(thread),
       updatedAt: Number(thread.timestamp) || last?.sentAt || 0
+    }
+  }
+
+  /**
+   * The thread list carries the last message's snippet, so the list can show a preview before the
+   * chat's history has been loaded (history only loads when a chat is opened).
+   */
+  private snippetPreview(thread: FcaThread): Conversation['lastMessage'] {
+    const extra = thread as unknown as { snippet?: string | null; snippetSender?: string | null; lastMessageTimestamp?: string | number; timestamp?: string | number }
+    const text = extra.snippet?.trim()
+    if (!text) return undefined
+    const sender = extra.snippetSender ?? ''
+    const isOutgoing = sender === this.meId
+    return {
+      id: `snippet-${thread.threadID}`,
+      text,
+      senderName: isOutgoing ? this.account.displayName : (this.users.get(sender)?.name ?? ''),
+      isOutgoing,
+      sentAt: Number(extra.lastMessageTimestamp ?? extra.timestamp) || 0
     }
   }
 
