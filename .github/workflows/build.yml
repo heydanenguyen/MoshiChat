@@ -28,7 +28,12 @@ jobs:
       - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
-      - run: npm run dist
+      - name: Windows build
+        shell: bash
+        # On failure the last 50 log lines become an annotation, readable without signing in.
+        run: |
+          set -o pipefail
+          npm run dist 2>&1 | tee build.log || { echo "::error title=Windows build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: Moshi-windows
@@ -62,7 +67,12 @@ jobs:
       - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
-      - run: npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }}
+      - name: macOS build
+        shell: bash
+        # On failure the last 50 log lines become an annotation, readable without signing in.
+        run: |
+          set -o pipefail
+          npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }} 2>&1 | tee build.log || { echo "::error title=macOS build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: Moshi-mac-${{ matrix.arch }}
