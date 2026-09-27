@@ -22,7 +22,8 @@ import type {
   CustomAccent,
   SavedMessage,
   GifItem,
-  Reaction
+  Reaction,
+  SentSticker
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
@@ -125,6 +126,8 @@ interface State {
   /** Unsent text per chat, kept on this device so switching chats or restarting never loses it. */
   drafts: Record<string, string>
   setDraft(conversationId: string, text: string): void
+  /** Remember that a message is one of our stickers (kept in settings, so it survives reloads and backups). */
+  rememberSticker(record: SentSticker): void
   /** Load a chat's first page without opening it (hover in the list); `quiet` skips error toasts. */
   prefetch(conversationId: string, quiet?: boolean): Promise<void>
   loadMore(conversationId: string): Promise<void>
@@ -169,6 +172,8 @@ const cleanError = (err: unknown): string =>
   (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
 
 let prefetchesInFlight = 0
+
+let stickerWrites = Promise.resolve()
 
 const DRAFTS_KEY = 'unison.drafts'
 let draftTimer: ReturnType<typeof setTimeout> | undefined
@@ -478,8 +483,9 @@ export const useStore = create<State>((set, get) => ({
       for (const [i, attachment] of sent.attachments.entries()) {
         if (!attachment.url && optimistic.attachments[i]?.url) attachment.url = optimistic.attachments[i].url
         // The platform echoes a sticker back as a photo; keep showing it as a sticker here.
-        if (pendingFiles[i]?.sticker && attachment.kind === 'image') {
+        if (pendingFiles[i]?.sticker && (attachment.kind === 'image' || attachment.kind === 'sticker')) {
           attachment.kind = 'sticker'
+          attachment.sticker = pendingFiles[i].sticker
           attachment.url = optimistic.attachments[i]?.url ?? attachment.url
         }
         // GIFs may come back as a video (Instagram, WhatsApp, Telegram): keep the looping GIF.
@@ -490,6 +496,9 @@ export const useStore = create<State>((set, get) => ({
       }
       const s = get()
       set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], sent, tempId) ?? [] } })
+      // Remember it, so the sticker still looks like one after the platform sends it back as a photo.
+      const sticker = pendingFiles.find((f) => f.sticker)?.sticker
+      if (sticker) get().rememberSticker({ conversationId: selectedId, messageId: sent.id, sticker, sentAt: sent.sentAt })
     } catch (err) {
       const s = get()
       const failed = { ...optimistic, status: 'failed' as const }
@@ -529,6 +538,14 @@ export const useStore = create<State>((set, get) => ({
       if (current && before) set({ messages: { ...get().messages, [selectedId]: current.map((m) => (m.id === messageId ? before : m)) } })
       get().showToast(cleanError(err), 'error')
     }
+  },
+
+  rememberSticker(record) {
+    stickerWrites = stickerWrites.then(async () => {
+      const list = get().settings.sentStickers ?? []
+      if (list.some((r) => r.conversationId === record.conversationId && r.messageId === record.messageId)) return
+      await get().setSettings({ sentStickers: [...list, record].slice(-500) })
+    }).catch(() => undefined)
   },
 
   setDraft(conversationId, text) {

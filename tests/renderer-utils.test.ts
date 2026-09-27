@@ -99,3 +99,35 @@ describe('personLook', () => {
     expect(personLook(group, { name: 'Mai Anh' }).url).toBe('p.jpg')
   })
 })
+
+describe('withStickers', () => {
+  const msg = (id: string, over: Record<string, unknown> = {}, att: Record<string, unknown> = {}) => ({
+    id, conversationId: 'c', senderId: 'me', senderName: 'Me', text: '', reactions: [], sentAt: 1_000_000, isOutgoing: true, status: 'sent' as const,
+    attachments: [{ id: id + 'a', kind: 'image' as const, url: 'x.jpg', ...att }], ...over
+  })
+  it('turns remembered and tell-tale stickers back into stickers, leaves photos alone', async () => {
+    const { withStickers } = await import('../src/renderer/src/utils')
+    const sent = [
+      { conversationId: 'c', messageId: 'm1', sticker: 'sunny-haha', sentAt: 1_000_000 },
+      { conversationId: 'c', messageId: 'gone', sticker: 'grape-cool', sentAt: 5_000_000 },
+      { conversationId: 'other', messageId: 'p', sticker: 'sunny-haha', sentAt: 9_000_000 }
+    ]
+    const list = [
+      msg('m1'),
+      msg('echo', { sentAt: 5_030_000 }, { width: 384, height: 384 }),
+      msg('old', { sentAt: 7_000_000 }, { width: 384, height: 384 }),
+      msg('photo', { sentAt: 5_010_000 }, { width: 1080, height: 1350 }),
+      msg('p', { sentAt: 9_000_000 }),
+      msg('theirs', { isOutgoing: false }, { width: 384, height: 384 })
+    ]
+    const out = withStickers(list, sent, 'c', 'instagram')
+    const look = (i: number) => [out[i].attachments[0].kind, out[i].attachments[0].sticker, out[i].attachments[0].flattened]
+    expect(look(0)).toEqual(['sticker', 'sunny-haha', false])
+    expect(look(1)).toEqual(['sticker', 'grape-cool', false])
+    expect(look(2)).toEqual(['sticker', undefined, true])
+    expect(look(3)[0]).toBe('image')
+    expect(look(4)[0]).toBe('image')
+    expect(look(5)[0]).toBe('image')
+    expect(withStickers([msg('photo', {}, { width: 800, height: 600 })], [], 'c', 'messenger')[0].attachments[0].kind).toBe('image')
+  })
+})

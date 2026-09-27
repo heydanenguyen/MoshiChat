@@ -1,4 +1,4 @@
-import type { Conversation, Language, Message, Reaction } from '@shared/types'
+import type { Conversation, Language, Message, Platform, Reaction, SentSticker } from '@shared/types'
 
 const locale = (lang: Language): string => (lang === 'vi' ? 'vi-VN' : 'en-US')
 
@@ -212,4 +212,31 @@ export function personLook(
   if (sender.isOutgoing || conversation.isGroup) return { name: sender.name ?? participant?.name ?? '', url: sender.avatarUrl ?? participant?.avatarUrl }
   const customPhoto = 'originalAvatarUrl' in conversation && conversation.avatarUrl !== conversation.originalAvatarUrl
   return { name: conversation.title, url: customPhoto ? conversation.avatarUrl : (sender.avatarUrl ?? conversation.avatarUrl) }
+}
+
+/** Unison stickers are 384×384 PNGs; a platform photo of exactly that size from you is one of them. */
+const STICKER_PIXELS = 384
+
+/**
+ * Platforms hand our stickers back as plain photos (Instagram and Telegram even on a white square), so after a
+ * reload they would show framed like pictures. Turn them back into stickers: by the id remembered when sending,
+ * by the time it was sent when the platform changed the id, or by their tell-tale size for older ones.
+ */
+export function withStickers(messages: Message[], sent: SentSticker[] | undefined, conversationId: string, platform: Platform): Message[] {
+  const records = sent?.filter((r) => r.conversationId === conversationId) ?? []
+  const ids = records.length ? new Set(messages.map((m) => m.id)) : undefined
+  const flattened = platform === 'instagram' || platform === 'telegram'
+  let changed = false
+  const out = messages.map((m) => {
+    const a = m.attachments.length === 1 ? m.attachments[0] : undefined
+    if (!a || a.kind !== 'image' || !m.isOutgoing || m.text.trim()) return m
+    const sizeFits = a.width === undefined || (a.width === STICKER_PIXELS && a.height === STICKER_PIXELS)
+    const record =
+      records.find((r) => r.messageId === m.id) ??
+      (sizeFits ? records.find((r) => !ids?.has(r.messageId) && Math.abs(r.sentAt - m.sentAt) < 120_000) : undefined)
+    if (!record && !(a.width === STICKER_PIXELS && a.height === STICKER_PIXELS)) return m
+    changed = true
+    return { ...m, attachments: [{ ...a, kind: 'sticker' as const, sticker: record?.sticker, flattened: !record && flattened }] }
+  })
+  return changed ? out : messages
 }

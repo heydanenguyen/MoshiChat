@@ -3,7 +3,7 @@ import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Plus, Reply, Sm
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
-import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, type MessageGroup } from '../utils'
+import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, withStickers, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
@@ -13,6 +13,9 @@ import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from '
 import { useWallpaper } from './Wallpaper'
 import { TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { EmojiPicker } from './EmojiPicker'
+import { StickerArt } from './StickerPicker'
+import { isStickerId } from '@shared/stickers'
+import { matchSticker } from '../stickerMatch'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -25,7 +28,13 @@ export function ChatView(): JSX.Element {
 
 function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const t = useT()
-  const messages = useStore((s) => s.messages[conversation.id])
+  const stored = useStore((s) => s.messages[conversation.id])
+  const sentStickers = useStore((s) => s.settings.sentStickers)
+  // Our own stickers come back from the platforms as photos: show them as stickers again.
+  const messages = useMemo(
+    () => stored && withStickers(stored, sentStickers, conversation.id, conversation.platform),
+    [stored, sentStickers, conversation.id, conversation.platform]
+  )
   const loading = useStore((s) => !!s.loading[conversation.id])
   const hasMore = useStore((s) => !!s.hasMore[conversation.id])
   const typing = useStore((s) => s.typing[conversation.id])
@@ -441,7 +450,20 @@ function Bubble({
     void react(message.id, '❤️')
   }
   const direction = message.isOutgoing ? 'out' : 'in'
-  const sticker = message.attachments.find((a) => a.kind === 'sticker' && a.url)
+  const sticker = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
+  // An older sticker the platform gave back as a photo: find out which one it is, once, and remember it.
+  const rememberSticker = useStore((s) => s.rememberSticker)
+  const unknownSticker = sticker && !sticker.sticker && message.isOutgoing ? sticker.url : undefined
+  useEffect(() => {
+    if (!unknownSticker) return
+    let live = true
+    void matchSticker(unknownSticker).then((id) => {
+      if (live && id) rememberSticker({ conversationId: message.conversationId, messageId: message.id, sticker: id, sentAt: message.sentAt })
+    })
+    return () => {
+      live = false
+    }
+  }, [unknownSticker, message.conversationId, message.id, message.sentAt, rememberSticker])
   const story = message.attachments.find((a) => a.kind === 'story')
   const inline = message.attachments.filter((a) => a.kind !== 'story')
   const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')
@@ -488,7 +510,14 @@ function Bubble({
                 {message.replyTo.text}
               </div>
             )}
-            {sticker && <img className="attachment-sticker" src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />}
+            {sticker &&
+              (sticker.sticker && isStickerId(sticker.sticker) ? (
+                <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
+                  <StickerArt id={sticker.sticker} />
+                </span>
+              ) : (
+                <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />
+              ))}
             {!sticker && gridded && <MediaGrid tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
             {!sticker &&
               inline
