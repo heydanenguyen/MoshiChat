@@ -21,7 +21,8 @@ import type {
   ContactOverride,
   CustomAccent,
   SavedMessage,
-  GifItem
+  GifItem,
+  Reaction
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
@@ -29,6 +30,7 @@ import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
 import { accentVars, type AccentSpec } from '@shared/accent'
 import { previewKindOf } from '@shared/preview'
 import { playSent, playSound } from './sounds'
+import { toggleReaction } from './utils'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -120,6 +122,9 @@ interface State {
   addFiles(files: OutgoingAttachment[]): void
   addDroppedFiles(files: File[]): void
   removeFile(path: string): void
+  /** Unsent text per chat, kept on this device so switching chats or restarting never loses it. */
+  drafts: Record<string, string>
+  setDraft(conversationId: string, text: string): void
   /** Load a chat's first page without opening it (hover in the list); `quiet` skips error toasts. */
   prefetch(conversationId: string, quiet?: boolean): Promise<void>
   loadMore(conversationId: string): Promise<void>
@@ -165,6 +170,38 @@ const cleanError = (err: unknown): string =>
 
 let prefetchesInFlight = 0
 
+const DRAFTS_KEY = 'unison.drafts'
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+
+function loadDrafts(): Record<string, string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') as Record<string, string>
+    return value && typeof value === 'object' ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+const draftMap = loadDrafts()
+
+function flushDrafts(publish?: () => void): void {
+  if (draftTimer) clearTimeout(draftTimer)
+  draftTimer = undefined
+  publish?.()
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(draftMap))
+  } catch {
+    /* storage unavailable */
+  }
+}
+window.addEventListener('beforeunload', () => flushDrafts())
+
+/** The latest unsent text for a chat (ahead of `drafts`, which updates once typing pauses). */
+export function readDraft(conversationId: string): string {
+  return draftMap[conversationId] ?? ''
+}
+
+
 /** A new incoming message plays the chosen sound, unless the chat is muted; softer in the open chat. */
 function maybePlaySound(message: Message): void {
   const { settings, conversations, selectedId } = useStore.getState()
@@ -207,6 +244,7 @@ export const useStore = create<State>((set, get) => ({
   detailsOpen: false,
   detailsTab: 'info',
   profiles: {},
+  drafts: { ...draftMap },
   stats: {},
   shared: {},
   pendingFiles: [],
@@ -477,11 +515,29 @@ export const useStore = create<State>((set, get) => ({
   async react(messageId, emoji) {
     const { selectedId } = get()
     if (!selectedId) return
+    // Show it straight away (like Instagram / Messenger); the platform's own update follows.
+    const list = get().messages[selectedId]
+    const before = list?.find((m) => m.id === messageId)
+    if (list && before) {
+      const updated = { ...before, reactions: toggleReaction(before.reactions, emoji) }
+      set({ messages: { ...get().messages, [selectedId]: list.map((m) => (m.id === messageId ? updated : m)) } })
+    }
     try {
       await window.unison.messages.react(selectedId, messageId, emoji)
     } catch (err) {
+      const current = get().messages[selectedId]
+      if (current && before) set({ messages: { ...get().messages, [selectedId]: current.map((m) => (m.id === messageId ? before : m)) } })
       get().showToast(cleanError(err), 'error')
     }
+  },
+
+  setDraft(conversationId, text) {
+    if ((draftMap[conversationId] ?? '') === (text.trim() ? text : '')) return
+    if (text.trim()) draftMap[conversationId] = text
+    else delete draftMap[conversationId]
+    // The list and the disk catch up once typing pauses, so each keystroke stays cheap.
+    if (draftTimer) clearTimeout(draftTimer)
+    draftTimer = setTimeout(() => flushDrafts(() => set({ drafts: { ...draftMap } })), 400)
   },
 
   setReplyTo(message) {

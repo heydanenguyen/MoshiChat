@@ -8001,3 +8001,113 @@ button.moment-card:hover {
     0 0 0 0.5px rgba(0, 0, 0, 0.06);
   cursor: grab;
 }
+
+/* ================================================================== reactions & drafts */
+
+.bubble {
+  position: relative;
+}
+/* double-click heart */
+.heart-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  font-size: 38px;
+  line-height: 1;
+  pointer-events: none;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 6px 12px rgba(255, 60, 110, 0.35));
+  animation: heart-burst 820ms var(--ease-spring) forwards;
+}
+@keyframes heart-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(-12deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.25) rotate(6deg);
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(0.95) rotate(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -62%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -90%) scale(0.8);
+  }
+}
+/* the reaction bar pops in one emoji after another */
+.reaction-bar {
+  animation: sheet-in var(--duration-base) var(--ease-spring);
+}
+.reaction-bar button {
+  will-change: transform;
+  animation: reaction-in 360ms var(--ease-spring) both;
+}
+.reaction-bar button:nth-child(2) {
+  animation-delay: 25ms;
+}
+.reaction-bar button:nth-child(3) {
+  animation-delay: 50ms;
+}
+.reaction-bar button:nth-child(4) {
+  animation-delay: 75ms;
+}
+.reaction-bar button:nth-child(5) {
+  animation-delay: 100ms;
+}
+.reaction-bar button:nth-child(6) {
+  animation-delay: 125ms;
+}
+.reaction-bar button:nth-child(7) {
+  animation-delay: 150ms;
+}
+@keyframes reaction-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.4);
+  }
+}
+.reaction-bar .reaction-more {
+  font-size: 0;
+  color: var(--text-secondary);
+  background: var(--fill-tertiary);
+}
+.reaction-emoji-anchor {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  z-index: 30;
+}
+.reaction-emoji-anchor .emoji-sheet {
+  position: absolute;
+  bottom: 0;
+  left: -120px;
+  right: auto;
+}
+.bubble-row.out .reaction-emoji-anchor .emoji-sheet {
+  left: auto;
+  right: -40px;
+}
+/* chips arrive with a little pop */
+.reaction-chip {
+  will-change: transform;
+  animation: reaction-chip-in 380ms var(--ease-spring);
+}
+@keyframes reaction-chip-in {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* "Draft:" in the chat list */
+.conv-draft {
+  color: var(--danger);
+  font-weight: 700;
+}
