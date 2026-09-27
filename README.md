@@ -91,7 +91,7 @@ Mỗi nền tảng là một `PlatformAdapter` (connect, listConversations, fetc
 
 Trước phiên bản 0.2.0 ứng dụng tên là **Unison**. Bộ cài Moshi tự gỡ bản Unison cũ, và Moshi tự chuyển thư mục dữ liệu `%APPDATA%\Unison` sang `%APPDATA%\Moshi` ở lần mở đầu; tệp sao lưu `.unisonbackup` vẫn khôi phục được.
 
-Moshi © 2026 Dane Nguyen, phát hành theo **GNU GPL v3 hoặc mới hơn** (xem `LICENSE`). Bạn được dùng, sửa và phân phối lại theo GPL. Tên **Moshi**, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép: bản fork phải dùng tên và biểu tượng khác (GPL v3 §7e). Địa chỉ kho mã nguồn công khai sẽ được điền vào `resources/legal/NOTICE.md` trước khi phát hành bộ cài.
+Moshi © 2026 Dane Nguyen, phát hành theo **GNU GPL v3 hoặc mới hơn** (xem `LICENSE`). Bạn được dùng, sửa và phân phối lại theo GPL. Tên **Moshi**, biểu tượng và bộ nhân vật là nhận diện riêng, không thuộc giấy phép: bản fork phải dùng tên và biểu tượng khác (GPL v3 §7e). Mã nguồn: <https://github.com/heydanenguyen/MoshiChat>. Bộ cài cho Windows và macOS được build tự động trên GitHub Actions và đăng ở mục Releases.
 
 ## Pháp lý và nền tảng
 

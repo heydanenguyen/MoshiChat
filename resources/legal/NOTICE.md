@@ -10,7 +10,7 @@ Moshi được phân phối với hy vọng hữu ích, nhưng **KHÔNG CÓ BẤ
 
 Mã nguồn đầy đủ của đúng phiên bản bạn đang dùng, gồm cả script đóng gói và bộ cài, được công bố tại:
 
-**(sẽ điền địa chỉ kho mã nguồn trước khi phát hành)**
+<https://github.com/heydanenguyen/MoshiChat>
 
 Bạn có thể tự build Moshi từ mã nguồn theo hướng dẫn trong tệp README.
 
@@ -36,7 +36,7 @@ Moshi is distributed in the hope that it will be useful, but **WITHOUT ANY WARRA
 
 The complete source code of the exact version you are running, including the packaging scripts and the installer, is published at:
 
-**(repository address to be filled in before release)**
+<https://github.com/heydanenguyen/MoshiChat>
 
 You can build Moshi yourself from the source by following the README.
 
