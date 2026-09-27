@@ -113,7 +113,7 @@ export interface Attachment {
   expired?: boolean
   /** A GIF delivered as a silent looping video (Telegram animations, WhatsApp GIFs). */
   gif?: boolean
-  /** One of Unison's own stickers (drawn from the app's pack, transparent and crisp). */
+  /** One of Moshi's own stickers (drawn from the app's pack, transparent and crisp). */
   sticker?: string
   /** A sticker the platform handed back on a white square (Instagram, Telegram). */
   flattened?: boolean
@@ -167,7 +167,7 @@ export interface OutgoingAttachment {
   duration?: number
   /** The same recording in other formats (voice notes are recorded as Opus and AAC at once). */
   alternates?: Array<{ path: string; mime: string; size: number; role?: 'opaque' }>
-  /** Unison sticker id when this file is one of our stickers. */
+  /** Moshi sticker id when this file is one of our stickers. */
   sticker?: string
   /** An animated GIF from the GIF picker (alternates carry an MP4 copy). */
   gif?: boolean
@@ -179,7 +179,7 @@ export type GifProvider = 'klipy' | 'giphy'
 
 export type TextSize = 'sm' | 'md' | 'lg' | 'xl'
 
-/** Unison's own message sounds (synthesised in renderer/src/sounds.ts). */
+/** Moshi's own message sounds (synthesised in renderer/src/sounds.ts). */
 export type SoundId = 'bubbles' | 'chirp' | 'boing' | 'twinkle' | 'marimba' | 'smooch'
 
 /** A snippet typed with "/shortcut" in the composer. `{name}` becomes the other person's first name. */
@@ -207,7 +207,7 @@ export interface ScheduledMessage {
   sendAt: number
   createdAt: number
   replyToId?: string
-  /** pending: waiting; failed: sending went wrong; missed: fell due long ago while Unison was closed. */
+  /** pending: waiting; failed: sending went wrong; missed: fell due long ago while Moshi was closed. */
   status: 'pending' | 'failed' | 'missed'
   error?: string
 }
@@ -477,7 +477,7 @@ export interface Settings {
   greetings: boolean
   /** Tag definitions (built-in and custom) in display order; absent means the built-in six. */
   tagDefs?: TagMeta[]
-  /** Pins set in Unison: conversation id -> pinned. Overrides the platform's own pin. */
+  /** Pins set in Moshi: conversation id -> pinned. Overrides the platform's own pin. */
   pins?: Record<string, boolean>
   /** Logo character used in the app and as the window icon. */
   logo?: LogoId
@@ -491,7 +491,7 @@ export interface Settings {
   sendReadReceipts?: boolean
   /** Messages bookmarked to find again later (newest first). */
   savedMessages?: SavedMessage[]
-  /** Unison stickers you sent, so they stay stickers after the platform echoes them back as photos. */
+  /** Moshi stickers you sent, so they stay stickers after the platform echoes them back as photos. */
   sentStickers?: SentSticker[]
   /** When the person accepted the unofficial-connection notice for a platform (ms since epoch). */
   acceptedUnofficial?: Partial<Record<Platform, number>>
@@ -532,10 +532,10 @@ export interface SavedMessage {
   savedAt: number
 }
 
-/** What the user changed about a contact in Unison (never sent to the platform). */
+/** What the user changed about a contact in Moshi (never sent to the platform). */
 export interface ContactOverride {
   nickname?: string
-  /** Data URL of an uploaded photo, or `logo:<LogoId>` for one of the Unison characters. */
+  /** Data URL of an uploaded photo, or `logo:<LogoId>` for one of the Moshi characters. */
   avatar?: string
   /** YYYY-MM-DD, or --MM-DD without the year. */
   birthday?: string

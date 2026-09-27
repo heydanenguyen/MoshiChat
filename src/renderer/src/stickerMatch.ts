@@ -1,5 +1,5 @@
 /**
- * Recognise which Unison sticker a platform photo is. Stickers sent before Unison remembered them come back from
+ * Recognise which Moshi sticker a platform photo is. Stickers sent before Moshi remembered them come back from
  * Instagram / Telegram flattened on white; comparing a tiny thumbnail against the pack tells us which one it was,
  * so the chat can draw the transparent original instead of a white square.
  */
@@ -49,7 +49,7 @@ function distance(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
 
 const results = new Map<string, Promise<StickerId | undefined>>()
 
-/** Which Unison sticker this image shows, if any (cached per URL). */
+/** Which Moshi sticker this image shows, if any (cached per URL). */
 export function matchSticker(url: string): Promise<StickerId | undefined> {
   let result = results.get(url)
   if (!result) {

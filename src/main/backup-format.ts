@@ -10,7 +10,9 @@ import type { Platform, Settings } from '@shared/types'
  *   "UNISONBK" | format (1 byte) | header length (uint16 BE) | header JSON | salt (16) | iv (12) | tag (16) | ciphertext
  */
 
-export const BACKUP_EXTENSION = 'unisonbackup'
+export const BACKUP_EXTENSION = 'moshibackup'
+/** Backups made while the app was still called Unison open the same way. */
+export const LEGACY_BACKUP_EXTENSION = 'unisonbackup'
 const MAGIC = Buffer.from('UNISONBK', 'ascii')
 const FORMAT = 1
 const KDF = { N: 1 << 15, r: 8, p: 1 }
@@ -86,8 +88,8 @@ export function packBackup(header: Omit<BackupHeader, 'kdf'>, payload: BackupPay
 }
 
 function split(buf: Buffer): { header: BackupHeader; headerBytes: Buffer; rest: Buffer } {
-  if (buf.length < MAGIC.length + 3 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) throw new BackupFormatError('not a Unison backup')
-  if (buf[MAGIC.length] !== FORMAT) throw new BackupFormatError('made by a newer Unison')
+  if (buf.length < MAGIC.length + 3 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) throw new BackupFormatError('not a Moshi backup')
+  if (buf[MAGIC.length] !== FORMAT) throw new BackupFormatError('made by a newer Moshi')
   const len = buf.readUInt16BE(MAGIC.length + 1)
   const start = MAGIC.length + 3
   const headerBytes = buf.subarray(start, start + len)

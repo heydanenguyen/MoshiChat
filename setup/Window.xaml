@@ -1,7 +1,7 @@
-<!-- Unison setup window. Loaded at runtime (XamlReader) by UnisonSetup.cs; named elements are wired in code. -->
+<!-- Moshi setup window. Loaded at runtime (XamlReader) by MoshiSetup.cs; named elements are wired in code. -->
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Cài đặt Unison" Width="668" Height="548"
+        Title="Cài đặt Moshi" Width="668" Height="548"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True"
         FontFamily="Segoe UI Variable Display, Segoe UI" Foreground="#141414">
@@ -197,7 +197,7 @@
       <Grid x:Name="TopBar" Height="56" VerticalAlignment="Top" Background="#00FFFFFF">
         <StackPanel Orientation="Horizontal" Margin="22,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left">
           <Image x:Name="LogoSmall" Width="24" Height="24" RenderOptions.BitmapScalingMode="HighQuality"/>
-          <TextBlock Text="Unison" FontWeight="Bold" FontSize="15" Margin="8,0,0,1" VerticalAlignment="Center"/>
+          <TextBlock Text="Moshi" FontWeight="Bold" FontSize="15" Margin="8,0,0,1" VerticalAlignment="Center"/>
         </StackPanel>
         <StackPanel x:Name="Steps" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
           <Border x:Name="Step1" Height="6" Width="22" CornerRadius="3" Margin="3,0" Background="#FF6A2B"/>

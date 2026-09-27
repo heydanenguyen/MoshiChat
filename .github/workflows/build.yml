@@ -29,8 +29,8 @@ jobs:
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
-          name: Unison-windows
-          path: dist/Unison-Setup-*.exe
+          name: Moshi-windows
+          path: dist/Moshi-Setup-*.exe
 
   mac:
     strategy:
@@ -61,10 +61,10 @@ jobs:
       - run: npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
         with:
-          name: Unison-mac-${{ matrix.arch }}
+          name: Moshi-mac-${{ matrix.arch }}
           path: |
-            dist/Unison-*-mac-*.dmg
-            dist/Unison-*-mac-*.zip
+            dist/Moshi-*-mac-*.dmg
+            dist/Moshi-*-mac-*.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

@@ -1,7 +1,7 @@
 # Giấy phép bên thứ ba / Third-party notices
 
-Unison được xây dựng trên các phần mềm mã nguồn mở dưới đây. Cảm ơn các tác giả.
-Unison is built on the open-source software below. Thank you to their authors.
+Moshi được xây dựng trên các phần mềm mã nguồn mở dưới đây. Cảm ơn các tác giả.
+Moshi is built on the open-source software below. Thank you to their authors.
 
 Danh sách đầy đủ mọi gói phụ thuộc: chạy `npx license-checker --production` trong mã nguồn.
 Full list of every dependency: run `npx license-checker --production` in the source tree.
@@ -45,5 +45,5 @@ Models are downloaded only when you choose to; they are not bundled with the ins
 
 ## Nhãn hiệu / Trademarks
 
-Messenger, Instagram, Facebook và WhatsApp là nhãn hiệu của Meta Platforms, Inc. Telegram là nhãn hiệu của Telegram FZ-LLC. Zalo là nhãn hiệu của VNG Corporation. Unison không liên kết với các công ty này.
-Messenger, Instagram, Facebook and WhatsApp are trademarks of Meta Platforms, Inc. Telegram is a trademark of Telegram FZ-LLC. Zalo is a trademark of VNG Corporation. Unison is not affiliated with these companies.
+Messenger, Instagram, Facebook và WhatsApp là nhãn hiệu của Meta Platforms, Inc. Telegram là nhãn hiệu của Telegram FZ-LLC. Zalo là nhãn hiệu của VNG Corporation. Moshi không liên kết với các công ty này.
+Messenger, Instagram, Facebook and WhatsApp are trademarks of Meta Platforms, Inc. Telegram is a trademark of Telegram FZ-LLC. Zalo is a trademark of VNG Corporation. Moshi is not affiliated with these companies.

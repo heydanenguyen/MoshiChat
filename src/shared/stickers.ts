@@ -1,5 +1,5 @@
 /**
- * Unison sticker pack: every logo character (src/shared/logos.ts) with a set of expressions.
+ * Moshi sticker pack: every logo character (src/shared/logos.ts) with a set of expressions.
  * Same flat style as the logos (solid colours, black features), plus a white sticker outline.
  * Drawn on the character's 64x64 canvas; the sticker canvas adds room for props.
  * Used inline by the picker and rendered to PNG by scripts/make-icons.mjs (resources/stickers).

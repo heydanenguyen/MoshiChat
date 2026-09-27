@@ -36,7 +36,7 @@ export interface AiProgress {
   error?: string
 }
 
-/** NLLB language codes for the languages Unison users meet most. */
+/** NLLB language codes for the languages Moshi users meet most. */
 export const NLLB: Record<string, string> = {
   vi: 'vie_Latn',
   en: 'eng_Latn',

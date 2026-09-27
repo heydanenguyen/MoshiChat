@@ -217,7 +217,7 @@ export class AccountManager {
     for (const c of this.conversations.values()) {
       if (c.accountId === accountId && !c.isGroup && c.participants.some((p) => !p.isMe && p.id === peerId)) return c
     }
-    if (!adapter.openConversation) throw new Error('This platform cannot start new conversations from Unison')
+    if (!adapter.openConversation) throw new Error('This platform cannot start new conversations from Moshi')
     const conversation = await adapter.openConversation(peerId)
     const existing = this.conversations.get(conversation.id)
     if (existing) return existing
@@ -452,7 +452,7 @@ export class AccountManager {
       conversation.unreadCount = 0
       this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
     }
-    // Private reading: clear the badge in Unison only, the platform is not told.
+    // Private reading: clear the badge in Moshi only, the platform is not told.
     if (this.storage.settings.sendReadReceipts === false) return
     await this.adapterFor(conversationId).markRead(conversationId)
   }

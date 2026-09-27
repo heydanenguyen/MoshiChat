@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { UnisonBridge } from '@shared/bridge'
+import type { MoshiBridge } from '@shared/bridge'
 import { IPC } from '@shared/bridge'
 import type { BridgeEvent } from '@shared/types'
 
-const bridge: UnisonBridge = {
+const bridge: MoshiBridge = {
   accounts: {
     list: () => ipcRenderer.invoke(IPC.accountsList),
     add: (input) => ipcRenderer.invoke(IPC.accountsAdd, input),

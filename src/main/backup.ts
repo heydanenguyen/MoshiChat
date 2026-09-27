@@ -120,7 +120,7 @@ export async function inspectBackup(path: string): Promise<BackupHeader & { path
 }
 
 /**
- * Replace this device's Unison data with the backup. The current data is moved to
+ * Replace this device's Moshi data with the backup. The current data is moved to
  * userData/before-restore-<time> first, so nothing is lost if the backup was the wrong one.
  * `beforeApply` runs once the backup is known to be good (stop the adapters there); relaunch after.
  */

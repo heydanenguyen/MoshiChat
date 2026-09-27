@@ -3,7 +3,7 @@ import type { BridgeEvent, ScheduledMessage, Settings } from '@shared/types'
 import type { AccountManager } from './adapters/manager'
 import type { Storage } from './storage'
 
-/** A message that was due while Unison was closed is only sent late if it is still this fresh. */
+/** A message that was due while Moshi was closed is only sent late if it is still this fresh. */
 const LATE_GRACE_MS = 60 * 60 * 1000
 /** Accounts that are still connecting get this long before a scheduled message counts as failed. */
 const RETRY_WINDOW_MS = 10 * 60 * 1000
@@ -12,7 +12,7 @@ const TICK_MS = 15_000
 /**
  * "Send later": messages wait in settings.scheduled and are sent from here when their time comes.
  * Only the main process edits the list (the renderer asks through IPC) and every change is pushed
- * back as a settings:updated event. Sending needs Unison to be running.
+ * back as a settings:updated event. Sending needs Moshi to be running.
  */
 export class Scheduler {
   private timer: ReturnType<typeof setInterval> | undefined

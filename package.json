@@ -1,7 +1,7 @@
 {
-  "name": "unison",
-  "productName": "Unison",
-  "version": "0.1.0",
+  "name": "moshi",
+  "productName": "Moshi",
+  "version": "0.2.0",
   "description": "All your conversations, in one place. Messenger, Instagram and Telegram in a single Apple-grade inbox.",
   "main": "./out/main/index.js",
   "author": {
@@ -51,8 +51,8 @@
     "vitest": "^5.0.2"
   },
   "build": {
-    "appId": "com.3hvn.unison",
-    "productName": "Unison",
+    "appId": "com.danenguyen.moshi",
+    "productName": "Moshi",
     "directories": {
       "output": "dist"
     },
@@ -89,10 +89,10 @@
       "include": "build/installer.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Unison",
-      "uninstallDisplayName": "Unison",
+      "shortcutName": "Moshi",
+      "uninstallDisplayName": "Moshi",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "unison-core-${version}.exe"
+      "artifactName": "moshi-core-${version}.exe"
     },
     "mac": {
       "target": [
@@ -113,15 +113,15 @@
       ],
       "category": "public.app-category.social-networking",
       "icon": "build/icon.png",
-      "artifactName": "Unison-${version}-mac-${arch}.${ext}",
+      "artifactName": "Moshi-${version}-mac-${arch}.${ext}",
       "darkModeSupport": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Unison uses the microphone only while you record a voice message.",
-        "NSCameraUsageDescription": "Unison does not use the camera."
+        "NSMicrophoneUsageDescription": "Moshi uses the microphone only while you record a voice message.",
+        "NSCameraUsageDescription": "Moshi does not use the camera."
       },
       "files": [
         "!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**",
@@ -162,7 +162,7 @@
       }
     ],
     "dmg": {
-      "title": "Unison",
+      "title": "Moshi",
       "iconSize": 96,
       "window": {
         "width": 560,

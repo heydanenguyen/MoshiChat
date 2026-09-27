@@ -115,7 +115,7 @@ export class AiService {
 
   private spawn(): UtilityProcess {
     if (this.worker) return this.worker
-    const worker = utilityProcess.fork(join(__dirname, 'ai-worker.js'), [], { serviceName: 'Unison AI', stdio: 'pipe' })
+    const worker = utilityProcess.fork(join(__dirname, 'ai-worker.js'), [], { serviceName: 'Moshi AI', stdio: 'pipe' })
     worker.stdout?.on('data', (d) => this.log('[ai]', String(d).trim()))
     worker.stderr?.on('data', (d) => this.log('[ai:err]', String(d).trim()))
     worker.on('message', (m: { type: string; id?: number; value?: unknown; message?: string } & Partial<AiProgress>) => {

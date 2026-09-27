@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
+import { existsSync, renameSync } from 'fs'
 import type { AddAccountInput, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
@@ -17,14 +18,28 @@ import { Scheduler } from './scheduler'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind } from '@shared/ai'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
-import { BACKUP_EXTENSION } from './backup-format'
+import { BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION } from './backup-format'
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 
 let window: BrowserWindow | undefined
+// The app used to be called Unison: carry an existing profile over once, before anything in it is opened.
+{
+  const legacy = join(app.getPath('appData'), 'Unison')
+  const current = app.getPath('userData')
+  if (existsSync(join(legacy, 'unison.json')) && !existsSync(join(current, 'unison.json'))) {
+    try {
+      if (existsSync(current)) renameSync(current, `${current}.empty-${Date.now()}`)
+      renameSync(legacy, current)
+    } catch (err) {
+      console.log('[moshi] could not move the Unison profile:', (err as Error).message)
+    }
+  }
+}
+
 const storage = new Storage()
-const log = (...args: unknown[]): void => console.log('[unison]', ...args)
+const log = (...args: unknown[]): void => console.log('[moshi]', ...args)
 
 const emit = (event: BridgeEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
@@ -74,7 +89,7 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   const notification = new Notification({
     title,
     body: event.message.text || 'Sent an attachment',
-    // Unison plays its own sound for new messages (renderer/src/sounds.ts) unless it is turned off.
+    // Moshi plays its own sound for new messages (renderer/src/sounds.ts) unless it is turned off.
     silent: storage.settings.sound !== 'off'
   })
   notification.on('click', () => {
@@ -165,7 +180,7 @@ function createWindow(): void {
     minWidth: 420,
     minHeight: 480,
     show: false,
-    title: 'Unison',
+    title: 'Moshi',
     icon: appIcon(),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
     // A thin custom title bar on every platform; macOS keeps its native traffic lights inset into it.
@@ -343,7 +358,7 @@ const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string
 /**
  * Let the user sign in on the platform's real login page inside a dedicated
  * app window, then hand the session cookies to the adapter. Passwords are
- * typed into the platform's page only; Unison never sees them.
+ * typed into the platform's page only; Moshi never sees them.
  */
 const openLogins = new Map<string, BrowserWindow>()
 
@@ -553,9 +568,9 @@ function registerIpc(): void {
     // Development only: UNISON_BACKUP_SAVE_PATH skips the dialog (automated tests).
     const testPath = !app.isPackaged ? process.env.UNISON_BACKUP_SAVE_PATH : undefined
     const picked = testPath ? { canceled: false, filePath: testPath } : await dialog.showSaveDialog(window!, {
-      title: vi ? 'Lưu bản sao lưu Unison' : 'Save Unison backup',
-      defaultPath: join(app.getPath('documents'), `Unison-backup-${day}.${BACKUP_EXTENSION}`),
-      filters: [{ name: 'Unison backup', extensions: [BACKUP_EXTENSION] }]
+      title: vi ? 'Lưu bản sao lưu Moshi' : 'Save Moshi backup',
+      defaultPath: join(app.getPath('documents'), `Moshi-backup-${day}.${BACKUP_EXTENSION}`),
+      filters: [{ name: 'Moshi backup', extensions: [BACKUP_EXTENSION] }]
     })
     if (picked.canceled || !picked.filePath) return null
     const result = await createBackup(storage, picked.filePath, String(input.password ?? ''), !!input.includeSessions)
@@ -566,10 +581,10 @@ function registerIpc(): void {
     const vi = storage.settings.language === 'vi'
     const testPick = !app.isPackaged ? process.env.UNISON_BACKUP_OPEN_PATH : undefined
     const picked = testPick ? { canceled: false, filePaths: [testPick] } : await dialog.showOpenDialog(window!, {
-      title: vi ? 'Chọn bản sao lưu Unison' : 'Choose a Unison backup',
+      title: vi ? 'Chọn bản sao lưu Moshi' : 'Choose a Moshi backup',
       defaultPath: app.getPath('documents'),
       properties: ['openFile'],
-      filters: [{ name: 'Unison backup', extensions: [BACKUP_EXTENSION] }]
+      filters: [{ name: 'Moshi backup', extensions: [BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION] }]
     })
     if (picked.canceled || !picked.filePaths[0]) return null
     return inspectBackup(picked.filePaths[0])
@@ -635,7 +650,7 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
-    if (isWindows) app.setAppUserModelId('com.3hvn.unison')
+    if (isWindows) app.setAppUserModelId('com.danenguyen.moshi')
     await storage.load()
     await pruneOrphanedSettings()
     void scheduler.start()

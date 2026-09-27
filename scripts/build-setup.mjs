@@ -1,8 +1,8 @@
-// Builds the branded setup: dist/Unison-Setup-<version>.exe
+// Builds the branded setup: dist/Moshi-Setup-<version>.exe
 //   1. character art from src/shared/logos.ts -> PNG (orange and pink buddies separately so they can
 //      move on their own, plus a blink frame)
-//   2. "Unison Uninstall.exe": the same program without a payload (goodbye / uninstall mode)
-//   3. the setup: WPF front end + the electron-builder NSIS package (dist/unison-core-<version>.exe),
+//   2. "Moshi Uninstall.exe": the same program without a payload (goodbye / uninstall mode)
+//   3. the setup: WPF front end + the electron-builder NSIS package (dist/moshi-core-<version>.exe),
 //      which it runs silently
 // Needs the .NET SDK (Roslyn csc) and .NET Framework 4.8 (part of Windows 10/11). Run after electron-builder:
 //   npm run dist
@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-const core = join(root, 'dist', `unison-core-${version}.exe`)
+const core = join(root, 'dist', `moshi-core-${version}.exe`)
 if (!existsSync(core)) throw new Error(`Missing ${core}: run electron-builder first (npm run dist)`)
 
 const work = join(root, 'build/.setup')
@@ -97,13 +97,13 @@ const common = [
   res('version.txt')
 ]
 
-const uninstaller = join(work, 'Unison Uninstall.exe')
-execFileSync(dotnet, [...common, `-out:${uninstaller}`, join(root, 'setup/UnisonSetup.cs')], { stdio: 'inherit' })
+const uninstaller = join(work, 'Moshi Uninstall.exe')
+execFileSync(dotnet, [...common, `-out:${uninstaller}`, join(root, 'setup/MoshiSetup.cs')], { stdio: 'inherit' })
 
-const setup = join(root, 'dist', `Unison-Setup-${version}.exe`)
+const setup = join(root, 'dist', `Moshi-Setup-${version}.exe`)
 execFileSync(
   dotnet,
-  [...common, res('expected.txt'), `-resource:${uninstaller},uninstaller.exe`, `-resource:${core},payload.exe`, `-out:${setup}`, join(root, 'setup/UnisonSetup.cs')],
+  [...common, res('expected.txt'), `-resource:${uninstaller},uninstaller.exe`, `-resource:${core},payload.exe`, `-out:${setup}`, join(root, 'setup/MoshiSetup.cs')],
   { stdio: 'inherit' }
 )
 await rm(work, { recursive: true, force: true })
