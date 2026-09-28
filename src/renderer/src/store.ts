@@ -32,6 +32,7 @@ import { accentVars, type AccentSpec } from '@shared/accent'
 import { previewKindOf } from '@shared/preview'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
+import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
@@ -78,8 +79,18 @@ interface State {
   loading: Record<string, boolean>
   hasMore: Record<string, boolean>
   typing: Record<string, { name: string; until: number }>
+  /** The chat in the active pane (kept in step with `layout` for everything that means "the open chat"). */
   selectedId?: string
-  highlightId?: string
+  /** One or two panes side by side (split chat). */
+  layout: PaneLayout
+  /** Chats read most recently, newest first: what a fresh split shows on the right. */
+  recent: string[]
+  /** Window wide enough for two panes (the split stays remembered while it is not). */
+  wide: boolean
+  /** Asks the composer of this chat to take keyboard focus (pane switched by keyboard or the list). */
+  composerFocus?: { conversationId: string; nonce: number }
+  /** Per chat: the message to scroll to and flash (search hit, saved message). */
+  highlightIds: Record<string, string | undefined>
   filter: Filter
   search: string
   searchHits: SearchHit[]
@@ -91,15 +102,26 @@ interface State {
   stats: Record<string, ConversationStats>
   shared: Record<string, Message[]>
   toast?: Toast
-  replyTo?: Message
-  pendingFiles: OutgoingAttachment[]
+  /** Per chat: the message being replied to. */
+  replyTos: Record<string, Message | undefined>
+  /** Per chat: files staged in the composer. */
+  pendingFiles: Record<string, OutgoingAttachment[]>
   forwarding?: Message
   lightbox?: Lightbox
   /** Window narrower than a phone-ish breakpoint: list and chat stack. */
   narrow: boolean
 
   init(): Promise<void>
+  /** Open a chat in the active pane (or focus the pane it is already in). */
   select(id?: string, highlightId?: string): void
+  /** Open a chat next to the current one: splits the view, or fills the other pane. */
+  openBeside(id: string): void
+  /** Open a chat in a specific pane (drag and drop onto a landing zone). */
+  openInPane(id: string, pane: PaneIndex): void
+  activatePane(pane: PaneIndex, focusComposer?: boolean): void
+  closePane(pane: PaneIndex): void
+  toggleSplit(): void
+  setWide(wide: boolean): void
   setFilter(filter: Filter): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
@@ -108,24 +130,24 @@ interface State {
   toggleSaved(message: Message): Promise<void>
   openSaved(saved: SavedMessage): Promise<void>
   /** `resolveFiles` prepares the real files after the optimistic bubble is shown (GIF downloads). */
-  /** Text the composer should take over (birthday wishes, …); nonce makes repeats count. */
-  composerDraft?: { text: string; nonce: number }
-  setComposerDraft(text: string): void
+  /** Per chat: text the composer should take over (birthday wishes, …); nonce makes repeats count. */
+  composerDrafts: Record<string, { text: string; nonce: number } | undefined>
+  setComposerDraft(conversationId: string, text: string): void
   /** Settings pushed from main (scheduled messages) or returned by an IPC call. */
   applySettings(settings: Settings): void
-  scheduleMessage(text: string, sendAt: number): Promise<void>
-  send(text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
-  sendGif(item: GifItem): Promise<void>
-  react(messageId: string, emoji: string): Promise<void>
-  setReplyTo(message?: Message): void
+  scheduleMessage(conversationId: string, text: string, sendAt: number): Promise<void>
+  send(conversationId: string, text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
+  sendGif(conversationId: string, item: GifItem): Promise<void>
+  react(conversationId: string, messageId: string, emoji: string): Promise<void>
+  setReplyTo(conversationId: string, message?: Message): void
   startForward(message?: Message): void
   forward(toConversationId: string): Promise<void>
   loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
   openAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<void>
   openLightbox(lightbox?: Lightbox): void
-  addFiles(files: OutgoingAttachment[]): void
-  addDroppedFiles(files: File[]): void
-  removeFile(path: string): void
+  addFiles(conversationId: string, files: OutgoingAttachment[]): void
+  addDroppedFiles(conversationId: string, files: File[]): void
+  removeFile(conversationId: string, path: string): void
   /** Unsent text per chat, kept on this device so switching chats or restarting never loses it. */
   drafts: Record<string, string>
   setDraft(conversationId: string, text: string): void
@@ -163,7 +185,7 @@ interface State {
   reconnect(accountId: string): Promise<void>
   addDemo(): Promise<void>
   toggleDetails(tab?: DetailsTab): void
-  notifyTyping(): void
+  notifyTyping(conversationId: string): void
   showToast(text: string, kind?: Toast['kind']): void
   t(key: TKey, params?: Record<string, string | number>): string
 }
@@ -219,14 +241,37 @@ export function readDraft(conversationId: string): string {
 }
 
 
-/** A new incoming message plays the chosen sound, unless the chat is muted; softer in the open chat. */
+const LAYOUT_KEY = 'moshi.panes'
+
+function loadLayout(): unknown {
+  try {
+    return JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? 'null')
+  } catch {
+    return undefined
+  }
+}
+
+function saveLayout(layout: PaneLayout): void {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout))
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Chats on screen right now (both panes when split). */
+function onScreen(conversationId: string): boolean {
+  return openIds(useStore.getState().layout).includes(conversationId)
+}
+
+/** A new incoming message plays the chosen sound, unless the chat is muted; softer in an open chat. */
 function maybePlaySound(message: Message): void {
-  const { settings, conversations, selectedId } = useStore.getState()
+  const { settings, conversations } = useStore.getState()
   const sound = settings.sound ?? 'bubbles'
   if (sound === 'off' || message.isOutgoing || message.system || Date.now() - message.sentAt > 60_000) return
   const conversation = conversations[message.conversationId]
   if (!conversation || conversation.muted || settings.muted.conversations.includes(conversation.id) || isMutedBy(settings, conversation)) return
-  const watching = document.hasFocus() && selectedId === message.conversationId
+  const watching = document.hasFocus() && onScreen(message.conversationId)
   playSound(sound, (settings.soundVolume ?? 0.7) * (watching ? 0.45 : 1))
 }
 
@@ -253,6 +298,10 @@ export const useStore = create<State>((set, get) => ({
   loading: {},
   hasMore: {},
   typing: {},
+  layout: { panes: [undefined], active: 0 },
+  recent: [],
+  wide: true,
+  highlightIds: {},
   filter: 'all',
   search: '',
   searchHits: [],
@@ -264,7 +313,9 @@ export const useStore = create<State>((set, get) => ({
   drafts: { ...draftMap },
   stats: {},
   shared: {},
-  pendingFiles: [],
+  replyTos: {},
+  pendingFiles: {},
+  composerDrafts: {},
   narrow: false,
 
   async init() {
@@ -274,12 +325,17 @@ export const useStore = create<State>((set, get) => ({
       bridge.accounts.list(),
       bridge.conversations.list()
     ])
+    const conversationMap = Object.fromEntries(conversations.map((c) => [c.id, c]))
     set({
       ready: true,
       settings: { ...DEFAULT_SETTINGS, ...settings },
       accounts: Object.fromEntries(accounts.map((a) => [a.id, a])),
-      conversations: Object.fromEntries(conversations.map((c) => [c.id, c]))
+      conversations: conversationMap
     })
+    // Reopen the panes from last time (only chats that still exist), without marking anything read.
+    const layout = restoreLayout(loadLayout(), (id) => !!conversationMap[id])
+    set({ layout, selectedId: activeId(layout), recent: openIds(layout) })
+    for (const id of openIds(layout)) void get().prefetch(id, true)
 
     bridge.onEvent((event: BridgeEvent) => {
       const state = get()
@@ -293,8 +349,8 @@ export const useStore = create<State>((set, get) => ({
           const conversations = Object.fromEntries(
             Object.entries(state.conversations).filter(([, c]) => c.accountId !== event.accountId)
           )
-          const selectedId = state.selectedId && conversations[state.selectedId] ? state.selectedId : undefined
-          set({ accounts, conversations, selectedId })
+          set({ accounts, conversations })
+          applyLayout(prune(state.layout, (id) => !!conversations[id]))
           break
         }
         case 'conversation:upserted':
@@ -324,7 +380,7 @@ export const useStore = create<State>((set, get) => ({
           }
           if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list }, shared, stats, typing })
           else set({ shared, stats, typing })
-          if (state.selectedId === event.message.conversationId && document.hasFocus() && !event.message.isOutgoing) {
+          if (onScreen(event.message.conversationId) && document.hasFocus() && !event.message.isOutgoing) {
             void bridge.conversations.markRead(event.message.conversationId)
           }
           break
@@ -386,12 +442,39 @@ export const useStore = create<State>((set, get) => ({
   },
 
   select(id, highlightId) {
-    const state = get()
-    set({ selectedId: id, highlightId, sheet: { kind: 'none' }, replyTo: undefined, pendingFiles: [], detailsTab: 'info' })
-    if (!id) return
-    const conversation = state.conversations[id]
-    if (conversation?.unreadCount) void window.unison.conversations.markRead(id)
-    void get().prefetch(id, false)
+    const { layout } = get()
+    if (!id) {
+      // Back to the list on a phone-sized window (where a split is never shown anyway).
+      applyLayout(single())
+      return
+    }
+    if (highlightId) set({ highlightIds: { ...get().highlightIds, [id]: highlightId } })
+    applyLayout(openIn(layout, id, layout.active), { focus: true })
+  },
+
+  openBeside(id) {
+    applyLayout(openBeside(get().layout, id), { focus: true })
+  },
+
+  openInPane(id, pane) {
+    applyLayout(openIn(get().layout, id, pane), { focus: true })
+  },
+
+  activatePane(pane, focusComposer = false) {
+    applyLayout(activate(get().layout, pane), { focus: focusComposer })
+  },
+
+  closePane(pane) {
+    applyLayout(closePane(get().layout, pane), { focus: true })
+  },
+
+  toggleSplit() {
+    const { layout, recent } = get()
+    applyLayout(toggleSplit(layout, suggestBeside(layout, recent)), { focus: true })
+  },
+
+  setWide(wide) {
+    if (get().wide !== wide) set({ wide })
   },
 
   setFilter(filter) {
@@ -458,13 +541,14 @@ export const useStore = create<State>((set, get) => ({
       await get().loadMore(id)
     }
     // Re-trigger the highlight even when the same message is chosen twice.
-    set({ highlightId: undefined })
-    setTimeout(() => set({ highlightId: messageId }), 0)
+    set({ highlightIds: { ...get().highlightIds, [id]: undefined } })
+    setTimeout(() => set({ highlightIds: { ...get().highlightIds, [id]: messageId } }), 0)
   },
 
-  async send(text, files, resolveFiles) {
-    const { selectedId, messages, settings, replyTo } = get()
-    const pendingFiles = files ?? get().pendingFiles
+  async send(selectedId, text, files, resolveFiles) {
+    const { messages, settings } = get()
+    const replyTo = get().replyTos[selectedId]
+    const pendingFiles = files ?? get().pendingFiles[selectedId] ?? []
     const trimmed = text.trim()
     if (!selectedId || (!trimmed && !pendingFiles.length)) return
     const tempId = `temp-${Date.now()}`
@@ -491,8 +575,8 @@ export const useStore = create<State>((set, get) => ({
     if (settings.sendSound !== false && settings.sound !== 'off') playSent(settings.soundVolume ?? 0.7)
     set({
       messages: { ...messages, [selectedId]: [...(messages[selectedId] ?? []), optimistic] },
-      replyTo: undefined,
-      pendingFiles: files ? get().pendingFiles : []
+      replyTos: { ...get().replyTos, [selectedId]: undefined },
+      pendingFiles: files ? get().pendingFiles : { ...get().pendingFiles, [selectedId]: [] }
     })
     try {
       const outgoing = resolveFiles ? await resolveFiles() : pendingFiles
@@ -528,7 +612,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async sendGif(item) {
+  async sendGif(conversationId, item) {
     const placeholder: OutgoingAttachment = {
       path: '',
       name: 'gif.gif',
@@ -539,11 +623,10 @@ export const useStore = create<State>((set, get) => ({
       width: item.gif.width,
       height: item.gif.height
     }
-    await get().send('', [placeholder], async () => [await window.unison.app.gif(item)])
+    await get().send(conversationId, '', [placeholder], async () => [await window.unison.app.gif(item)])
   },
 
-  async react(messageId, emoji) {
-    const { selectedId } = get()
+  async react(selectedId, messageId, emoji) {
     if (!selectedId) return
     // Show it straight away (like Instagram / Messenger); the platform's own update follows.
     const list = get().messages[selectedId]
@@ -578,8 +661,8 @@ export const useStore = create<State>((set, get) => ({
     draftTimer = setTimeout(() => flushDrafts(() => set({ drafts: { ...draftMap } })), 400)
   },
 
-  setReplyTo(message) {
-    set({ replyTo: message })
+  setReplyTo(conversationId, message) {
+    set({ replyTos: { ...get().replyTos, [conversationId]: message } })
   },
 
   startForward(message) {
@@ -633,27 +716,28 @@ export const useStore = create<State>((set, get) => ({
     set({ lightbox })
   },
 
-  addFiles(files) {
-    const existing = new Set(get().pendingFiles.map((f) => f.path))
-    set({ pendingFiles: [...get().pendingFiles, ...files.filter((f) => !existing.has(f.path))] })
+  addFiles(conversationId, files) {
+    const current = get().pendingFiles[conversationId] ?? []
+    const existing = new Set(current.map((f) => f.path))
+    set({ pendingFiles: { ...get().pendingFiles, [conversationId]: [...current, ...files.filter((f) => !existing.has(f.path))] } })
   },
 
-  addDroppedFiles(files) {
+  addDroppedFiles(conversationId, files) {
     for (const file of files) {
       const described = window.unison.app.describeFile(file)
       if (!described.path) continue
       if (file.type.startsWith('image/') && file.size < 3_000_000) {
         const reader = new FileReader()
-        reader.onload = () => get().addFiles([{ ...described, preview: String(reader.result) }])
+        reader.onload = () => get().addFiles(conversationId, [{ ...described, preview: String(reader.result) }])
         reader.readAsDataURL(file)
       } else {
-        get().addFiles([described])
+        get().addFiles(conversationId, [described])
       }
     }
   },
 
-  removeFile(path) {
-    set({ pendingFiles: get().pendingFiles.filter((f) => f.path !== path) })
+  removeFile(conversationId, path) {
+    set({ pendingFiles: { ...get().pendingFiles, [conversationId]: (get().pendingFiles[conversationId] ?? []).filter((f) => f.path !== path) } })
   },
 
   async prefetch(id, quiet = true) {
@@ -674,7 +758,7 @@ export const useStore = create<State>((set, get) => ({
     } catch (err) {
       set({ loading: { ...get().loading, [id]: false } })
       // A failed hover prefetch stays quiet; opening the chat tries again and reports errors.
-      if (!quiet || get().selectedId === id) get().showToast((err as Error).message, 'error')
+      if (!quiet || onScreen(id)) get().showToast((err as Error).message, 'error')
     } finally {
       if (quiet) prefetchesInFlight -= 1
     }
@@ -709,20 +793,20 @@ export const useStore = create<State>((set, get) => ({
     set({ sheet: { kind: 'none' }, forwarding: undefined, lightbox: undefined })
   },
 
-  setComposerDraft(text) {
-    set({ composerDraft: { text, nonce: Date.now() } })
+  setComposerDraft(conversationId, text) {
+    set({ composerDrafts: { ...get().composerDrafts, [conversationId]: { text, nonce: Date.now() } } })
   },
 
   applySettings(settings) {
     set({ settings: { ...DEFAULT_SETTINGS, ...settings } })
   },
 
-  async scheduleMessage(text, sendAt) {
-    const { selectedId, replyTo } = get()
+  async scheduleMessage(selectedId, text, sendAt) {
+    const replyTo = get().replyTos[selectedId]
     if (!selectedId || !text.trim()) return
     try {
       const settings = await window.unison.scheduled.add({ conversationId: selectedId, text, sendAt, replyToId: replyTo?.id })
-      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, replyTo: undefined })
+      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, replyTos: { ...get().replyTos, [selectedId]: undefined } })
       const when = new Date(sendAt)
       const time = when.toLocaleString(get().settings.language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit', ...(when.toDateString() === new Date().toDateString() ? {} : { weekday: 'short', day: 'numeric', month: 'numeric' }) })
       get().showToast(translate(get().settings.language, 'scheduledToast', { time }))
@@ -787,10 +871,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async hideConversation(conversationId) {
-    const { settings, selectedId, conversations } = get()
+    const { settings, conversations } = get()
     const muted = settings.muted.conversations.includes(conversationId) ? settings.muted.conversations : [...settings.muted.conversations, conversationId]
     await get().setSettings({ hidden: { ...(settings.hidden ?? {}), [conversationId]: Date.now() }, muted: { ...settings.muted, conversations: muted } })
-    if (get().selectedId === selectedId && selectedId === conversationId) set({ selectedId: undefined, replyTo: undefined, pendingFiles: [] })
+    applyLayout(prune(get().layout, (id) => id !== conversationId))
     get().showToast(translate(settings.language, 'hiddenToast', { name: conversations[conversationId]?.title ?? '' }), 'info')
   },
 
@@ -921,13 +1005,12 @@ export const useStore = create<State>((set, get) => ({
     set({ detailsOpen: !detailsOpen, detailsTab: tab ?? detailsTab })
   },
 
-  notifyTyping() {
-    const { selectedId } = get()
-    if (!selectedId) return
+  notifyTyping(conversationId) {
+    if (!conversationId) return
     const now = Date.now()
     if (now - lastTypingSent < 4000) return
     lastTypingSent = now
-    void window.unison.messages.typing(selectedId).catch(() => undefined)
+    void window.unison.messages.typing(conversationId).catch(() => undefined)
   },
 
   showToast(text, kind = 'info') {
@@ -942,6 +1025,32 @@ export const useStore = create<State>((set, get) => ({
     return translate(get().settings.language, key, params)
   }
 }))
+
+/**
+ * Put a pane layout into effect: mirror the active chat into `selectedId`, close sheets, reset the
+ * details tab when the active chat changed, mark newly shown chats read, load them and remember them.
+ */
+function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): void {
+  const state = useStore.getState()
+  const before = state.layout
+  const previousActive = state.selectedId
+  const nextActive = activeId(layout)
+  const shownBefore = new Set(openIds(before))
+  const patch: Partial<State> = { layout, selectedId: nextActive, sheet: { kind: 'none' } }
+  if (nextActive !== previousActive) patch.detailsTab = 'info'
+  if (nextActive) {
+    patch.recent = pushRecent(state.recent, nextActive)
+    if (options.focus) patch.composerFocus = { conversationId: nextActive, nonce: Date.now() }
+  }
+  useStore.setState(patch)
+  saveLayout(layout)
+  for (const id of openIds(layout)) {
+    if (shownBefore.has(id) && id !== nextActive) continue
+    const conversation = state.conversations[id]
+    if (conversation?.unreadCount) void window.unison.conversations.markRead(id)
+    void useStore.getState().prefetch(id, false)
+  }
+}
 
 // ---------------------------------------------------------------- nicknames & custom photos
 

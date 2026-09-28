@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { AI_MODELS, detectLanguage, translationChunks } from '../src/shared/ai'
+import { AI_MODELS, aiErrorHint, detectLanguage, translationChunks } from '../src/shared/ai'
+
+describe('AI error hints', () => {
+  it('explains a build packaged for the other CPU, in the app language', () => {
+    const sharp = 'Could not load the "sharp" module using the darwin-arm64 runtime'
+    expect(aiErrorHint(sharp, 'vi')).toMatch(/Apple Silicon/)
+    expect(aiErrorHint(sharp, 'vi')).toContain(sharp)
+    expect(aiErrorHint(sharp, 'en')).toMatch(/different CPU/)
+    expect(aiErrorHint('dlopen(onnxruntime_binding.node): incompatible architecture', 'en')).toMatch(/different CPU/)
+  })
+
+  it('points at the network for download failures and leaves the rest alone', () => {
+    expect(aiErrorHint('fetch failed: getaddrinfo ENOTFOUND huggingface.co', 'en')).toMatch(/connection/)
+    expect(aiErrorHint('The AI worker stopped', 'en')).toBe('The AI worker stopped')
+  })
+})
 
 describe('language detection for translation', () => {
   it('reads the script or Vietnamese cues, else English', () => {

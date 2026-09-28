@@ -304,6 +304,7 @@ const vi = {
   gifError: 'Không tải được GIF',
   gifSettingsTitle: 'Thư viện GIF',
   gifSettingsOn: 'Đang dùng {provider}. Dán key khác để đổi.',
+  gifBuiltIn: 'Đang dùng thư viện {provider} tích hợp sẵn của Moshi. Chỉ cần dán key riêng nếu muốn dùng tài khoản của bạn.',
   retry: 'Thử lại',
   save: 'Lưu',
   backupSection: 'Sao lưu',
@@ -463,7 +464,16 @@ const vi = {
   logoHint: 'Chọn nhân vật cho Moshi. Biểu tượng cửa sổ và thanh taskbar đổi theo ngay.',
   lastMessageAt: 'Tin nhắn gần nhất: {time}',
   tagManage: 'Quản lý tag',
-  tagManageHint: 'Tạo tag riêng với emoji và màu, hoặc xóa tag không dùng. Xóa tag sẽ gỡ nó khỏi mọi hội thoại.'
+  tagManageHint: 'Tạo tag riêng với emoji và màu, hoặc xóa tag không dùng. Xóa tag sẽ gỡ nó khỏi mọi hội thoại.',
+  splitView: 'Chia đôi khung chat',
+  unsplitView: 'Về một khung',
+  openBeside: 'Mở cạnh bên',
+  closePane: 'Đóng khung này',
+  emptyPaneTitle: 'Khung chat trống',
+  emptyPaneHint: 'Chọn một hội thoại trong danh sách, hoặc kéo thả vào đây.',
+  dropOpenLeft: 'Mở bên trái',
+  dropOpenRight: 'Mở bên phải',
+  splitTooNarrow: 'Cửa sổ đang hẹp, Moshi chỉ hiện khung đang chọn.'
 }
 
 export type Dictionary = typeof vi
@@ -773,6 +783,7 @@ const en: Dictionary = {
   gifError: 'Could not load GIFs',
   gifSettingsTitle: 'GIF library',
   gifSettingsOn: 'Using {provider}. Paste another key to change.',
+  gifBuiltIn: 'Using the {provider} library built into Moshi. Paste a key only if you want to use your own account.',
   retry: 'Try again',
   save: 'Save',
   backupSection: 'Backup',
@@ -932,7 +943,16 @@ const en: Dictionary = {
   logoHint: 'Pick Moshi’s character. The window and taskbar icon change with it.',
   lastMessageAt: 'Last message: {time}',
   tagManage: 'Manage tags',
-  tagManageHint: 'Create your own tags with an emoji and colour, or delete ones you do not use. Deleting a tag removes it from every chat.'
+  tagManageHint: 'Create your own tags with an emoji and colour, or delete ones you do not use. Deleting a tag removes it from every chat.',
+  splitView: 'Split chat',
+  unsplitView: 'Back to one pane',
+  openBeside: 'Open beside',
+  closePane: 'Close this pane',
+  emptyPaneTitle: 'Empty pane',
+  emptyPaneHint: 'Pick a conversation from the list, or drag one here.',
+  dropOpenLeft: 'Open on the left',
+  dropOpenRight: 'Open on the right',
+  splitTooNarrow: 'The window is narrow, so only the active pane is shown.'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

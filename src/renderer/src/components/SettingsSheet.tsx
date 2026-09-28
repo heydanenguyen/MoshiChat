@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ArchiveRestore, BellOff, ChevronRight, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, stepZoom } from '@shared/types'
@@ -33,6 +34,11 @@ export function SettingsSheet(): JSX.Element {
     .map(([id, at]) => ({ id, at, conversation: conversationMap[id] }))
   const closeSheet = useStore((s) => s.closeSheet)
   const language = settings.language
+  // The GIF library built into this release (users only need a key of their own when there is none).
+  const [gifBuiltIn, setGifBuiltIn] = useState<string | null>(null)
+  useEffect(() => {
+    void window.unison.app.gifDefault().then((p) => setGifBuiltIn(p === 'giphy' ? 'GIPHY' : p ? 'KLIPY' : null)).catch(() => undefined)
+  }, [])
 
   const statusLabel = (status: string): string => {
     switch (status) {
@@ -331,7 +337,9 @@ export function SettingsSheet(): JSX.Element {
               <div className="settings-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('gifSettingsTitle')}</div>
-                  <div className="settings-row-sub">{settings.gif?.key ? t('gifSettingsOn', { provider: settings.gif.provider === 'giphy' ? 'GIPHY' : 'KLIPY' }) : t('gifSetupHint')}</div>
+                  <div className="settings-row-sub">
+                    {settings.gif?.key ? t('gifSettingsOn', { provider: settings.gif.provider === 'giphy' ? 'GIPHY' : 'KLIPY' }) : gifBuiltIn ? t('gifBuiltIn', { provider: gifBuiltIn }) : t('gifSetupHint')}
+                  </div>
                 </div>
               </div>
               <div className="settings-row">

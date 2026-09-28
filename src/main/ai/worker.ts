@@ -107,6 +107,8 @@ port.on('message', async ({ data }) => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // Loading the library itself can fail (a build packaged for another CPU): say so in the log at least.
+    if (request.type === 'init') send({ type: 'log', message: `could not load the AI library: ${message}` })
     if ('kind' in request) send({ type: 'progress', kind: request.kind, phase: 'error', error: message })
     if ('id' in request) send({ type: 'error', id: request.id, message })
   }

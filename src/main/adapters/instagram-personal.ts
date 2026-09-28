@@ -89,7 +89,7 @@ const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
 export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
   private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
-  private composer = new DirectComposer('persist:login-instagram')
+  private composer = new DirectComposer('persist:login-instagram', (...args) => this.ctx.log(...args))
   private realtime = new InstagramRealtime('persist:login-instagram', {
     onActivity: () => this.onRealtimeActivity(),
     onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
@@ -270,13 +270,13 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     if (options.attachments?.length) return this.sendAttachments(id, text, options)
     if (!text.trim()) throw new Error('Message is empty')
     const external = externalIdOf(id)
-    const threadId = this.threadIdFor(id)
-    let url: string
-    if (threadId) url = `https://www.instagram.com/direct/t/${threadId}/`
+    const threadId = await this.resolveThread(id)
+    let url: string[]
+    if (threadId) url = this.threadUrls(threadId)
     else {
       const peer = this.users.get(this.pendingPeers.get(external) ?? '')
       if (!peer?.username) throw new Error('Unknown Instagram recipient')
-      url = `https://ig.me/m/${peer.username}`
+      url = [`new:${peer.username}`, `https://ig.me/m/${peer.username}`]
     }
     const sentAt = Date.now()
     await this.composer.send(url, text)
@@ -317,14 +317,14 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    */
   private async sendAttachments(id: string, text: string, options: SendOptions): Promise<Message> {
     const external = externalIdOf(id)
-    let threadId = this.threadIdFor(id)
-    let url: string
-    if (threadId) url = `https://www.instagram.com/direct/t/${threadId}/`
+    let threadId = await this.resolveThread(id)
+    let url: string[]
+    if (threadId) url = this.threadUrls(threadId)
     else {
       // New contact: open Instagram's composer for them (ig.me), the thread appears after the first send.
       const peer = this.users.get(this.pendingPeers.get(external) ?? '')
       if (!peer?.username) throw new Error('Unknown Instagram recipient')
-      url = `https://ig.me/m/${peer.username}`
+      url = [`new:${peer.username}`, `https://ig.me/m/${peer.username}`]
     }
     const files = (options.attachments ?? []).map((file) => {
       // Voice notes are recorded as Opus and AAC together; Instagram plays AAC (.m4a) natively.
@@ -348,7 +348,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
       if (threadId) this.aliases.set(external, threadId)
     }
-    if (text.trim()) await this.composer.send(threadId ? `https://www.instagram.com/direct/t/${threadId}/` : url, text)
+    if (text.trim()) await this.composer.send(threadId ? this.threadUrls(threadId) : url, text)
     if (!threadId) {
       // Sent, but the new thread is not listed yet: show the local copy; the next refresh reconciles it.
       const local: Message = {
@@ -388,6 +388,36 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     // Text sent right after shows up through the next refresh.
     this.onRealtimeActivity()
     return message
+  }
+
+  /**
+   * Addresses of a thread on instagram.com, best first. The web client moved to the newer "Slide" id
+   * (thread_v2_id) in its URLs; the legacy direct_v2 id is kept as a fallback for threads without one.
+   */
+  private threadUrls(threadId: string): string[] {
+    const v2 = this.threads.get(threadId)?.thread_v2_id ?? this.v2Ids.get(threadId)
+    const ids = v2 && v2 !== threadId ? [v2, threadId] : [threadId]
+    return ids.map((id) => `https://www.instagram.com/direct/t/${id}/`)
+  }
+
+  /**
+   * The thread behind a conversation. Chats opened from the contact list carry a peer id instead
+   * (`u<pk>`), and that link is only in memory, so look the thread up in the inbox before sending:
+   * instagram.com only shows a composer for a real thread address (ig.me landing pages have none).
+   */
+  private async resolveThread(id: string): Promise<string | undefined> {
+    const known = this.threadIdFor(id)
+    if (known) return known
+    const external = externalIdOf(id)
+    if (!external.startsWith('u')) return undefined
+    const peerPk = this.pendingPeers.get(external) ?? external.slice(1)
+    if (!this.pendingPeers.has(external)) this.pendingPeers.set(external, peerPk)
+    const found = await this.findThreadFor(external)
+    if (found) {
+      this.aliases.set(external, found)
+      this.ctx.log('instagram: resolved chat', external, 'to thread', found)
+    }
+    return found
   }
 
   /** After messaging a brand-new peer, find the thread Instagram created. */

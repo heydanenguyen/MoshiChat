@@ -30,6 +30,9 @@ jobs:
       - run: npm test
       - name: Windows build
         shell: bash
+        env:
+          # GIF library key baked into the build (Settings → GIF works without setup). Optional.
+          MOSHI_GIF_KEY: ${{ secrets.MOSHI_GIF_KEY }}
         # On failure the last 50 log lines become an annotation, readable without signing in.
         run: |
           set -o pipefail
@@ -65,6 +68,8 @@ jobs:
       - run: npm test
       - name: macOS build
         shell: bash
+        env:
+          MOSHI_GIF_KEY: ${{ secrets.MOSHI_GIF_KEY }}
         # On failure the last 50 log lines become an annotation, readable without signing in.
         run: |
           set -o pipefail
@@ -72,9 +77,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Moshi-mac-${{ matrix.arch }}
+          # Only this runner's own architecture: native modules (sharp, onnxruntime) are installed for the
+          # machine that runs npm ci, so a build for the other CPU made here would ship the wrong binaries.
           path: |
-            dist/Moshi-*-mac-*.dmg
-            dist/Moshi-*-mac-*.zip
+            dist/Moshi-*-mac-${{ matrix.arch }}.dmg
+            dist/Moshi-*-mac-${{ matrix.arch }}.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

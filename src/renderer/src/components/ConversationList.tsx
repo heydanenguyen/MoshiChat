@@ -1,9 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { BellOff, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { BellOff, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
 import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
 import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleConversations } from '../store'
-import { formatListTime } from '../utils'
+import { formatListTime, modKey } from '../utils'
+import { openIds } from '../panes'
+
+/** Drag payload type for a chat row (dropped onto a pane of the chat area). */
+export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
 import { Avatar } from './Avatar'
 import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
@@ -23,6 +27,10 @@ export function ConversationList(): JSX.Element {
   const conversations = useVisibleConversations()
   const selectedId = useStore((s) => s.selectedId)
   const select = useStore((s) => s.select)
+  const openBeside = useStore((s) => s.openBeside)
+  const layout = useStore((s) => s.layout)
+  const canSplit = useStore((s) => s.wide && !s.narrow)
+  const beside = new Set(openIds(layout).filter((id) => id !== selectedId))
   const search = useStore((s) => s.search)
   const setSearch = useStore((s) => s.setSearch)
   const searchHits = useStore((s) => s.searchHits)
@@ -142,8 +150,13 @@ export function ConversationList(): JSX.Element {
           return (
             <button
               key={c.id}
-              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${c.unreadCount ? 'unread' : ''}`}
-              onClick={() => select(c.id)}
+              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${c.unreadCount ? 'unread' : ''}`}
+              onClick={(e) => (canSplit && (e.metaKey || e.ctrlKey) ? openBeside(c.id) : select(c.id))}
+              draggable={canSplit}
+              onDragStart={(e) => {
+                e.dataTransfer.setData(CONVERSATION_DRAG, c.id)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
               onMouseEnter={() => {
                 // Resting on a chat for a moment starts loading it, so opening feels instant.
                 if (hoverTimer.current) clearTimeout(hoverTimer.current)
@@ -259,6 +272,19 @@ export function ConversationList(): JSX.Element {
               if (menu.hover) closeHoverMenu()
             }}
           >
+            {canSplit && menu.conversationId !== selectedId && (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  openBeside(menu.conversationId)
+                  setMenu(undefined)
+                }}
+              >
+                <Columns2 size={15} />
+                <span>{t('openBeside')}</span>
+                <span className="context-menu-shortcut">{modKey}·click</span>
+              </button>
+            )}
             <button
               className="context-menu-item"
               onClick={() => {

@@ -15,6 +15,13 @@ Lần đầu mở app, bấm **Dùng thử với dữ liệu mẫu** để xem t
 
 Icon được sinh bằng `node scripts/make-icon.mjs` (không cần thư viện native).
 
+### macOS
+
+- Tải đúng bản cho máy: `Moshi-<phiên bản>-mac-arm64.dmg` cho Apple Silicon (M1 trở lên), `…-mac-x64.dmg` cho Intel. Bản sai kiến trúc vẫn mở được (Rosetta) nhưng **AI trên máy (Whisper, NLLB) không chạy** vì thư viện native (sharp, onnxruntime) chỉ được đóng gói cho đúng một loại chip; Cài đặt sẽ báo rõ lỗi này.
+- Bản chưa ký (chưa có Apple Developer ID): lần đầu mở, macOS báo không xác minh được nhà phát triển. Chuột phải vào Moshi → *Open*, hoặc bỏ cờ cách ly: `xattr -dr com.apple.quarantine /Applications/Moshi.app`. Tự cập nhật (electron-updater) trên macOS cũng cần app được ký.
+- Đóng gói tại chỗ: `npm run dist:mac:arm64` trên máy Apple Silicon, `npm run dist:mac:x64` trên máy Intel (mỗi kiến trúc build trên máy cùng kiến trúc để `npm ci` kéo đúng binary native; GitHub Actions đã tách hai runner như vậy).
+- Gỡ lỗi gửi ảnh/sticker Instagram: chạy với `MOSHI_COMPOSER_DEBUG=1` để nhìn thấy cửa sổ ẩn mà Moshi dùng để bấm nút của Instagram; mỗi lần thất bại app cũng ghi vào log một mô tả ngắn của trang (có ô soạn không, có `input[type=file]` không, nhãn các icon).
+
 ## Kết nối tài khoản thật
 
 | Nền tảng | Cách kết nối | Cần gì | Reply / Reaction / Đính kèm / Voice / Forward |
@@ -50,6 +57,7 @@ Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (ba
 - Tìm hội thoại và **tìm trong nội dung tin nhắn** (cache cục bộ + tìm kiếm phía máy chủ Telegram), nhảy tới tin và highlight
 - Pane chi tiết dạng tab cho từng người: thông tin (ảnh đại diện, bio, SĐT, sinh nhật, giới tính khi nền tảng cung cấp), thẻ "Trò chuyện" với ngày bắt đầu, thời gian đã trò chuyện, tổng số tin (Telegram lấy số thật từ máy chủ) và lần hoạt động gần nhất, tìm trong hội thoại, ảnh & video, liên kết, tài liệu; lightbox xem ảnh
 - Gắn nhãn màu cho từng liên hệ (Công việc, Bạn thân, Người yêu, Gia đình, VIP, Vui vẻ): vòng màu quanh avatar, lọc theo nhãn ở thanh bên, chuột phải vào hội thoại để gắn nhanh
+- GIF: thư viện KLIPY tích hợp sẵn nếu bản build được đóng gói với `MOSHI_GIF_KEY` (secret trên GitHub Actions); người dùng chỉ cần dán key riêng khi muốn dùng tài khoản của mình (Cài đặt → GIF)
 - Emoji picker (8 nhóm, tìm kiếm, gần đây), thanh bên thu gọn thành rail 64px, icon nền tảng chỉ hiện khi xem gộp nhiều nền tảng
 - Soạn tin mới (⌘N hoặc nút bút): danh bạ gộp mọi tài khoản (Telegram contacts, WhatsApp, bạn bè Zalo, người từng nhắn Facebook/Instagram), lọc theo nền tảng, mở hoặc tạo hội thoại ngay
 - Responsive: bubble và ảnh co theo bề rộng khung chat (container query), dưới 1180px pane chi tiết thành lớp phủ, dưới 980px thanh bên thành rail, dưới 720px một cột kiểu điện thoại với nút quay lại
@@ -58,6 +66,7 @@ Nền mesh gradient pastel chuyển động chậm, ba cột là panel kính (ba
 - Thanh tiêu đề hiện câu chào vui xoay vòng mỗi 90 giây, gọi tên bạn, biết giờ trong ngày, số tin chưa đọc và thời tiết thật nơi bạn ở (Open-Meteo, định vị thô qua IP, không cần API key; tắt được trong Cài đặt)
 - Thanh cuộn kiểu macOS: viên 4px chỉ hiện khi cuộn hoặc rê chuột
 - Thanh tiêu đề mỏng kiểu mac ở mọi nền tảng: trên Windows app tự vẽ ba đèn giao thông thay cho nút hệ thống che nội dung
+- **Chia đôi khung chat** (⌘\\ hoặc nút ▯▯ ở đầu khung): hai hội thoại cạnh nhau, mỗi khung có ô soạn, trả lời, tệp đính kèm riêng. ⌘-click hoặc kéo thả một hội thoại từ danh sách sang nửa trái/phải, chuột phải → *Mở cạnh bên*; ⌘1/⌘2 chuyển khung; thanh bên tự gập thành rail để nhường chỗ; cửa sổ hẹp chỉ hiện khung đang chọn và nhớ lại khi mở rộng
 - ⌘K command palette, thông báo hệ thống, dark/light/system, Tiếng Việt/English
 
 ## Kiến trúc
@@ -85,6 +94,7 @@ Mỗi nền tảng là một `PlatformAdapter` (connect, listConversations, fetc
 
 - `Ctrl/⌘ K` – nhảy nhanh đến hội thoại
 - `Ctrl/⌘ ,` – cài đặt
+- `Ctrl/⌘ \\` – chia đôi / gộp khung chat, `Ctrl/⌘ 1` `Ctrl/⌘ 2` – chuyển khung
 - `Enter` gửi, `Shift+Enter` xuống dòng (đổi được trong cài đặt), `Esc` huỷ reply / đóng sheet
 
 ## Giấy phép

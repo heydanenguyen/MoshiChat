@@ -1,7 +1,7 @@
 import { app, session, utilityProcess, type UtilityProcess } from 'electron'
 import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
-import { AI_MODELS, NLLB, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type VoiceModel } from '@shared/ai'
+import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type VoiceModel } from '@shared/ai'
 
 /** The worker goes away after this long without work, giving its memory back. */
 const IDLE_MS = 10 * 60 * 1000
@@ -119,13 +119,15 @@ export class AiService {
     worker.stdout?.on('data', (d) => this.log('[ai]', String(d).trim()))
     worker.stderr?.on('data', (d) => this.log('[ai:err]', String(d).trim()))
     worker.on('message', (m: { type: string; id?: number; value?: unknown; message?: string } & Partial<AiProgress>) => {
-      if (m.type === 'progress' && m.kind && m.phase) this.onProgress({ kind: m.kind, phase: m.phase, progress: m.progress, error: m.error })
-      else if (m.type === 'log') this.log('[ai]', m.message)
+      if (m.type === 'progress' && m.kind && m.phase) {
+        if (m.error) this.log('[ai] failed:', m.error)
+        this.onProgress({ kind: m.kind, phase: m.phase, progress: m.progress, error: m.error ? aiErrorHint(m.error, this.language()) : undefined })
+      } else if (m.type === 'log') this.log('[ai]', m.message)
       else if ((m.type === 'result' || m.type === 'error') && m.id !== undefined) {
         const pending = this.pending.get(m.id)
         this.pending.delete(m.id)
         if (m.type === 'result') pending?.resolve(m.value)
-        else pending?.reject(new Error(m.message ?? 'AI error'))
+        else pending?.reject(new Error(aiErrorHint(m.message ?? 'AI error', this.language())))
       }
     })
     worker.on('exit', () => {

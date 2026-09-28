@@ -4064,6 +4064,7 @@ kbd {
     display: none;
   }
   .app.narrow.show-list .chat-col,
+  .app.narrow.show-list .chat-area,
   .app.narrow.show-list .details-col {
     display: none;
   }
@@ -8280,4 +8281,233 @@ button.moment-card:hover {
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-primary);
+}
+
+/* ================================================================== split chat */
+
+/* The chat cell of the app grid: one pane, or two side by side. */
+.chat-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gutter);
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.chat-area.split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* While split, the sidebar folds to its rail so both panes get room (same look as narrow windows). */
+.app.split,
+.app.split.sidebar-collapsed {
+  grid-template-columns: 68px var(--list-width) minmax(0, 1fr) auto;
+}
+.app.split .sidebar {
+  padding: 0 6px 10px 10px;
+}
+.app.split .sidebar .brand,
+.app.split .sidebar .nav-item-label,
+.app.split .sidebar .account-row-text,
+.app.split .sidebar .nav-badge,
+.app.split .sidebar .sidebar-section-title,
+.app.split .sidebar .muted-mark,
+.app.split .sidebar .sidebar-toggle {
+  display: none;
+}
+.app.split .sidebar .sidebar-top {
+  justify-content: center;
+  padding: 0;
+}
+.app.split .sidebar .nav-item,
+.app.split .sidebar .account-row {
+  justify-content: center;
+  padding: 0;
+  height: 42px;
+  position: relative;
+}
+
+/* Panes: the active one carries the accent along its top edge, the other rests a little. */
+.chat-pane {
+  transition:
+    box-shadow var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out);
+}
+.chat-pane::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 3px;
+  border-radius: 0 0 var(--radius-full) var(--radius-full);
+  background: var(--accent-gradient);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out);
+  pointer-events: none;
+}
+.chat-area.split .chat-pane.active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+.chat-area.split .chat-pane:not(.active) .chat-header {
+  opacity: 0.72;
+}
+.chat-area.split .chat-pane:not(.active) .composer {
+  opacity: 0.85;
+}
+
+/* An empty pane invites a chat in. */
+.chat-pane.empty .pane-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+}
+.pane-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.pane-empty-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+.pane-empty-hint {
+  font-size: var(--text-sm);
+  max-width: 260px;
+  line-height: 1.45;
+}
+.pane-empty .btn {
+  margin-top: 10px;
+}
+
+/* Dragging a chat from the list: two landing zones over the chat area. */
+.split-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gutter);
+  padding: var(--gutter);
+  pointer-events: none;
+  animation: fade-in var(--duration-fast) ease;
+}
+.split-drop-zone {
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-panel);
+  background: var(--accent-soft-2);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-md);
+  transition:
+    background var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+.split-drop-zone.over {
+  background: var(--accent-soft);
+  transform: scale(0.985);
+}
+
+/* The list marks the chat open in the other pane with a quieter ring. */
+.conv-item.beside::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 30%;
+  bottom: 30%;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  opacity: 0.45;
+}
+.conv-item[draggable='true'] {
+  -webkit-user-drag: element;
+}
+
+.context-menu-shortcut {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.8;
+}
+
+/* Split + details pane: two chats need the room, so the details float over the right pane unless the window is very wide. */
+@media (max-width: 1600px) {
+  .app.split .details-col {
+    position: absolute;
+    top: var(--gutter);
+    right: var(--gutter);
+    bottom: var(--gutter);
+    z-index: 20;
+    box-shadow: var(--shadow-lg);
+  }
+  .app.split {
+    position: relative;
+  }
+}
+
+/* Landing zones read over any chat underneath. */
+.split-drop-zone {
+  background: color-mix(in srgb, var(--glass-strong) 82%, var(--accent) 18%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+:root[data-theme='dark'] .split-drop-zone {
+  text-shadow: none;
+}
+.split-drop-zone.over {
+  background: color-mix(in srgb, var(--glass-strong) 65%, var(--accent) 35%);
+}
+
+/* Narrow chats (a split pane, a small window): the toolbar would squeeze the text box to a few words
+   per line, so the box takes the whole first row and the tools sit underneath, send on the right. */
+@container chat (max-width: 560px) {
+  .composer-box:not(.recording) {
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 6px 6px 6px 10px;
+    border-radius: 20px;
+  }
+  .composer-box:not(.recording) .composer-input {
+    flex: 1 1 100%;
+    order: 0;
+    padding: 6px 2px 4px;
+    min-height: 30px;
+  }
+  .composer-box:not(.recording) .composer-attach {
+    display: inline-flex;
+    order: 1;
+    margin-bottom: 0;
+  }
+  .composer-box:not(.recording) .composer-tools {
+    order: 2;
+    flex: 1;
+    margin-bottom: 0;
+  }
+  .composer-box:not(.recording) .composer-tools .composer-send {
+    margin-left: auto;
+  }
 }
