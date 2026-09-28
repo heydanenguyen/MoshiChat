@@ -787,6 +787,9 @@ function registerIpc(): void {
   })
 }
 
+// Windows and Linux draw classic scrollbars that take up space; Chromium's overlay scrollbars are the
+// macOS kind: a thin pill over the content that fades out when the scrolling stops.
+if (!isMac) app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar')
 // Chromium stops painting occluded windows on Windows, which breaks screenshot-based
 // UI checks during development. Keep the default behaviour in packaged builds.
 if (process.env.ELECTRON_RENDERER_URL && isWindows) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
