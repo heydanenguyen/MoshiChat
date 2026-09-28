@@ -4135,13 +4135,14 @@ kbd {
     position: relative;
   }
 }
+/* Invisible click-catcher under the floating details: a click anywhere else closes them. It never dims
+   the app (a tint here reads as a cut under the title bar and muddies the glass panels). */
 .details-scrim {
   position: absolute;
   inset: 0;
   z-index: 19;
   display: none;
-  background: rgba(10, 12, 24, 0.24);
-  animation: fade-in var(--duration-fast) ease;
+  background: transparent;
 }
 @media (max-width: 1229px) {
   .details-col {
@@ -4150,7 +4151,8 @@ kbd {
     right: var(--gutter);
     bottom: var(--gutter);
     z-index: 20;
-    box-shadow: var(--shadow-lg);
+    /* floats as a card: a deeper shadow separates it from the chat underneath */
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--glass-border);
   }
   .app.details-open .details-scrim {
     display: block;
