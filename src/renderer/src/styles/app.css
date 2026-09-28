@@ -8738,10 +8738,32 @@ button.moment-card:hover {
   background: transparent;
 }
 .platform-win[data-style='liquid'] .mesh {
-  background: color-mix(in srgb, var(--mesh-base) 58%, transparent);
+  background: transparent;
 }
+/* only a hint of the pastel wash is left over the wallpaper */
 .platform-win[data-style='liquid'] .mesh-blob {
-  opacity: 0.7;
+  opacity: 0.22;
+}
+.platform-win[data-style='liquid'][data-theme='dark'] .mesh-blob {
+  opacity: 0.3;
+}
+/* graded like a native vibrancy layout: nothing under the sidebar, half under the list, most under the chat */
+.platform-win[data-style='liquid'] {
+  --glass-blur: 30px;
+}
+.platform-win[data-style='liquid'] .list-col {
+  background: rgba(255, 255, 255, 0.52);
+}
+.platform-win[data-style='liquid'] .chat-col,
+.platform-win[data-style='liquid'] .details-col {
+  background: rgba(255, 255, 255, 0.8);
+}
+.platform-win[data-style='liquid'][data-theme='dark'] .list-col {
+  background: color-mix(in srgb, var(--bg-window) 40%, transparent);
+}
+.platform-win[data-style='liquid'][data-theme='dark'] .chat-col,
+.platform-win[data-style='liquid'][data-theme='dark'] .details-col {
+  background: color-mix(in srgb, var(--bg-window) 66%, transparent);
 }
 /* panels: stronger refraction and a light sheen along the top edge */
 :root[data-style='liquid'] .panel,

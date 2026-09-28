@@ -286,9 +286,16 @@ function backdropFor(settings: Settings): 'acrylic' | 'none' | undefined {
   return settings.style === 'liquid' ? 'acrylic' : 'none'
 }
 
+/** The window's own colour: transparent while a system backdrop is shown, otherwise the theme's base. */
+function windowColorFor(settings: Settings): string {
+  if (backdropFor(settings) === 'acrylic') return '#00000000'
+  return nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff'
+}
+
 function applyBackdrop(): void {
   if (isMac || !window || window.isDestroyed()) return
   window.setBackgroundMaterial(backdropFor(storage.settings) ?? 'none')
+  window.setBackgroundColor(windowColorFor(storage.settings))
 }
 
 function createWindow(): void {
@@ -300,7 +307,7 @@ function createWindow(): void {
     show: false,
     title: 'Moshi',
     icon: appIcon(),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
+    backgroundColor: windowColorFor(storage.settings),
     // A thin custom title bar on every platform; macOS keeps its native traffic lights inset into it.
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
