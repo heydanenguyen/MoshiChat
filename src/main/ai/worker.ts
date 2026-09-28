@@ -14,6 +14,7 @@ type Request =
   | { type: 'init'; cacheDir: string }
   | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel; chatModel: ChatModel; speakLang: SpeakLang; device: Device }
   | { type: 'speak'; id: number; speakLang: SpeakLang; text: string }
+  | { type: 'cutout'; id: number; image: Uint8Array }
   | { type: 'chat'; id: number; chatModel: ChatModel; messages: ChatMessage[]; maxNewTokens: number }
   | { type: 'transcribe'; id: number; voiceModel: VoiceModel; device: Device; audio: Float32Array; language?: string }
   | { type: 'translate'; id: number; texts: string[]; src: string; tgt: string }
@@ -38,11 +39,11 @@ async function lib(cacheDir?: string): Promise<typeof import('@huggingface/trans
 
 /** Build (or reuse) a pipeline, reporting download progress for this kind of model. */
 function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device, chatModel: ChatModel = 'small', speakLang: SpeakLang = 'vi'): Promise<Pipe> {
-  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : AI_MODELS.translate
+  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : kind === 'cutout' ? AI_MODELS.cutout : AI_MODELS.translate
   const key = `${spec.repo}|${device}`
   const existing = pipes.get(key)
   if (existing) return existing
-  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'chat' ? 'text-generation' : kind === 'speak' ? 'text-to-speech' : 'translation'
+  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'chat' ? 'text-generation' : kind === 'speak' ? 'text-to-speech' : kind === 'cutout' ? 'background-removal' : 'translation'
   const files = new Map<string, { loaded: number; total: number }>()
   const progress_callback = (p: { status: string; file?: string; loaded?: number; total?: number }): void => {
     if (p.status === 'progress' && p.file) {
@@ -96,6 +97,17 @@ port.on('message', async ({ data }) => {
       })) as { text?: string } | Array<{ text?: string }>
       const text = (Array.isArray(output) ? output.map((o) => o.text ?? '').join(' ') : (output.text ?? '')).trim()
       send({ type: 'result', id: request.id, value: text })
+      return
+    }
+    if (request.type === 'cutout') {
+      const { RawImage } = await lib()
+      const remove = await pipe('cutout', 'turbo', 'cpu')
+      const image = await RawImage.fromBlob(new Blob([Uint8Array.from(request.image) as unknown as BlobPart]))
+      type Cut = { toSharp(): import('sharp').Sharp }
+      const result = (await remove(image)) as Cut | Cut[]
+      const cut = Array.isArray(result) ? result[0] : result
+      const png = await cut.toSharp().png().toBuffer()
+      send({ type: 'result', id: request.id, value: new Uint8Array(png) })
       return
     }
     if (request.type === 'speak') {

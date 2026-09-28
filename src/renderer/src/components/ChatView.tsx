@@ -576,6 +576,7 @@ function Bubble({
   }
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
+  const customUrl = useStore((s) => (id: string) => s.customStickers.find((c) => c.id === id)?.url)
   // An older sticker the platform gave back as a photo: find out which one it is, once, and remember it.
   const rememberSticker = useStore((s) => s.rememberSticker)
   const unknownSticker = sticker && !sticker.sticker && message.isOutgoing ? sticker.url : undefined
@@ -636,7 +637,9 @@ function Bubble({
               </div>
             )}
             {sticker &&
-              (sticker.sticker && isStickerId(sticker.sticker) ? (
+              (sticker.sticker?.startsWith('custom:') && customUrl(sticker.sticker.slice(7)) ? (
+                <img className="attachment-sticker" src={customUrl(sticker.sticker.slice(7))} alt={sticker.name ?? t('sticker')} draggable={false} />
+              ) : sticker.sticker && isStickerId(sticker.sticker) ? (
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
                   <StickerArt id={sticker.sticker} />
                 </span>

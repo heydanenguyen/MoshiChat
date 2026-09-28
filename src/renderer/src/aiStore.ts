@@ -52,6 +52,8 @@ interface AiState {
   speak(message: Message, text?: string): Promise<void>
   remove(kind: AiKind): Promise<void>
   closeSetup(): void
+  /** Run now if the model is here, otherwise offer the download first and run afterwards. */
+  withModel(kind: AiKind, run: () => Promise<void>): Promise<void>
   transcribe(message: Message, attachment: Attachment): Promise<void>
   translate(message: Message): Promise<void>
   toggleHidden(key: string): void
@@ -205,6 +207,8 @@ export const useAi = create<AiState>((set, get) => {
     closeSetup() {
       set({ setup: undefined })
     },
+
+    withModel,
 
     async transcribe(message, attachment) {
       const key = voiceKey(message, attachment)

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import type { CustomSticker } from '@shared/bridge'
 import type { SettingsPage } from './components/SettingsSheet'
 import type {
   Account,
@@ -166,6 +167,13 @@ interface State {
   createTag(input: { name: string; icon: string; color: string; fill?: string }): Promise<TagMeta>
   deleteTag(tag: TagId): Promise<void>
   togglePin(conversationId: string): Promise<void>
+  /** The user's own stickers (loaded once, kept in memory). */
+  customStickers: CustomSticker[]
+  stickersLoaded: boolean
+  loadStickers(): Promise<void>
+  /** Pick an image; still photos get their background cut out when `cutout` is on (the model downloads first). */
+  addSticker(cutout: boolean): Promise<void>
+  removeSticker(id: string): Promise<void>
   addTodo(input: { conversationId?: string; messageId?: string; text: string; due?: number }): Promise<void>
   updateTodo(id: string, patch: { text?: string; due?: number; done?: boolean }): Promise<void>
   removeTodo(id: string): Promise<void>
@@ -317,6 +325,8 @@ export const useStore = create<State>((set, get) => ({
   detailsTab: 'info',
   profiles: {},
   drafts: { ...draftMap },
+  customStickers: [],
+  stickersLoaded: false,
   stats: {},
   shared: {},
   replyTos: {},
@@ -875,6 +885,38 @@ export const useStore = create<State>((set, get) => ({
     const { settings, conversations } = get()
     const pinned = isPinned(conversations[conversationId], settings.pins)
     await get().setSettings({ pins: { ...(settings.pins ?? {}), [conversationId]: !pinned } })
+  },
+
+  async loadStickers() {
+    if (get().stickersLoaded) return
+    try {
+      set({ customStickers: await window.unison.stickers.list(), stickersLoaded: true })
+    } catch {
+      set({ stickersLoaded: true })
+    }
+  },
+
+  async addSticker(cutout) {
+    const picked = await window.unison.stickers.pick()
+    if (!picked) return
+    const add = async (): Promise<void> => {
+      try {
+        const sticker = await window.unison.stickers.add(picked.path, cutout && !picked.animated)
+        set({ customStickers: [sticker, ...get().customStickers] })
+      } catch (err) {
+        get().showToast(cleanError(err), 'error')
+      }
+    }
+    if (cutout && !picked.animated) {
+      // The cut-out model may still need downloading: the AI setup sheet takes over and calls back.
+      const { useAi } = await import('./aiStore')
+      await useAi.getState().withModel('cutout', add)
+    } else await add()
+  },
+
+  async removeSticker(id) {
+    await window.unison.stickers.remove(id)
+    set({ customStickers: get().customStickers.filter((s) => s.id !== id) })
   },
 
   async addTodo(input) {

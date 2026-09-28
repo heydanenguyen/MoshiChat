@@ -52,6 +52,12 @@ const bridge: MoshiBridge = {
     summarize: (key, lines) => ipcRenderer.invoke(IPC.aiSummarize, key, lines),
     suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines)
   },
+  stickers: {
+    list: () => ipcRenderer.invoke(IPC.stickersList),
+    pick: () => ipcRenderer.invoke(IPC.stickersPick),
+    add: (path, cutout) => ipcRenderer.invoke(IPC.stickersAdd, path, cutout),
+    remove: (id) => ipcRenderer.invoke(IPC.stickersRemove, id)
+  },
   backup: {
     create: (input) => ipcRenderer.invoke(IPC.backupCreate, input),
     pick: () => ipcRenderer.invoke(IPC.backupPick),

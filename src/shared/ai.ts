@@ -1,6 +1,6 @@
 /** On-device AI (Whisper for voice notes, NLLB for translation): shared ids, sizes and helpers. */
 
-export type AiKind = 'voice' | 'translate' | 'chat' | 'speak'
+export type AiKind = 'voice' | 'translate' | 'chat' | 'speak' | 'cutout'
 /** Languages the on-device reading voice comes in (system voices cover the rest when installed). */
 export type SpeakLang = 'vi' | 'en'
 export type VoiceModel = 'turbo' | 'small'
@@ -17,7 +17,7 @@ export interface AiModelSpec {
   files?: string[]
 }
 
-export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec; chat: Record<ChatModel, AiModelSpec>; speak: Record<SpeakLang, AiModelSpec> } = {
+export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec; chat: Record<ChatModel, AiModelSpec>; speak: Record<SpeakLang, AiModelSpec>; cutout: AiModelSpec } = {
   voice: {
     // Best free speech recognition that runs locally; handles Vietnamese well.
     turbo: { repo: 'onnx-community/whisper-large-v3-turbo', dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' }, megabytes: 725 },
@@ -34,7 +34,9 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
   speak: {
     vi: { repo: 'Xenova/mms-tts-vie', dtype: 'q8', megabytes: 40, files: ['model'] },
     en: { repo: 'Xenova/mms-tts-eng', dtype: 'q8', megabytes: 40, files: ['model'] }
-  }
+  },
+  // Background removal for custom stickers (BRIA RMBG-1.4, CC BY-NC 4.0: non-commercial use).
+  cutout: { repo: 'briaai/RMBG-1.4', dtype: 'q8', megabytes: 44, files: ['model'] }
 }
 
 export interface AiStatus {
@@ -42,6 +44,7 @@ export interface AiStatus {
   translate: { ready: boolean }
   chat: { model: ChatModel; ready: boolean }
   speak: Record<SpeakLang, boolean>
+  cutout: { ready: boolean }
   /** Space the downloaded models take. */
   bytes: number
 }

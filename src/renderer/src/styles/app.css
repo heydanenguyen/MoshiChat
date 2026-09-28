@@ -9531,3 +9531,113 @@ button.moment-card:hover {
 .ai-lang:disabled:not(.ready) {
   opacity: 0.6;
 }
+
+/* ================================================================== custom stickers */
+.sticker-mine-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 8px;
+}
+.sticker-mine-bar .btn.small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--text-xs);
+}
+.sticker-cutout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.sticker-cutout input {
+  accent-color: var(--accent);
+}
+.sticker-cutout-note {
+  color: var(--text-tertiary);
+}
+.sticker-empty {
+  padding: 18px 16px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.45;
+}
+.sticker-cell.mine {
+  position: relative;
+  display: block;
+  padding: 0;
+}
+.sticker-cell-img {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.sticker-cell-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.sticker-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 0;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) ease;
+}
+.sticker-cell.mine:hover .sticker-remove {
+  opacity: 1;
+}
+.sticker-remove:hover {
+  color: var(--danger);
+}
+/* stickers come alive: a little pop when they land, a wiggle under the pointer */
+.attachment-sticker {
+  animation: sticker-land var(--duration-slow) var(--ease-spring);
+  transform-origin: 50% 90%;
+}
+.attachment-sticker:hover {
+  animation: sticker-wiggle 0.6s ease-in-out;
+}
+@keyframes sticker-land {
+  from {
+    transform: scale(0.6) rotate(-6deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes sticker-wiggle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-6deg) scale(1.04);
+  }
+  75% {
+    transform: rotate(6deg) scale(1.04);
+  }
+}

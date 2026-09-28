@@ -106,11 +106,11 @@ export function TranslationBlock({ message }: { message: Message }): JSX.Element
 }
 
 const kindSpec = (kind: AiKind, voiceModel: VoiceModel, chatModel: ChatModel, speakLang: SpeakLang = 'vi'): { megabytes: number } =>
-  kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : AI_MODELS.translate
-const titleKey = (kind: AiKind): 'aiVoiceTitle' | 'aiTranslateTitle' | 'aiChatTitle' | 'aiSpeakTitle' =>
-  kind === 'voice' ? 'aiVoiceTitle' : kind === 'chat' ? 'aiChatTitle' : kind === 'speak' ? 'aiSpeakTitle' : 'aiTranslateTitle'
-const introKey = (kind: AiKind): 'aiVoiceIntro' | 'aiTranslateIntro' | 'aiChatIntro' | 'aiSpeakIntro' =>
-  kind === 'voice' ? 'aiVoiceIntro' : kind === 'chat' ? 'aiChatIntro' : kind === 'speak' ? 'aiSpeakIntro' : 'aiTranslateIntro'
+  kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : kind === 'cutout' ? AI_MODELS.cutout : AI_MODELS.translate
+const titleKey = (kind: AiKind): 'aiVoiceTitle' | 'aiTranslateTitle' | 'aiChatTitle' | 'aiSpeakTitle' | 'aiCutoutTitle' =>
+  kind === 'voice' ? 'aiVoiceTitle' : kind === 'chat' ? 'aiChatTitle' : kind === 'speak' ? 'aiSpeakTitle' : kind === 'cutout' ? 'aiCutoutTitle' : 'aiTranslateTitle'
+const introKey = (kind: AiKind): 'aiVoiceIntro' | 'aiTranslateIntro' | 'aiChatIntro' | 'aiSpeakIntro' | 'aiCutoutIntro' =>
+  kind === 'voice' ? 'aiVoiceIntro' : kind === 'chat' ? 'aiChatIntro' : kind === 'speak' ? 'aiSpeakIntro' : kind === 'cutout' ? 'aiCutoutIntro' : 'aiTranslateIntro'
 
 /** First use: explain, download with progress, then carry on with what the user asked for. */
 export function AiSetupSheet(): JSX.Element | null {
@@ -266,6 +266,7 @@ export function AiSettings(): JSX.Element {
       {row('translate', t('aiTranslateTitle'), t('aiTranslateHint'))}
       {row('chat', t('aiChatTitle'), t('aiChatHint'))}
       {row('speak', t('aiSpeakTitle'), t('aiSpeakHint'))}
+      {row('cutout', t('aiCutoutTitle'), t('aiCutoutHint'))}
       <div className="settings-row">
         <div className="settings-row-text">
           <div className="settings-row-title">{t('aiSuggestAuto')}</div>

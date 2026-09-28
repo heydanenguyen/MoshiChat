@@ -113,6 +113,7 @@ export class AiService {
       translate: { ready: await present(AI_MODELS.translate) },
       chat: { model: this.chatModel(), ready: await present(AI_MODELS.chat[this.chatModel()]) },
       speak: { vi: await present(AI_MODELS.speak.vi), en: await present(AI_MODELS.speak.en) },
+      cutout: { ready: await present(AI_MODELS.cutout) },
       bytes: await folderSize(modelsDir())
     }
   }
@@ -191,7 +192,9 @@ export class AiService {
           ? Object.values(AI_MODELS.chat).map((m) => m.repo)
           : kind === 'speak'
             ? Object.values(AI_MODELS.speak).map((m) => m.repo)
-            : [AI_MODELS.translate.repo]
+            : kind === 'cutout'
+              ? [AI_MODELS.cutout.repo]
+              : [AI_MODELS.translate.repo]
     for (const repo of repos) await rm(join(modelsDir(), ...repo.split('/')), { recursive: true, force: true })
   }
 
@@ -222,6 +225,11 @@ export class AiService {
     const bullets = parseSummary(text)
     if (bullets.length) this.remember('summaries', cacheKey, JSON.stringify(bullets))
     return bullets
+  }
+
+  /** The photo with its background made transparent (PNG in, PNG out). */
+  cutout(png: Uint8Array): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ type: 'cutout', image: png })
   }
 
   /** Audio for a text in one of the reading voices (16 kHz mono PCM). */

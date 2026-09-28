@@ -1,5 +1,15 @@
 import type { AiKind, AiStatus, SpeakLang } from './ai'
 import type { ChatLine } from './ai-prompts'
+
+/** A sticker the user made (see main/stickers.ts). */
+export interface CustomSticker {
+  id: string
+  name: string
+  mime: string
+  animated: boolean
+  createdAt: number
+  url: string
+}
 import type {
   Account,
   AddAccountInput,
@@ -93,6 +103,15 @@ export interface MoshiBridge {
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
     /** Three short replies to the newest line. */
     suggest(lines: ChatLine[]): Promise<string[]>
+  }
+  stickers: {
+    /** The user's own stickers, image inline as a data URL, newest first. */
+    list(): Promise<CustomSticker[]>
+    /** Ask for an image file; null when cancelled. */
+    pick(): Promise<{ path: string; animated: boolean; name: string } | null>
+    /** Add it (cut the background out of still images when asked). */
+    add(path: string, cutout: boolean): Promise<CustomSticker>
+    remove(id: string): Promise<void>
   }
   backup: {
     /** Ask where to save, then write an encrypted backup. Null when the user cancels. */
@@ -202,6 +221,10 @@ export const IPC = {
   appPickFiles: 'app:pickFiles',
   appSaveVoice: 'app:saveVoice',
   appSticker: 'app:sticker',
+  stickersList: 'stickers:list',
+  stickersPick: 'stickers:pick',
+  stickersAdd: 'stickers:add',
+  stickersRemove: 'stickers:remove',
   appGifSearch: 'app:gifSearch',
   appGif: 'app:gif',
   appGifDefault: 'app:gifDefault',

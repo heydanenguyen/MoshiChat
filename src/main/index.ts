@@ -16,6 +16,7 @@ import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
 import { Reminders } from './reminders'
+import { addSticker, customStickerFile, listStickers, pickStickerSource, removeSticker } from './stickers'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind, SpeakLang } from '@shared/ai'
 import type { ChatLine } from '@shared/ai-prompts'
@@ -144,6 +145,7 @@ const LEGAL_DOCS = { notice: 'NOTICE.md', license: 'LICENSE', terms: 'TERMS.md',
 
 /** A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency. */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
+  if (id.startsWith('custom:')) return customStickerFile(id.slice(7))
   if (!isStickerId(id)) throw new Error('Unknown sticker')
   const dir = app.isPackaged ? join(process.resourcesPath, 'stickers') : join(__dirname, '../../resources/stickers')
   const path = join(dir, `${id}.png`)
@@ -734,8 +736,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.updateDownload, () => updater.download())
   ipcMain.on(IPC.updateInstall, () => updater.install())
   ipcMain.handle(IPC.aiStatus, () => ai.status())
-  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
-  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' ? kind : 'voice'))
+  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
+  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice'))
   ipcMain.handle(IPC.aiSpeak, (_e, text: string, speakLang: SpeakLang) => ai.speak(String(text ?? '').slice(0, 1200), speakLang === 'en' ? 'en' : 'vi'))
   ipcMain.handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
   ipcMain.handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
@@ -799,6 +801,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
+  ipcMain.handle(IPC.stickersList, () => listStickers())
+  ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
+  ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>
+    addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined)
+  )
+  ipcMain.handle(IPC.stickersRemove, (_e, id: string) => removeSticker(String(id)))
   ipcMain.handle(IPC.appLegal, (_e, name: string) => {
     const file = LEGAL_DOCS[name as keyof typeof LEGAL_DOCS]
     if (!file) throw new Error('Unknown document')
