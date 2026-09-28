@@ -1,25 +1,13 @@
-## Moshi 0.2.2
-
-### Giao diện
-- **Theme mới: Liquid Glass.** Cài đặt → Giao diện → Phong cách. Kính trong hơn, viền sáng, bo tròn sâu. Chỉ đổi hiệu ứng bề mặt, bố cục giữ nguyên.
-- **Chọn nền tối.** Xanh than, xám than, đen, xám xanh, nâu mocha, hoặc bất kỳ màu nào. Các tấm kính, thanh bên và popup đổi theo.
-- **Bảng Cài đặt mới.** Danh sách trang bên trái, mỗi lần một trang bên phải, không còn cuộn dài. Tài khoản lên đầu, nhớ trang mở lần cuối.
-- Trong Tùy chỉnh liên hệ có thể chọn một nhân vật trừu tượng làm ảnh đại diện.
+## Moshi 0.2.3
 
 ### Windows
-- Thanh cuộn kiểu overlay như macOS: mỏng, nổi trên nội dung, tự ẩn khi dừng cuộn.
-- Ô nhắn tin không còn hiện thanh cuộn có mũi tên khi chỉ có một dòng.
-- Popup emoji, sticker, GIF và hẹn giờ gửi không còn bị cắt khi khung chat hẹp.
-
-### Khác
-- Cập nhật trong app từ GitHub Releases: có bản mới thì hiện thẻ ở thanh bên và trong Cài đặt.
+- **Cập nhật không còn bật cửa sổ gỡ cài đặt.** Khi cài đè bản mới (nút Cập nhật trong bộ cài, hoặc tự cập nhật trong app), bản cũ được gỡ im lặng phía sau. Lần cài đè từ 0.2.2 lên bản này có thể còn hiện cửa sổ đó một lần cuối, chỉ cần đóng nó lại.
+- **Thanh cuộn mỏng như macOS.** Vệt 4px trong khung chat và danh sách, chỉ hiện khi rê chuột hoặc đang cuộn; 6px ở các vùng khác. Không còn thanh cuộn dày có rãnh.
+- **Liquid Glass xuyên nền.** Trên Windows 11 (22H2 trở lên), chọn phong cách Liquid Glass là màn hình nền được làm mờ và hiện xuyên qua cửa sổ, rõ nhất ở panel trái. Windows 10 giữ nền phẳng.
 
 ---
 
 ### English
-- **New Liquid Glass style** (Settings → Appearance → Style): clearer glass, bright edges, deeper rounding; surface effects only, same layout.
-- **Dark base colour**: navy, graphite, black, slate, mocha or any custom colour.
-- **Settings redesigned** as a page list on the left with one page at a time on the right.
-- Contact customizer can use one of the abstract characters as the photo.
-- Windows: overlay scrollbars like macOS, no arrowed scrollbar in the composer, pickers stay inside the chat panel.
-- In-app updates from GitHub Releases.
+- Windows: updating no longer pops up the uninstall window; the old version is removed silently (installer Update button and in-app updates alike). Installing over 0.2.2 may show it one last time; just close it.
+- Windows: thin macOS-style scrollbars (4px in chat and list panes, shown on hover or while scrolling; 6px elsewhere).
+- Windows 11 22H2+: the Liquid Glass style shows the blurred desktop through the window (acrylic).
