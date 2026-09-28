@@ -51,9 +51,13 @@ export function MemoryCard({ collapsed }: { collapsed: boolean }): JSX.Element |
   const conversation = conversations[memory.record.conversationId]
   const ago =
     'years' in memory.ago
-      ? t('memoryYearsAgo', { n: String(memory.ago.years) })
+      ? memory.ago.years === 1
+        ? t('memoryYearAgo')
+        : t('memoryYearsAgo', { n: String(memory.ago.years) })
       : 'months' in memory.ago
-        ? t('memoryMonthsAgo', { n: String(memory.ago.months) })
+        ? memory.ago.months === 1
+          ? t('memoryMonthAgo')
+          : t('memoryMonthsAgo', { n: String(memory.ago.months) })
         : t('memoryWeekAgo')
   const open = (): void => {
     select(memory.record.conversationId)

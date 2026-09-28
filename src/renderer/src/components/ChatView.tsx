@@ -576,7 +576,9 @@ function Bubble({
   }
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
-  const customUrl = useStore((s) => (id: string) => s.customStickers.find((c) => c.id === id)?.url)
+  // A stable selector (zustand v5): the array itself, not a fresh closure per render.
+  const customStickers = useStore((s) => s.customStickers)
+  const customUrl = (id: string): string | undefined => customStickers.find((c) => c.id === id)?.url
   // An older sticker the platform gave back as a photo: find out which one it is, once, and remember it.
   const rememberSticker = useStore((s) => s.rememberSticker)
   const unknownSticker = sticker && !sticker.sticker && message.isOutgoing ? sticker.url : undefined

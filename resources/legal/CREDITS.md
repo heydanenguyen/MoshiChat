@@ -39,6 +39,9 @@ Full list of every dependency: run `npx license-checker --production` in the sou
 | ONNX Runtime (`onnxruntime-node`) | MIT | https://github.com/microsoft/onnxruntime |
 | Whisper large-v3-turbo (OpenAI), ONNX conversion | MIT | https://huggingface.co/onnx-community/whisper-large-v3-turbo |
 | NLLB-200 distilled 600M (Meta AI), ONNX conversion | **CC BY-NC 4.0 – phi thương mại / non-commercial** | https://huggingface.co/Xenova/nllb-200-distilled-600M |
+| Qwen2.5 0.5B / 1.5B Instruct (Alibaba), ONNX conversion | Apache-2.0 | https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct |
+| MMS-TTS vie / eng (Meta AI), ONNX conversion | **CC BY-NC 4.0 – phi thương mại / non-commercial** | https://huggingface.co/Xenova/mms-tts-vie |
+| RMBG-1.4 (BRIA AI), ONNX conversion | **CC BY-NC 4.0 – phi thương mại / non-commercial** | https://huggingface.co/briaai/RMBG-1.4 |
 
 Các mô hình chỉ được tải khi bạn chọn; chúng không đi kèm trong bộ cài.
 Models are downloaded only when you choose to; they are not bundled with the installer.

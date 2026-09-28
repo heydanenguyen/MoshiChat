@@ -6,11 +6,26 @@ let current: { stop(): void } | undefined
 
 const langTag = (lang: string): string => (lang === 'vi' ? 'vi' : lang === 'en' ? 'en' : lang)
 
+/** Chromium fills the voice list asynchronously; wait for it once (briefly) instead of assuming there are none. */
+export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
+  if (typeof speechSynthesis === 'undefined') return Promise.resolve([])
+  const now = speechSynthesis.getVoices()
+  if (now.length) return Promise.resolve(now)
+  return new Promise((resolve) => {
+    const done = (): void => {
+      speechSynthesis.removeEventListener('voiceschanged', done)
+      resolve(speechSynthesis.getVoices())
+    }
+    speechSynthesis.addEventListener('voiceschanged', done)
+    setTimeout(done, 700)
+  })
+}
+if (typeof speechSynthesis !== 'undefined') void loadVoices()
+
 /** A system voice for this language, preferring "natural"/online ones and the app's own language. */
-export function systemVoice(lang: string): SpeechSynthesisVoice | undefined {
-  if (typeof speechSynthesis === 'undefined') return undefined
+export async function systemVoice(lang: string): Promise<SpeechSynthesisVoice | undefined> {
   const tag = langTag(lang)
-  const voices = speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith(tag))
+  const voices = (await loadVoices()).filter((v) => v.lang.toLowerCase().startsWith(tag))
   return voices.find((v) => /natural|neural/i.test(v.name)) ?? voices.find((v) => v.localService) ?? voices[0]
 }
 

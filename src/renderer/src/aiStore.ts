@@ -262,7 +262,7 @@ export const useAi = create<AiState>((set, get) => {
       const body = (text ?? message.text).trim()
       if (!body) return
       const lang = detectLanguage(body)
-      const voice = systemVoice(lang)
+      const voice = await systemVoice(lang)
       if (voice) {
         set({ speaking: key })
         await speakWithSystem(body, voice)
