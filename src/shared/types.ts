@@ -1,4 +1,5 @@
 import type { AiProgress, ChatModel, VoiceModel } from './ai'
+import type { Todo } from './todos'
 import type { LogoId } from './logos'
 /** Domain model shared between main, preload and renderer. */
 
@@ -520,6 +521,8 @@ export interface Settings {
   acceptedUnofficial?: Partial<Record<Platform, number>>
   /** Chats hidden from the list ("Strangers" in Settings): conversation id -> when it was hidden. Hidden chats are muted too. */
   hidden?: Record<string, number>
+  /** To-dos (from messages or typed), with optional reminders; the main process marks reminders shown. */
+  todos?: Todo[]
   /** Text size across the app (bigger for high-resolution screens). */
   textSize?: TextSize
   /** Whole-interface zoom, 0.8-2 (1 = 100%). */
@@ -625,7 +628,7 @@ export type BridgeEvent =
   | { type: 'typing'; typing: TypingEvent }
   | { type: 'auth:prompt'; prompt: AuthPrompt }
   | { type: 'auth:cleared'; requestId: string }
-  | { type: 'focus-conversation'; conversationId: string }
+  | { type: 'focus-conversation'; conversationId: string; messageId?: string }
   | { type: 'window:state'; maximized: boolean }
   | { type: 'settings:updated'; settings: Settings }
   | { type: 'ai:progress'; progress: AiProgress }

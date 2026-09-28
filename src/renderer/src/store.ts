@@ -48,6 +48,7 @@ export type Sheet =
   | { kind: 'new-chat' }
   | { kind: 'backup'; mode: 'create' | 'restore' }
   | { kind: 'legal'; doc: LegalDoc }
+  | { kind: 'todos' }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 
@@ -165,6 +166,9 @@ interface State {
   createTag(input: { name: string; icon: string; color: string; fill?: string }): Promise<TagMeta>
   deleteTag(tag: TagId): Promise<void>
   togglePin(conversationId: string): Promise<void>
+  addTodo(input: { conversationId?: string; messageId?: string; text: string; due?: number }): Promise<void>
+  updateTodo(id: string, patch: { text?: string; due?: number; done?: boolean }): Promise<void>
+  removeTodo(id: string): Promise<void>
   /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
   hideConversation(conversationId: string): Promise<void>
   unhideConversation(conversationId: string): Promise<void>
@@ -438,6 +442,7 @@ export const useStore = create<State>((set, get) => ({
           break
         case 'focus-conversation':
           get().select(event.conversationId)
+          if (event.messageId) setTimeout(() => void get().jumpTo(event.messageId!), 400)
           break
       }
     })
@@ -870,6 +875,32 @@ export const useStore = create<State>((set, get) => ({
     const { settings, conversations } = get()
     const pinned = isPinned(conversations[conversationId], settings.pins)
     await get().setSettings({ pins: { ...(settings.pins ?? {}), [conversationId]: !pinned } })
+  },
+
+  async addTodo(input) {
+    const { settings } = get()
+    const todo = { id: crypto.randomUUID(), createdAt: Date.now(), ...input }
+    await get().setSettings({ todos: [...(settings.todos ?? []), todo] })
+    get().showToast(translate(settings.language, 'todoAdded'), 'info')
+  },
+
+  async updateTodo(id, patch) {
+    const { settings } = get()
+    const now = Date.now()
+    const todos = (settings.todos ?? []).map((t) => {
+      if (t.id !== id) return t
+      const next = { ...t, ...patch }
+      if ('done' in patch) next.doneAt = patch.done ? now : undefined
+      // A new time means a new reminder.
+      if ('due' in patch) delete next.remindedAt
+      if (next.due === undefined) delete next.due
+      return next
+    })
+    await get().setSettings({ todos })
+  },
+
+  async removeTodo(id) {
+    await get().setSettings({ todos: (get().settings.todos ?? []).filter((t) => t.id !== id) })
   },
 
   async hideConversation(conversationId) {

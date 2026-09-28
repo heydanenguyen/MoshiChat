@@ -15,6 +15,7 @@ import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
+import { Reminders } from './reminders'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind } from '@shared/ai'
 import type { ChatLine } from '@shared/ai-prompts'
@@ -79,6 +80,16 @@ const ai = new AiService(
 
 const updater = new Updater((state) => emit({ type: 'update:state', state }), log)
 
+const reminders = new Reminders(
+  storage,
+  emit,
+  (todo) => {
+    window?.show()
+    window?.focus()
+    if (todo.conversationId) window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId: todo.conversationId, messageId: todo.messageId })
+  },
+  log
+)
 const scheduler = new Scheduler(
   storage,
   manager,
@@ -838,6 +849,7 @@ if (!gotLock) {
     await storage.load()
     await pruneOrphanedSettings()
     void scheduler.start()
+    reminders.start()
     void pruneSafetyCopies()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))

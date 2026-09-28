@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { BellOff, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { useOpenTodos } from './TodoSheet'
 import { UpdateCard } from './UpdateCard'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
@@ -23,6 +24,7 @@ interface Menu {
 
 export function Sidebar(): JSX.Element {
   const t = useT()
+  const openTodos = useOpenTodos()
   const filter = useStore((s) => s.filter)
   const setFilter = useStore((s) => s.setFilter)
   const accounts = useStore((s) => s.accounts)
@@ -139,6 +141,14 @@ export function Sidebar(): JSX.Element {
               </button>
             )
           })}
+          <button className="nav-item" onClick={() => openSheet({ kind: 'todos' })} title={t('todos')}>
+            <span className="nav-item-icon tile todo">
+              <ListTodo size={16} strokeWidth={2.2} />
+            </span>
+            {!collapsed && <span className="nav-item-label">{t('todos')}</span>}
+            {!collapsed && badge(openTodos)}
+            {collapsed && openTodos > 0 && <span className="rail-dot" />}
+          </button>
         </div>
 
         <div className="sidebar-section">

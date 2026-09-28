@@ -69,7 +69,20 @@ const at = (days: number, hour: number, minute = 0): number => {
 }
 
 /** Pick when a message goes out: quick choices plus any date and time. */
-export function SchedulePicker({ onPick, onClose }: { onPick(sendAt: number): void; onClose(): void }): JSX.Element {
+/** Pick a time: for sending later (default) or, with `title`/`noneLabel`, for a to-do reminder (which may have none). */
+export function SchedulePicker({
+  onPick,
+  onClose,
+  title,
+  noneLabel,
+  onNone
+}: {
+  onPick(sendAt: number): void
+  onClose(): void
+  title?: string
+  noneLabel?: string
+  onNone?(): void
+}): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const ref = useRef<HTMLDivElement>(null)
@@ -108,8 +121,16 @@ export function SchedulePicker({ onPick, onClose }: { onPick(sendAt: number): vo
     <div className="schedule-picker" ref={ref} role="dialog" aria-label={t('scheduleSend')}>
       <div className="schedule-title">
         <CalendarClock size={15} strokeWidth={2.3} />
-        {t('scheduleSend')}
+        {title ?? t('scheduleSend')}
       </div>
+      {noneLabel && onNone && (
+        <button className="schedule-option" onClick={onNone}>
+          <span className="schedule-option-icon">
+            <CalendarClock size={16} strokeWidth={2.2} />
+          </span>
+          <span className="schedule-option-label">{noneLabel}</span>
+        </button>
+      )}
       {options.map((o) => (
         <button key={o.label} className="schedule-option" onClick={() => onPick(o.time)}>
           <span className="schedule-option-icon">{o.icon}</span>
@@ -123,7 +144,7 @@ export function SchedulePicker({ onPick, onClose }: { onPick(sendAt: number): vo
           {t('scheduleConfirm')}
         </button>
       </div>
-      <div className="schedule-note">{t('scheduledNote')}</div>
+      {!title && <div className="schedule-note">{t('scheduledNote')}</div>}
     </div>
   )
 }

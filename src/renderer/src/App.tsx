@@ -20,6 +20,7 @@ import { darkBaseHex, stepZoom } from '@shared/types'
 import { NewChatSheet } from './components/NewChatSheet'
 import { BackupSheet } from './components/BackupSheet'
 import { LegalSheet } from './components/LegalSheet'
+import { TodoSheet } from './components/TodoSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
@@ -280,6 +281,7 @@ export default function App(): JSX.Element {
             {sheet.kind === 'new-chat' && <NewChatSheet />}
             {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
             {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
+            {sheet.kind === 'todos' && <TodoSheet />}
             <AiSetupSheet />
             {forwarding && <ForwardSheet message={forwarding} />}
             {lightbox && <Lightbox {...lightbox} />}
