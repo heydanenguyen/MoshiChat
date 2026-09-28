@@ -1,7 +1,11 @@
 import { BrowserWindow } from 'electron'
+import { readFile, stat } from 'fs/promises'
+import { basename } from 'path'
 import { SessionExpiredError } from './web-client'
 
 const IDLE_CLOSE_MS = 3 * 60_000
+/** Files handed over as a drop (when Instagram has no file input) are sent inline, so keep them modest. */
+const DROP_MAX_BYTES = 25 * 1024 * 1024
 
 /** Words Instagram uses for its Send button across common UI languages. */
 const SEND_LABELS = [
@@ -23,86 +27,244 @@ const SEND_LABELS = [
   'Gönder'
 ]
 
+/** Instagram's "Add Photo or Video" button, by its icon label, across common UI languages. */
+const MEDIA_LABEL = 'photo|video|image|media|gallery|ảnh|hình|foto|imagen|bild|图片|照片|写真|사진|рисун|фото'
+
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  webm: 'audio/webm'
+}
+
+type Logger = (...args: unknown[]) => void
+
+/** Shared helpers for the page scripts (a string so it is inlined into each executeJavaScript call). */
+const HELPERS = `
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const findBox = () => document.querySelector('div[role="textbox"][contenteditable="true"]') || document.querySelector('div[contenteditable="true"][aria-label]') || document.querySelector('form textarea');
+  const fileInput = () => document.querySelector('input[type="file"]');
+  const labels = ${JSON.stringify(SEND_LABELS)};
+  const sendButton = () => [...document.querySelectorAll('div[role="button"], button')].find((b) => labels.includes((b.textContent || '').trim()) || labels.includes(b.getAttribute('aria-label') || ''));
+`
+
 /**
  * Sends a direct message the way a person does on instagram.com: open the
  * thread in a hidden window, type into Instagram's own composer and press its
  * Send button. Instagram's client then talks to its servers itself, so the
  * request looks exactly like normal web usage (the legacy REST send endpoint
  * gets web sessions logged out).
+ *
+ * Set MOSHI_COMPOSER_DEBUG=1 to watch the hidden window (with DevTools) while
+ * it works; every failure also logs a short description of the page it saw.
  */
 export class DirectComposer {
   private window?: BrowserWindow
   private idle?: NodeJS.Timeout
   private queue: Promise<unknown> = Promise.resolve()
 
-  constructor(private readonly partition: string) {}
+  constructor(
+    private readonly partition: string,
+    private readonly log: Logger = () => undefined
+  ) {}
 
-  /** Serialised so two sends never type into the same box at once. */
-  send(threadUrl: string, text: string): Promise<void> {
-    const run = this.queue.then(() => this.sendNow(threadUrl, text))
+  /** Serialised so two sends never type into the same box at once. `threadUrls`: addresses to try, best first. */
+  send(threadUrls: string | string[], text: string): Promise<void> {
+    const run = this.queue.then(() => this.sendNow(threadUrls, text))
     this.queue = run.catch(() => undefined)
     return run
   }
 
   /** Photos, videos and audio through Instagram's own "Add Photo or Video" picker. */
-  sendFiles(threadUrl: string, paths: string[]): Promise<void> {
-    const run = this.queue.then(() => this.sendFilesNow(threadUrl, paths))
+  sendFiles(threadUrls: string | string[], paths: string[]): Promise<void> {
+    const run = this.queue.then(() => this.sendFilesNow(threadUrls, paths))
     this.queue = run.catch(() => undefined)
     return run
   }
 
-  private async sendFilesNow(threadUrl: string, paths: string[]): Promise<void> {
+  /**
+   * Show the thread and wait for its composer. Each candidate address gets a turn: Instagram changed
+   * its thread ids, and an unknown id quietly lands on the inbox with nothing open (no text box).
+   */
+  private async open(threadUrls: string | string[]): Promise<BrowserWindow> {
     if (this.idle) clearTimeout(this.idle)
     const win = this.ensure()
-    if (!win.webContents.getURL().startsWith(threadUrl)) await win.loadURL(threadUrl)
-    const url = win.webContents.getURL()
-    if (/\/challenge\/|\/checkpoint\//.test(url)) throw new SessionExpiredError('checkpoint')
-    if (/\/accounts\/login/.test(url)) throw new SessionExpiredError('logged_out')
+    const candidates = Array.isArray(threadUrls) ? threadUrls : [threadUrls]
+    const current = win.webContents.getURL()
+    const already = candidates.find((u) => current.startsWith(u))
+    const order = already ? [already, ...candidates.filter((u) => u !== already)] : candidates
+    let lastReason = 'NO_TEXTBOX'
+    for (const [i, candidate] of order.entries()) {
+      // "new:<username>": start a conversation through Instagram's own New Message dialog.
+      if (candidate.startsWith('new:')) {
+        const state = await this.startConversation(win, candidate.slice(4))
+        if (state === 'OK') return win
+        if (state === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
+        lastReason = state
+        this.log(`[instagram composer] could not start a chat with ${candidate.slice(4)} (${state}):`, await this.describe(win))
+        if (i < order.length - 1) await win.loadURL('about:blank')
+        continue
+      }
+      const url = candidate
+      if (!win.webContents.getURL().startsWith(url)) await win.loadURL(url)
+      const landed = win.webContents.getURL()
+      if (/\/challenge\/|\/checkpoint\//.test(landed)) throw new SessionExpiredError('checkpoint')
+      if (/\/accounts\/login/.test(landed)) throw new SessionExpiredError('logged_out')
+      const state = (await win.webContents.executeJavaScript(
+        `(async () => {
+          ${HELPERS}
+          // A profile-style landing page (ig.me) shows a "Message" button instead of the composer: press it once.
+          const messageButton = () => [...document.querySelectorAll('div[role="button"], button, a[role="link"]')].find((b) => /^(message|send message|nhắn tin|gửi tin nhắn|mensaje|enviar mensaje|nachricht)$/i.test((b.textContent || '').trim()));
+          let pressed = false;
+          for (let i = 0; i < ${i === order.length - 1 ? 80 : 40}; i++) {
+            if (findBox()) return 'OK';
+            if (!pressed && i >= 8) { const b = messageButton(); if (b) { pressed = true; b.click(); } }
+            await wait(250);
+          }
+          return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_TEXTBOX';
+        })()`,
+        true
+      )) as string
+      if (state === 'OK') return win
+      if (state === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
+      lastReason = state
+      this.log(`[instagram composer] no text box at ${url}:`, await this.describe(win))
+      if (i < order.length - 1) await win.loadURL('about:blank')
+    }
+    throw new Error(
+      lastReason === 'NO_TEXTBOX'
+        ? 'Could not open the Instagram conversation to type in'
+        : lastReason === 'NO_RECIPIENT'
+          ? 'Instagram could not find this person in New Message'
+          : `Instagram send failed (${lastReason})`
+    )
+  }
 
-    // Wait for the composer, and make sure nothing is left over in it from an earlier attempt.
+  /**
+   * The way a person starts a chat on instagram.com: New Message → search the username → pick the
+   * person → Chat. Ends on the thread with its composer ready.
+   */
+  private async startConversation(win: BrowserWindow, username: string): Promise<string> {
+    await win.loadURL('https://www.instagram.com/direct/new/')
+    const landed = win.webContents.getURL()
+    if (/\/challenge\/|\/checkpoint\//.test(landed)) throw new SessionExpiredError('checkpoint')
+    if (/\/accounts\/login/.test(landed)) throw new SessionExpiredError('logged_out')
+    return (await win.webContents.executeJavaScript(
+      `(async () => {
+        ${HELPERS}
+        const username = ${JSON.stringify(username)};
+        const dialog = () => document.querySelector('div[role="dialog"]');
+        const searchBox = () => document.querySelector('div[role="dialog"] input[name="queryBox"]') || document.querySelector('div[role="dialog"] input[type="text"]') || document.querySelector('input[name="queryBox"]');
+        // The inbox opens the dialog itself on /direct/new/; if not, press the "New message" icon.
+        let box = null;
+        for (let i = 0; i < 40 && !box; i++) {
+          box = searchBox();
+          if (!box && i === 12) {
+            const pen = [...document.querySelectorAll('svg[aria-label]')].find((s) => /new message|tin nhắn mới|nouveau message|nueva|neue nachricht/i.test(s.getAttribute('aria-label') || ''));
+            if (pen) (pen.closest('[role="button"], button, a') || pen).click();
+          }
+          if (!box) await wait(250);
+        }
+        if (!box) return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_DIALOG';
+        // React inputs only notice value changes made through the native setter.
+        box.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(box, username);
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        // Pick the result whose username matches exactly (the list also shows display names).
+        let row = null;
+        for (let i = 0; i < 40 && !row; i++) {
+          const scope = dialog() || document;
+          const spans = [...scope.querySelectorAll('span, div')].filter((el) => el.children.length === 0 && (el.textContent || '').trim().toLowerCase() === username.toLowerCase());
+          row = spans.map((el) => el.closest('[role="button"], label, [role="checkbox"]') || el.parentElement)[0] || null;
+          if (!row) await wait(250);
+        }
+        if (!row) return 'NO_RECIPIENT';
+        row.click();
+        await wait(300);
+        // "Chat" becomes enabled once someone is picked.
+        let go = null;
+        for (let i = 0; i < 20 && !go; i++) {
+          go = [...document.querySelectorAll('div[role="button"], button')].find((b) => /^(chat|next|nhắn tin|trò chuyện|tiếp|enviar|chatear|weiter)$/i.test((b.textContent || '').trim()) && b.getAttribute('aria-disabled') !== 'true' && !b.disabled);
+          if (!go) await wait(200);
+        }
+        if (!go) return 'NO_CHAT_BUTTON';
+        go.click();
+        for (let i = 0; i < 60; i++) { if (findBox()) return 'OK'; await wait(250); }
+        return 'NO_TEXTBOX';
+      })()`,
+      true
+    )) as string
+  }
+
+  private async sendFilesNow(threadUrls: string | string[], paths: string[]): Promise<void> {
+    const win = await this.open(threadUrls)
+
+    // Wait for the composer, make sure nothing is left over in it, and find (or summon) the file input.
     const ready = (await win.webContents.executeJavaScript(
       `(async () => {
-        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-        for (let i = 0; i < 80; i++) {
-          const box = document.querySelector('div[role="textbox"][contenteditable="true"]');
-          if (box && document.querySelector('input[type="file"]')) {
-            // Never let text from an earlier failed attempt ride along with the files.
-            if ((box.textContent || '').trim()) { box.focus(); document.execCommand('selectAll'); document.execCommand('delete'); await wait(150); }
-            if ((box.textContent || '').trim()) return 'DIRTY';
-            return 'OK';
+        ${HELPERS}
+        let box = null;
+        for (let i = 0; i < 80 && !box; i++) { box = findBox(); if (!box) await wait(250); }
+        if (!box) return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_TEXTBOX';
+        // Never let text from an earlier failed attempt ride along with the files.
+        if ((box.textContent || '').trim()) { box.focus(); document.execCommand('selectAll'); document.execCommand('delete'); await wait(150); }
+        if ((box.textContent || '').trim()) return 'DIRTY';
+        for (let i = 0; i < 12 && !fileInput(); i++) await wait(250);
+        if (fileInput()) return 'OK';
+        // Some Instagram builds only mount the file input once the photo button is pressed. Pressing it
+        // would also open the OS file dialog, so file inputs are stopped from doing that meanwhile.
+        const proto = HTMLInputElement.prototype;
+        const click = proto.click;
+        const showPicker = proto.showPicker;
+        proto.click = function () { if (this.type !== 'file') return click.call(this); };
+        proto.showPicker = function () { if (this.type !== 'file') return showPicker.call(this); };
+        try {
+          const row = box.getBoundingClientRect();
+          const label = new RegExp(${JSON.stringify(MEDIA_LABEL)}, 'i');
+          const buttons = [...document.querySelectorAll('svg[aria-label], [role="button"][aria-label], button[aria-label]')]
+            .filter((el) => label.test(el.getAttribute('aria-label') || ''))
+            .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && Math.abs(r.top + r.height / 2 - (row.top + row.height / 2)) < 120; });
+          for (const el of buttons) {
+            (el.closest('[role="button"], button') || el).click();
+            for (let i = 0; i < 12 && !fileInput(); i++) await wait(250);
+            if (fileInput()) return 'OK';
           }
-          await wait(250);
+        } finally {
+          proto.click = click;
+          proto.showPicker = showPicker;
         }
-        return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_PICKER';
+        return 'NO_INPUT';
       })()`,
       true
     )) as string
     if (ready === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
     if (ready === 'DIRTY') throw new Error('Instagram’s message box is not empty; try again')
-    if (ready !== 'OK') throw new Error('Could not open Instagram’s photo picker')
+    if (ready !== 'OK' && ready !== 'NO_INPUT') {
+      this.log('[instagram composer] no composer on the page:', await this.describe(win))
+      throw new Error('Could not open the Instagram conversation to attach files')
+    }
 
-    // Hand the files to Instagram's hidden <input type=file>, exactly as the OS file dialog would.
-    const dbg = win.webContents.debugger
-    if (!dbg.isAttached()) dbg.attach('1.3')
-    try {
-      const { result } = (await dbg.sendCommand('Runtime.evaluate', {
-        expression: `[...document.querySelectorAll('input[type="file"]')].find((i) => /image|audio|video|\\.mp4|\\.jpg/.test(i.accept)) || document.querySelector('input[type="file"]')`
-      })) as { result: { objectId?: string } }
-      if (!result.objectId) throw new Error('Could not find Instagram’s photo picker')
-      await dbg.sendCommand('DOM.setFileInputFiles', {
-        files: paths,
-        objectId: result.objectId
-      })
-    } finally {
-      dbg.detach()
+    let staged = ready === 'OK' && (await this.stageThroughInput(win, paths))
+    if (!staged) {
+      // No usable file input: hand the files over the way a drag-and-drop (or a paste) into the thread does.
+      this.log('[instagram composer] no file input, dropping the files instead:', await this.describe(win))
+      staged = await this.stageByDrop(win, paths)
+    }
+    if (!staged) {
+      this.log('[instagram composer] files were not accepted:', await this.describe(win))
+      throw new Error('Could not open Instagram’s photo picker')
     }
 
     // Newer Instagram stages the files and waits for Send; older builds send right away.
     const outcome = (await win.webContents.executeJavaScript(
       `(async () => {
-        const labels = ${JSON.stringify(SEND_LABELS)};
-        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-        const sendButton = () => [...document.querySelectorAll('div[role="button"], button')].find((b) => labels.includes((b.textContent || '').trim()) || labels.includes(b.getAttribute('aria-label') || ''));
+        ${HELPERS}
         let button = null;
         for (let i = 0; i < 20 && !button; i++) { button = sendButton(); if (!button) await wait(200); }
         if (!button) return 'AUTO';
@@ -117,10 +279,85 @@ export class DirectComposer {
     if (outcome === 'STUCK') throw new Error('Instagram is still uploading; check the conversation before sending again')
   }
 
+  /** Hand the files to Instagram's hidden <input type=file>, exactly as the OS file dialog would. */
+  private async stageThroughInput(win: BrowserWindow, paths: string[]): Promise<boolean> {
+    const dbg = win.webContents.debugger
+    try {
+      if (!dbg.isAttached()) dbg.attach('1.3')
+      const { result } = (await dbg.sendCommand('Runtime.evaluate', {
+        expression: `[...document.querySelectorAll('input[type="file"]')].find((i) => /image|audio|video|\\.mp4|\\.jpg/.test(i.accept)) || document.querySelector('input[type="file"]')`
+      })) as { result: { objectId?: string } }
+      if (!result.objectId) return false
+      await dbg.sendCommand('DOM.setFileInputFiles', { files: paths, objectId: result.objectId })
+      return true
+    } catch (err) {
+      this.log('[instagram composer] file input failed:', (err as Error).message)
+      return false
+    } finally {
+      if (dbg.isAttached()) dbg.detach()
+    }
+  }
+
+  /** Build the files in the page and drop them on the composer (then paste them, if the drop did nothing). */
+  private async stageByDrop(win: BrowserWindow, paths: string[]): Promise<boolean> {
+    const payload: Array<{ name: string; mime: string; data: string }> = []
+    let total = 0
+    for (const path of paths) {
+      total += (await stat(path)).size
+      if (total > DROP_MAX_BYTES) throw new Error('These files are too large to send to Instagram from here; try a smaller photo or video')
+      const ext = path.split('.').pop()?.toLowerCase() ?? ''
+      payload.push({ name: basename(path), mime: MIME_BY_EXT[ext] ?? 'application/octet-stream', data: (await readFile(path)).toString('base64') })
+    }
+    const outcome = (await win.webContents.executeJavaScript(
+      `(async () => {
+        ${HELPERS}
+        const box = findBox();
+        if (!box) return 'NO_TEXTBOX';
+        const files = ${JSON.stringify(payload)}.map((f) => new File([Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0))], f.name, { type: f.mime }));
+        const previews = () => document.querySelectorAll('img[src^="blob:"], video[src^="blob:"]').length;
+        const before = previews();
+        const staged = () => previews() > before || !!sendButton();
+        const transfer = new DataTransfer();
+        for (const f of files) transfer.items.add(f);
+        const target = box.closest('form') || box.parentElement || box;
+        for (const type of ['dragenter', 'dragover', 'drop']) target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        for (let i = 0; i < 20 && !staged(); i++) await wait(250);
+        if (staged()) return 'OK';
+        box.focus();
+        box.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }));
+        for (let i = 0; i < 20 && !staged(); i++) await wait(250);
+        return staged() ? 'OK' : 'NOT_STAGED';
+      })()`,
+      true
+    )) as string
+    return outcome === 'OK'
+  }
+
+  /** A short account of what the hidden page looks like, for the log when something is not found. */
+  private async describe(win: BrowserWindow): Promise<string> {
+    try {
+      return (await win.webContents.executeJavaScript(
+        `JSON.stringify({
+          url: location.href,
+          title: document.title,
+          visibility: document.visibilityState,
+          textbox: !!document.querySelector('div[role="textbox"][contenteditable="true"]'),
+          fileInputs: [...document.querySelectorAll('input[type="file"]')].map((i) => i.accept || '*'),
+          iconLabels: [...document.querySelectorAll('svg[aria-label]')].map((s) => s.getAttribute('aria-label')).filter(Boolean).slice(-16),
+          buttons: [...document.querySelectorAll('div[role="button"], button')].length
+        })`,
+        false
+      )) as string
+    } catch (err) {
+      return `unavailable (${(err as Error).message})`
+    }
+  }
+
   private ensure(): BrowserWindow {
     if (!this.window || this.window.isDestroyed()) {
+      const debug = process.env.MOSHI_COMPOSER_DEBUG === '1'
       this.window = new BrowserWindow({
-        show: false,
+        show: debug,
         width: 1280,
         height: 880,
         webPreferences: {
@@ -132,27 +369,18 @@ export class DirectComposer {
         }
       })
       this.window.webContents.setAudioMuted(true)
+      if (debug) this.window.webContents.openDevTools({ mode: 'detach' })
     }
     return this.window
   }
 
-  private async sendNow(threadUrl: string, text: string): Promise<void> {
-    if (this.idle) clearTimeout(this.idle)
-    const win = this.ensure()
-    const current = win.webContents.getURL()
-    if (!current.startsWith(threadUrl)) {
-      await win.loadURL(threadUrl)
-    }
-    const url = win.webContents.getURL()
-    if (/\/challenge\/|\/checkpoint\//.test(url)) throw new SessionExpiredError('checkpoint')
-    if (/\/accounts\/login/.test(url)) throw new SessionExpiredError('logged_out')
+  private async sendNow(threadUrls: string | string[], text: string): Promise<void> {
+    const win = await this.open(threadUrls)
 
     const outcome = (await win.webContents.executeJavaScript(
       `(async () => {
+        ${HELPERS}
         const text = ${JSON.stringify(text)};
-        const labels = ${JSON.stringify(SEND_LABELS)};
-        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-        const findBox = () => document.querySelector('div[role="textbox"][contenteditable="true"]');
         let box = null;
         for (let i = 0; i < 80 && !box; i++) { box = findBox(); if (!box) await wait(250); }
         if (!box) return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_TEXTBOX';
@@ -162,10 +390,7 @@ export class DirectComposer {
         const probe = text.replace(/\\s+/g, ' ').trim().slice(0, 24);
         if (!(box.textContent || '').replace(/\\s+/g, ' ').includes(probe)) return 'INSERT_FAILED';
         let button = null;
-        for (let i = 0; i < 20 && !button; i++) {
-          button = [...document.querySelectorAll('div[role="button"], button')].find((b) => labels.includes((b.textContent || '').trim()) || labels.includes(b.getAttribute('aria-label') || ''));
-          if (!button) await wait(150);
-        }
+        for (let i = 0; i < 20 && !button; i++) { button = sendButton(); if (!button) await wait(150); }
         if (!button) return 'NO_BUTTON';
         button.click();
         for (let i = 0; i < 60; i++) {
@@ -181,6 +406,7 @@ export class DirectComposer {
     this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
     if (outcome === 'OK') return
     if (outcome === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
+    this.log(`[instagram composer] text send failed (${outcome}):`, await this.describe(win))
     const reasons: Record<string, string> = {
       NO_TEXTBOX: 'Could not open the Instagram conversation to type in',
       INSERT_FAILED: 'Instagram did not accept the typed text',

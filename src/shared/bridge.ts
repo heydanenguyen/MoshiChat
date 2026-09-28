@@ -18,7 +18,8 @@ import type {
   WeatherInfo,
   BackupInfo,
   GifItem,
-  GifPage
+  GifPage,
+  GifProvider
 } from './types'
 
 /** The API exposed to the renderer through the preload script. */
@@ -119,10 +120,14 @@ export interface MoshiBridge {
     gifSearch(query: string, page: number): Promise<GifPage>
     /** Download a picked GIF as a ready-to-send file. */
     gif(item: GifItem): Promise<OutgoingAttachment>
+    /** The GIF library whose key is built into this release, or null when users must bring their own. */
+    gifDefault(): Promise<GifProvider | null>
     /** Local weather for the greeting line; undefined when offline. */
     weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform
     windowAction(action: 'minimize' | 'maximize' | 'close'): void
+    /** Unread count on the Dock icon (macOS) or taskbar (Windows); 0 clears it. */
+    setBadge(count: number): void
   }
   onEvent(listener: (event: BridgeEvent) => void): () => void
 }
@@ -178,7 +183,9 @@ export const IPC = {
   appSticker: 'app:sticker',
   appGifSearch: 'app:gifSearch',
   appGif: 'app:gif',
+  appGifDefault: 'app:gifDefault',
   appWeather: 'app:weather',
   appWindowAction: 'app:windowAction',
+  appSetBadge: 'app:setBadge',
   event: 'bridge:event'
 } as const

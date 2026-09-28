@@ -83,6 +83,25 @@ export function detectLanguage(text: string): string {
 }
 
 /**
+ * A plain-language reason when on-device AI cannot start, in the app language. The usual one on a
+ * Mac is a build packaged for the other CPU (Intel vs Apple Silicon): the native libraries the models
+ * run on (sharp, onnxruntime) then refuse to load. Other messages pass through unchanged.
+ */
+export function aiErrorHint(message: string, language: string): string {
+  const vi = language === 'vi'
+  const detail = message.length > 160 ? `${message.slice(0, 157)}…` : message
+  if (/darwin-(arm64|x64)|Could not load the "sharp" module|onnxruntime_binding|incompatible architecture|not a valid Win32 application|win32-(x64|arm64|ia32) runtime/i.test(message)) {
+    return vi
+      ? `Bản Moshi này được đóng gói cho loại chip khác (Intel ↔ Apple Silicon) nên AI trên máy không chạy được. Hãy tải đúng bản cho máy này. (${detail})`
+      : `This Moshi build was packaged for a different CPU (Intel vs Apple Silicon), so on-device AI cannot start. Please download the build for this Mac. (${detail})`
+  }
+  if (/ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|fetch failed|huggingface\.co/i.test(message)) {
+    return vi ? `Không tải được mô hình: kiểm tra kết nối mạng (huggingface.co có thể bị chặn). (${detail})` : `The model could not be downloaded: check the connection (huggingface.co may be blocked). (${detail})`
+  }
+  return message
+}
+
+/**
  * Text as paragraphs of sentences. NLLB translates one sentence at a time well but tends to drop the
  * rest when given several, so each sentence is translated on its own and put back in place.
  */

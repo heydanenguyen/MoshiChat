@@ -10,10 +10,16 @@ import { fillQuickReply, givenName } from '@shared/extras'
 import type { QuickReply } from '@shared/types'
 
 interface Props {
+  /** The chat this composer writes to (each pane of a split view has its own). */
+  conversationId: string
+  /** Whether its pane is the active one: only the active composer takes keyboard focus. */
+  active?: boolean
   disabled?: boolean
   canAttach: boolean
   canVoice?: boolean
 }
+
+const NO_FILES: never[] = []
 
 interface Recording {
   recorder: MediaRecorder
@@ -33,15 +39,16 @@ const stopped = (recorder: MediaRecorder): Promise<void> =>
     recorder.stop()
   })
 
-export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): JSX.Element {
+export function Composer({ conversationId, active = true, disabled, canAttach, canVoice = canAttach }: Props): JSX.Element {
   const t = useT()
   const send = useStore((s) => s.send)
   const notifyTyping = useStore((s) => s.notifyTyping)
   const sendOnEnter = useStore((s) => s.settings.sendOnEnter)
-  const selectedId = useStore((s) => s.selectedId)
-  const replyTo = useStore((s) => s.replyTo)
+  const selectedId = conversationId
+  const replyTo = useStore((s) => s.replyTos[conversationId])
   const setReplyTo = useStore((s) => s.setReplyTo)
-  const pendingFiles = useStore((s) => s.pendingFiles)
+  const pendingFiles = useStore((s) => s.pendingFiles[conversationId] ?? NO_FILES)
+  const focusRequest = useStore((s) => s.composerFocus)
   const addFiles = useStore((s) => s.addFiles)
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const removeFile = useStore((s) => s.removeFile)
@@ -54,8 +61,8 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   const [gifsOpen, setGifsOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const scheduleMessage = useStore((s) => s.scheduleMessage)
-  const composerDraft = useStore((s) => s.composerDraft)
-  const partnerName = useStore((s) => (s.selectedId ? s.conversations[s.selectedId]?.title : undefined))
+  const composerDraft = useStore((s) => s.composerDrafts[conversationId])
+  const partnerName = useStore((s) => s.conversations[conversationId]?.title)
   const quickReplies = useQuickReplies()
   // "/query" right before the caret opens the quick replies menu.
   const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null)
@@ -74,8 +81,14 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
     switching.current = true
     setText(selectedId ? readDraft(selectedId) : '')
     setEmojiOpen(false)
-    focusInput()
+    if (active) focusInput()
+    // The pane's active state only matters on the first render of this chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+  // Focus asked for by the store (a pane switched by keyboard, or a chat picked from the list).
+  useEffect(() => {
+    if (focusRequest?.conversationId === conversationId) focusInput()
+  }, [focusRequest, conversationId])
   useEffect(() => {
     if (switching.current) {
       switching.current = false
@@ -85,8 +98,8 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
   }, [text, selectedId, setDraft])
 
   useEffect(() => {
-    if (replyTo) focusInput()
-  }, [replyTo])
+    if (replyTo && active) focusInput()
+  }, [replyTo, active])
 
   // Something else asked the composer to take over a draft (e.g. the birthday banner).
   useEffect(() => {
@@ -129,7 +142,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
     setScheduleOpen(false)
     const value = text
     setText('')
-    void scheduleMessage(value, sendAt)
+    void scheduleMessage(conversationId, value, sendAt)
     focusInput()
   }
 
@@ -148,7 +161,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
 
   const submit = (): void => {
     if ((!text.trim() && !pendingFiles.length) || disabled) return
-    void send(text)
+    void send(conversationId, text)
     setText('')
     focusInput()
   }
@@ -172,7 +185,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
       return
     }
     if (e.key === 'Escape' && replyTo) {
-      setReplyTo(undefined)
+      setReplyTo(conversationId, undefined)
       return
     }
     if (e.key !== 'Enter') return
@@ -188,13 +201,13 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
     const files = [...e.clipboardData.files]
     if (files.length) {
       e.preventDefault()
-      addDroppedFiles(files)
+      addDroppedFiles(conversationId, files)
     }
   }
 
   const pick = async (): Promise<void> => {
     const files = await window.unison.app.pickFiles()
-    if (files.length) addFiles(files)
+    if (files.length) addFiles(conversationId, files)
     focusInput()
   }
 
@@ -246,7 +259,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
         const bytes = new Uint8Array(await blob.arrayBuffer())
         const aac = session.aac?.chunks.length ? new Uint8Array(await new Blob(session.aac.chunks, { type: 'audio/mp4' }).arrayBuffer()) : undefined
         const voice = await window.unison.app.saveVoice(bytes, duration, aac)
-        await send('', [voice])
+        await send(conversationId, '', [voice])
       } catch (err) {
         showToast((err as Error).message, 'error')
       }
@@ -266,7 +279,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
             <strong>{t('replyingTo', { name: replyTo.senderName })}</strong>
             <span>{replyTo.text || t('attachment')}</span>
           </div>
-          <button className="icon-btn" onClick={() => setReplyTo(undefined)} title={t('cancelReply')}>
+          <button className="icon-btn" onClick={() => setReplyTo(conversationId, undefined)} title={t('cancelReply')}>
             <X size={14} strokeWidth={2.4} />
           </button>
         </div>
@@ -284,7 +297,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
                 <span className="pending-file-name">{file.voice ? t('voice') : file.name}</span>
                 <span className="pending-file-meta">{formatBytes(file.size)}</span>
               </span>
-              <button className="pending-file-remove" onClick={() => removeFile(file.path)} title={t('remove')}>
+              <button className="pending-file-remove" onClick={() => removeFile(conversationId, file.path)} title={t('remove')}>
                 <X size={11} strokeWidth={3} />
               </button>
             </div>
@@ -323,7 +336,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
             onChange={(e) => {
               setText(e.target.value)
               updateSlash(e.target.value, e.target.selectionStart ?? e.target.value.length)
-              if (e.target.value) notifyTyping()
+              if (e.target.value) notifyTyping(conversationId)
             }}
             onBlur={() => setSlash(null)}
             onKeyDown={onKeyDown}
@@ -354,7 +367,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
                       setStickersOpen(false)
                       void (async () => {
                         try {
-                          await send('', [await window.unison.app.sticker(id)])
+                          await send(conversationId, '', [await window.unison.app.sticker(id)])
                         } catch (err) {
                           showToast((err as Error).message, 'error')
                         }
@@ -381,7 +394,7 @@ export function Composer({ disabled, canAttach, canVoice = canAttach }: Props): 
                     onClose={() => setGifsOpen(false)}
                     onPick={(item) => {
                       setGifsOpen(false)
-                      void sendGif(item)
+                      void sendGif(conversationId, item)
                       focusInput()
                     }}
                   />

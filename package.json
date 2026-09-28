@@ -22,6 +22,8 @@
     "installer-art": "node scripts/make-installer-art.mjs",
     "setup": "node scripts/build-setup.mjs",
     "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:mac:arm64": "electron-vite build && electron-builder --mac --arm64 --publish never",
+    "dist:mac:x64": "electron-vite build && electron-builder --mac --x64 --publish never",
     "dist:win": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs"
   },
   "dependencies": {
@@ -67,6 +69,8 @@
       ],
       "icon": "build/icon.ico",
       "files": [
+        "out/**",
+        "package.json",
         "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
         "!node_modules/@img/sharp-{darwin,linux,linuxmusl}*/**",
@@ -96,20 +100,8 @@
     },
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.social-networking",
       "icon": "build/icon.png",
@@ -124,6 +116,8 @@
         "NSCameraUsageDescription": "Moshi does not use the camera."
       },
       "files": [
+        "out/**",
+        "package.json",
         "!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**",
         "!node_modules/@img/sharp-{win32,linux,linuxmusl}*/**",
         "!node_modules/@img/sharp-libvips-{win32,linux,linuxmusl}*/**"

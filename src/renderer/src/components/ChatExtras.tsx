@@ -188,7 +188,7 @@ export function BirthdayBanner({ conversation, canSendStickers, onCelebrate }: {
               onClick={() =>
                 void (async () => {
                   try {
-                    await send('', [await window.unison.app.sticker(id)])
+                    await send(conversation.id, '', [await window.unison.app.sticker(id)])
                   } catch (err) {
                     showToast((err as Error).message, 'error')
                   }
@@ -200,7 +200,7 @@ export function BirthdayBanner({ conversation, canSendStickers, onCelebrate }: {
           ))}
         </span>
       )}
-      <button className="btn primary birthday-wish" onClick={() => setComposerDraft(fillQuickReply(t('birthdayWishText'), name))}>
+      <button className="btn primary birthday-wish" onClick={() => setComposerDraft(conversation.id, fillQuickReply(t('birthdayWishText'), name))}>
         {t('birthdayWish')}
       </button>
       <button

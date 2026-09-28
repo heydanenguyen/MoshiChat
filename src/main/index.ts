@@ -1,8 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
-import { mkdir, readFile, stat, writeFile } from 'fs/promises'
+import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
-import type { AddAccountInput, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, AppCommand, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
@@ -23,7 +23,13 @@ import { BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION } from './backup-format'
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 
+/** GIF library key shipped with this build (empty in a plain local build). */
+const BUILT_IN_GIF = { key: typeof __MOSHI_GIF_KEY__ === 'string' ? __MOSHI_GIF_KEY__ : '', provider: typeof __MOSHI_GIF_PROVIDER__ === 'string' ? __MOSHI_GIF_PROVIDER__ : 'klipy' } as const
+
 let window: BrowserWindow | undefined
+// Development only: keep a dev run's data (and its single-instance lock) apart from the installed app.
+// On macOS the default folders "moshi" and "Moshi" are the same directory, so this matters there.
+if (!app.isPackaged && process.env.MOSHI_USER_DATA) app.setPath('userData', process.env.MOSHI_USER_DATA)
 // The app used to be called Unison: carry an existing profile over once, before anything in it is opened.
 try {
   if (migrateLegacyProfile(app.getPath('appData'), app.getPath('userData')) === 'moved') console.log('[moshi] moved the Unison profile to', app.getPath('userData'))
@@ -32,7 +38,27 @@ try {
 }
 
 const storage = new Storage()
-const log = (...args: unknown[]): void => console.log('[moshi]', ...args)
+
+/** Every log line also goes to <userData>/moshi.log (trimmed at 2 MB), so problems can be reported after the fact. */
+const LOG_FILE = join(app.getPath('userData'), 'moshi.log')
+let logQueue: Promise<void> = Promise.resolve()
+function logToFile(line: string): void {
+  logQueue = logQueue
+    .then(async () => {
+      const info = await stat(LOG_FILE).catch(() => undefined)
+      if (info && info.size > 2 * 1024 * 1024) {
+        const tail = (await readFile(LOG_FILE, 'utf8')).slice(-512 * 1024)
+        await writeFile(LOG_FILE, tail)
+      }
+      await appendFile(LOG_FILE, line)
+    })
+    .catch(() => undefined)
+}
+const log = (...args: unknown[]): void => {
+  console.log('[moshi]', ...args)
+  const text = args.map((a) => (typeof a === 'string' ? a : a instanceof Error ? a.message : JSON.stringify(a))).join(' ')
+  logToFile(`${new Date().toISOString()} ${text}\n`)
+}
 
 const emit = (event: BridgeEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
@@ -166,6 +192,91 @@ function appIcon(logo: Settings['logo'] = storage.settings.logo): Electron.Nativ
   return undefined
 }
 
+/**
+ * The macOS menu bar. Without one Electron installs its own, whose View menu takes ⌘=, ⌘- and ⌘0
+ * (zooming the page without saving it) and whose ⌘R reloads the app mid-conversation. This menu
+ * hands those keys, ⌘N, ⌘K and ⌘, to the renderer as commands; Edit keeps the standard roles so
+ * copy and paste keep working in every text field.
+ */
+function installMenu(): void {
+  if (!isMac) return
+  const vi = storage.settings.language === 'vi'
+  const command = (command: AppCommand) => (): void => {
+    if (!window || window.isDestroyed()) {
+      createWindow()
+      return
+    }
+    window.show()
+    window.webContents.send(IPC.event, { type: 'app:command', command } satisfies BridgeEvent)
+  }
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Moshi',
+      submenu: [
+        { role: 'about', label: vi ? 'Giới thiệu Moshi' : 'About Moshi' },
+        { type: 'separator' },
+        { label: vi ? 'Cài đặt…' : 'Settings…', accelerator: 'Cmd+,', click: command('settings') },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide', label: vi ? 'Ẩn Moshi' : 'Hide Moshi' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit', label: vi ? 'Thoát Moshi' : 'Quit Moshi' }
+      ]
+    },
+    {
+      label: vi ? 'Tệp' : 'File',
+      submenu: [
+        { label: vi ? 'Tin nhắn mới' : 'New Message', accelerator: 'Cmd+N', click: command('new-chat') },
+        { label: vi ? 'Nhảy tới hội thoại…' : 'Jump to Conversation…', accelerator: 'Cmd+K', click: command('command-palette') },
+        { type: 'separator' },
+        { role: 'close', label: vi ? 'Đóng cửa sổ' : 'Close Window' }
+      ]
+    },
+    {
+      label: vi ? 'Sửa' : 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: vi ? 'Đọc' : 'Speech', submenu: [{ role: 'startSpeaking' }, { role: 'stopSpeaking' }] }
+      ]
+    },
+    {
+      label: vi ? 'Xem' : 'View',
+      submenu: [
+        { label: vi ? 'Phóng to' : 'Zoom In', accelerator: 'Cmd+=', click: command('zoom-in') },
+        { label: vi ? 'Thu nhỏ' : 'Zoom Out', accelerator: 'Cmd+-', click: command('zoom-out') },
+        { label: vi ? 'Cỡ chuẩn' : 'Actual Size', accelerator: 'Cmd+0', click: command('zoom-reset') },
+        { type: 'separator' },
+        { label: vi ? 'Chia đôi khung chat' : 'Split Chat', accelerator: 'Cmd+\\', click: command('toggle-split') },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        ...(app.isPackaged ? [] : [{ type: 'separator' } as const, { role: 'reload' } as const, { role: 'toggleDevTools' } as const])
+      ]
+    },
+    {
+      label: vi ? 'Cửa sổ' : 'Window',
+      submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }]
+    },
+    {
+      label: vi ? 'Trợ giúp' : 'Help',
+      role: 'help',
+      submenu: [{ label: vi ? 'Moshi trên GitHub' : 'Moshi on GitHub', click: () => void shell.openExternal('https://github.com/heydanenguyen/MoshiChat') }]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1240,
@@ -216,11 +327,43 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  if (!app.isPackaged && process.env.MOSHI_UI_SCRIPT) installUiScript(window)
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/**
+ * Development only: run a script inside the page (it can drive the store through window.__moshi) and
+ * save a screenshot whenever it logs `MOSHI_SHOT:<name>`; `MOSHI_DONE` quits. Lets UI changes be
+ * checked by eye without clicking through the app: MOSHI_UI_SCRIPT=steps.js MOSHI_SHOT_DIR=out npm run dev
+ */
+function installUiScript(win: BrowserWindow): void {
+  const script = process.env.MOSHI_UI_SCRIPT
+  const dir = process.env.MOSHI_SHOT_DIR ?? app.getPath('temp')
+  if (!script) return
+  win.webContents.on('console-message', (_e, _level, message) => {
+    if (message.startsWith('MOSHI_SHOT:')) {
+      const name = message.slice(11).replace(/[^\w.-]/g, '_')
+      void win.webContents
+        .capturePage()
+        .then((image) => writeFile(join(dir, `${name}.png`), image.toPNG()))
+        .then(() => log('ui shot saved:', name))
+    } else if (message === 'MOSHI_DONE') setTimeout(() => app.quit(), 800)
+  })
+  // MOSHI_UI_SIZE=900x700 checks narrow layouts.
+  const size = /^(\d+)x(\d+)$/.exec(process.env.MOSHI_UI_SIZE ?? '')
+  if (size) win.setSize(Number(size[1]), Number(size[2]))
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      void readFile(script, 'utf8')
+        .then((code) => win.webContents.executeJavaScript(code, true))
+        .catch((err) => log('ui script failed:', (err as Error).message))
+    }, 1500)
+  })
 }
 
 /**
@@ -539,6 +682,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
+    if (patch.language) installMenu()
     if ('zoom' in patch && window && !window.isDestroyed()) window.webContents.setZoomFactor(clampZoom(settings.zoom))
     if (patch.logo) {
       const icon = appIcon(settings.logo)
@@ -614,11 +758,19 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.appGifSearch, (_e, query: string, page: number) => {
     const { gif, language } = storage.settings
-    return searchGifs(gif?.provider ?? 'klipy', gif?.key ?? '', String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)
+    // The user's own key wins; otherwise the key built into this release (if any).
+    const provider = gif?.key ? gif.provider : BUILT_IN_GIF.provider
+    const key = gif?.key || BUILT_IN_GIF.key
+    return searchGifs(provider, key, String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)
   })
+  ipcMain.handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
   ipcMain.handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
   ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
+  ipcMain.on(IPC.appSetBadge, (_e, count: unknown) => {
+    // Dock badge on macOS (taskbar overlay on Windows); the renderer already leaves out muted chats.
+    app.setBadgeCount(Math.max(0, Math.min(9999, Math.floor(Number(count) || 0))))
+  })
   ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!window) return
     if (action === 'minimize') window.minimize()
@@ -653,6 +805,7 @@ if (!gotLock) {
     hardenSession()
     registerImageProxy()
     registerIpc()
+    installMenu()
     createWindow()
     await manager.restore()
 

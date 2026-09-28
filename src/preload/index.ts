@@ -79,9 +79,11 @@ const bridge: MoshiBridge = {
     sticker: (id) => ipcRenderer.invoke(IPC.appSticker, id),
     gifSearch: (query, page) => ipcRenderer.invoke(IPC.appGifSearch, query, page),
     gif: (item) => ipcRenderer.invoke(IPC.appGif, item),
+    gifDefault: () => ipcRenderer.invoke(IPC.appGifDefault),
     weather: (force) => ipcRenderer.invoke(IPC.appWeather, force),
     platform: process.platform,
-    windowAction: (action) => ipcRenderer.send(IPC.appWindowAction, action)
+    windowAction: (action) => ipcRenderer.send(IPC.appWindowAction, action),
+    setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count)
   },
   onEvent: (listener) => {
     const handler = (_event: unknown, payload: BridgeEvent): void => listener(payload)

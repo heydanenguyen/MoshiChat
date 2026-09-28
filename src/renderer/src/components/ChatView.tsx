@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { BellOff, ChevronLeft, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles } from 'lucide-react'
+import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, X } from 'lucide-react'
 import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
@@ -16,18 +16,124 @@ import { EmojiPicker } from './EmojiPicker'
 import { StickerArt } from './StickerPicker'
 import { isStickerId } from '@shared/stickers'
 import { matchSticker } from '../stickerMatch'
+import { isSplit, type PaneIndex } from '../panes'
+import { CONVERSATION_DRAG } from './ConversationList'
+import { modKey } from '../utils'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
+/**
+ * The chat cell of the app: one pane, or two side by side (split chat). A split is only shown when
+ * the window is wide enough; otherwise the active pane stands in for it and the split is kept.
+ * Dragging a chat from the list over the area shows two landing zones, left and right.
+ */
 export function ChatView(): JSX.Element {
-  const selectedId = useStore((s) => s.selectedId)
-  const conversation = useStore((s) => (s.selectedId ? s.conversations[s.selectedId] : undefined))
-  if (!selectedId || !conversation) return <EmptyState kind="no-selection" />
-  return <Thread key={conversation.id} conversation={conversation} />
+  const t = useT()
+  const layout = useStore((s) => s.layout)
+  const conversations = useStore((s) => s.conversations)
+  const canSplit = useStore((s) => s.wide && !s.narrow)
+  const openInPane = useStore((s) => s.openInPane)
+  const [dragOver, setDragOver] = useState<0 | 1 | undefined>()
+  const dragDepth = useRef(0)
+  const split = isSplit(layout) && canSplit
+
+  const isChatDrag = (e: React.DragEvent): boolean => canSplit && e.dataTransfer.types.includes(CONVERSATION_DRAG)
+  const zoneAt = (e: React.DragEvent): 0 | 1 => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientX < r.left + r.width / 2 ? 0 : 1
+  }
+
+  let body: JSX.Element
+  if (!split) {
+    const id = layout.panes[layout.active]
+    const conversation = id ? conversations[id] : undefined
+    body = !id || !conversation ? <EmptyState kind="no-selection" /> : <Thread key={conversation.id} conversation={conversation} pane={layout.active} split={false} active />
+  } else {
+    body = (
+      <>
+        {layout.panes.map((id, index) => {
+          const pane = index as PaneIndex
+          const conversation = id ? conversations[id] : undefined
+          if (!id || !conversation) return <EmptyPane key={`empty-${pane}`} pane={pane} active={layout.active === pane} />
+          return <Thread key={`${pane}:${conversation.id}`} conversation={conversation} pane={pane} split active={layout.active === pane} />
+        })}
+      </>
+    )
+  }
+
+  return (
+    <div
+      className={`chat-area ${split ? 'split' : ''}`}
+      onDragEnter={(e) => {
+        if (!isChatDrag(e)) return
+        e.preventDefault()
+        dragDepth.current += 1
+        setDragOver(zoneAt(e))
+      }}
+      onDragOver={(e) => {
+        if (!isChatDrag(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        const zone = zoneAt(e)
+        if (zone !== dragOver) setDragOver(zone)
+      }}
+      onDragLeave={(e) => {
+        if (!isChatDrag(e)) return
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setDragOver(undefined)
+      }}
+      onDrop={(e) => {
+        if (!isChatDrag(e)) return
+        e.preventDefault()
+        dragDepth.current = 0
+        setDragOver(undefined)
+        const id = e.dataTransfer.getData(CONVERSATION_DRAG)
+        if (id && conversations[id]) openInPane(id, zoneAt(e))
+      }}
+    >
+      {body}
+      {dragOver !== undefined && (
+        <div className="split-drop" aria-hidden>
+          <div className={`split-drop-zone ${dragOver === 0 ? 'over' : ''}`}>{t('dropOpenLeft')}</div>
+          <div className={`split-drop-zone ${dragOver === 1 ? 'over' : ''}`}>{t('dropOpenRight')}</div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
+/** A pane with nothing in it yet: the next chat picked from the list (or dropped here) fills it. */
+function EmptyPane({ pane, active }: { pane: PaneIndex; active: boolean }): JSX.Element {
   const t = useT()
+  const activatePane = useStore((s) => s.activatePane)
+  const closePane = useStore((s) => s.closePane)
+  return (
+    <section className={`chat-col chat-pane empty ${active ? 'active' : ''}`} onMouseDownCapture={() => !active && activatePane(pane)}>
+      <header className="chat-header drag">
+        <div className="chat-header-info" />
+        <div className="chat-header-actions no-drag">
+          <button className="icon-btn" onClick={() => closePane(pane)} title={t('closePane')}>
+            <X size={18} strokeWidth={2} />
+          </button>
+        </div>
+      </header>
+      <div className="pane-empty">
+        <span className="pane-empty-icon">
+          <Columns2 size={30} strokeWidth={2} />
+        </span>
+        <div className="pane-empty-title">{t('emptyPaneTitle')}</div>
+        <div className="pane-empty-hint">{t('emptyPaneHint')}</div>
+      </div>
+    </section>
+  )
+}
+
+function Thread({ conversation, pane, split, active }: { conversation: Conversation; pane: PaneIndex; split: boolean; active: boolean }): JSX.Element {
+  const t = useT()
+  const activatePane = useStore((s) => s.activatePane)
+  const closePane = useStore((s) => s.closePane)
+  const toggleSplit = useStore((s) => s.toggleSplit)
+  const canSplit = useStore((s) => s.wide && !s.narrow)
   const stored = useStore((s) => s.messages[conversation.id])
   const sentStickers = useStore((s) => s.settings.sentStickers)
   // Our own stickers come back from the platforms as photos: show them as stickers again.
@@ -46,7 +152,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
   const bubbleChoice = useStore((s) => s.settings.contactOverrides?.[conversation.id]?.bubble)
   const customAccents = useStore((s) => s.settings.customAccents)
   const bubbleVars = useMemo(() => bubbleVarsOf(bubbleChoice, customAccents), [bubbleChoice, customAccents])
-  const highlightId = useStore((s) => s.highlightId)
+  const highlightId = useStore((s) => s.highlightIds[conversation.id])
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const narrow = useStore((s) => s.narrow)
   const select = useStore((s) => s.select)
@@ -108,24 +214,30 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       ? t('members', { count: conversation.participants.length })
       : (conversation.participants.find((p) => !p.isMe)?.handle ?? PLATFORMS[conversation.platform].name)
 
+  // Only real files light up the drop overlay; a chat dragged from the list is handled by the chat area.
+  const isFileDrag = (e: React.DragEvent): boolean => e.dataTransfer.types.includes('Files')
   const onDrop = (e: React.DragEvent): void => {
+    if (!isFileDrag(e)) return
     e.preventDefault()
     setDragging(0)
     if (!features.attachments) return
     const files = [...e.dataTransfer.files]
-    if (files.length) addDroppedFiles(files)
+    if (files.length) addDroppedFiles(conversation.id, files)
   }
 
   return (
     <section
-      className={`chat-col ${wallpaper.attr ? 'has-wallpaper' : ''}`}
+      className={`chat-col chat-pane ${active ? 'active' : ''} ${wallpaper.attr ? 'has-wallpaper' : ''}`}
       style={{ ...bubbleVars, ...wallpaper.style }}
+      onMouseDownCapture={() => !active && activatePane(pane)}
+      onFocusCapture={() => !active && activatePane(pane)}
       onDragEnter={(e) => {
+        if (!isFileDrag(e)) return
         e.preventDefault()
         if (features.attachments) setDragging((d) => d + 1)
       }}
-      onDragLeave={() => setDragging((d) => Math.max(0, d - 1))}
-      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => isFileDrag(e) && setDragging((d) => Math.max(0, d - 1))}
+      onDragOver={(e) => isFileDrag(e) && e.preventDefault()}
       onDrop={onDrop}
     >
       {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
@@ -144,9 +256,19 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
           <div className={`chat-header-sub ${isTyping ? 'typing' : ''}`}>{subtitle}</div>
         </div>
         <div className="chat-header-actions no-drag">
-          <button className={`icon-btn ${detailsOpen ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
+          {canSplit && !split && (
+            <button className="icon-btn" onClick={() => toggleSplit()} title={`${t('splitView')} (${modKey} \\)`}>
+              <Columns2 size={18} strokeWidth={2} />
+            </button>
+          )}
+          <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
+          {split && (
+            <button className="icon-btn" onClick={() => closePane(pane)} title={t('closePane')}>
+              <X size={18} strokeWidth={2} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -194,7 +316,7 @@ function Thread({ conversation }: { conversation: Conversation }): JSX.Element {
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
       <ScheduledStrip conversationId={conversation.id} />
-      <Composer disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
+      <Composer conversationId={conversation.id} active={active} disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
     </section>
   )
 }
@@ -299,7 +421,7 @@ function Group({
                     <button
                       key={r.emoji}
                       className={`reaction-chip ${r.byMe ? 'mine' : ''}`}
-                      onClick={() => features.react && void react(message.id, r.emoji)}
+                      onClick={() => features.react && void react(message.conversationId, message.id, r.emoji)}
                       title={t('react')}
                     >
                       {r.emoji}
@@ -447,7 +569,7 @@ function Bubble({
     if ((e.target as HTMLElement).closest('a, button, img, video, audio, .album, .link-card, .post-card')) return
     window.getSelection()?.removeAllRanges()
     if (mine !== '❤️') setBurst(Date.now())
-    void react(message.id, '❤️')
+    void react(message.conversationId, message.id, '❤️')
   }
   const direction = message.isOutgoing ? 'out' : 'in'
   const sticker = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
@@ -538,7 +660,7 @@ function Bubble({
             </button>
           )}
           {features.reply && (
-            <button className="icon-btn" title={t('reply')} onClick={() => setReplyTo(message)}>
+            <button className="icon-btn" title={t('reply')} onClick={() => setReplyTo(message.conversationId, message)}>
               <Reply size={15} strokeWidth={2} />
             </button>
           )}
@@ -557,7 +679,7 @@ function Bubble({
                   className={mine === emoji ? 'active' : ''}
                   onClick={() => {
                     setPicker(false)
-                    void react(message.id, emoji)
+                    void react(message.conversationId, message.id, emoji)
                   }}
                 >
                   {emoji}
@@ -580,7 +702,7 @@ function Bubble({
               <EmojiPicker
                 onPick={(emoji) => {
                   setMoreEmoji(false)
-                  void react(message.id, emoji)
+                  void react(message.conversationId, message.id, emoji)
                 }}
                 onClose={() => setMoreEmoji(false)}
               />

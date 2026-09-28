@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
-import { useStore } from './store'
+import { useStore, useUnreadCounts } from './store'
 import { translate } from './i18n'
 import { isMac } from './utils'
 import { Sidebar } from './components/Sidebar'
@@ -25,8 +25,18 @@ import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
 import { useAi } from './aiStore'
 
+/** Step the whole interface zoom (saved in Settings) and say where it landed. */
+function zoomBy(direction: 1 | -1 | 0): void {
+  const { settings, setSettings, showToast } = useStore.getState()
+  const zoom = direction === 0 ? 1 : stepZoom(settings.zoom, direction)
+  if (zoom === (settings.zoom ?? 1)) return
+  void setSettings({ zoom })
+  showToast(`${translate(settings.language, 'zoom')} ${Math.round(zoom * 100)}%`)
+}
+
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
+  const unreadTotal = useUnreadCounts().total
   const init = useStore((s) => s.init)
   const theme = useStore((s) => s.settings.theme)
   const language = useStore((s) => s.settings.language)
@@ -54,6 +64,8 @@ export default function App(): JSX.Element {
 
   const narrow = useStore((s) => s.narrow)
   const setNarrow = useStore((s) => s.setNarrow)
+  const setWide = useStore((s) => s.setWide)
+  const split = useStore((s) => s.layout.panes.length > 1 && s.wide && !s.narrow)
 
   // Apple-style overlay scrollbars: show the thumb only while scrolling or hovering.
   useEffect(() => {
@@ -81,6 +93,15 @@ export default function App(): JSX.Element {
     return () => media.removeEventListener('change', apply)
   }, [setNarrow])
 
+  // Two chat panes need room: below this the split is remembered but only the active pane shows.
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1100px)')
+    const apply = (): void => setWide(media.matches)
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [setWide])
+
   useEffect(() => {
     document.documentElement.dataset.mesh = mesh
     // Custom accents set their variables inline on :root; presets use the [data-accent] rules.
@@ -98,15 +119,44 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.textSize = textSize
   }, [mesh, accent, customAccents, font, messageShadows, textSize])
 
+  // Unread count on the Dock / taskbar icon (0 until the first load, so a stale badge never lingers).
+  useEffect(() => {
+    window.unison.app.setBadge(ready ? unreadTotal : 0)
+  }, [ready, unreadTotal])
+
+  // The native menu bar (macOS) sends its shortcuts here.
+  useEffect(() => {
+    return window.unison.onEvent((event) => {
+      if (event.type !== 'app:command') return
+      const { openSheet, sheet } = useStore.getState()
+      switch (event.command) {
+        case 'settings':
+          openSheet({ kind: 'settings' })
+          break
+        case 'new-chat':
+          openSheet({ kind: 'new-chat' })
+          break
+        case 'command-palette':
+          openSheet(sheet.kind === 'command' ? { kind: 'none' } : { kind: 'command' })
+          break
+        case 'zoom-in':
+          zoomBy(1)
+          break
+        case 'zoom-out':
+          zoomBy(-1)
+          break
+        case 'zoom-reset':
+          zoomBy(0)
+          break
+        case 'toggle-split':
+          useStore.getState().toggleSplit()
+          break
+      }
+    })
+  }, [])
+
   // Ctrl +/-/0 and Ctrl + mouse wheel zoom the whole interface (saved in Settings).
   useEffect(() => {
-    const zoomBy = (direction: 1 | -1 | 0): void => {
-      const { settings, setSettings, showToast } = useStore.getState()
-      const zoom = direction === 0 ? 1 : stepZoom(settings.zoom, direction)
-      if (zoom === (settings.zoom ?? 1)) return
-      void setSettings({ zoom })
-      showToast(`${translate(settings.language, 'zoom')} ${Math.round(zoom * 100)}%`)
-    }
     const onKey = (e: KeyboardEvent): void => {
       if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return
       if (e.key === '=' || e.key === '+') zoomBy(1)
@@ -133,10 +183,10 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     void init().then(() => useAi.getState().init())
-    // Catch up on unread messages in the open thread when the window regains focus.
+    // Catch up on unread messages in the open panes when the window regains focus.
     const onFocus = (): void => {
-      const { selectedId, conversations } = useStore.getState()
-      if (selectedId && conversations[selectedId]?.unreadCount) void window.unison.conversations.markRead(selectedId)
+      const { layout, conversations } = useStore.getState()
+      for (const id of layout.panes) if (id && conversations[id]?.unreadCount) void window.unison.conversations.markRead(id)
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -180,6 +230,12 @@ export default function App(): JSX.Element {
       } else if (mod && e.key === ',') {
         e.preventDefault()
         openSheet({ kind: 'settings' })
+      } else if (mod && e.key === '\\') {
+        e.preventDefault()
+        useStore.getState().toggleSplit()
+      } else if (mod && (e.key === '1' || e.key === '2') && useStore.getState().layout.panes.length > 1) {
+        e.preventDefault()
+        useStore.getState().activatePane(e.key === '1' ? 0 : 1, true)
       } else if (e.key === 'Escape' && (sheet.kind !== 'none' || useStore.getState().forwarding || useStore.getState().lightbox)) {
         closeSheet()
       }
@@ -195,7 +251,7 @@ export default function App(): JSX.Element {
       {ready && (
         <>
           <TitleBar />
-          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
+          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
             <div className="mesh" aria-hidden>
               <span className="mesh-blob b1" />
               <span className="mesh-blob b2" />

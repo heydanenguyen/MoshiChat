@@ -570,8 +570,12 @@ export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversati
   return tags.some((t) => m.tags.includes(t))
 }
 
+/** What the native menu bar (macOS) asks the renderer to do. */
+export type AppCommand = 'settings' | 'new-chat' | 'command-palette' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'toggle-split'
+
 /** Events pushed from main to the renderer. */
 export type BridgeEvent =
+  | { type: 'app:command'; command: AppCommand }
   | { type: 'account:updated'; account: Account }
   | { type: 'account:removed'; accountId: string }
   | { type: 'conversation:upserted'; conversation: Conversation }
