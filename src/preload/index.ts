@@ -42,7 +42,8 @@ const bridge: MoshiBridge = {
   },
   ai: {
     status: () => ipcRenderer.invoke(IPC.aiStatus),
-    prepare: (kind) => ipcRenderer.invoke(IPC.aiPrepare, kind),
+    prepare: (kind, speakLang) => ipcRenderer.invoke(IPC.aiPrepare, kind, speakLang),
+    speak: (text, speakLang) => ipcRenderer.invoke(IPC.aiSpeak, text, speakLang),
     remove: (kind) => ipcRenderer.invoke(IPC.aiRemove, kind),
     readMedia: (url) => ipcRenderer.invoke(IPC.aiReadMedia, url),
     transcribe: (key, pcm, language) => ipcRenderer.invoke(IPC.aiTranscribe, key, pcm, language),

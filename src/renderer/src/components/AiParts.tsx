@@ -1,5 +1,5 @@
-import { AlertCircle, AudioLines, Captions, Cpu, Languages, RefreshCw, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
-import { AI_MODELS, type AiKind, type ChatModel, type VoiceModel } from '@shared/ai'
+import { AlertCircle, AudioLines, Captions, Cpu, Languages, RefreshCw, ShieldCheck, Sparkles, Trash2, Volume2, X } from 'lucide-react'
+import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import type { Attachment, Message } from '@shared/types'
 import { textKey, useAi, voiceKey } from '../aiStore'
 import { useStore, useT } from '../store'
@@ -105,10 +105,12 @@ export function TranslationBlock({ message }: { message: Message }): JSX.Element
   )
 }
 
-const kindSpec = (kind: AiKind, voiceModel: VoiceModel, chatModel: ChatModel): { megabytes: number } =>
-  kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : AI_MODELS.translate
-const titleKey = (kind: AiKind): 'aiVoiceTitle' | 'aiTranslateTitle' | 'aiChatTitle' => (kind === 'voice' ? 'aiVoiceTitle' : kind === 'chat' ? 'aiChatTitle' : 'aiTranslateTitle')
-const introKey = (kind: AiKind): 'aiVoiceIntro' | 'aiTranslateIntro' | 'aiChatIntro' => (kind === 'voice' ? 'aiVoiceIntro' : kind === 'chat' ? 'aiChatIntro' : 'aiTranslateIntro')
+const kindSpec = (kind: AiKind, voiceModel: VoiceModel, chatModel: ChatModel, speakLang: SpeakLang = 'vi'): { megabytes: number } =>
+  kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : AI_MODELS.translate
+const titleKey = (kind: AiKind): 'aiVoiceTitle' | 'aiTranslateTitle' | 'aiChatTitle' | 'aiSpeakTitle' =>
+  kind === 'voice' ? 'aiVoiceTitle' : kind === 'chat' ? 'aiChatTitle' : kind === 'speak' ? 'aiSpeakTitle' : 'aiTranslateTitle'
+const introKey = (kind: AiKind): 'aiVoiceIntro' | 'aiTranslateIntro' | 'aiChatIntro' | 'aiSpeakIntro' =>
+  kind === 'voice' ? 'aiVoiceIntro' : kind === 'chat' ? 'aiChatIntro' : kind === 'speak' ? 'aiSpeakIntro' : 'aiTranslateIntro'
 
 /** First use: explain, download with progress, then carry on with what the user asked for. */
 export function AiSetupSheet(): JSX.Element | null {
@@ -119,9 +121,10 @@ export function AiSetupSheet(): JSX.Element | null {
   const close = useAi((s) => s.closeSetup)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
   const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
+  const speakLang = useAi((s) => s.speakLang ?? 'vi')
   if (!setup) return null
   const busy = progress?.phase === 'downloading' || progress?.phase === 'loading'
-  const size = kindSpec(setup.kind, voiceModel, chatModel).megabytes
+  const size = kindSpec(setup.kind, voiceModel, chatModel, speakLang).megabytes
   const start = async (): Promise<void> => {
     const then = setup.then
     if (await prepare(setup.kind)) {
@@ -195,7 +198,7 @@ export function AiSettings(): JSX.Element {
   const setSettings = useStore((s) => s.setSettings)
 
   const row = (kind: AiKind, title: string, hint: string): JSX.Element => {
-    const ready = !!status?.[kind].ready
+    const ready = kind === 'speak' ? !!status?.speak.vi || !!status?.speak.en : !!status?.[kind].ready
     const p = progress[kind]
     const busy = p?.phase === 'downloading' || p?.phase === 'loading'
     const size = kindSpec(kind, voiceModel, chatModel).megabytes
@@ -213,6 +216,15 @@ export function AiSettings(): JSX.Element {
               {(['turbo', 'small'] as VoiceModel[]).map((m) => (
                 <button key={m} className={voiceModel === m ? 'active' : ''} onClick={() => void setSettings({ voiceModel: m }).then(() => refresh())}>
                   {m === 'turbo' ? t('aiQualityBest') : t('aiQualityLight')} · {AI_MODELS.voice[m].megabytes} MB
+                </button>
+              ))}
+            </div>
+          )}
+          {kind === 'speak' && status && (
+            <div className="ai-langs">
+              {(['vi', 'en'] as SpeakLang[]).map((lang) => (
+                <button key={lang} className={`ai-lang ${status.speak[lang] ? 'ready' : ''}`} disabled={busy || status.speak[lang]} onClick={() => void prepare('speak', lang)}>
+                  {lang === 'vi' ? t('langVi') : t('langEn')} · {status.speak[lang] ? t('aiReady') : `${AI_MODELS.speak[lang].megabytes} MB`}
                 </button>
               ))}
             </div>
@@ -253,6 +265,7 @@ export function AiSettings(): JSX.Element {
       {row('voice', t('aiVoiceTitle'), t('aiVoiceHint'))}
       {row('translate', t('aiTranslateTitle'), t('aiTranslateHint'))}
       {row('chat', t('aiChatTitle'), t('aiChatHint'))}
+      {row('speak', t('aiSpeakTitle'), t('aiSpeakHint'))}
       <div className="settings-row">
         <div className="settings-row-text">
           <div className="settings-row-title">{t('aiSuggestAuto')}</div>
@@ -370,5 +383,18 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
         </button>
       )}
     </div>
+  )
+}
+
+/** In the bubble's action bar: read this message aloud; press again to stop. */
+export function SpeakButton({ message, text }: { message: Message; text?: string }): JSX.Element | null {
+  const t = useT()
+  const speak = useAi((s) => s.speak)
+  const speaking = useAi((s) => s.speaking === textKey(message))
+  if (!(text ?? message.text).trim()) return null
+  return (
+    <button className={`icon-btn ${speaking ? 'active' : ''}`} title={speaking ? t('aiSpeakStop') : t('aiSpeak')} onClick={() => void speak(message, text)} aria-pressed={speaking}>
+      <Volume2 size={15} strokeWidth={2} />
+    </button>
   )
 }

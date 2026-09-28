@@ -9504,3 +9504,30 @@ button.moment-card:hover {
   left: 0;
   right: auto;
 }
+
+/* ================================================================== reading voices */
+.ai-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ai-lang {
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-lang.ready {
+  color: var(--success, #34c759);
+  border-color: color-mix(in srgb, var(--success, #34c759) 40%, transparent);
+  cursor: default;
+}
+.ai-lang:disabled:not(.ready) {
+  opacity: 0.6;
+}

@@ -1,6 +1,8 @@
 /** On-device AI (Whisper for voice notes, NLLB for translation): shared ids, sizes and helpers. */
 
-export type AiKind = 'voice' | 'translate' | 'chat'
+export type AiKind = 'voice' | 'translate' | 'chat' | 'speak'
+/** Languages the on-device reading voice comes in (system voices cover the rest when installed). */
+export type SpeakLang = 'vi' | 'en'
 export type VoiceModel = 'turbo' | 'small'
 /** The small instruction-tuned model behind summaries and reply suggestions. */
 export type ChatModel = 'small' | 'better'
@@ -15,7 +17,7 @@ export interface AiModelSpec {
   files?: string[]
 }
 
-export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec; chat: Record<ChatModel, AiModelSpec> } = {
+export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec; chat: Record<ChatModel, AiModelSpec>; speak: Record<SpeakLang, AiModelSpec> } = {
   voice: {
     // Best free speech recognition that runs locally; handles Vietnamese well.
     turbo: { repo: 'onnx-community/whisper-large-v3-turbo', dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' }, megabytes: 725 },
@@ -27,6 +29,11 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
   chat: {
     small: { repo: 'onnx-community/Qwen2.5-0.5B-Instruct', dtype: 'q4', megabytes: 480, files: ['model'] },
     better: { repo: 'onnx-community/Qwen2.5-1.5B-Instruct', dtype: 'q4', megabytes: 1100, files: ['model'] }
+  },
+  // Meta's MMS text-to-speech (VITS), one small model per language. CC BY-NC 4.0: non-commercial use.
+  speak: {
+    vi: { repo: 'Xenova/mms-tts-vie', dtype: 'q8', megabytes: 40, files: ['model'] },
+    en: { repo: 'Xenova/mms-tts-eng', dtype: 'q8', megabytes: 40, files: ['model'] }
   }
 }
 
@@ -34,6 +41,7 @@ export interface AiStatus {
   voice: { model: VoiceModel; ready: boolean; gpu: boolean }
   translate: { ready: boolean }
   chat: { model: ChatModel; ready: boolean }
+  speak: Record<SpeakLang, boolean>
   /** Space the downloaded models take. */
   bytes: number
 }

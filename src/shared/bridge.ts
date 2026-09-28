@@ -1,4 +1,4 @@
-import type { AiKind, AiStatus } from './ai'
+import type { AiKind, AiStatus, SpeakLang } from './ai'
 import type { ChatLine } from './ai-prompts'
 import type {
   Account,
@@ -79,7 +79,9 @@ export interface MoshiBridge {
   ai: {
     status(): Promise<AiStatus>
     /** Download (first time) and load a model; progress arrives as ai:progress events. */
-    prepare(kind: AiKind): Promise<boolean>
+    prepare(kind: AiKind, speakLang?: SpeakLang): Promise<boolean>
+    /** PCM audio for a text, from the on-device reading voice of that language. */
+    speak(text: string, speakLang: SpeakLang): Promise<{ audio: Float32Array; rate: number }>
     remove(kind: AiKind): Promise<void>
     /** Raw bytes of a voice note (decoded to 16 kHz in the renderer). */
     readMedia(url: string): Promise<Uint8Array>
@@ -184,6 +186,7 @@ export const IPC = {
   aiCached: 'ai:cached',
   aiSummarize: 'ai:summarize',
   aiSuggest: 'ai:suggest',
+  aiSpeak: 'ai:speak',
   backupCreate: 'backup:create',
   backupPick: 'backup:pick',
   backupRestore: 'backup:restore',

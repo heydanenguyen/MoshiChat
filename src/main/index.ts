@@ -17,7 +17,7 @@ import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
 import { Reminders } from './reminders'
 import { AiService, readMedia } from './ai/service'
-import type { AiKind } from '@shared/ai'
+import type { AiKind, SpeakLang } from '@shared/ai'
 import type { ChatLine } from '@shared/ai-prompts'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
 import { Updater } from './updater'
@@ -734,8 +734,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.updateDownload, () => updater.download())
   ipcMain.on(IPC.updateInstall, () => updater.install())
   ipcMain.handle(IPC.aiStatus, () => ai.status())
-  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind) => ai.prepare(kind === 'translate' || kind === 'chat' ? kind : 'voice'))
-  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' ? kind : 'voice'))
+  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
+  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' ? kind : 'voice'))
+  ipcMain.handle(IPC.aiSpeak, (_e, text: string, speakLang: SpeakLang) => ai.speak(String(text ?? '').slice(0, 1200), speakLang === 'en' ? 'en' : 'vi'))
   ipcMain.handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
   ipcMain.handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
     ai.transcribe(String(key), pcm, typeof language === 'string' && /^[a-z]{2}$/.test(language) ? language : undefined)

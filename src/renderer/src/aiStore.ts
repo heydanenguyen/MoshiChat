@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { detectLanguage, type AiKind, type AiProgress, type AiStatus } from '@shared/ai'
+import { detectLanguage, type AiKind, type AiProgress, type AiStatus, type SpeakLang } from '@shared/ai'
+import { playPcm, speakWithSystem, stopSpeaking, systemVoice } from './tts'
 import type { Attachment, Message } from '@shared/types'
 import type { ChatLine } from '@shared/ai-prompts'
 import { useStore } from './store'
@@ -36,13 +37,19 @@ interface AiState {
   suggestions: Record<string, SuggestState>
   /** Unread count of a chat when it was opened (the summary covers those). */
   unreadAtOpen: Record<string, number>
+  /** Key of the message being read aloud. */
+  speaking?: string
+  /** Language the setup sheet downloads a reading voice for. */
+  speakLang?: SpeakLang
   progress: Partial<Record<AiKind, AiProgress>>
   results: Record<string, AiResult>
   /** First use: the model is not on this computer yet; the setup sheet offers the download. */
   setup?: { kind: AiKind; then?: () => void }
   init(): Promise<void>
   refresh(): Promise<void>
-  prepare(kind: AiKind): Promise<boolean>
+  prepare(kind: AiKind, speakLang?: SpeakLang): Promise<boolean>
+  /** Read a message aloud (or stop, when it is the one playing). */
+  speak(message: Message, text?: string): Promise<void>
   remove(kind: AiKind): Promise<void>
   closeSetup(): void
   transcribe(message: Message, attachment: Attachment): Promise<void>
@@ -125,7 +132,8 @@ export const useAi = create<AiState>((set, get) => {
   const withModel = async (kind: AiKind, run: () => Promise<void>): Promise<void> => {
     const status = get().status ?? (await window.unison.ai.status())
     if (!get().status) set({ status })
-    if (status[kind].ready) return run()
+    // Reading voices are per language and handled by speak() itself.
+    if (kind !== 'speak' && status[kind].ready) return run()
     set({ setup: { kind, then: () => void run() } })
   }
 
@@ -176,10 +184,10 @@ export const useAi = create<AiState>((set, get) => {
       set({ status: await window.unison.ai.status() })
     },
 
-    async prepare(kind) {
+    async prepare(kind, speakLang) {
       set({ progress: { ...get().progress, [kind]: { kind, phase: 'downloading', progress: 0 } } })
       try {
-        await window.unison.ai.prepare(kind)
+        await window.unison.ai.prepare(kind, speakLang ?? get().speakLang)
         await get().refresh()
         return true
       } catch (err) {
@@ -238,6 +246,41 @@ export const useAi = create<AiState>((set, get) => {
           patch(key, { error: clean(err) })
         }
       })
+    },
+
+    async speak(message, text) {
+      const key = textKey(message)
+      if (get().speaking === key) {
+        stopSpeaking()
+        set({ speaking: undefined })
+        return
+      }
+      const body = (text ?? message.text).trim()
+      if (!body) return
+      const lang = detectLanguage(body)
+      const voice = systemVoice(lang)
+      if (voice) {
+        set({ speaking: key })
+        await speakWithSystem(body, voice)
+        if (get().speaking === key) set({ speaking: undefined })
+        return
+      }
+      const speakLang: SpeakLang = lang === 'en' ? 'en' : 'vi'
+      const status = get().status ?? (await window.unison.ai.status())
+      const run = async (): Promise<void> => {
+        set({ speaking: key })
+        try {
+          const { audio, rate } = await window.unison.ai.speak(body.slice(0, 1200), speakLang)
+          if (get().speaking !== key) return
+          await playPcm(audio instanceof Float32Array ? audio : new Float32Array(audio as ArrayLike<number>), rate)
+        } catch (err) {
+          useStore.getState().showToast(clean(err), 'error')
+        } finally {
+          if (get().speaking === key) set({ speaking: undefined })
+        }
+      }
+      if (status.speak[speakLang]) return run()
+      set({ speakLang, setup: { kind: 'speak', then: () => void run() } })
     },
 
     async summarize(conversationId, force) {

@@ -1,7 +1,7 @@
 import { app, session, utilityProcess, type UtilityProcess } from 'electron'
 import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
-import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type VoiceModel } from '@shared/ai'
+import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import { parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
 /** The worker goes away after this long without work, giving its memory back. */
@@ -112,6 +112,7 @@ export class AiService {
       voice: { model, ready: await present(AI_MODELS.voice[model]), gpu: (await this.voiceDevice()) === 'dml' },
       translate: { ready: await present(AI_MODELS.translate) },
       chat: { model: this.chatModel(), ready: await present(AI_MODELS.chat[this.chatModel()]) },
+      speak: { vi: await present(AI_MODELS.speak.vi), en: await present(AI_MODELS.speak.en) },
       bytes: await folderSize(modelsDir())
     }
   }
@@ -170,13 +171,27 @@ export class AiService {
   }
 
   /** Download (first time) and load a model. */
-  async prepare(kind: AiKind): Promise<boolean> {
-    return this.request<boolean>({ type: 'prepare', kind, voiceModel: this.voiceModel(), chatModel: this.chatModel(), device: kind === 'voice' ? await this.voiceDevice() : 'cpu' })
+  async prepare(kind: AiKind, speakLang?: SpeakLang): Promise<boolean> {
+    return this.request<boolean>({
+      type: 'prepare',
+      kind,
+      voiceModel: this.voiceModel(),
+      chatModel: this.chatModel(),
+      speakLang: speakLang ?? (this.language() === 'en' ? 'en' : 'vi'),
+      device: kind === 'voice' ? await this.voiceDevice() : 'cpu'
+    })
   }
 
   async remove(kind: AiKind): Promise<void> {
     this.stop()
-    const repos = kind === 'voice' ? Object.values(AI_MODELS.voice).map((m) => m.repo) : kind === 'chat' ? Object.values(AI_MODELS.chat).map((m) => m.repo) : [AI_MODELS.translate.repo]
+    const repos =
+      kind === 'voice'
+        ? Object.values(AI_MODELS.voice).map((m) => m.repo)
+        : kind === 'chat'
+          ? Object.values(AI_MODELS.chat).map((m) => m.repo)
+          : kind === 'speak'
+            ? Object.values(AI_MODELS.speak).map((m) => m.repo)
+            : [AI_MODELS.translate.repo]
     for (const repo of repos) await rm(join(modelsDir(), ...repo.split('/')), { recursive: true, force: true })
   }
 
@@ -207,6 +222,11 @@ export class AiService {
     const bullets = parseSummary(text)
     if (bullets.length) this.remember('summaries', cacheKey, JSON.stringify(bullets))
     return bullets
+  }
+
+  /** Audio for a text in one of the reading voices (16 kHz mono PCM). */
+  speak(text: string, speakLang: SpeakLang): Promise<{ audio: Float32Array; rate: number }> {
+    return this.request({ type: 'speak', speakLang, text })
   }
 
   /** Three short ways to answer the newest message. Not cached: the chat moves on. */

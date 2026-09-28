@@ -5,14 +5,15 @@
  * NLLB always on the CPU (its int8 model crashes DirectML natively). Models are downloaded once from
  * Hugging Face into <userData>/models.
  */
-import { AI_MODELS, type AiKind, type ChatModel, type VoiceModel } from '@shared/ai'
+import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import type { ChatMessage } from '@shared/ai-prompts'
 
 export type Device = 'dml' | 'cpu'
 
 type Request =
   | { type: 'init'; cacheDir: string }
-  | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel; chatModel: ChatModel; device: Device }
+  | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel; chatModel: ChatModel; speakLang: SpeakLang; device: Device }
+  | { type: 'speak'; id: number; speakLang: SpeakLang; text: string }
   | { type: 'chat'; id: number; chatModel: ChatModel; messages: ChatMessage[]; maxNewTokens: number }
   | { type: 'transcribe'; id: number; voiceModel: VoiceModel; device: Device; audio: Float32Array; language?: string }
   | { type: 'translate'; id: number; texts: string[]; src: string; tgt: string }
@@ -36,12 +37,12 @@ async function lib(cacheDir?: string): Promise<typeof import('@huggingface/trans
 }
 
 /** Build (or reuse) a pipeline, reporting download progress for this kind of model. */
-function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device, chatModel: ChatModel = 'small'): Promise<Pipe> {
-  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : AI_MODELS.translate
+function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device, chatModel: ChatModel = 'small', speakLang: SpeakLang = 'vi'): Promise<Pipe> {
+  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : AI_MODELS.translate
   const key = `${spec.repo}|${device}`
   const existing = pipes.get(key)
   if (existing) return existing
-  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'chat' ? 'text-generation' : 'translation'
+  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'chat' ? 'text-generation' : kind === 'speak' ? 'text-to-speech' : 'translation'
   const files = new Map<string, { loaded: number; total: number }>()
   const progress_callback = (p: { status: string; file?: string; loaded?: number; total?: number }): void => {
     if (p.status === 'progress' && p.file) {
@@ -79,7 +80,7 @@ port.on('message', async ({ data }) => {
     }
     if (request.type === 'prepare') {
       send({ type: 'progress', kind: request.kind, phase: 'loading' })
-      await pipe(request.kind, request.voiceModel, request.kind === 'voice' ? request.device : 'cpu', request.chatModel)
+      await pipe(request.kind, request.voiceModel, request.kind === 'voice' ? request.device : 'cpu', request.chatModel, request.speakLang)
       send({ type: 'result', id: request.id, value: true })
       return
     }
@@ -95,6 +96,12 @@ port.on('message', async ({ data }) => {
       })) as { text?: string } | Array<{ text?: string }>
       const text = (Array.isArray(output) ? output.map((o) => o.text ?? '').join(' ') : (output.text ?? '')).trim()
       send({ type: 'result', id: request.id, value: text })
+      return
+    }
+    if (request.type === 'speak') {
+      const tts = await pipe('speak', 'turbo', 'cpu', 'small', request.speakLang)
+      const out = (await tts(request.text)) as { audio: Float32Array; sampling_rate: number }
+      send({ type: 'result', id: request.id, value: { audio: out.audio, rate: out.sampling_rate } })
       return
     }
     if (request.type === 'chat') {

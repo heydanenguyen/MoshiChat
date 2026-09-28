@@ -11,7 +11,7 @@ import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from '
 import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
-import { SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
+import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
 import { StickerArt } from './StickerPicker'
@@ -671,6 +671,7 @@ function Bubble({
             <Forward size={15} strokeWidth={2} />
           </button>
           <TranslateButton message={message} />
+          <SpeakButton message={message} />
           <TodoButton message={message} />
           <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
             <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
