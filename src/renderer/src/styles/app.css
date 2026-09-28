@@ -66,13 +66,35 @@ a {
   -webkit-app-region: no-drag;
 }
 
-/* Windows has no overlay scrollbars: anything that overflows gets the classic arrowed bar.
-   Slim every scrollbar there to the thin one the .scroll containers use below (scrollbar-color inherits). */
-.platform-win {
-  scrollbar-color: var(--fill-secondary) transparent;
-}
+/* Windows has no overlay scrollbars: anything that overflows gets the classic arrowed bar, and even
+   Chromium's "thin" one is 11px with a track. Every scrollbar there is drawn by the ::-webkit-scrollbar
+   rules instead: a 6px pill on a transparent track (4px inside .scroll panes, shown only while hovered or
+   scrolling, like macOS). Any scrollbar-width / scrollbar-color value switches those rules off, so they
+   are reset here on purpose with !important. macOS keeps its native overlay scrollbars. */
+.platform-win,
 .platform-win * {
-  scrollbar-width: thin;
+  scrollbar-width: auto !important;
+  scrollbar-color: auto !important;
+}
+.platform-win ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.platform-win ::-webkit-scrollbar-track,
+.platform-win ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.platform-win ::-webkit-scrollbar-thumb {
+  background: var(--fill-secondary);
+  border-radius: var(--radius-full);
+}
+.platform-win ::-webkit-scrollbar-thumb:hover {
+  background: var(--fill-primary);
+}
+.platform-win ::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Overlay scrollbars, macOS style: a 4px pill that fades in while scrolling or hovering. */
@@ -8707,6 +8729,19 @@ button.moment-card:hover {
 :root[data-style='liquid'] .mesh-blob {
   filter: blur(130px);
   opacity: 0.85;
+}
+/* Windows 11 draws a blurred acrylic backdrop behind the window (see main/index.ts); the page keeps the
+   ground translucent so it shows through everything, the sidebar first of all. Older Windows shows the
+   window's own colour underneath, which reads the same as before. */
+.platform-win[data-style='liquid'],
+.platform-win[data-style='liquid'] body {
+  background: transparent;
+}
+.platform-win[data-style='liquid'] .mesh {
+  background: color-mix(in srgb, var(--mesh-base) 58%, transparent);
+}
+.platform-win[data-style='liquid'] .mesh-blob {
+  opacity: 0.7;
 }
 /* panels: stronger refraction and a light sheen along the top edge */
 :root[data-style='liquid'] .panel,

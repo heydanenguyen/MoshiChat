@@ -280,6 +280,17 @@ function installMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+/** The system-drawn backdrop behind the window: acrylic for Liquid Glass on Windows, nothing otherwise. */
+function backdropFor(settings: Settings): 'acrylic' | 'none' | undefined {
+  if (isMac) return undefined
+  return settings.style === 'liquid' ? 'acrylic' : 'none'
+}
+
+function applyBackdrop(): void {
+  if (isMac || !window || window.isDestroyed()) return
+  window.setBackgroundMaterial(backdropFor(storage.settings) ?? 'none')
+}
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1240,
@@ -295,6 +306,9 @@ function createWindow(): void {
     trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
     vibrancy: isMac ? 'sidebar' : undefined,
     visualEffectState: isMac ? 'active' : undefined,
+    // Windows 11: the Liquid Glass style shows the desktop through the window behind a blurred acrylic
+    // layer (the page keeps its own background translucent for it). Older Windows ignores this.
+    backgroundMaterial: backdropFor(storage.settings),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -685,6 +699,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
+    if ('style' in patch) applyBackdrop()
     if (patch.language) installMenu()
     if ('zoom' in patch && window && !window.isDestroyed()) window.webContents.setZoomFactor(clampZoom(settings.zoom))
     if (patch.logo) {
@@ -787,9 +802,6 @@ function registerIpc(): void {
   })
 }
 
-// Windows and Linux draw classic scrollbars that take up space; Chromium's overlay scrollbars are the
-// macOS kind: a thin pill over the content that fades out when the scrolling stops.
-if (!isMac) app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar')
 // Chromium stops painting occluded windows on Windows, which breaks screenshot-based
 // UI checks during development. Keep the default behaviour in packaged builds.
 if (process.env.ELECTRON_RENDERER_URL && isWindows) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
