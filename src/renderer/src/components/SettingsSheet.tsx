@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArchiveRestore, BellOff, ChevronRight, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
+import { ACCENTS, DARK_BASES, FONTS, MESHES, STYLES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
@@ -76,6 +76,34 @@ export function SettingsSheet(): JSX.Element {
               {t('personalize')}
             </div>
             <div className="settings-group">
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('style')}</div>
+                  <div className="settings-row-sub">{t('styleHint')}</div>
+                  <div className="style-picker" role="radiogroup" aria-label={t('style')}>
+                    {STYLES.map((style) => {
+                      const active = (settings.style ?? 'moshi') === style.id
+                      return (
+                        <button key={style.id} className={`style-card ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ style: style.id })}>
+                          <span className={`style-preview ${style.id}`} aria-hidden>
+                            <i className="blob b1" />
+                            <i className="blob b2" />
+                            <i className="blob b3" />
+                            <i className="pane p1" />
+                            <i className="pane p2">
+                              <i className="line" />
+                              <i className="line short" />
+                              <i className="pill" />
+                            </i>
+                          </span>
+                          <span className="style-name">{style.name[language]}</span>
+                          <span className="style-sub">{style.sub[language]}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
               <div className="settings-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-row-text">
                   <div className="settings-row-title">{t('logo')}</div>

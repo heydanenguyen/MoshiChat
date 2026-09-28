@@ -8654,3 +8654,274 @@ button.moment-card:hover {
   border-radius: var(--radius-full);
   display: block;
 }
+
+/* ================================================================== surface styles
+   Styles change only how surfaces are drawn (glass, edges, rounding, shadows); every layout rule
+   stays as it is. The default is the Moshi look defined by the tokens; each other style overrides
+   tokens under [data-style] and adds a few effect-only rules. */
+
+/* ---- Liquid Glass: clear, bright-edged panels floating over a softer, wider mesh */
+:root[data-style='liquid'] {
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-panel: 30px;
+  --radius-bubble: 22px;
+
+  --glass: rgba(255, 255, 255, 0.5);
+  --glass-strong: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.95);
+  --glass-blur: 44px;
+  --bg-elevated: rgba(255, 255, 255, 0.88);
+  --bg-input: rgba(255, 255, 255, 0.62);
+  --bg-selected: rgba(255, 255, 255, 0.95);
+  --bubble-in: rgba(255, 255, 255, 0.74);
+  --mesh-base: #f5f6fb;
+
+  --shadow-sm: 0 1px 2px rgba(31, 38, 135, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-md: 0 12px 32px rgba(31, 38, 135, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-lg: 0 40px 100px rgba(31, 38, 135, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-panel: 0 24px 70px rgba(31, 38, 135, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+  --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 38%);
+  --liquid-edge: rgba(255, 255, 255, 0.8);
+}
+:root[data-style='liquid'][data-theme='dark'] {
+  --glass: color-mix(in srgb, var(--bg-window) 46%, transparent);
+  --glass-strong: color-mix(in srgb, var(--bg-window) 72%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --bg-elevated: color-mix(in srgb, var(--bg-sidebar-solid) 90%, white 4%);
+  --bg-input: rgba(255, 255, 255, 0.08);
+  --bg-selected: rgba(255, 255, 255, 0.12);
+  --bubble-in: rgba(255, 255, 255, 0.1);
+  --mesh-base: var(--dark-base, #0f1122);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --shadow-lg: 0 40px 100px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 38%);
+  --liquid-edge: rgba(255, 255, 255, 0.22);
+}
+/* the mesh spreads wider and softer, like a photo out of focus */
+:root[data-style='liquid'] .mesh-blob {
+  filter: blur(130px);
+  opacity: 0.85;
+}
+/* panels: stronger refraction and a light sheen along the top edge */
+:root[data-style='liquid'] .panel,
+:root[data-style='liquid'] .list-col,
+:root[data-style='liquid'] .chat-col,
+:root[data-style='liquid'] .details-col {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.04);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.04);
+}
+:root[data-style='liquid'] .list-col::before,
+:root[data-style='liquid'] .chat-col::before,
+:root[data-style='liquid'] .details-col::before,
+:root[data-style='liquid'] .sheet::before,
+:root[data-style='liquid'] .emoji-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--liquid-sheen);
+  pointer-events: none;
+  z-index: -1;
+}
+:root[data-style='liquid'] .sheet,
+:root[data-style='liquid'] .emoji-sheet {
+  position: relative;
+  border: 1px solid var(--liquid-edge);
+}
+/* controls turn into pills */
+:root[data-style='liquid'] .composer-box {
+  border-radius: 28px;
+  border-color: var(--liquid-edge);
+}
+:root[data-style='liquid'] .search-field input,
+:root[data-style='liquid'] .icon-btn,
+:root[data-style='liquid'] .composer-send,
+:root[data-style='liquid'] .segmented,
+:root[data-style='liquid'] .segmented button {
+  border-radius: var(--radius-full);
+}
+:root[data-style='liquid'] .nav-item.active {
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--liquid-edge);
+}
+:root[data-style='liquid'] .conv-item.selected {
+  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--liquid-edge);
+}
+/* incoming bubbles are glass too */
+:root[data-style='liquid'] .bubble.in {
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--liquid-edge) inset;
+}
+
+/* ---- style picker in Settings: tiny mock scenes, one per style */
+.style-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+.style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 8px 8px 9px;
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+  background: var(--fill-tertiary);
+  text-align: left;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+}
+.style-card:hover {
+  background: var(--bg-hover);
+}
+.style-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.style-preview {
+  position: relative;
+  height: 76px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 7px;
+  background: #f3f4fa;
+}
+.style-preview i {
+  position: absolute;
+  display: block;
+}
+.style-preview .blob {
+  border-radius: 50%;
+  filter: blur(14px);
+}
+.style-preview .b1 {
+  left: -14px;
+  top: -18px;
+  width: 80px;
+  height: 80px;
+  background: #ffd6e0;
+}
+.style-preview .b2 {
+  right: -16px;
+  top: -10px;
+  width: 76px;
+  height: 76px;
+  background: #d6e6ff;
+}
+.style-preview .b3 {
+  left: 40%;
+  bottom: -30px;
+  width: 80px;
+  height: 80px;
+  background: #e7dbff;
+}
+.style-preview .pane {
+  top: 10px;
+  bottom: 10px;
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(31, 38, 135, 0.08);
+}
+.style-preview .p1 {
+  left: 10px;
+  width: 36px;
+}
+.style-preview .p2 {
+  left: 54px;
+  right: 10px;
+}
+.style-preview .line {
+  left: 10px;
+  right: 10px;
+  top: 12px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(27, 29, 42, 0.16);
+}
+.style-preview .line.short {
+  top: 22px;
+  right: 40%;
+}
+.style-preview .pill {
+  left: 10px;
+  right: 10px;
+  bottom: 9px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(27, 29, 42, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+.style-preview.liquid {
+  background: #f5f6fb;
+}
+.style-preview.liquid .blob {
+  filter: blur(20px);
+}
+.style-preview.liquid .b1 {
+  background: #ffd9e2;
+}
+.style-preview.liquid .b2 {
+  background: #cfe3ff;
+}
+.style-preview.liquid .pane {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 13px;
+  box-shadow:
+    0 8px 20px rgba(31, 38, 135, 0.08),
+    inset 0 1px 0 #fff;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.style-preview.liquid .pill {
+  background: rgba(255, 255, 255, 0.7);
+}
+:root[data-theme='dark'] .style-preview {
+  background: #14162a;
+}
+:root[data-theme='dark'] .style-preview .b1 {
+  background: #3a2447;
+}
+:root[data-theme='dark'] .style-preview .b2 {
+  background: #1e2c58;
+}
+:root[data-theme='dark'] .style-preview .b3 {
+  background: #2c2456;
+}
+:root[data-theme='dark'] .style-preview .pane {
+  background: rgba(30, 32, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+:root[data-theme='dark'] .style-preview .line {
+  background: rgba(255, 255, 255, 0.22);
+}
+:root[data-theme='dark'] .style-preview .pill {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+:root[data-theme='dark'] .style-preview.liquid .pane {
+  background: rgba(40, 42, 60, 0.45);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.style-name {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.style-sub {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}

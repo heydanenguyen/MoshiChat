@@ -54,6 +54,7 @@ export default function App(): JSX.Element {
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
   const mesh = useStore((s) => s.settings.mesh)
   const darkBase = useStore((s) => s.settings.darkBase)
+  const style = useStore((s) => s.settings.style)
   const accent = useStore((s) => s.settings.accent)
   const customAccents = useStore((s) => s.settings.customAccents)
   const font = useStore((s) => s.settings.font)
@@ -106,6 +107,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     document.documentElement.dataset.mesh = mesh
+    document.documentElement.dataset.style = style ?? 'moshi'
     // Custom accents set their variables inline on :root; presets use the [data-accent] rules.
     const root = document.documentElement
     const custom = accent.startsWith('custom-') ? customAccents?.find((a) => a.id === accent) : undefined
@@ -122,7 +124,7 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
-  }, [mesh, darkBase, accent, customAccents, font, messageShadows, textSize])
+  }, [mesh, style, darkBase, accent, customAccents, font, messageShadows, textSize])
 
   // Unread count on the Dock / taskbar icon (0 until the first load, so a stale badge never lingers).
   useEffect(() => {

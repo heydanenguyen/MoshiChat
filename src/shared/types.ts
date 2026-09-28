@@ -412,6 +412,13 @@ export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatc
   { id: 'mono', name: { vi: 'Tối giản', en: 'Mono' }, swatch: ['#eceef5', '#e3e6ef', '#f2f3f8', '#dfe3ee'] }
 ]
 
+/** Surface style: how panels, bubbles and sheets are drawn. The layout never changes with it. */
+export type StyleId = 'moshi' | 'liquid'
+export const STYLES: Array<{ id: StyleId; name: { vi: string; en: string }; sub: { vi: string; en: string } }> = [
+  { id: 'moshi', name: { vi: 'Moshi', en: 'Moshi' }, sub: { vi: 'Pastel mềm, kính mờ nhẹ', en: 'Soft pastel, light frosted glass' } },
+  { id: 'liquid', name: { vi: 'Liquid Glass', en: 'Liquid Glass' }, sub: { vi: 'Kính trong, viền sáng, bo tròn sâu', en: 'Clear glass, bright edges, deep rounding' } }
+]
+
 /** Base tone behind everything in dark mode: a preset id, or any `#rrggbb` picked by the user. */
 export type DarkBaseId = 'navy' | 'graphite' | 'black' | 'slate' | 'mocha'
 export const DARK_BASES: Array<{ id: DarkBaseId; name: { vi: string; en: string }; base: string }> = [
@@ -482,6 +489,8 @@ export interface Settings {
   tags: Record<string, TagId[]>
   sidebarCollapsed: boolean
   mesh: MeshId
+  /** Surface effects (glass, edges, rounding); absent = the Moshi look. */
+  style?: StyleId
   /** Dark-mode base tone: a DarkBaseId or a custom `#rrggbb`; absent = navy. */
   darkBase?: DarkBaseId | string
   accent: AccentId | CustomAccentId
