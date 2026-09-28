@@ -102,7 +102,7 @@ port.on('message', async ({ data }) => {
     if (request.type === 'cutout') {
       const { RawImage } = await lib()
       const remove = await pipe('cutout', 'turbo', 'cpu')
-      const image = await RawImage.fromBlob(new Blob([Uint8Array.from(request.image) as unknown as BlobPart]))
+      const image = await RawImage.fromBlob(new Blob([Uint8Array.from(request.image) as never]))
       type Cut = { toSharp(): import('sharp').Sharp }
       const result = (await remove(image)) as Cut | Cut[]
       const cut = Array.isArray(result) ? result[0] : result
