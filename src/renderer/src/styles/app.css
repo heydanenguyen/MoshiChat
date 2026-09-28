@@ -8760,13 +8760,16 @@ button.moment-card:hover {
 .platform-win[data-style='liquid'][data-theme='dark'] body {
   background: rgba(0, 0, 0, 0.32);
 }
-.platform-win[data-style='liquid'] .list-col {
-  background: rgba(255, 255, 255, 0.72);
-}
-/* the reading surfaces are solid: nothing moves behind the text */
+/* the reading surfaces are solid white: nothing moves behind the text; only the sidebar shows the desktop */
+.platform-win[data-style='liquid'] .list-col,
 .platform-win[data-style='liquid'] .chat-col,
 .platform-win[data-style='liquid'] .details-col {
   background: #ffffff;
+}
+.platform-win[data-style='liquid'] .list-col::before,
+.platform-win[data-style='liquid'] .chat-col::before,
+.platform-win[data-style='liquid'] .details-col::before {
+  display: none;
 }
 /* With a transparent window the blur is the system's job. Chromium's own backdrop-filter over a see-through
    root samples stale GPU memory and leaves ghost rectangles (a translucent band across the top, outlines of
@@ -8777,9 +8780,7 @@ button.moment-card:hover {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
-.platform-win[data-style='liquid'][data-theme='dark'] .list-col {
-  background: color-mix(in srgb, var(--bg-window) 58%, transparent);
-}
+.platform-win[data-style='liquid'][data-theme='dark'] .list-col,
 .platform-win[data-style='liquid'][data-theme='dark'] .chat-col,
 .platform-win[data-style='liquid'][data-theme='dark'] .details-col {
   background: var(--bg-window);
@@ -8809,6 +8810,10 @@ button.moment-card:hover {
 :root[data-style='liquid'] .emoji-sheet {
   position: relative;
   border: 1px solid var(--liquid-edge);
+}
+/* every host of the sheen must be positioned, or the sheen spans the whole app behind the panels */
+:root[data-style='liquid'] .details-col {
+  position: relative;
 }
 /* controls turn into pills */
 :root[data-style='liquid'] .composer-box {
