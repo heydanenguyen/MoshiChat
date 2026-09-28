@@ -47,6 +47,7 @@ export default function App(): JSX.Element {
   const authPrompts = useStore((s) => s.authPrompts)
   const hasAccounts = useStore((s) => Object.keys(s.accounts).length > 0)
   const detailsOpen = useStore((s) => s.detailsOpen)
+  const toggleDetails = useStore((s) => s.toggleDetails)
   const selectedId = useStore((s) => s.selectedId)
   const toast = useStore((s) => s.toast)
   const forwarding = useStore((s) => s.forwarding)
@@ -258,7 +259,7 @@ export default function App(): JSX.Element {
       {ready && (
         <>
           <TitleBar />
-          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
+          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${detailsOpen && selectedId ? 'details-open' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
             <div className="mesh" aria-hidden>
               <span className="mesh-blob b1" />
               <span className="mesh-blob b2" />
@@ -270,6 +271,8 @@ export default function App(): JSX.Element {
             <ConversationList />
             {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
             {detailsOpen && selectedId ? <DetailsPane /> : <div />}
+            {/* Mid-width windows float the details over the chat; the scrim closes them (see the responsive rules). */}
+            {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => toggleDetails()} />}
 
             {sheet.kind === 'settings' && <SettingsSheet initialPage={sheet.page} />}
             {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
