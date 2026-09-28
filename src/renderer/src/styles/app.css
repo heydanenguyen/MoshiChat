@@ -8677,7 +8677,7 @@ button.moment-card:hover {
   --bg-input: rgba(255, 255, 255, 0.62);
   --bg-selected: rgba(255, 255, 255, 0.95);
   --bubble-in: rgba(255, 255, 255, 0.74);
-  --mesh-base: #e8edf8;
+  --mesh-base: #f5f6fb;
 
   --shadow-sm: 0 1px 2px rgba(31, 38, 135, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --shadow-md: 0 12px 32px rgba(31, 38, 135, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.9);
@@ -8702,60 +8702,19 @@ button.moment-card:hover {
   --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
   --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 38%);
   --liquid-edge: rgba(255, 255, 255, 0.22);
-  --liquid-sidebar: rgba(255, 255, 255, 0.03);
-  --liquid-chat: color-mix(in srgb, var(--bg-window) 82%, transparent);
-  --liquid-bokeh: 0.14;
-  --liquid-wash: 0.06;
 }
-/* the backdrop reads like a photo out of focus: bigger, richer blobs, a wash of light from the
-   top left and a few soft bokeh discs */
+/* the mesh spreads wider and softer, like a photo out of focus */
 :root[data-style='liquid'] .mesh-blob {
-  filter: blur(80px) saturate(1.5);
-  opacity: 1;
-  scale: 1.35;
+  filter: blur(130px);
+  opacity: 0.85;
 }
-:root[data-style='liquid'] .mesh::before,
-:root[data-style='liquid'] .mesh::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-:root[data-style='liquid'] .mesh::before {
-  background:
-    radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.75) 0 54px, transparent 55px),
-    radial-gradient(circle at 24% 64%, rgba(255, 255, 255, 0.55) 0 30px, transparent 31px),
-    radial-gradient(circle at 46% 12%, rgba(255, 255, 255, 0.6) 0 38px, transparent 39px),
-    radial-gradient(circle at 80% 26%, rgba(255, 255, 255, 0.7) 0 70px, transparent 71px),
-    radial-gradient(circle at 92% 76%, rgba(255, 255, 255, 0.6) 0 46px, transparent 47px),
-    radial-gradient(circle at 60% 88%, rgba(255, 255, 255, 0.5) 0 28px, transparent 29px),
-    radial-gradient(circle at 36% 40%, rgba(255, 255, 255, 0.4) 0 18px, transparent 19px);
-  filter: blur(2px);
-  opacity: var(--liquid-bokeh, 0.9);
-  animation: drift 40s ease-in-out infinite alternate-reverse;
-}
-:root[data-style='liquid'] .mesh::after {
-  background: linear-gradient(160deg, rgba(255, 255, 255, var(--liquid-wash, 0.32)), transparent 58%);
-}
-/* depth: the sidebar is the most liquid (nearly the backdrop itself), the list is half glass,
-   the chat is the clearest pane of all */
-:root[data-style='liquid'] .sidebar {
-  background: var(--liquid-sidebar, rgba(255, 255, 255, 0.16));
-  -webkit-backdrop-filter: blur(36px) saturate(170%);
-  backdrop-filter: blur(36px) saturate(170%);
-  box-shadow: inset -1px 0 0 var(--liquid-edge);
-}
+/* panels: stronger refraction and a light sheen along the top edge */
 :root[data-style='liquid'] .panel,
 :root[data-style='liquid'] .list-col,
+:root[data-style='liquid'] .chat-col,
 :root[data-style='liquid'] .details-col {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.04);
   backdrop-filter: blur(var(--glass-blur)) saturate(190%) brightness(1.04);
-}
-:root[data-style='liquid'] .chat-col {
-  background: var(--liquid-chat, rgba(255, 255, 255, 0.86));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%) brightness(1.06);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%) brightness(1.06);
-  box-shadow: var(--shadow-panel), 0 30px 80px rgba(31, 38, 135, 0.08);
 }
 :root[data-style='liquid'] .list-col::before,
 :root[data-style='liquid'] .chat-col::before,
