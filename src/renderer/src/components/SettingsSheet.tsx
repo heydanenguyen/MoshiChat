@@ -64,11 +64,11 @@ export function SettingsSheet({ initialPage }: { initialPage?: SettingsPage }): 
         <nav className="settings-nav" aria-label={t('settings')}>
           <div className="settings-nav-title">{t('settings')}</div>
           {PAGES.map((p) => (
-            <button key={p.id} className={`settings-nav-item ${page === p.id ? 'active' : ''}`} onClick={() => setPage(p.id)} aria-current={page === p.id ? 'page' : undefined}>
-              <span className="settings-nav-icon" style={{ background: p.tint }}>
+            <button key={p.id} className={`nav-item ${page === p.id ? 'active' : ''}`} onClick={() => setPage(p.id)} aria-current={page === p.id ? 'page' : undefined}>
+              <span className="nav-item-icon tile" style={{ ['--brand' as string]: p.tint } as React.CSSProperties}>
                 {p.icon}
               </span>
-              <span className="settings-nav-label">{t(`settings_${p.id}`)}</span>
+              <span className="nav-item-label">{t(`settings_${p.id}`)}</span>
             </button>
           ))}
         </nav>
