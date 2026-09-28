@@ -2,6 +2,8 @@
 // The real work is done by the electron-builder NSIS package, run silently underneath:
 //   setup:     payload.exe /S          (per-user, no admin), progress = install folder size vs expected size
 //   uninstall: <nsis uninstaller> /S   (the Windows "Uninstall" entry points to this program instead)
+//   update:    the NSIS package runs the registered uninstaller with /S; this program then removes the old
+//              version headlessly (SilentUninstall) instead of showing the goodbye window
 // The window (Window.xaml) and the character art (assets/*.png, drawn from src/shared/logos.ts) are
 // embedded resources. Built by scripts/build-setup.mjs.
 using System;
@@ -38,6 +40,10 @@ namespace MoshiSetup
             if (args.Contains("--lang=vi")) L.Vietnamese = true;
             if (args.Contains("--lang=en")) L.Vietnamese = false;
             bool uninstall = args.Contains("--uninstall") || !Res.Has("payload.exe");
+            // The NSIS package, while updating, copies whatever "Uninstall" points at (this program) to %TEMP%
+            // and runs it with /S. Remove the old version quietly with the real NSIS uninstaller and report its
+            // result; never open the goodbye window in the middle of an update.
+            if (uninstall && args.Any(a => a.Equals("/S", StringComparison.OrdinalIgnoreCase))) return SilentUninstall(args);
             if (uninstall && !args.Contains("--relaunched"))
             {
                 // The uninstaller lives in the folder it removes: run a copy from %TEMP% instead.
@@ -51,6 +57,40 @@ namespace MoshiSetup
             var ui = new SetupWindow(uninstall);
             app.MainWindow = ui.Window;
             return app.Run(ui.Window);
+        }
+
+        /// <summary>
+        /// Headless uninstall for the NSIS package (and anything else that passes /S): runs the NSIS uninstaller
+        /// the package registered, forwarding its flags (/KEEP_APP_DATA, /currentuser, --updated, _?=dir).
+        /// Nothing to remove counts as success, so an update over a half-removed install still goes ahead.
+        /// </summary>
+        static int SilentUninstall(string[] args)
+        {
+            try
+            {
+                var entry = InstallEntry.Find();
+                string core = entry?.Get("MoshiCoreUninstall") ?? entry?.Get("QuietUninstallString");
+                if (string.IsNullOrEmpty(core)) return 0;
+                string exe = core.StartsWith("\"") ? core.Substring(1, core.IndexOf('"', 1) - 1) : core.Split(' ')[0];
+                if (!File.Exists(exe)) return 0;
+                // "_?=<dir>" is unquoted and must stay last (NSIS reads everything after it as the path), so take
+                // it from the raw command line rather than from the split-up args.
+                string cmd = Environment.CommandLine;
+                int at = cmd.IndexOf("_?=", StringComparison.Ordinal);
+                string dir = at >= 0 ? cmd.Substring(at + 3).Trim() : (entry?.Location ?? System.IO.Path.GetDirectoryName(exe));
+                var flags = args.TakeWhile(a => !a.StartsWith("_?=", StringComparison.Ordinal))
+                    .Where(a => (a.StartsWith("/") || a.StartsWith("--")) && !a.StartsWith("--uninstall") && !a.StartsWith("--relaunched") && !a.StartsWith("--lang="))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!flags.Any(f => f.Equals("/S", StringComparison.OrdinalIgnoreCase))) flags.Insert(0, "/S");
+                var p = Process.Start(new ProcessStartInfo(exe, string.Join(" ", flags) + " _?=" + dir) { UseShellExecute = false, CreateNoWindow = true });
+                p.WaitForExit();
+                return p.ExitCode;
+            }
+            catch
+            {
+                return 1;
+            }
         }
     }
 
@@ -566,6 +606,11 @@ namespace MoshiSetup
                 var legacy = InstallEntry.FindLegacy();
                 if (legacy != null) await Task.Run(() => RemoveLegacy(legacy));
                 var existing = InstallEntry.Find();
+                // For the update itself, point the Windows entry straight at the NSIS uninstaller: the package looks
+                // it up to remove the old version, and going through this program would open the goodbye window.
+                // Register() points it back at "Moshi Uninstall.exe" once the new version is in.
+                string coreUninstall = existing?.Get("MoshiCoreUninstall");
+                if (existing != null && !string.IsNullOrEmpty(coreUninstall)) existing.Set("UninstallString", coreUninstall);
                 string dir = existing?.Location ?? defaultDir;
                 long baseline = await Task.Run(() => FolderSize(dir));
                 bool fresh = baseline < expectedBytes / 3;
