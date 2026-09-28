@@ -74,3 +74,26 @@ export function accentVars(spec: AccentSpec): Record<string, string> {
 }
 
 export const ACCENT_VAR_NAMES = Object.keys(accentVars({ from: '#000000' }))
+
+/** Nudge every channel by `n` (the dark surfaces sit a few steps above the base). */
+const lift = (hex: string, n: number): [number, number, number] => rgb(hex).map((v) => Math.min(255, v + n)) as [number, number, number]
+
+/**
+ * CSS custom properties for a dark-mode base colour: the window, the glass panels, the sidebar and
+ * elevated sheets all follow it, keeping the same steps the navy default uses (#0f1122 -> #14162a ...).
+ * The dark theme reads them through `var(--dark-*, fallback)`, so light mode is untouched.
+ */
+export function darkBaseVars(hex: string): Record<string, string> {
+  const base = isHexColor(hex) ? hex : '#0f1122'
+  const glass = lift(base, 9).join(', ')
+  return {
+    '--dark-base': base,
+    '--dark-sidebar': toHex(lift(base, 5)),
+    '--dark-glass': `rgba(${glass}, 0.62)`,
+    '--dark-glass-strong': `rgba(${glass}, 0.82)`,
+    '--dark-elevated': `rgba(${lift(base, 19).join(', ')}, 0.96)`,
+    '--dark-ring-gap': toHex(lift(base, 11))
+  }
+}
+
+export const DARK_BASE_VAR_NAMES = Object.keys(darkBaseVars('#000000'))

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArchiveRestore, BellOff, ChevronRight, FileArchive, Minus, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Language, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, stepZoom } from '@shared/types'
+import { ACCENTS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
@@ -118,6 +118,40 @@ export function SettingsSheet(): JSX.Element {
                         <span>{mesh.name[language]}</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+              </div>
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-text">
+                  <div className="settings-row-title">{t('darkBackground')}</div>
+                  <div className="settings-row-sub">{t('darkBackgroundHint')}</div>
+                  <div className="dark-base-picker" role="radiogroup" aria-label={t('darkBackground')}>
+                    {DARK_BASES.map((base) => {
+                      const active = (settings.darkBase ?? 'navy') === base.id
+                      return (
+                        <button
+                          key={base.id}
+                          className={`dark-base-swatch ${active ? 'active' : ''}`}
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => void setSettings({ darkBase: base.id })}
+                          title={base.name[language]}
+                          style={{ background: base.base }}
+                        >
+                          <span>{base.name[language]}</span>
+                        </button>
+                      )
+                    })}
+                    {(() => {
+                      const custom = !!settings.darkBase && !DARK_BASES.some((b) => b.id === settings.darkBase)
+                      const value = custom ? darkBaseHex(settings.darkBase) : '#1c1c1e'
+                      return (
+                        <label className={`dark-base-swatch custom ${custom ? 'active' : ''}`} title={t('darkBackgroundCustom')} style={{ background: custom ? value : undefined }}>
+                          <input type="color" value={value} aria-label={t('darkBackgroundCustom')} onChange={(e) => void setSettings({ darkBase: e.target.value.toLowerCase() })} />
+                          <span>{t('darkBackgroundCustom')}</span>
+                        </label>
+                      )
+                    })()}
                   </div>
                 </div>
               </div>

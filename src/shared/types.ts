@@ -412,6 +412,18 @@ export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatc
   { id: 'mono', name: { vi: 'Tối giản', en: 'Mono' }, swatch: ['#eceef5', '#e3e6ef', '#f2f3f8', '#dfe3ee'] }
 ]
 
+/** Base tone behind everything in dark mode: a preset id, or any `#rrggbb` picked by the user. */
+export type DarkBaseId = 'navy' | 'graphite' | 'black' | 'slate' | 'mocha'
+export const DARK_BASES: Array<{ id: DarkBaseId; name: { vi: string; en: string }; base: string }> = [
+  { id: 'navy', name: { vi: 'Xanh than', en: 'Navy' }, base: '#0f1122' },
+  { id: 'graphite', name: { vi: 'Xám than', en: 'Graphite' }, base: '#161618' },
+  { id: 'black', name: { vi: 'Đen', en: 'Black' }, base: '#000000' },
+  { id: 'slate', name: { vi: 'Xám xanh', en: 'Slate' }, base: '#151a21' },
+  { id: 'mocha', name: { vi: 'Nâu mocha', en: 'Mocha' }, base: '#1b1512' }
+]
+/** The hex behind a dark-base setting (a preset id, a custom hex, or nothing = navy). */
+export const darkBaseHex = (value: string | undefined): string => DARK_BASES.find((d) => d.id === value)?.base ?? (value && /^#[0-9a-f]{6}$/i.test(value) ? value : DARK_BASES[0].base)
+
 /** `flat` accents are single solid colours taken from the logo characters (no gradients anywhere). */
 export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string; flat?: boolean }> = [
   { id: 'ocean', name: { vi: 'Xanh biển', en: 'Ocean' }, from: '#5b8cff', to: '#8a6bff' },
@@ -470,6 +482,8 @@ export interface Settings {
   tags: Record<string, TagId[]>
   sidebarCollapsed: boolean
   mesh: MeshId
+  /** Dark-mode base tone: a DarkBaseId or a custom `#rrggbb`; absent = navy. */
+  darkBase?: DarkBaseId | string
   accent: AccentId | CustomAccentId
   font: FontId
   muted: MuteRules

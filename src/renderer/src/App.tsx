@@ -15,8 +15,8 @@ import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
-import { ACCENT_VAR_NAMES, accentVars } from '@shared/accent'
-import { stepZoom } from '@shared/types'
+import { ACCENT_VAR_NAMES, DARK_BASE_VAR_NAMES, accentVars, darkBaseVars } from '@shared/accent'
+import { darkBaseHex, stepZoom } from '@shared/types'
 import { NewChatSheet } from './components/NewChatSheet'
 import { BackupSheet } from './components/BackupSheet'
 import { LegalSheet } from './components/LegalSheet'
@@ -53,6 +53,7 @@ export default function App(): JSX.Element {
   const lightbox = useStore((s) => s.lightbox)
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
   const mesh = useStore((s) => s.settings.mesh)
+  const darkBase = useStore((s) => s.settings.darkBase)
   const accent = useStore((s) => s.settings.accent)
   const customAccents = useStore((s) => s.settings.customAccents)
   const font = useStore((s) => s.settings.font)
@@ -115,10 +116,13 @@ export default function App(): JSX.Element {
     } else {
       root.dataset.accent = accent.startsWith('custom-') ? 'ocean' : accent
     }
+    // Dark-mode base tone: the dark theme reads these through var(--dark-*, navy default).
+    for (const name of DARK_BASE_VAR_NAMES) root.style.removeProperty(name)
+    if (darkBase && darkBase !== 'navy') for (const [name, value] of Object.entries(darkBaseVars(darkBaseHex(darkBase)))) root.style.setProperty(name, value)
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
-  }, [mesh, accent, customAccents, font, messageShadows, textSize])
+  }, [mesh, darkBase, accent, customAccents, font, messageShadows, textSize])
 
   // Unread count on the Dock / taskbar icon (0 until the first load, so a stale badge never lingers).
   useEffect(() => {
