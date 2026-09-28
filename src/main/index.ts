@@ -801,6 +801,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
+  ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())
   ipcMain.handle(IPC.stickersList, () => listStickers())
   ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
   ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>

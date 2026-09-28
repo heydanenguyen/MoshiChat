@@ -63,6 +63,10 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
   private threads = new Map<string, FcaThread>()
   private users = new Map<string, FcaUser>()
   private history = new Map<string, Message[]>()
+
+  cachedMessages(): Message[] {
+    return [...this.history.values()].flat()
+  }
   private stopListening?: () => void
 
   constructor(

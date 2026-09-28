@@ -108,6 +108,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private slideFailures = 0
   private users = new Map<string, IgUser>()
   private history = new Map<string, Message[]>()
+
+  cachedMessages(): Message[] {
+    return [...this.history.values()].flat()
+  }
   private cursors = new Map<string, string | undefined>()
   /** Chats already refreshed from the server this session (the rest may show cached messages first). */
   private refreshed = new Set<string>()

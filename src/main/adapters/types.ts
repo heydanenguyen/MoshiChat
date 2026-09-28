@@ -54,6 +54,8 @@ export interface PlatformAdapter {
   searchInConversation?(conversationId: string, query: string, limit: number): Promise<Message[]>
   /** Oldest message, total count and latest activity. */
   getConversationStats?(conversationId: string): Promise<ConversationStats>
+  /** Everything cached in memory, for insights and memories (no network). */
+  cachedMessages?(): Message[]
   /** People the account can message (friends, contacts, recent peers). */
   listContacts?(): Promise<Peer[]>
   /** Direct conversation with a contact, created lazily when the platform allows it. */

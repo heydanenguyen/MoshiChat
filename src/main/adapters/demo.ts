@@ -333,6 +333,10 @@ export class DemoAdapter implements PlatformAdapter {
   readonly account: Account
   private conversations = new Map<string, Conversation>()
   private messages = new Map<string, Message[]>()
+
+  cachedMessages(): Message[] {
+    return [...this.messages.values()].flat()
+  }
   private replies = new Map<string, string[]>()
   private timers = new Set<NodeJS.Timeout>()
   private ambient?: NodeJS.Timeout

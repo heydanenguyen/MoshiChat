@@ -50,6 +50,7 @@ export type Sheet =
   | { kind: 'backup'; mode: 'create' | 'restore' }
   | { kind: 'legal'; doc: LegalDoc }
   | { kind: 'todos' }
+  | { kind: 'insights' }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 

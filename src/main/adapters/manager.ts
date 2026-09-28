@@ -1,3 +1,4 @@
+import type { InsightRecord } from '@shared/insights'
 import { SendLimiter } from '../rate-limit'
 import { randomUUID } from 'crypto'
 import { app } from 'electron'
@@ -531,6 +532,26 @@ export class AccountManager {
       }
       await new Promise((r) => setTimeout(r, 250))
     }
+  }
+
+  /** Light records of every message Moshi holds in memory (its own cache plus what each adapter keeps). */
+  insightRecords(): InsightRecord[] {
+    const seen = new Map<string, InsightRecord>()
+    const add = (m: Message): void => {
+      if (m.system) return
+      seen.set(`${m.conversationId}|${m.id}`, {
+        conversationId: m.conversationId,
+        id: m.id,
+        sentAt: m.sentAt,
+        isOutgoing: m.isOutgoing,
+        senderName: m.senderName,
+        text: m.text.slice(0, 140),
+        hasPhoto: m.attachments.some((a) => a.kind === 'image' || a.kind === 'video')
+      })
+    }
+    for (const bucket of this.messages.values()) for (const m of bucket.values()) add(m)
+    for (const adapter of this.adapters.values()) for (const m of adapter.cachedMessages?.() ?? []) add(m)
+    return [...seen.values()]
   }
 
   private cache(messages: Message[]): void {

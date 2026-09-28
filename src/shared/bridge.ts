@@ -1,5 +1,6 @@
 import type { AiKind, AiStatus, SpeakLang } from './ai'
 import type { ChatLine } from './ai-prompts'
+import type { InsightRecord } from './insights'
 
 /** A sticker the user made (see main/stickers.ts). */
 export interface CustomSticker {
@@ -103,6 +104,10 @@ export interface MoshiBridge {
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
     /** Three short replies to the newest line. */
     suggest(lines: ChatLine[]): Promise<string[]>
+  }
+  insights: {
+    /** Light records of the messages on this computer, for insights and memories. */
+    records(): Promise<InsightRecord[]>
   }
   stickers: {
     /** The user's own stickers, image inline as a data URL, newest first. */
@@ -221,6 +226,7 @@ export const IPC = {
   appPickFiles: 'app:pickFiles',
   appSaveVoice: 'app:saveVoice',
   appSticker: 'app:sticker',
+  insightsRecords: 'insights:records',
   stickersList: 'stickers:list',
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { BellOff, ChartNoAxesColumn, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { MemoryCard } from './Insights'
 import { useOpenTodos } from './TodoSheet'
 import { UpdateCard } from './UpdateCard'
 import type { Platform, TagId } from '@shared/types'
@@ -149,7 +150,14 @@ export function Sidebar(): JSX.Element {
             {!collapsed && badge(openTodos)}
             {collapsed && openTodos > 0 && <span className="rail-dot" />}
           </button>
+          <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
+            <span className="nav-item-icon tile insights">
+              <ChartNoAxesColumn size={16} strokeWidth={2.2} />
+            </span>
+            {!collapsed && <span className="nav-item-label">{t('insights')}</span>}
+          </button>
         </div>
+        <MemoryCard collapsed={collapsed} />
 
         <div className="sidebar-section">
           {!collapsed && (
