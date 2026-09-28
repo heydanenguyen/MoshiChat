@@ -573,9 +573,20 @@ export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversati
 /** What the native menu bar (macOS) asks the renderer to do. */
 export type AppCommand = 'settings' | 'new-chat' | 'command-palette' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'toggle-split'
 
+/** In-app updates (GitHub Releases). `manual`: this build cannot replace itself (unsigned macOS), so offer the download page. */
+export type UpdateState =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'available'; version: string; notes?: string; manual?: boolean; url: string }
+  | { phase: 'downloading'; version: string; percent: number }
+  | { phase: 'ready'; version: string }
+  | { phase: 'none'; version: string }
+  | { phase: 'error'; message: string; url: string; version?: string }
+
 /** Events pushed from main to the renderer. */
 export type BridgeEvent =
   | { type: 'app:command'; command: AppCommand }
+  | { type: 'update:state'; state: UpdateState }
   | { type: 'account:updated'; account: Account }
   | { type: 'account:removed'; accountId: string }
   | { type: 'conversation:upserted'; conversation: Conversation }

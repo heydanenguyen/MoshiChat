@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BellOff, Inbox, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { UpdateCard } from './UpdateCard'
 import type { Platform, TagId } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { TagChip } from './Tag'
@@ -219,6 +220,7 @@ export function Sidebar(): JSX.Element {
       </div>
 
       <div className="sidebar-footer">
+        <UpdateCard collapsed={collapsed} />
         <button className="nav-item subtle" onClick={() => openSheet({ kind: 'add-account' })} title={t('addAccount')}>
           <span className="nav-item-icon">
             <Plus size={16} strokeWidth={2.2} />

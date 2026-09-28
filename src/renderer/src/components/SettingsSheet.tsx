@@ -15,6 +15,7 @@ import { QuickReplyManager } from './QuickReplyManager'
 import { LEGAL_TITLE_KEY } from './LegalSheet'
 import { formatListTime } from '../utils'
 import { AiSettings } from './AiParts'
+import { UpdateSettings } from './UpdateCard'
 import { SoundSettings } from './SoundSettings'
 
 export function SettingsSheet(): JSX.Element {
@@ -459,6 +460,16 @@ export function SettingsSheet(): JSX.Element {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- updates */}
+          <div>
+            <div className="sidebar-section-title" style={{ marginBottom: 8 }}>
+              {t('updateSection')}
+            </div>
+            <div className="settings-group">
+              <UpdateSettings />
             </div>
           </div>
 

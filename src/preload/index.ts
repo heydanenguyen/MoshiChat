@@ -65,6 +65,12 @@ const bridge: MoshiBridge = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     set: (patch) => ipcRenderer.invoke(IPC.settingsSet, patch)
   },
+  update: {
+    state: () => ipcRenderer.invoke(IPC.updateState),
+    check: () => ipcRenderer.invoke(IPC.updateCheck),
+    download: () => ipcRenderer.invoke(IPC.updateDownload),
+    install: () => ipcRenderer.send(IPC.updateInstall)
+  },
   app: {
     openExternal: (url) => ipcRenderer.invoke(IPC.appOpenExternal, url),
     legal: (name) => ipcRenderer.invoke(IPC.appLegal, name),
@@ -82,6 +88,7 @@ const bridge: MoshiBridge = {
     gifDefault: () => ipcRenderer.invoke(IPC.appGifDefault),
     weather: (force) => ipcRenderer.invoke(IPC.appWeather, force),
     platform: process.platform,
+    version: () => ipcRenderer.invoke(IPC.appVersion),
     windowAction: (action) => ipcRenderer.send(IPC.appWindowAction, action),
     setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count)
   },

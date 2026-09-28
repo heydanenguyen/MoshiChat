@@ -19,7 +19,8 @@ import type {
   BackupInfo,
   GifItem,
   GifPage,
-  GifProvider
+  GifProvider,
+  UpdateState
 } from './types'
 
 /** The API exposed to the renderer through the preload script. */
@@ -105,6 +106,15 @@ export interface MoshiBridge {
     get(): Promise<Settings>
     set(patch: Partial<Settings>): Promise<Settings>
   }
+  update: {
+    state(): Promise<UpdateState>
+    /** Ask GitHub Releases now (background checks run on their own). */
+    check(): Promise<void>
+    /** Download the new version, or open the download page when this build cannot install itself. */
+    download(): Promise<void>
+    /** Quit and install a downloaded update. */
+    install(): void
+  }
   app: {
     openExternal(url: string): Promise<void>
     /** A bundled legal document (Markdown): terms, privacy policy or third-party notices. */
@@ -125,6 +135,7 @@ export interface MoshiBridge {
     /** Local weather for the greeting line; undefined when offline. */
     weather(force?: boolean): Promise<WeatherInfo | undefined>
     platform: NodeJS.Platform
+    version(): Promise<string>
     windowAction(action: 'minimize' | 'maximize' | 'close'): void
     /** Unread count on the Dock icon (macOS) or taskbar (Windows); 0 clears it. */
     setBadge(count: number): void
@@ -187,5 +198,10 @@ export const IPC = {
   appWeather: 'app:weather',
   appWindowAction: 'app:windowAction',
   appSetBadge: 'app:setBadge',
+  appVersion: 'app:version',
+  updateState: 'update:state',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateInstall: 'update:install',
   event: 'bridge:event'
 } as const

@@ -24,6 +24,7 @@ import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
 import { useAi } from './aiStore'
+import { useUpdate } from './updateStore'
 
 /** Step the whole interface zoom (saved in Settings) and say where it landed. */
 function zoomBy(direction: 1 | -1 | 0): void {
@@ -182,7 +183,7 @@ export default function App(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    void init().then(() => useAi.getState().init())
+    void init().then(() => Promise.all([useAi.getState().init(), useUpdate.getState().init()]))
     // Catch up on unread messages in the open panes when the window regains focus.
     const onFocus = (): void => {
       const { layout, conversations } = useStore.getState()

@@ -473,7 +473,23 @@ const vi = {
   emptyPaneHint: 'Chọn một hội thoại trong danh sách, hoặc kéo thả vào đây.',
   dropOpenLeft: 'Mở bên trái',
   dropOpenRight: 'Mở bên phải',
-  splitTooNarrow: 'Cửa sổ đang hẹp, Moshi chỉ hiện khung đang chọn.'
+  splitTooNarrow: 'Cửa sổ đang hẹp, Moshi chỉ hiện khung đang chọn.',
+  updateSection: 'Cập nhật',
+  updateAvailableTitle: 'Moshi {version} đã có',
+  updateAvailableHint: 'Tải về ngầm, dùng tiếp bình thường; cài khi bạn khởi động lại.',
+  updateManualHint: 'Bản macOS này chưa ký nên không tự thay thế được; tải bản mới từ trang phát hành rồi cài đè.',
+  updateReadyTitle: 'Moshi {version} sẵn sàng',
+  updateReadyHint: 'Đã tải xong. Khởi động lại để dùng bản mới.',
+  updateInstall: 'Cập nhật',
+  updateOpenPage: 'Tải bản mới',
+  updateRestart: 'Khởi động lại',
+  updateLater: 'Để sau',
+  updateDownloading: 'Đang tải {percent}%',
+  updateChecking: 'Đang kiểm tra…',
+  updateUpToDate: 'Bạn đang dùng bản mới nhất.',
+  updateCheck: 'Kiểm tra cập nhật',
+  updateAutoHint: 'Moshi tự kiểm tra bản mới khi mở và vài giờ một lần; không tải gì khi bạn chưa bấm.',
+  updateError: 'Không kiểm tra được: {message}'
 }
 
 export type Dictionary = typeof vi
@@ -952,7 +968,23 @@ const en: Dictionary = {
   emptyPaneHint: 'Pick a conversation from the list, or drag one here.',
   dropOpenLeft: 'Open on the left',
   dropOpenRight: 'Open on the right',
-  splitTooNarrow: 'The window is narrow, so only the active pane is shown.'
+  splitTooNarrow: 'The window is narrow, so only the active pane is shown.',
+  updateSection: 'Updates',
+  updateAvailableTitle: 'Moshi {version} is out',
+  updateAvailableHint: 'Downloads in the background; installs when you restart.',
+  updateManualHint: 'This macOS build is unsigned and cannot replace itself; download the new version and install it over this one.',
+  updateReadyTitle: 'Moshi {version} is ready',
+  updateReadyHint: 'Downloaded. Restart to use the new version.',
+  updateInstall: 'Update',
+  updateOpenPage: 'Get the new version',
+  updateRestart: 'Restart',
+  updateLater: 'Later',
+  updateDownloading: 'Downloading {percent}%',
+  updateChecking: 'Checking…',
+  updateUpToDate: 'You are on the latest version.',
+  updateCheck: 'Check for updates',
+  updateAutoHint: 'Moshi checks for new versions at launch and every few hours; nothing downloads until you say so.',
+  updateError: 'Could not check: {message}'
 }
 
 const dictionaries: Record<Language, Dictionary> = { vi, en }

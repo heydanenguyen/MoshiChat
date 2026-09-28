@@ -18,6 +18,7 @@ import { Scheduler } from './scheduler'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind } from '@shared/ai'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
+import { Updater } from './updater'
 import { BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION } from './backup-format'
 
 const isMac = process.platform === 'darwin'
@@ -73,6 +74,8 @@ const ai = new AiService(
   (progress) => emit({ type: 'ai:progress', progress }),
   log
 )
+
+const updater = new Updater((state) => emit({ type: 'update:state', state }), log)
 
 const scheduler = new Scheduler(
   storage,
@@ -690,6 +693,11 @@ function registerIpc(): void {
     }
     return settings
   })
+  ipcMain.handle(IPC.appVersion, () => app.getVersion())
+  ipcMain.handle(IPC.updateState, () => updater.current())
+  ipcMain.handle(IPC.updateCheck, () => updater.check(false))
+  ipcMain.handle(IPC.updateDownload, () => updater.download())
+  ipcMain.on(IPC.updateInstall, () => updater.install())
   ipcMain.handle(IPC.aiStatus, () => ai.status())
   ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind) => ai.prepare(kind === 'translate' ? 'translate' : 'voice'))
   ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' ? 'translate' : 'voice'))
@@ -808,6 +816,7 @@ if (!gotLock) {
     installMenu()
     createWindow()
     await manager.restore()
+    void updater.start()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -819,6 +828,7 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
+    updater.stop()
     scheduler.stop()
     ai.stop()
     void manager.shutdown()
