@@ -8742,11 +8742,16 @@ button.moment-card:hover {
 .platform-win[data-style='liquid'] {
   --glass-blur: 30px;
 }
-.platform-win[data-style='liquid'] {
+.platform-win[data-style='liquid']:not([data-theme='dark']) {
   --text-primary: #0f1117;
   --text-secondary: rgba(15, 17, 23, 0.72);
   --text-tertiary: rgba(15, 17, 23, 0.5);
   --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%);
+}
+.platform-win[data-style='liquid'][data-theme='dark'] {
+  --text-primary: #f4f5fb;
+  --text-secondary: rgba(244, 245, 251, 0.74);
+  --text-tertiary: rgba(244, 245, 251, 0.5);
 }
 /* a light veil over the system blur keeps text readable on any wallpaper without hiding it */
 .platform-win[data-style='liquid'] body {
@@ -8762,8 +8767,15 @@ button.moment-card:hover {
 .platform-win[data-style='liquid'] .chat-col,
 .platform-win[data-style='liquid'] .details-col {
   background: #ffffff;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+}
+/* With a transparent window the blur is the system's job. Chromium's own backdrop-filter over a see-through
+   root samples stale GPU memory and leaves ghost rectangles (a translucent band across the top, outlines of
+   closed sheets), so no element uses it under Liquid Glass on Windows. */
+.platform-win[data-style='liquid'] *,
+.platform-win[data-style='liquid'] *::before,
+.platform-win[data-style='liquid'] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 .platform-win[data-style='liquid'][data-theme='dark'] .list-col {
   background: color-mix(in srgb, var(--bg-window) 58%, transparent);
