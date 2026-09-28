@@ -8740,12 +8740,10 @@ button.moment-card:hover {
 .platform-win[data-style='liquid'] .mesh {
   background: transparent;
 }
-/* only a hint of the pastel wash is left over the wallpaper */
+/* nothing of the app's own backdrop: what you see behind the panels is the desktop and other windows,
+   blurred by the system */
 .platform-win[data-style='liquid'] .mesh-blob {
-  opacity: 0.22;
-}
-.platform-win[data-style='liquid'][data-theme='dark'] .mesh-blob {
-  opacity: 0.3;
+  display: none;
 }
 /* graded like a native vibrancy layout: nothing under the sidebar, half under the list, most under the chat */
 .platform-win[data-style='liquid'] {
