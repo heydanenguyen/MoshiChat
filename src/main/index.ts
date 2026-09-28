@@ -17,6 +17,7 @@ import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind } from '@shared/ai'
+import type { ChatLine } from '@shared/ai-prompts'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
 import { Updater } from './updater'
 import { BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION } from './backup-format'
@@ -70,6 +71,7 @@ const manager = new AccountManager(storage, emit, log)
 
 const ai = new AiService(
   () => storage.settings.voiceModel ?? 'turbo',
+  () => storage.settings.chatModel ?? 'small',
   () => storage.settings.language,
   (progress) => emit({ type: 'ai:progress', progress }),
   log
@@ -721,14 +723,21 @@ function registerIpc(): void {
   ipcMain.handle(IPC.updateDownload, () => updater.download())
   ipcMain.on(IPC.updateInstall, () => updater.install())
   ipcMain.handle(IPC.aiStatus, () => ai.status())
-  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind) => ai.prepare(kind === 'translate' ? 'translate' : 'voice'))
-  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' ? 'translate' : 'voice'))
+  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind) => ai.prepare(kind === 'translate' || kind === 'chat' ? kind : 'voice'))
+  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' ? kind : 'voice'))
   ipcMain.handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
   ipcMain.handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
     ai.transcribe(String(key), pcm, typeof language === 'string' && /^[a-z]{2}$/.test(language) ? language : undefined)
   )
   ipcMain.handle(IPC.aiTranslate, (_e, key: string, text: string) => ai.translate(String(key), String(text ?? '').slice(0, 5000)))
   ipcMain.handle(IPC.aiCached, () => ai.cached())
+  // Chat lines come from the renderer already trimmed; bound them again here.
+  const cleanLines = (lines: unknown): ChatLine[] =>
+    (Array.isArray(lines) ? lines : [])
+      .slice(-80)
+      .map((l) => ({ who: String((l as ChatLine).who ?? '').slice(0, 60), text: String((l as ChatLine).text ?? '').slice(0, 500), at: Number((l as ChatLine).at) || 0, mine: !!(l as ChatLine).mine }))
+  ipcMain.handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
+  ipcMain.handle(IPC.aiSuggest, (_e, lines: unknown) => ai.suggest(cleanLines(lines)))
   ipcMain.handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
     const day = new Date().toISOString().slice(0, 10)
     const vi = storage.settings.language === 'vi'

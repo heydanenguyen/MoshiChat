@@ -1,7 +1,8 @@
 import { app, session, utilityProcess, type UtilityProcess } from 'electron'
 import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
-import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type VoiceModel } from '@shared/ai'
+import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type VoiceModel } from '@shared/ai'
+import { parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
 /** The worker goes away after this long without work, giving its memory back. */
 const IDLE_MS = 10 * 60 * 1000
@@ -9,7 +10,7 @@ const CACHE_LIMIT = 3000
 const MEDIA_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|whatsapp\.net)$/i
 
 type Pending = { resolve(value: unknown): void; reject(err: Error): void; message: Record<string, unknown>; retried?: boolean }
-type Cache = { transcripts: Record<string, string>; translations: Record<string, string> }
+type Cache = { transcripts: Record<string, string>; translations: Record<string, string>; summaries: Record<string, string> }
 
 const modelsDir = (): string => join(app.getPath('userData'), 'models')
 
@@ -17,7 +18,7 @@ const modelsDir = (): string => join(app.getPath('userData'), 'models')
 function expectedFiles(spec: AiModelSpec): string[] {
   const suffix = (dtype: string): string => (dtype === 'q8' ? '_quantized' : dtype === 'fp32' ? '' : `_${dtype}`)
   const of = (file: string): string => suffix(typeof spec.dtype === 'string' ? spec.dtype : (spec.dtype[file] ?? 'fp32'))
-  return ['encoder_model', 'decoder_model_merged'].map((f) => join(modelsDir(), ...spec.repo.split('/'), 'onnx', `${f}${of(f)}.onnx`))
+  return (spec.files ?? ['encoder_model', 'decoder_model_merged']).map((f) => join(modelsDir(), ...spec.repo.split('/'), 'onnx', `${f}${of(f)}.onnx`))
 }
 
 async function present(spec: AiModelSpec): Promise<boolean> {
@@ -42,7 +43,7 @@ export class AiService {
   private pending = new Map<number, Pending>()
   private nextId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
-  private cache: Cache = { transcripts: {}, translations: {} }
+  private cache: Cache = { transcripts: {}, translations: {}, summaries: {} }
   private cacheLoaded = false
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   /** DirectML crashed this machine's worker once: voice stays on the CPU from then on. */
@@ -50,6 +51,7 @@ export class AiService {
 
   constructor(
     private voiceModel: () => VoiceModel,
+    private chatModel: () => ChatModel,
     private language: () => string,
     private onProgress: (progress: AiProgress) => void,
     private log: (...args: unknown[]) => void
@@ -63,7 +65,7 @@ export class AiService {
     if (!this.cacheLoaded) {
       this.cacheLoaded = true
       try {
-        this.cache = { transcripts: {}, translations: {}, ...(JSON.parse(await readFile(this.cacheFile, 'utf8')) as Partial<Cache>) }
+        this.cache = { transcripts: {}, translations: {}, summaries: {}, ...(JSON.parse(await readFile(this.cacheFile, 'utf8')) as Partial<Cache>) }
       } catch {
         /* first use */
       }
@@ -109,6 +111,7 @@ export class AiService {
     return {
       voice: { model, ready: await present(AI_MODELS.voice[model]), gpu: (await this.voiceDevice()) === 'dml' },
       translate: { ready: await present(AI_MODELS.translate) },
+      chat: { model: this.chatModel(), ready: await present(AI_MODELS.chat[this.chatModel()]) },
       bytes: await folderSize(modelsDir())
     }
   }
@@ -168,12 +171,12 @@ export class AiService {
 
   /** Download (first time) and load a model. */
   async prepare(kind: AiKind): Promise<boolean> {
-    return this.request<boolean>({ type: 'prepare', kind, voiceModel: this.voiceModel(), device: kind === 'voice' ? await this.voiceDevice() : 'cpu' })
+    return this.request<boolean>({ type: 'prepare', kind, voiceModel: this.voiceModel(), chatModel: this.chatModel(), device: kind === 'voice' ? await this.voiceDevice() : 'cpu' })
   }
 
   async remove(kind: AiKind): Promise<void> {
     this.stop()
-    const repos = kind === 'voice' ? Object.values(AI_MODELS.voice).map((m) => m.repo) : [AI_MODELS.translate.repo]
+    const repos = kind === 'voice' ? Object.values(AI_MODELS.voice).map((m) => m.repo) : kind === 'chat' ? Object.values(AI_MODELS.chat).map((m) => m.repo) : [AI_MODELS.translate.repo]
     for (const repo of repos) await rm(join(modelsDir(), ...repo.split('/')), { recursive: true, force: true })
   }
 
@@ -189,6 +192,27 @@ export class AiService {
     })
     this.remember('transcripts', key, text)
     return text
+  }
+
+  chat(messages: ReturnType<typeof summaryMessages>, maxNewTokens: number): Promise<string> {
+    return this.request<string>({ type: 'chat', chatModel: this.chatModel(), messages, maxNewTokens })
+  }
+
+  /** A few bullet points about these messages, cached by the newest one so reopening a chat is instant. */
+  async summarize(key: string, lines: ChatLine[]): Promise<string[]> {
+    const cache = await this.cached()
+    const cacheKey = `${key}|${this.language()}|${this.chatModel()}`
+    if (cache.summaries[cacheKey] !== undefined) return JSON.parse(cache.summaries[cacheKey]) as string[]
+    const text = await askChat(this, summaryMessages(lines, this.language()), 220)
+    const bullets = parseSummary(text)
+    if (bullets.length) this.remember('summaries', cacheKey, JSON.stringify(bullets))
+    return bullets
+  }
+
+  /** Three short ways to answer the newest message. Not cached: the chat moves on. */
+  async suggest(lines: ChatLine[]): Promise<string[]> {
+    const text = await askChat(this, suggestMessages(lines, this.language()), 60)
+    return parseSuggestions(text)
   }
 
   /** Translate into the app language. `same` when the text already is in that language. */
@@ -208,6 +232,11 @@ export class AiService {
     this.remember('translations', cacheKey, result)
     return { text: result, from }
   }
+}
+
+/** What the chat model answers to a conversation; the text is trimmed by the worker. */
+async function askChat(service: AiService, messages: ReturnType<typeof summaryMessages>, maxNewTokens: number): Promise<string> {
+  return service.chat(messages, maxNewTokens)
 }
 
 /** Bytes of a voice note for the renderer to decode: data URLs, files, or platform CDNs through their session. */

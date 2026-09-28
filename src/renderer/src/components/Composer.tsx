@@ -6,6 +6,7 @@ import { EmojiPicker } from './EmojiPicker'
 import { StickerPicker } from './StickerPicker'
 import { GifPicker } from './GifPicker'
 import { QuickReplyMenu, SchedulePicker, matchQuickReplies, useQuickReplies } from './ComposerExtras'
+import { SuggestionChips } from './AiParts'
 import { fillQuickReply, givenName } from '@shared/extras'
 import type { QuickReply } from '@shared/types'
 
@@ -306,6 +307,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           ))}
         </div>
       )}
+      {!recording && !disabled && <SuggestionChips conversationId={conversationId} />}
       {recording ? (
         <div className="composer-box recording">
           <button className="icon-btn composer-attach" onClick={() => finishRecording(false)} title={t('cancel')}>

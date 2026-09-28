@@ -1,4 +1,4 @@
-import type { AiProgress, VoiceModel } from './ai'
+import type { AiProgress, ChatModel, VoiceModel } from './ai'
 import type { LogoId } from './logos'
 /** Domain model shared between main, preload and renderer. */
 
@@ -530,6 +530,10 @@ export interface Settings {
   scheduled?: ScheduledMessage[]
   /** On-device voice-to-text model: most accurate (turbo) or light (small). */
   voiceModel?: VoiceModel
+  /** Size of the on-device chat model (summaries, reply suggestions). */
+  chatModel?: ChatModel
+  /** Reply suggestions appear by themselves under new messages (once the chat model is installed). */
+  aiSuggest?: boolean
   /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */
   sound?: SoundId | 'off'
   /** 0..1, default 0.7. */

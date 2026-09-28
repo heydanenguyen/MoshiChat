@@ -47,7 +47,9 @@ const bridge: MoshiBridge = {
     readMedia: (url) => ipcRenderer.invoke(IPC.aiReadMedia, url),
     transcribe: (key, pcm, language) => ipcRenderer.invoke(IPC.aiTranscribe, key, pcm, language),
     translate: (key, text) => ipcRenderer.invoke(IPC.aiTranslate, key, text),
-    cached: () => ipcRenderer.invoke(IPC.aiCached)
+    cached: () => ipcRenderer.invoke(IPC.aiCached),
+    summarize: (key, lines) => ipcRenderer.invoke(IPC.aiSummarize, key, lines),
+    suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines)
   },
   backup: {
     create: (input) => ipcRenderer.invoke(IPC.backupCreate, input),

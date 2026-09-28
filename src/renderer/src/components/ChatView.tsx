@@ -11,7 +11,7 @@ import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from '
 import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
-import { TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
+import { SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { EmojiPicker } from './EmojiPicker'
 import { StickerArt } from './StickerPicker'
 import { isStickerId } from '@shared/stickers'
@@ -261,6 +261,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
               <Columns2 size={18} strokeWidth={2} />
             </button>
           )}
+          <SummaryButton conversationId={conversation.id} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
@@ -272,6 +273,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
         </div>
       </header>
 
+      <SummaryCard conversationId={conversation.id} />
       <BirthdayBanner conversation={conversation} canSendStickers={features.attachments} onCelebrate={celebrate} />
       <div className="chat-scroll scroll" ref={scrollRef}>
         <div className="chat-scroll-inner">

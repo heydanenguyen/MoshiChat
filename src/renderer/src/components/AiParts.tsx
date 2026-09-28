@@ -1,5 +1,5 @@
-import { AlertCircle, AudioLines, Captions, Cpu, Languages, ShieldCheck, Trash2, X } from 'lucide-react'
-import { AI_MODELS, type AiKind, type VoiceModel } from '@shared/ai'
+import { AlertCircle, AudioLines, Captions, Cpu, Languages, RefreshCw, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
+import { AI_MODELS, type AiKind, type ChatModel, type VoiceModel } from '@shared/ai'
 import type { Attachment, Message } from '@shared/types'
 import { textKey, useAi, voiceKey } from '../aiStore'
 import { useStore, useT } from '../store'
@@ -105,7 +105,10 @@ export function TranslationBlock({ message }: { message: Message }): JSX.Element
   )
 }
 
-const kindSpec = (kind: AiKind, voiceModel: VoiceModel): { megabytes: number } => (kind === 'voice' ? AI_MODELS.voice[voiceModel] : AI_MODELS.translate)
+const kindSpec = (kind: AiKind, voiceModel: VoiceModel, chatModel: ChatModel): { megabytes: number } =>
+  kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : AI_MODELS.translate
+const titleKey = (kind: AiKind): 'aiVoiceTitle' | 'aiTranslateTitle' | 'aiChatTitle' => (kind === 'voice' ? 'aiVoiceTitle' : kind === 'chat' ? 'aiChatTitle' : 'aiTranslateTitle')
+const introKey = (kind: AiKind): 'aiVoiceIntro' | 'aiTranslateIntro' | 'aiChatIntro' => (kind === 'voice' ? 'aiVoiceIntro' : kind === 'chat' ? 'aiChatIntro' : 'aiTranslateIntro')
 
 /** First use: explain, download with progress, then carry on with what the user asked for. */
 export function AiSetupSheet(): JSX.Element | null {
@@ -115,9 +118,10 @@ export function AiSetupSheet(): JSX.Element | null {
   const prepare = useAi((s) => s.prepare)
   const close = useAi((s) => s.closeSetup)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
+  const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
   if (!setup) return null
   const busy = progress?.phase === 'downloading' || progress?.phase === 'loading'
-  const size = kindSpec(setup.kind, voiceModel).megabytes
+  const size = kindSpec(setup.kind, voiceModel, chatModel).megabytes
   const start = async (): Promise<void> => {
     const then = setup.then
     if (await prepare(setup.kind)) {
@@ -127,9 +131,9 @@ export function AiSetupSheet(): JSX.Element | null {
   }
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && close()}>
-      <div className="sheet ai-sheet" role="dialog" aria-label={t(setup.kind === 'voice' ? 'aiVoiceTitle' : 'aiTranslateTitle')}>
+      <div className="sheet ai-sheet" role="dialog" aria-label={t(titleKey(setup.kind))}>
         <div className="sheet-header">
-          <div className="sheet-title">{t(setup.kind === 'voice' ? 'aiVoiceTitle' : 'aiTranslateTitle')}</div>
+          <div className="sheet-title">{t(titleKey(setup.kind))}</div>
           <button className="icon-btn" onClick={close} disabled={busy} title={t('close')}>
             <X size={16} strokeWidth={2.4} />
           </button>
@@ -137,7 +141,7 @@ export function AiSetupSheet(): JSX.Element | null {
         <div className="sheet-body">
           <div className="ai-setup">
             <LogoMark size={64} title="" className="ai-setup-buddy" />
-            <p>{t(setup.kind === 'voice' ? 'aiVoiceIntro' : 'aiTranslateIntro')}</p>
+            <p>{t(introKey(setup.kind))}</p>
             <ul className="ai-points">
               <li>
                 <ShieldCheck size={15} strokeWidth={2.3} /> {t('aiPrivate')}
@@ -186,13 +190,15 @@ export function AiSettings(): JSX.Element {
   const remove = useAi((s) => s.remove)
   const refresh = useAi((s) => s.refresh)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
+  const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
+  const aiSuggest = useStore((s) => s.settings.aiSuggest !== false)
   const setSettings = useStore((s) => s.setSettings)
 
   const row = (kind: AiKind, title: string, hint: string): JSX.Element => {
     const ready = !!status?.[kind].ready
     const p = progress[kind]
     const busy = p?.phase === 'downloading' || p?.phase === 'loading'
-    const size = kindSpec(kind, voiceModel).megabytes
+    const size = kindSpec(kind, voiceModel, chatModel).megabytes
     return (
       <div className="settings-row ai-row">
         <div className="settings-row-text">
@@ -207,6 +213,15 @@ export function AiSettings(): JSX.Element {
               {(['turbo', 'small'] as VoiceModel[]).map((m) => (
                 <button key={m} className={voiceModel === m ? 'active' : ''} onClick={() => void setSettings({ voiceModel: m }).then(() => refresh())}>
                   {m === 'turbo' ? t('aiQualityBest') : t('aiQualityLight')} · {AI_MODELS.voice[m].megabytes} MB
+                </button>
+              ))}
+            </div>
+          )}
+          {kind === 'chat' && (
+            <div className="segmented ai-quality">
+              {(['small', 'better'] as ChatModel[]).map((m) => (
+                <button key={m} className={chatModel === m ? 'active' : ''} onClick={() => void setSettings({ chatModel: m }).then(() => refresh())}>
+                  {m === 'small' ? t('aiQualityFast') : t('aiQualityBetter')} · {AI_MODELS.chat[m].megabytes} MB
                 </button>
               ))}
             </div>
@@ -237,6 +252,14 @@ export function AiSettings(): JSX.Element {
     <>
       {row('voice', t('aiVoiceTitle'), t('aiVoiceHint'))}
       {row('translate', t('aiTranslateTitle'), t('aiTranslateHint'))}
+      {row('chat', t('aiChatTitle'), t('aiChatHint'))}
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-title">{t('aiSuggestAuto')}</div>
+          <div className="settings-row-sub">{t('aiSuggestAutoHint')}</div>
+        </div>
+        <button className={`switch ${aiSuggest ? 'on' : ''}`} role="switch" aria-checked={aiSuggest} onClick={() => void setSettings({ aiSuggest: !aiSuggest })} />
+      </div>
       <div className="settings-row">
         <div className="settings-row-text">
           <div className="settings-row-sub">
@@ -246,5 +269,106 @@ export function AiSettings(): JSX.Element {
         </div>
       </div>
     </>
+  )
+}
+
+/** Header button + card: a few bullet points about what was unread (or the recent conversation). */
+export function SummaryButton({ conversationId }: { conversationId: string }): JSX.Element {
+  const t = useT()
+  const summarize = useAi((s) => s.summarize)
+  const state = useAi((s) => s.summaries[conversationId])
+  const unread = useAi((s) => s.unreadAtOpen[conversationId] ?? 0)
+  const active = !!state?.bullets && !state.hidden
+  return (
+    <button className={`icon-btn ${active ? 'active' : ''}`} onClick={() => void summarize(conversationId)} title={unread >= 3 ? t('aiSummaryUnread', { count: String(unread) }) : t('aiSummarize')}>
+      <Sparkles size={18} strokeWidth={2} />
+    </button>
+  )
+}
+
+export function SummaryCard({ conversationId }: { conversationId: string }): JSX.Element | null {
+  const t = useT()
+  const state = useAi((s) => s.summaries[conversationId])
+  const summarize = useAi((s) => s.summarize)
+  const dismiss = useAi((s) => s.dismissSummary)
+  if (!state || state.hidden) return null
+  return (
+    <div className="summary-card" role="status">
+      <div className="summary-head">
+        <Sparkles size={14} strokeWidth={2.4} />
+        <span>{state.count ? t('aiSummaryUnread', { count: String(state.count) }) : t('aiSummaryRecent')}</span>
+        <span className="summary-spacer" />
+        {!state.busy && (
+          <button className="icon-btn small" onClick={() => void summarize(conversationId, true)} title={t('aiSummarizeAgain')}>
+            <RefreshCw size={13} strokeWidth={2.4} />
+          </button>
+        )}
+        <button className="icon-btn small" onClick={() => dismiss(conversationId)} title={t('close')}>
+          <X size={13} strokeWidth={2.6} />
+        </button>
+      </div>
+      {state.busy && (
+        <div className="summary-busy">
+          <BuddyLoader size={16} inline /> {t('aiSummarizing')}
+        </div>
+      )}
+      {state.error && <div className="field-error">{state.error}</div>}
+      {state.bullets && (
+        <ul className="summary-list">
+          {state.bullets.map((b, i) => (
+            <li key={i}>{b}</li>
+          ))}
+        </ul>
+      )}
+      {!state.busy && !state.error && !state.bullets && <div className="summary-busy">{t('aiNothingToSummarize')}</div>}
+    </div>
+  )
+}
+
+/** Over the composer: three ways to answer the newest message; one tap puts it in the box. */
+export function SuggestionChips({ conversationId }: { conversationId: string }): JSX.Element | null {
+  const t = useT()
+  const state = useAi((s) => s.suggestions[conversationId])
+  const suggest = useAi((s) => s.suggest)
+  const clear = useAi((s) => s.clearSuggestions)
+  const ready = useAi((s) => !!s.status?.chat.ready)
+  const setComposerDraft = useStore((s) => s.setComposerDraft)
+  const last = useStore((s) => s.messages[conversationId]?.at(-1))
+  if (!last || last.isOutgoing || last.system) return null
+  if (!state?.items?.length && !state?.busy) {
+    // Nothing yet: a quiet chip asks for suggestions (and the download, the first time).
+    return (
+      <div className="suggest-row">
+        <button className="suggest-chip ask" onClick={() => void suggest(conversationId, true)} title={t('aiSuggestHint')}>
+          <Sparkles size={13} strokeWidth={2.4} /> {ready ? t('aiSuggestNow') : t('aiSuggestTitle')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="suggest-row">
+      {state.busy && (
+        <span className="suggest-chip busy">
+          <BuddyLoader size={14} inline /> {t('aiThinking')}
+        </span>
+      )}
+      {state.items?.map((text) => (
+        <button
+          key={text}
+          className="suggest-chip"
+          onClick={() => {
+            setComposerDraft(conversationId, text)
+            clear(conversationId)
+          }}
+        >
+          {text}
+        </button>
+      ))}
+      {!state.busy && (
+        <button className="icon-btn small" onClick={() => void suggest(conversationId, true)} title={t('aiSuggestAgain')}>
+          <RefreshCw size={12} strokeWidth={2.4} />
+        </button>
+      )}
+    </div>
   )
 }

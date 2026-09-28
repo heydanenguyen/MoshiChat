@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { detectLanguage, type AiKind, type AiProgress, type AiStatus } from '@shared/ai'
 import type { Attachment, Message } from '@shared/types'
+import type { ChatLine } from '@shared/ai-prompts'
 import { useStore } from './store'
 import { translate as tr } from './i18n'
 
@@ -14,8 +15,27 @@ export interface AiResult {
   hidden?: boolean
 }
 
+export interface SummaryState {
+  bullets?: string[]
+  busy?: boolean
+  error?: string
+  /** How many unread messages it covers; 0 = the recent conversation. */
+  count?: number
+  hidden?: boolean
+}
+export interface SuggestState {
+  items?: string[]
+  busy?: boolean
+  /** The message the suggestions answer. */
+  forId?: string
+}
+
 interface AiState {
   status?: AiStatus
+  summaries: Record<string, SummaryState>
+  suggestions: Record<string, SuggestState>
+  /** Unread count of a chat when it was opened (the summary covers those). */
+  unreadAtOpen: Record<string, number>
   progress: Partial<Record<AiKind, AiProgress>>
   results: Record<string, AiResult>
   /** First use: the model is not on this computer yet; the setup sheet offers the download. */
@@ -28,6 +48,11 @@ interface AiState {
   transcribe(message: Message, attachment: Attachment): Promise<void>
   translate(message: Message): Promise<void>
   toggleHidden(key: string): void
+  summarize(conversationId: string, force?: boolean): Promise<void>
+  dismissSummary(conversationId: string): void
+  /** `manual`: the user asked (offers the download when the model is missing). */
+  suggest(conversationId: string, manual?: boolean): Promise<void>
+  clearSuggestions(conversationId: string): void
 }
 
 export const voiceKey = (m: Message, a: Attachment): string => `${m.conversationId}|${m.id}|${a.id}`
@@ -66,6 +91,31 @@ function spokenLanguage(conversationId: string): string {
   const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]
   return best && best[1] >= 3 ? best[0] : language()
 }
+const ATTACHMENT_LABEL: Record<string, { vi: string; en: string }> = {
+  image: { vi: '[ảnh]', en: '[photo]' },
+  video: { vi: '[video]', en: '[video]' },
+  audio: { vi: '[tin nhắn thoại]', en: '[voice note]' },
+  file: { vi: '[tệp]', en: '[file]' },
+  sticker: { vi: '[sticker]', en: '[sticker]' },
+  link: { vi: '[liên kết]', en: '[link]' },
+  story: { vi: '[story]', en: '[story]' },
+  post: { vi: '[bài viết]', en: '[post]' }
+}
+
+/** The newest `count` messages of a chat as lines the model can read (attachments become short labels). */
+function linesFor(conversationId: string, count: number): ChatLine[] {
+  const lang = language()
+  return (useStore.getState().messages[conversationId] ?? [])
+    .filter((m) => !m.system && (m.text.trim() || m.attachments.length))
+    .slice(-count)
+    .map((m) => ({
+      who: m.senderName,
+      text: m.text.trim() || m.attachments.map((a) => ATTACHMENT_LABEL[a.kind]?.[lang] ?? '[…]').join(' '),
+      at: m.sentAt,
+      mine: m.isOutgoing
+    }))
+}
+
 const clean = (err: unknown): string => ((err as Error)?.message ?? String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
 export const useAi = create<AiState>((set, get) => {
@@ -79,9 +129,14 @@ export const useAi = create<AiState>((set, get) => {
     set({ setup: { kind, then: () => void run() } })
   }
 
+  let suggestTimer: ReturnType<typeof setTimeout> | undefined
+
   return {
     progress: {},
     results: {},
+    summaries: {},
+    suggestions: {},
+    unreadAtOpen: {},
 
     async init() {
       window.unison.onEvent((event) => {
@@ -97,6 +152,24 @@ export const useAi = create<AiState>((set, get) => {
         if (key.endsWith(`|${lang}`)) results[`t:${key.slice(0, -(lang.length + 1))}`] = { text }
       }
       set({ status, results })
+      // Remember how many messages were unread when a chat is opened, and offer replies as new ones arrive.
+      useStore.subscribe((s, prev) => {
+        if (s.selectedId && s.selectedId !== prev.selectedId) {
+          set({ unreadAtOpen: { ...get().unreadAtOpen, [s.selectedId]: prev.conversations[s.selectedId]?.unreadCount ?? 0 } })
+        }
+        const id = s.selectedId
+        if (!id) return
+        const list = s.messages[id]
+        if (list === prev.messages[id] && id === prev.selectedId) return
+        const last = list?.at(-1)
+        if (!last) return
+        if (last.isOutgoing) {
+          if (get().suggestions[id]?.items?.length) get().clearSuggestions(id)
+          return
+        }
+        if (suggestTimer) clearTimeout(suggestTimer)
+        suggestTimer = setTimeout(() => void get().suggest(id), 1200)
+      })
     },
 
     async refresh() {
@@ -165,6 +238,71 @@ export const useAi = create<AiState>((set, get) => {
           patch(key, { error: clean(err) })
         }
       })
+    },
+
+    async summarize(conversationId, force) {
+      const current = get().summaries[conversationId]
+      if (current?.busy) return
+      if (current?.bullets && !force) {
+        set({ summaries: { ...get().summaries, [conversationId]: { ...current, hidden: !current.hidden } } })
+        return
+      }
+      await withModel('chat', async () => {
+        const unread = get().unreadAtOpen[conversationId] ?? 0
+        const count = unread >= 3 ? Math.min(unread, 60) : 0
+        const lines = linesFor(conversationId, count || 40)
+        const messages = useStore.getState().messages[conversationId] ?? []
+        const last = messages.at(-1)
+        if (lines.length < 2 || !last) {
+          useStore.getState().showToast(tr(language(), 'aiNothingToSummarize'))
+          return
+        }
+        set({ summaries: { ...get().summaries, [conversationId]: { busy: true, count } } })
+        try {
+          const bullets = await window.unison.ai.summarize(`${conversationId}|${last.id}|${count}`, lines)
+          set({ summaries: { ...get().summaries, [conversationId]: { bullets, count } } })
+        } catch (err) {
+          set({ summaries: { ...get().summaries, [conversationId]: { error: clean(err), count } } })
+        }
+      })
+    },
+
+    dismissSummary(conversationId) {
+      const current = get().summaries[conversationId]
+      if (current) set({ summaries: { ...get().summaries, [conversationId]: { ...current, hidden: true } } })
+    },
+
+    async suggest(conversationId, manual) {
+      const settings = useStore.getState().settings
+      if (!manual && settings.aiSuggest === false) return
+      const status = get().status
+      if (!manual && !status?.chat.ready) return
+      const list = useStore.getState().messages[conversationId] ?? []
+      const last = list.at(-1)
+      if (!last || last.isOutgoing || last.system) return
+      const current = get().suggestions[conversationId]
+      if (current?.busy || (current?.forId === last.id && current.items?.length && !manual)) return
+      await withModel('chat', async () => {
+        set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, forId: last.id } } })
+        try {
+          const items = await window.unison.ai.suggest(linesFor(conversationId, 12))
+          // The chat may have moved on while the model was thinking.
+          const now = useStore.getState().messages[conversationId]?.at(-1)
+          if (now && now.id !== last.id && now.isOutgoing) {
+            get().clearSuggestions(conversationId)
+            return
+          }
+          set({ suggestions: { ...get().suggestions, [conversationId]: { items, forId: last.id } } })
+        } catch {
+          set({ suggestions: { ...get().suggestions, [conversationId]: { forId: last.id } } })
+        }
+      })
+    },
+
+    clearSuggestions(conversationId) {
+      const next = { ...get().suggestions }
+      delete next[conversationId]
+      set({ suggestions: next })
     },
 
     toggleHidden(key) {

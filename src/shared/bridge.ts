@@ -1,4 +1,5 @@
 import type { AiKind, AiStatus } from './ai'
+import type { ChatLine } from './ai-prompts'
 import type {
   Account,
   AddAccountInput,
@@ -85,7 +86,11 @@ export interface MoshiBridge {
     /** `language`: ISO code of what is probably spoken (Whisper otherwise assumes English). */
     transcribe(key: string, pcm: Float32Array, language?: string): Promise<string>
     translate(key: string, text: string): Promise<{ text: string; from: string; same?: boolean }>
-    cached(): Promise<{ transcripts: Record<string, string>; translations: Record<string, string> }>
+    cached(): Promise<{ transcripts: Record<string, string>; translations: Record<string, string>; summaries: Record<string, string> }>
+    /** Bullet points about these lines (cached by `key`). */
+    summarize(key: string, lines: ChatLine[]): Promise<string[]>
+    /** Three short replies to the newest line. */
+    suggest(lines: ChatLine[]): Promise<string[]>
   }
   backup: {
     /** Ask where to save, then write an encrypted backup. Null when the user cancels. */
@@ -177,6 +182,8 @@ export const IPC = {
   aiTranscribe: 'ai:transcribe',
   aiTranslate: 'ai:translate',
   aiCached: 'ai:cached',
+  aiSummarize: 'ai:summarize',
+  aiSuggest: 'ai:suggest',
   backupCreate: 'backup:create',
   backupPick: 'backup:pick',
   backupRestore: 'backup:restore',

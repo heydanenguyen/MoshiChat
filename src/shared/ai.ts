@@ -1,7 +1,9 @@
 /** On-device AI (Whisper for voice notes, NLLB for translation): shared ids, sizes and helpers. */
 
-export type AiKind = 'voice' | 'translate'
+export type AiKind = 'voice' | 'translate' | 'chat'
 export type VoiceModel = 'turbo' | 'small'
+/** The small instruction-tuned model behind summaries and reply suggestions. */
+export type ChatModel = 'small' | 'better'
 
 export interface AiModelSpec {
   repo: string
@@ -9,21 +11,29 @@ export interface AiModelSpec {
   dtype: Record<string, string> | string
   /** Approximate download, for the UI. */
   megabytes: number
+  /** ONNX file base names to expect on disk; Whisper/NLLB use the encoder + merged decoder pair. */
+  files?: string[]
 }
 
-export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec } = {
+export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiModelSpec; chat: Record<ChatModel, AiModelSpec> } = {
   voice: {
     // Best free speech recognition that runs locally; handles Vietnamese well.
     turbo: { repo: 'onnx-community/whisper-large-v3-turbo', dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' }, megabytes: 725 },
     small: { repo: 'onnx-community/whisper-small', dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' }, megabytes: 240 }
   },
   // 200 languages, offline.
-  translate: { repo: 'Xenova/nllb-200-distilled-600M', dtype: 'q8', megabytes: 855 }
+  translate: { repo: 'Xenova/nllb-200-distilled-600M', dtype: 'q8', megabytes: 855 },
+  // Qwen2.5 Instruct (Apache-2.0) speaks Vietnamese; 4-bit so it runs on any CPU. 'better' is slower but wiser.
+  chat: {
+    small: { repo: 'onnx-community/Qwen2.5-0.5B-Instruct', dtype: 'q4', megabytes: 480, files: ['model'] },
+    better: { repo: 'onnx-community/Qwen2.5-1.5B-Instruct', dtype: 'q4', megabytes: 1100, files: ['model'] }
+  }
 }
 
 export interface AiStatus {
   voice: { model: VoiceModel; ready: boolean; gpu: boolean }
   translate: { ready: boolean }
+  chat: { model: ChatModel; ready: boolean }
   /** Space the downloaded models take. */
   bytes: number
 }
