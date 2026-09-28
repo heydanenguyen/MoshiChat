@@ -1,6 +1,6 @@
 # Builds installers for every platform on GitHub's own machines (free for public repositories).
 # Run it by hand from the Actions tab, or push a tag like v0.2.0. Downloads appear under the run's "Artifacts";
-# tagged runs also attach them to a draft GitHub Release.
+# tagged runs also publish them as a GitHub Release (notes from RELEASE_NOTES.md).
 #
 # Signing is optional: without certificate secrets, macOS builds are unsigned (users right-click → Open once)
 # and Windows builds are unsigned (SmartScreen warning). To sign macOS: add CSC_LINK (base64 .p12),
@@ -94,10 +94,15 @@ jobs:
     needs: [windows, mac]
     runs-on: ubuntu-latest
     steps:
+      # Checkout first: it cleans the workspace, which would wipe artifacts downloaded before it.
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      # Published straight away: the in-app updater only sees published releases. The body comes from
+      # RELEASE_NOTES.md at the tagged commit, so write the notes before tagging.
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          name: Moshi ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
           files: artifacts/**/*
