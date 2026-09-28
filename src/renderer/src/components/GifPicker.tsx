@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Clock, ExternalLink, Search, TrendingUp, X } from 'lucide-react'
 import type { GifItem, GifProvider } from '@shared/types'
 import { useStore, useT } from '../store'
+import { useKeepInside } from '../popover'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
 
@@ -73,6 +74,7 @@ export function GifPicker({ onPick, onClose }: { onPick(item: GifItem): void; on
   const [loadingMore, setLoadingMore] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const request = useRef(0)
+  useKeepInside(ref)
   const effective = query.trim() || mood || ''
 
   useEffect(() => {

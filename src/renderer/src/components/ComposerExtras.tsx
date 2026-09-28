@@ -4,6 +4,7 @@ import type { QuickReply } from '@shared/types'
 import { defaultQuickReplies, fold } from '@shared/extras'
 import { useStore, useT } from '../store'
 import { formatTime } from '../utils'
+import { useKeepInside } from '../popover'
 
 /** The user's quick replies, or the starter set until they edit them. */
 export function useQuickReplies(): QuickReply[] {
@@ -72,6 +73,7 @@ export function SchedulePicker({ onPick, onClose }: { onPick(sendAt: number): vo
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const ref = useRef<HTMLDivElement>(null)
+  useKeepInside(ref)
   const now = new Date()
   const pad = (n: number): string => String(n).padStart(2, '0')
   const inHour = new Date(Date.now() + 60 * 60 * 1000)

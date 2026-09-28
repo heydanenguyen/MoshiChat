@@ -3,6 +3,7 @@ import { Clock } from 'lucide-react'
 import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
 import { STICKER_EXPRESSIONS, STICKER_VIEWBOX, isStickerId, stickerInner, type StickerId } from '@shared/stickers'
 import { useStore, useT } from '../store'
+import { useKeepInside } from '../popover'
 import { LogoMark } from './Logo'
 
 const RECENT_KEY = 'unison.recentStickers'
@@ -36,6 +37,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: StickerId): void
   const [recent, setRecent] = useState<StickerId[]>(loadRecent)
   const [tab, setTab] = useState<'recent' | LogoId>(() => (loadRecent().length ? 'recent' : (logo ?? 'buddies')))
   const ref = useRef<HTMLDivElement>(null)
+  useKeepInside(ref)
 
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {

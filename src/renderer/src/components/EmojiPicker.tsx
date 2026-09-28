@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useT } from '../store'
+import { useKeepInside } from '../popover'
 
 interface Category {
   id: string
@@ -81,6 +82,7 @@ export function EmojiPicker({ onPick, onClose }: Props): JSX.Element {
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const ref = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
+  useKeepInside(ref)
 
   useEffect(() => {
     input.current?.focus({ preventScroll: true })

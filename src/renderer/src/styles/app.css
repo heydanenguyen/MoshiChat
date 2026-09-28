@@ -66,6 +66,15 @@ a {
   -webkit-app-region: no-drag;
 }
 
+/* Windows has no overlay scrollbars: anything that overflows gets the classic arrowed bar.
+   Slim every scrollbar there to the thin one the .scroll containers use below (scrollbar-color inherits). */
+.platform-win {
+  scrollbar-color: var(--fill-secondary) transparent;
+}
+.platform-win * {
+  scrollbar-width: thin;
+}
+
 /* Overlay scrollbars, macOS style: a 4px pill that fades in while scrolling or hovering. */
 .scroll {
   overflow-y: auto;
@@ -2016,6 +2025,10 @@ mark {
   max-height: 160px;
   min-height: 36px;
   font-family: var(--font-text);
+  /* scrolls only at max height (set from Composer); thin bar instead of the classic arrowed one on Windows */
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-secondary) transparent;
 }
 
 .composer-input::placeholder {
@@ -2077,6 +2090,8 @@ mark {
   bottom: 44px;
   right: -60px;
   width: 340px;
+  /* never wider than the chat it opens in (useKeepInside then slides it fully into view) */
+  max-width: calc(100cqw - 16px);
   height: 360px;
   display: flex;
   flex-direction: column;
@@ -7020,6 +7035,7 @@ button.moment-card:hover {
   right: -48px;
   z-index: 30;
   width: 280px;
+  max-width: calc(100cqw - 16px);
   padding: 8px;
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);

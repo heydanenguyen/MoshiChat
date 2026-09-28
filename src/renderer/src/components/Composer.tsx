@@ -151,6 +151,8 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    // Windows draws a classic scrollbar for any overflow, even a rounding pixel; only scroll once the box is at its max height.
+    el.style.overflowY = el.scrollHeight > 160 ? 'auto' : 'hidden'
   }, [text])
 
   useEffect(() => {

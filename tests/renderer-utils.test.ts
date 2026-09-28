@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Message } from '../src/shared/types'
 import { formatBytes, gradientFor, initials, sectionize } from '../src/renderer/src/utils'
 import { translate } from '../src/renderer/src/i18n'
+import { popoverShift } from '../src/renderer/src/popover'
 
 const msg = (id: string, sender: string, sentAt: number, isOutgoing = false): Message => ({
   id,
@@ -129,5 +130,21 @@ describe('withStickers', () => {
     expect(look(4)[0]).toBe('image')
     expect(look(5)[0]).toBe('image')
     expect(withStickers([msg('photo', {}, { width: 800, height: 600 })], [], 'c', 'messenger')[0].attachments[0].kind).toBe('image')
+  })
+})
+
+describe('popoverShift', () => {
+  const panel = { left: 400, right: 1000 }
+  it('leaves a popover that already fits alone', () => {
+    expect(popoverShift({ left: 500, right: 800 }, panel)).toBe(0)
+  })
+  it('slides a popover running past the left edge back in, keeping the inset', () => {
+    expect(popoverShift({ left: 230, right: 586 }, panel)).toBe(178)
+  })
+  it('slides a popover running past the right edge back in', () => {
+    expect(popoverShift({ left: 900, right: 1100 }, panel)).toBe(-108)
+  })
+  it('hugs the left edge when the popover is wider than the panel', () => {
+    expect(popoverShift({ left: 300, right: 1200 }, { left: 400, right: 700 })).toBe(108)
   })
 })
