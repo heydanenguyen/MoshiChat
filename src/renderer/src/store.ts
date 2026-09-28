@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import type { SettingsPage } from './components/SettingsSheet'
 import type {
   Account,
   AddAccountInput,
@@ -41,7 +42,7 @@ export type LegalDoc = 'notice' | 'license' | 'terms' | 'privacy' | 'credits'
 
 export type Sheet =
   | { kind: 'none' }
-  | { kind: 'settings' }
+  | { kind: 'settings'; page?: SettingsPage }
   | { kind: 'add-account'; platform?: Platform }
   | { kind: 'command' }
   | { kind: 'new-chat' }

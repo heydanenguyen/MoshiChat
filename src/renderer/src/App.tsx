@@ -271,7 +271,7 @@ export default function App(): JSX.Element {
             {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
             {detailsOpen && selectedId ? <DetailsPane /> : <div />}
 
-            {sheet.kind === 'settings' && <SettingsSheet />}
+            {sheet.kind === 'settings' && <SettingsSheet initialPage={sheet.page} />}
             {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
             {sheet.kind === 'command' && <CommandPalette />}
             {sheet.kind === 'new-chat' && <NewChatSheet />}

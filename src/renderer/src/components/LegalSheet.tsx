@@ -115,7 +115,7 @@ export function LegalSheet({ doc }: { doc: LegalDoc }): JSX.Element {
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && closeSheet()}>
       <div className="sheet" role="dialog" aria-label={t(LEGAL_TITLE_KEY[doc])}>
         <div className="sheet-header">
-          <button className="icon-btn" onClick={() => openSheet({ kind: 'settings' })} title={t('back')}>
+          <button className="icon-btn" onClick={() => openSheet({ kind: 'settings', page: 'data' })} title={t('back')}>
             <ChevronLeft size={18} strokeWidth={2.4} />
           </button>
           <div className="sheet-title">{t(LEGAL_TITLE_KEY[doc])}</div>

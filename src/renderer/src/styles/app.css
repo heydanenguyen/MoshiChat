@@ -8925,3 +8925,203 @@ button.moment-card:hover {
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }
+
+/* ================================================================== settings: page list + one page at a time */
+.settings-sheet {
+  width: 880px;
+  height: min(700px, 100vh - 64px);
+  flex-direction: row;
+  padding: 0;
+}
+.settings-nav {
+  width: 208px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--separator);
+  background: var(--fill-tertiary);
+  overflow-y: auto;
+}
+.settings-nav-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  padding: 4px 10px 12px;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.settings-nav-item.active {
+  background: var(--glass-strong);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+.settings-nav-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.settings-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.settings-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 18px 20px 12px 24px;
+}
+.settings-page-text {
+  flex: 1;
+  min-width: 0;
+}
+.settings-page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.settings-page-sub {
+  margin-top: 3px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.settings-page {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: settings-page-in var(--duration-base) var(--ease-out);
+}
+@keyframes settings-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-group-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 6px;
+}
+/* a picker under its title spans the full row */
+.settings-row.stack {
+  align-items: flex-start;
+}
+.settings-row.stack .settings-row-sub {
+  margin-bottom: 2px;
+}
+.settings-row-badge {
+  margin-left: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--fill-tertiary);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  vertical-align: 1px;
+}
+.settings-row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.settings-row-actions .icon-btn.danger:hover {
+  color: var(--danger);
+}
+.settings-row-btn.accent {
+  color: var(--accent);
+}
+.settings-empty {
+  color: var(--text-secondary);
+}
+/* pickers that used to sit outside a row keep their look inside one */
+.settings-row.stack .logo-picker {
+  padding: 0;
+  margin-top: 10px;
+}
+.settings-row.stack .accent-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.settings-row.stack .accent-group {
+  padding: 0;
+}
+.settings-row.stack .mute-chips {
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .settings-sheet {
+    flex-direction: column;
+    height: calc(100vh - 48px);
+  }
+  .settings-nav {
+    width: auto;
+    flex-direction: row;
+    gap: 4px;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--separator);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .settings-nav-title {
+    display: none;
+  }
+  .settings-nav-item {
+    flex-shrink: 0;
+    padding: 6px 10px 6px 6px;
+  }
+  .settings-page-head,
+  .settings-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

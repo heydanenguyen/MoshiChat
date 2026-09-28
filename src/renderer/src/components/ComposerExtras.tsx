@@ -35,7 +35,7 @@ export function QuickReplyMenu({ items, active, onPick, onHover }: { items: Quic
       <div className="quick-menu-head">
         <Zap size={13} strokeWidth={2.4} />
         {t('quickReplies')}
-        <button className="quick-menu-manage" onClick={() => openSheet({ kind: 'settings' })} title={t('quickReplyManage')}>
+        <button className="quick-menu-manage" onClick={() => openSheet({ kind: 'settings', page: 'chat' })} title={t('quickReplyManage')}>
           <Settings2 size={13} strokeWidth={2.4} />
         </button>
       </div>
