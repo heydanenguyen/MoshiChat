@@ -4,6 +4,8 @@
  * always gets the same character.
  */
 
+const cache = new Map<string, string>()
+
 const COLORS = ['#FFB3C1', '#5BBF6C', '#FFA24C', '#7FD3FF', '#2F7BFF', '#FF6A4D', '#FFB6C9', '#FFD35C', '#B98CFF', '#4CD9C0']
 
 function hash(seed: string): number {
@@ -51,17 +53,68 @@ const MOUTHS: string[] = [
   '<path d="M44 67h12l-6 6z" fill="#111"/>'
 ]
 
-export function abstractAvatarSvg(seed: string): string {
+/** The pieces one character is made of (indices into the tables above). */
+export interface AbstractParts {
+  color: number
+  shape: number
+  eyes: number
+  mouth: number
+  flip: boolean
+}
+
+/** The character a name gets on its own (what the list shows for contacts without a photo). */
+export function abstractPartsOf(seed: string): AbstractParts {
   const h = hash(seed || '?')
-  const color = COLORS[h % COLORS.length]
-  const shape = SHAPES[(h >>> 4) % SHAPES.length](color)
-  const eyes = EYES[(h >>> 8) % EYES.length]
-  const mouth = MOUTHS[(h >>> 12) % MOUTHS.length]
-  const flip = (h >>> 16) & 1 ? 'transform="scale(-1 1) translate(-100 0)"' : ''
+  return { color: h % COLORS.length, shape: (h >>> 4) % SHAPES.length, eyes: (h >>> 8) % EYES.length, mouth: (h >>> 12) % MOUTHS.length, flip: !!((h >>> 16) & 1) }
+}
+
+export function abstractSvgOf(p: AbstractParts): string {
+  const color = COLORS[p.color % COLORS.length]
+  const shape = SHAPES[p.shape % SHAPES.length](color)
+  const eyes = EYES[p.eyes % EYES.length]
+  const mouth = MOUTHS[p.mouth % MOUTHS.length]
+  const flip = p.flip ? 'transform="scale(-1 1) translate(-100 0)"' : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><clipPath id="c"><circle cx="50" cy="50" r="50"/></clipPath><g clip-path="url(#c)"><circle cx="50" cy="50" r="50" fill="#0b0b0b"/><g ${flip}>${shape}</g>${eyes}${mouth}</g></svg>`
 }
 
-const cache = new Map<string, string>()
+export function abstractAvatarSvg(seed: string): string {
+  return abstractSvgOf(abstractPartsOf(seed))
+}
+
+/** A picked character is kept as `abstract:<color>.<shape>.<eyes>.<mouth>.<flip>` in the contact's settings. */
+export const abstractId = (p: AbstractParts): string => `abstract:${p.color}.${p.shape}.${p.eyes}.${p.mouth}.${p.flip ? 1 : 0}`
+
+export function parseAbstractId(value: string): AbstractParts | undefined {
+  const m = /^abstract:(\d+)\.(\d+)\.(\d+)\.(\d+)\.([01])$/.exec(value)
+  if (!m) return undefined
+  return { color: Number(m[1]), shape: Number(m[2]), eyes: Number(m[3]), mouth: Number(m[4]), flip: m[5] === '1' }
+}
+
+/** Data URL for a picked character (undefined when the value is not one). */
+export function abstractIdUrl(value: string): string | undefined {
+  const parts = parseAbstractId(value)
+  if (!parts) return undefined
+  let url = cache.get(value)
+  if (!url) {
+    url = 'data:image/svg+xml;utf8,' + encodeURIComponent(abstractSvgOf(parts))
+    cache.set(value, url)
+  }
+  return url
+}
+
+/** A spread of characters to pick from: the name's own first, then variations that stay deterministic per round. */
+export function abstractChoices(seed: string, round: number, count = 9): AbstractParts[] {
+  const list: AbstractParts[] = [abstractPartsOf(seed)]
+  const seen = new Set([abstractId(list[0])])
+  for (let i = 0; list.length < count && i < count * 4; i++) {
+    const p = abstractPartsOf(`${seed}#${round}#${i}`)
+    const id = abstractId(p)
+    if (seen.has(id)) continue
+    seen.add(id)
+    list.push(p)
+  }
+  return list
+}
 
 /** Data URL for an <img src>, cached per seed. */
 export function abstractAvatarUrl(seed: string): string {

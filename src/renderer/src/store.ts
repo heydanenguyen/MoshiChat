@@ -30,6 +30,7 @@ import { translate, type TKey } from './i18n'
 import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
 import { accentVars, type AccentSpec } from '@shared/accent'
 import { previewKindOf } from '@shared/preview'
+import { abstractIdUrl } from './components/AbstractAvatar'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
@@ -1058,6 +1059,7 @@ function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): voi
 export function customAvatarUrl(value?: string): string | undefined {
   if (!value) return undefined
   if (value.startsWith('data:image/')) return value
+  if (value.startsWith('abstract:')) return abstractIdUrl(value)
   if (value.startsWith('logo:')) {
     const id = value.slice(5) as LogoId
     if (LOGO_ORDER.includes(id)) return `data:image/svg+xml;utf8,${encodeURIComponent(logoIconSvg(id, true))}`

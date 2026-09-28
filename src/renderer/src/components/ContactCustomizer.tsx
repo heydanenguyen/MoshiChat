@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Cake, Image as ImageIcon, ImagePlus, Palette, RotateCcw, X } from 'lucide-react'
+import { Cake, Image as ImageIcon, ImagePlus, Palette, RotateCcw, Shuffle, X } from 'lucide-react'
+import { abstractChoices, abstractId, abstractIdUrl, parseAbstractId } from './AbstractAvatar'
 import type { Conversation } from '@shared/types'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
 import { customAvatarUrl, useStore, useT } from '../store'
@@ -44,6 +45,8 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   const [avatar, setAvatar] = useState<string | undefined>(override?.avatar)
   const [birthday, setBirthday] = useState(override?.birthday && /^\d{4}-/.test(override.birthday) ? override.birthday : '')
   const [busy, setBusy] = useState(false)
+  // Abstract characters: the name's own one first, then a fresh spread each time "another set" is pressed.
+  const [round, setRound] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
   const ref = useRef<HTMLDivElement>(null)
   const originalName = conversation.originalTitle ?? conversation.title
@@ -140,6 +143,30 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
           ))}
         </div>
         <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void upload(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+      </div>
+
+      <div className="field">
+        <span className="field-label">{t('avatarAbstract')}</span>
+        <div className="avatar-choices" role="radiogroup" aria-label={t('avatarAbstract')}>
+          {(() => {
+            const choices = abstractChoices(originalName, round)
+            // Keep the picked character in view even after the set changes.
+            const picked = avatar && parseAbstractId(avatar)
+            if (picked && !choices.some((p) => abstractId(p) === avatar)) choices.splice(1, 0, picked)
+            return choices.map((p) => {
+              const id = abstractId(p)
+              return (
+                <button key={id} className={`avatar-choice ${avatar === id ? 'active' : ''}`} role="radio" aria-checked={avatar === id} onClick={() => setAvatar(id)} title={t('avatarAbstract')}>
+                  <img className="avatar-choice-abstract" src={abstractIdUrl(id)} alt="" draggable={false} />
+                </button>
+              )
+            })
+          })()}
+          <button className="avatar-choice upload" onClick={() => setRound((r) => r + 1)} title={t('avatarShuffle')}>
+            <Shuffle size={17} strokeWidth={2.2} />
+          </button>
+        </div>
+        <span className="field-hint">{t('avatarAbstractHint')}</span>
       </div>
 
       <label className="field">

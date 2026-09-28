@@ -8580,3 +8580,10 @@ button.moment-card:hover {
   max-height: 120px;
   overflow: auto;
 }
+
+.avatar-choice-abstract {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: block;
+}
