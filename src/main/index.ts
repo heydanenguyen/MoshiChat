@@ -31,6 +31,19 @@ const isWindows = process.platform === 'win32'
 const BUILT_IN_GIF = { key: typeof __MOSHI_GIF_KEY__ === 'string' ? __MOSHI_GIF_KEY__ : '', provider: typeof __MOSHI_GIF_PROVIDER__ === 'string' ? __MOSHI_GIF_PROVIDER__ : 'klipy' } as const
 
 let window: BrowserWindow | undefined
+/** Set once the app is really quitting, so closing the window on macOS stops hiding it. */
+let quitting = false
+
+/** Bring the main window back (Dock icon, second launch), creating it again if it was closed. */
+function showMain(): void {
+  if (!window || window.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+}
 // Development only: keep a dev run's data (and its single-instance lock) apart from the installed app.
 // On macOS the default folders "moshi" and "Moshi" are the same directory, so this matters there.
 if (!app.isPackaged && process.env.MOSHI_USER_DATA) app.setPath('userData', process.env.MOSHI_USER_DATA)
@@ -251,7 +264,8 @@ function installMenu(): void {
         { label: vi ? 'Tin nhắn mới' : 'New Message', accelerator: 'Cmd+N', click: command('new-chat') },
         { label: vi ? 'Nhảy tới hội thoại…' : 'Jump to Conversation…', accelerator: 'Cmd+K', click: command('command-palette') },
         { type: 'separator' },
-        { role: 'close', label: vi ? 'Đóng cửa sổ' : 'Close Window' }
+        // ⌘W closes what is on top first (a photo, a sheet), then hides the window.
+        { label: vi ? 'Đóng' : 'Close', accelerator: 'Cmd+W', click: command('close') }
       ]
     },
     {
@@ -355,6 +369,18 @@ function createWindow(): void {
     if (level >= 2) log('renderer:', message, source ? `(${source}:${line})` : '')
   })
   window.webContents.on('preload-error', (_e, path, error) => log('preload error', path, error.message))
+  // macOS: closing the window hides it, like other messengers; the Dock icon brings it back. (It
+  // used to be destroyed while the app kept running, and the hidden Instagram/Zalo helper windows
+  // stopped "activate" from ever making a new one, so the only way back was quitting.)
+  window.on('close', (e) => {
+    if (!isMac || quitting || !window) return
+    e.preventDefault()
+    const w = window
+    if (w.isFullScreen()) {
+      w.once('leave-full-screen', () => w.hide())
+      w.setFullScreen(false)
+    } else w.hide()
+  })
   window.on('closed', () => (window = undefined))
   const sendState = (): void => {
     if (window && !window.isDestroyed()) window.webContents.send(IPC.event, { type: 'window:state', maximized: window.isMaximized() })
@@ -474,6 +500,61 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
 }
 
 /** A pasted image (screenshot from the clipboard) as a file the adapters can send. */
+const MEDIA_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/avif': 'avif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm'
+}
+
+/** The bytes behind a photo or video shown in the app (a platform CDN, a local file, a data URL). */
+async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> {
+  if (url.startsWith('data:')) {
+    const comma = url.indexOf(',')
+    const meta = url.slice(5, comma)
+    const body = url.slice(comma + 1)
+    return { data: meta.endsWith(';base64') ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body)), type: meta.split(';')[0] }
+  }
+  let target = new URL(url)
+  if (target.protocol === 'unison-img:') target = new URL(target.searchParams.get('u') ?? '')
+  if (target.protocol === 'file:') return { data: await readFile(target), type: '' }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('This file cannot be saved')
+  const host = target.hostname
+  const instagram = /instagram|cdninstagram/.test(host) || target.searchParams.has('_nc_cat')
+  const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(host)
+  const ses = /fbcdn|cdninstagram|instagram/.test(host)
+    ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
+    : /facebook|fbsbx/.test(host)
+      ? session.fromPartition('persist:login-messenger')
+      : session.defaultSession
+  const referer = zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : /fbcdn|facebook|fbsbx/.test(host) ? 'https://www.facebook.com/' : undefined
+  const res = await ses.fetch(target.toString(), referer ? { headers: { Referer: referer } } : undefined)
+  if (!res.ok) throw new Error(`Could not download the file (${res.status})`)
+  const data = Buffer.from(await res.arrayBuffer())
+  if (data.length > 500 * 1024 * 1024) throw new Error('This file is too large')
+  return { data, type: (res.headers.get('content-type') ?? '').split(';')[0].trim() }
+}
+
+/** "Save" in the photo viewer: asks where (Downloads by default) and writes the original file there. */
+async function saveMedia(url: string, name?: string): Promise<string | undefined> {
+  const { data, type } = await mediaBytes(url)
+  let base = (name && !/^https?:/.test(name) ? name : '') || decodeURIComponent(new URL(url.startsWith('data:') ? 'https://x/photo' : url).pathname.split('/').pop() || '') || 'photo'
+  base = base.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120)
+  const ext = MEDIA_EXT[type]
+  if (!/\.[a-z0-9]{2,5}$/i.test(base)) base += `.${ext ?? 'jpg'}`
+  const options = { defaultPath: join(app.getPath('downloads'), base) }
+  const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+  if (picked.canceled || !picked.filePath) return undefined
+  await writeFile(picked.filePath, data)
+  return picked.filePath
+}
+
 async function saveImage(bytes: Uint8Array, mime: string, name?: string): Promise<OutgoingAttachment> {
   const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/gif' ? 'gif' : mime === 'image/webp' ? 'webp' : mime.startsWith('video/') ? 'mp4' : 'png'
   if (!/^(image|video)\//.test(mime)) throw new Error('Only images and videos can be pasted')
@@ -827,6 +908,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())
   ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
   ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
+  ipcMain.handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
   ipcMain.handle(IPC.stickersList, () => listStickers())
   ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
   ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>
@@ -873,10 +955,7 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (window) {
-      if (window.isMinimized()) window.restore()
-      window.focus()
-    }
+    if (app.isReady()) showMain()
   })
 
   app.whenReady().then(async () => {
@@ -896,9 +975,7 @@ if (!gotLock) {
     await manager.restore()
     void updater.start()
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    })
+    app.on('activate', showMain)
   })
 
   app.on('window-all-closed', () => {
@@ -906,6 +983,7 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
+    quitting = true
     updater.stop()
     scheduler.stop()
     ai.stop()

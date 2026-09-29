@@ -619,7 +619,7 @@ export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversati
 }
 
 /** What the native menu bar (macOS) asks the renderer to do. */
-export type AppCommand = 'settings' | 'new-chat' | 'command-palette' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'toggle-split'
+export type AppCommand = 'settings' | 'new-chat' | 'command-palette' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'toggle-split' | 'close'
 
 /** In-app updates (GitHub Releases). `manual`: this build cannot replace itself (unsigned macOS), so offer the download page. */
 export type UpdateState =

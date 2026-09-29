@@ -97,6 +97,7 @@ const bridge: MoshiBridge = {
     }),
     saveVoice: (bytes, durationSeconds, aac) => ipcRenderer.invoke(IPC.appSaveVoice, bytes, durationSeconds, aac),
     saveImage: (bytes, mime, name) => ipcRenderer.invoke(IPC.appSaveImage, bytes, mime, name),
+    saveMedia: (url, name) => ipcRenderer.invoke(IPC.appSaveMedia, url, name),
     sticker: (id) => ipcRenderer.invoke(IPC.appSticker, id),
     gifSearch: (query, page) => ipcRenderer.invoke(IPC.appGifSearch, query, page),
     gif: (item) => ipcRenderer.invoke(IPC.appGif, item),

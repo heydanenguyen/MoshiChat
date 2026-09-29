@@ -161,6 +161,14 @@ export default function App(): JSX.Element {
         case 'toggle-split':
           useStore.getState().toggleSplit()
           break
+        case 'close': {
+          // ⌘W: the photo viewer, then an open sheet, then the window itself (hidden on macOS).
+          const state = useStore.getState()
+          if (state.lightbox) state.openLightbox(undefined)
+          else if (sheet.kind !== 'none') state.closeSheet()
+          else window.unison.app.windowAction('close')
+          break
+        }
       }
     })
   }, [])

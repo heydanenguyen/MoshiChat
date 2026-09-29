@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ExternalLink, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react'
 import { useStore, useT, type Lightbox as LightboxState } from '../store'
 
 export function Lightbox({ url, name, video, poster, externalUrl, externalLabel, gallery, index = 0 }: LightboxState): JSX.Element {
   const t = useT()
   const openLightbox = useStore((s) => s.openLightbox)
+  const showToast = useStore((s) => s.showToast)
+  const [saving, setSaving] = useState(false)
   const [current, setCurrent] = useState(index)
   const count = gallery?.length ?? 0
   const item = gallery?.[current] ?? { url, video, poster }
@@ -13,6 +15,19 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
   }
 
   useEffect(() => setCurrent(index), [index, url])
+
+  const download = async (): Promise<void> => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const path = await window.unison.app.saveMedia(item.url, count > 1 ? undefined : name)
+      if (path) showToast(t('mediaSaved', { name: path.split(/[\\/]/).pop() ?? '' }))
+    } catch (err) {
+      showToast(t('mediaSaveFailed', { reason: (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -51,6 +66,9 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
             {externalLabel ?? externalUrl}
           </button>
         )}
+        <button className="lightbox-close lightbox-download" onClick={() => void download()} disabled={saving} title={t('mediaDownload')} aria-label={t('mediaDownload')}>
+          <Download size={18} strokeWidth={2.4} />
+        </button>
         <button className="lightbox-close" onClick={() => openLightbox(undefined)} title={t('close')}>
           <X size={18} strokeWidth={2.4} />
         </button>

@@ -161,6 +161,8 @@ export interface MoshiBridge {
     saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
     /** An image pasted from the clipboard (no file behind it yet): written to a temp file, ready to send. */
     saveImage(bytes: Uint8Array, mime: string, name?: string): Promise<OutgoingAttachment>
+    /** Save a photo or video shown in the app to a place the user picks; the path, or undefined if cancelled. */
+    saveMedia(url: string, name?: string): Promise<string | undefined>
     /** A Moshi sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
@@ -236,6 +238,7 @@ export const IPC = {
   insightsRecords: 'insights:records',
   insightsBackfill: 'insights:backfill',
   appSaveImage: 'app:saveImage',
+  appSaveMedia: 'app:saveMedia',
   stickersList: 'stickers:list',
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',
