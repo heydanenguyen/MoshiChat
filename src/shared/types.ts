@@ -547,6 +547,10 @@ export interface Settings {
   suggestLanguage?: 'auto' | 'vi' | 'en'
   /** Buttons in the bar beside a hovered message; false hides one (all on by default). */
   bubbleActions?: Partial<Record<BubbleAction, boolean>>
+  /** Where Download in the photo viewer saves; unset (or a folder that is gone) means the system Downloads folder. */
+  downloadDir?: string
+  /** Ask where to save each time instead of saving straight into that folder. Default off. */
+  askWhereToSave?: boolean
   /** Reply suggestions appear by themselves under new messages (once the chat model is installed). */
   aiSuggest?: boolean
   /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */

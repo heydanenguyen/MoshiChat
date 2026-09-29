@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArchiveRestore, Bell, BellOff, ChevronRight, Database, FileArchive, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
+import { ArchiveRestore, Bell, BellOff, ChevronRight, Database, FileArchive, FolderOpen, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import type { BubbleAction, Language, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
@@ -425,6 +425,42 @@ const BUBBLE_ACTION_LABELS: Record<BubbleAction, TKey> = {
   save: 'saveAction'
 }
 
+/** Where Download in the photo viewer saves, and whether it asks each time. */
+function DownloadSettings(): JSX.Element {
+  const t = useT()
+  const settings = useStore((s) => s.settings)
+  const setSettings = useStore((s) => s.setSettings)
+  const [folder, setFolder] = useState<{ path: string; label: string; custom: boolean } | undefined>()
+  useEffect(() => {
+    void window.unison.app.downloadFolder().then(setFolder).catch(() => undefined)
+  }, [settings.downloadDir])
+  const pick = async (): Promise<void> => {
+    const path = await window.unison.app.pickDownloadFolder()
+    if (path) await setSettings({ downloadDir: path })
+  }
+  return (
+    <Group label={t('downloadsTitle')}>
+      <Row title={t('downloadFolder')} sub={folder?.label ?? '…'} />
+      <div className="settings-row backup-buttons">
+        <button className="btn" onClick={() => void pick()}>
+          <FolderOpen size={15} strokeWidth={2.2} /> {t('downloadFolderChange')}
+        </button>
+        <button className="btn secondary" onClick={() => void window.unison.app.openDownloadFolder()}>
+          {t('downloadFolderOpen')}
+        </button>
+        {folder?.custom && (
+          <button className="btn secondary" onClick={() => void setSettings({ downloadDir: undefined })}>
+            {t('downloadFolderReset')}
+          </button>
+        )}
+      </div>
+      <Row title={t('askWhereToSave')} sub={t('askWhereToSaveHint')}>
+        <Switch on={!!settings.askWhereToSave} onChange={(on) => void setSettings({ askWhereToSave: on })} />
+      </Row>
+    </Group>
+  )
+}
+
 function ChatPage(): JSX.Element {
   const t = useT()
   const settings = useStore((s) => s.settings)
@@ -460,6 +496,7 @@ function ChatPage(): JSX.Element {
         <Row title={t('quickReplies')} sub={t('quickRepliesHint')} />
         <QuickReplyManager />
       </Group>
+      <DownloadSettings />
       <Group>
         <Row
           title={t('gifSettingsTitle')}

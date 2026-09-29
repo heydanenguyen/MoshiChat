@@ -541,14 +541,39 @@ async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> 
   return { data, type: (res.headers.get('content-type') ?? '').split(';')[0].trim() }
 }
 
-/** "Save" in the photo viewer: asks where (Downloads by default) and writes the original file there. */
+/** The folder chosen in Settings if it still exists, else the system Downloads folder. */
+async function downloadDir(): Promise<string> {
+  const custom = storage.settings.downloadDir
+  if (custom && (await stat(custom).catch(() => undefined))?.isDirectory()) return custom
+  return app.getPath('downloads')
+}
+
+/** photo.jpg, or photo (1).jpg, photo (2).jpg… when the name is taken. */
+async function freePath(dir: string, file: string): Promise<string> {
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file
+  const ext = dot > 0 ? file.slice(dot) : ''
+  for (let i = 0; i < 1000; i++) {
+    const candidate = join(dir, i ? `${stem} (${i})${ext}` : file)
+    if (!(await stat(candidate).catch(() => undefined))) return candidate
+  }
+  return join(dir, `${stem}-${Date.now()}${ext}`)
+}
+
+/** Download in the photo viewer: straight into the download folder, or wherever the user picks when Settings asks for that. */
 async function saveMedia(url: string, name?: string): Promise<string | undefined> {
   const { data, type } = await mediaBytes(url)
   let base = (name && !/^https?:/.test(name) ? name : '') || decodeURIComponent(new URL(url.startsWith('data:') ? 'https://x/photo' : url).pathname.split('/').pop() || '') || 'photo'
   base = base.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120)
   const ext = MEDIA_EXT[type]
   if (!/\.[a-z0-9]{2,5}$/i.test(base)) base += `.${ext ?? 'jpg'}`
-  const options = { defaultPath: join(app.getPath('downloads'), base) }
+  const dir = await downloadDir()
+  if (!storage.settings.askWhereToSave) {
+    const path = await freePath(dir, base)
+    await writeFile(path, data)
+    return path
+  }
+  const options = { defaultPath: join(dir, base) }
   const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
   if (picked.canceled || !picked.filePath) return undefined
   await writeFile(picked.filePath, data)
@@ -909,6 +934,19 @@ function registerIpc(): void {
   ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
   ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
   ipcMain.handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
+  ipcMain.handle(IPC.appDownloadFolder, async () => {
+    const path = await downloadDir()
+    const home = app.getPath('home')
+    return { path, label: path.startsWith(home) ? '~' + path.slice(home.length) : path, custom: path !== app.getPath('downloads') }
+  })
+  ipcMain.handle(IPC.appPickDownloadFolder, async () => {
+    const options: Electron.OpenDialogOptions = { defaultPath: await downloadDir(), properties: ['openDirectory', 'createDirectory'] }
+    const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    return picked.canceled ? undefined : picked.filePaths[0]
+  })
+  ipcMain.handle(IPC.appOpenDownloadFolder, async () => {
+    await shell.openPath(await downloadDir())
+  })
   ipcMain.handle(IPC.stickersList, () => listStickers())
   ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
   ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>

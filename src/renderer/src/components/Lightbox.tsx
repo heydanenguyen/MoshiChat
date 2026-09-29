@@ -21,7 +21,10 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
     setSaving(true)
     try {
       const path = await window.unison.app.saveMedia(item.url, count > 1 ? undefined : name)
-      if (path) showToast(t('mediaSaved', { name: path.split(/[\\/]/).pop() ?? '' }))
+      if (path) {
+        const parts = path.split(/[\\/]/)
+        showToast(t('mediaSaved', { name: parts.pop() ?? '', folder: parts.pop() ?? '' }))
+      }
     } catch (err) {
       showToast(t('mediaSaveFailed', { reason: (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }), 'error')
     } finally {

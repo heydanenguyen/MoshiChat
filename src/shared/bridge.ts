@@ -163,6 +163,11 @@ export interface MoshiBridge {
     saveImage(bytes: Uint8Array, mime: string, name?: string): Promise<OutgoingAttachment>
     /** Save a photo or video shown in the app to a place the user picks; the path, or undefined if cancelled. */
     saveMedia(url: string, name?: string): Promise<string | undefined>
+    /** The folder Download saves into, with a short label for Settings (~ for the home folder). */
+    downloadFolder(): Promise<{ path: string; label: string; custom: boolean }>
+    /** Let the user choose a folder; its path, or undefined if cancelled. */
+    pickDownloadFolder(): Promise<string | undefined>
+    openDownloadFolder(): Promise<void>
     /** A Moshi sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
@@ -239,6 +244,9 @@ export const IPC = {
   insightsBackfill: 'insights:backfill',
   appSaveImage: 'app:saveImage',
   appSaveMedia: 'app:saveMedia',
+  appDownloadFolder: 'app:downloadFolder',
+  appPickDownloadFolder: 'app:pickDownloadFolder',
+  appOpenDownloadFolder: 'app:openDownloadFolder',
   stickersList: 'stickers:list',
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',
