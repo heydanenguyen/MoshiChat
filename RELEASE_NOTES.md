@@ -1,15 +1,26 @@
-## Moshi 0.2.5
+## Moshi 0.2.6
 
 ### Mới
-- **Việc cần làm** thiết kế lại: hạn hiện theo cách người ta nói ("Quá hạn 2 ngày", "Hôm nay 11:46", "Ngày mai 09:00"), việc quá hạn có vạch đỏ và chip dời sang tối nay / sáng mai, bấm vào chữ để sửa tại chỗ, gõ việc mới là có sẵn chip giờ nhắc, mục Đã xong gập gọn kèm nút xoá.
-- **Dán ảnh chụp màn hình** thẳng vào khung chat (⌘V / Ctrl+V) để gửi, không cần lưu file rồi kéo thả.
+- **Dịch nội dung đang soạn.** Nút dịch cạnh ô nhập: chọn ngôn ngữ, bấm *Dịch ngay* (có Hoàn tác), hoặc bật *Tự dịch khi gửi* cho từng người để gõ tiếng Việt mà gửi đi tiếng Anh, Nhật, Hàn… Ngôn ngữ được nhớ theo từng cuộc trò chuyện.
+- **Sidebar gập gọn.** Bấm vào tiêu đề Hộp thư / Nhãn / Tài khoản để gập nhóm đó lại, bấm lại để mở; khi gập vẫn thấy số tin chưa đọc.
+- **Ngôn ngữ gợi ý trả lời** trong Cài đặt → AI: tự động theo tin nhắn, hoặc luôn tiếng Việt / English.
+
+### Cải thiện
+- **Bong bóng tin nhắn rộng hơn hẳn.** Thanh hành động khi rê chuột không còn chiếm chỗ trong hàng, nên tin dài đọc thành dòng rộng (~76% khung) thay vì cột hẹp.
+- **Tóm tắt và gợi ý trả lời** có prompt mới: nêu rõ tin cần trả lời, ba ý khác nhau, ví dụ mẫu. Với tiếng Việt, hãy chọn model "Tốt hơn" (1.5B) trong Cài đặt → AI.
+- **Icon âm thanh** vẽ lại theo bộ nhân vật Moshi thay cho emoji hệ thống.
+- Mục **Nền tối** chỉ hiện khi app đang ở giao diện tối.
 
 ### Sửa
-- **"Thân thiết" đếm đúng 30 ngày.** Trước đây bảng chỉ đếm tin đã lỡ tải về, nên người nhắn nhiều mà bạn chưa cuộn lại xếp dưới người nhắn ít. Giờ Moshi tự tải đủ 30 ngày gần nhất của mọi cuộc trò chuyện đang hoạt động (có thanh tiến độ ở lần mở đầu), lưu lại trên máy, các lần sau mở là có ngay. Tab "Năm nay" vẫn ghi rõ là ước lượng.
+- Instagram: lỗi "HTTP 500: unexpected response" lúc kết nối (Instagram trục trặc tạm thời ở bước tra tên) không còn làm hỏng cả tài khoản; app thử lại rồi dùng tên đã nhớ.
 
 ---
 
 ### English
-- To-dos redesigned: relative due labels ("2 days overdue", "Today 11:46"), overdue items get a red edge and snooze chips (tonight / tomorrow morning), click a title to edit it in place, quick reminder chips while adding, a collapsed Done group with a clear button.
-- Paste screenshots from the clipboard straight into the composer (⌘V / Ctrl+V).
-- Close friends counts the real last 30 days: Moshi now fills in the recent history of every active chat (with a progress bar on first open) and keeps it on this computer, instead of ranking by whichever pages happened to be loaded. "This year" is still an estimate.
+- Translate what you type: pick a language next to the box, translate now (with undo) or turn on translate-when-sending per chat. Remembered per conversation.
+- Sidebar groups (Inboxes, Tags, Accounts) fold on click; a small count stays visible while folded.
+- Reply-suggestion language setting (auto / Vietnamese / English).
+- Much wider message bubbles: the hover action bar no longer takes room inside the row.
+- Sharper summary and reply prompts; for Vietnamese pick the "Better" (1.5B) model.
+- Sound icons redrawn in the Moshi character style; the dark-background option only shows in the dark look.
+- Instagram: a transient 500 at connect no longer fails the account.
