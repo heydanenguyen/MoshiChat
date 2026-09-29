@@ -159,11 +159,12 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       if (!pk) throw new Error('Instagram session is missing the user id; please sign in again')
       this.mePk = pk
       // The settings form is the cheapest self lookup and is not rate limited like /users/{id}/info/.
-      const form = await this.web.json<{ form_data: { username: string; first_name?: string } }>('/api/v1/accounts/edit/web_form_data/', { headers: APP_HEADERS })
-      const me: IgUser = { pk, username: form.form_data.username, full_name: form.form_data.first_name }
+      // Instagram answers it with a bare 500 now and then (right after a restart, or on a new device);
+      // that is not a sign-in problem, so try once more and then carry on with what is remembered.
+      const me = await this.lookupSelf(pk)
       this.account.id = `instagram:ig-${pk}`
       this.account.displayName = me?.full_name || me?.username || this.secret.username || 'Instagram'
-      this.account.handle = me?.username ? `@${me.username}` : undefined
+      this.account.handle = me?.username ? `@${me.username}` : this.secret.username ? `@${this.secret.username}` : undefined
       this.account.avatarUrl = me?.profile_pic_url
       this.secret = { cookies: await this.web.cookies(), username: me?.username ?? this.secret.username }
     } catch (err) {
@@ -181,6 +182,24 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     this.realtime.start()
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
     this.setStatus('connected')
+  }
+
+  /** Who this session belongs to; undefined when Instagram is having a moment and we already know the name. */
+  private async lookupSelf(pk: string): Promise<IgUser | undefined> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const form = await this.web.json<{ form_data: { username: string; first_name?: string } }>('/api/v1/accounts/edit/web_form_data/', { headers: APP_HEADERS })
+        return { pk, username: form.form_data.username, full_name: form.form_data.first_name }
+      } catch (err) {
+        if (err instanceof SessionExpiredError) throw err
+        const message = (err as Error).message
+        // 5xx / non-JSON: Instagram's side. Anything else (a 4xx) is worth surfacing.
+        if (!/HTTP 5\d\d|unexpected response|Request failed|timed out/i.test(message)) throw err
+        this.ctx.log('instagram self lookup failed', attempt === 0 ? '(retrying)' : '(using the remembered name)', message)
+        if (attempt === 0) await sleep(2500)
+      }
+    }
+    return this.secret.username ? { pk, username: this.secret.username } : undefined
   }
 
   /** New cookies from a fresh sign-in; takes effect on the next connect(). */
