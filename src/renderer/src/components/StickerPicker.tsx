@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Clock, ImagePlus, Trash2, UserRound } from 'lucide-react'
 import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
 import { STICKER_EXPRESSIONS, STICKER_VIEWBOX, isStickerId, stickerInner, type StickerId } from '@shared/stickers'
+import { stickerMotionCss } from '@shared/sticker-motion'
 import { useStore, useT } from '../store'
 import { useAi } from '../aiStore'
 import { AI_MODELS } from '@shared/ai'
@@ -28,9 +29,86 @@ function saveRecent(list: StickerId[]): void {
   }
 }
 
-/** A sticker drawn inline (crisp at any size). */
-export function StickerArt({ id, size = 72 }: { id: StickerId; size?: number }): JSX.Element {
-  return <svg className="sticker-art" width={size} height={size} viewBox={STICKER_VIEWBOX} aria-hidden dangerouslySetInnerHTML={{ __html: stickerInner(id) }} />
+/** Keyframes for a sticker are added to the page the first time it is shown moving. */
+const motionStyles = new Set<string>()
+function ensureMotion(id: StickerId): void {
+  if (motionStyles.has(id)) return
+  motionStyles.add(id)
+  const style = document.createElement('style')
+  style.dataset.sticker = id
+  style.textContent = stickerMotionCss(id)
+  document.head.appendChild(style)
+}
+
+/**
+ * A sticker drawn inline (crisp at any size), optionally alive:
+ * - 'hover': moves while the pointer is over it (or its button), and finishes the loop when it leaves;
+ * - 'auto': also plays twice the first time it scrolls into view (a new sticker in a chat).
+ * It always stops on a loop boundary, where every part is back on the still pose, so it never snaps.
+ */
+export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; size?: number; play?: 'none' | 'hover' | 'auto' }): JSX.Element {
+  const ref = useRef<SVGSVGElement>(null)
+  const [playing, setPlaying] = useState(false)
+  // Loops left before stopping; undefined while hovered (keep going).
+  const loopsLeft = useRef<number | undefined>(0)
+  const effects = useStore((s) => s.settings.effects !== false)
+
+  useEffect(() => {
+    if (play !== 'none') ensureMotion(id)
+  }, [id, play])
+
+  useEffect(() => {
+    const svg = ref.current
+    const target = svg?.parentElement
+    if (!svg || !target || play === 'none') return
+    const enter = (): void => {
+      loopsLeft.current = undefined
+      setPlaying(true)
+    }
+    const leave = (): void => {
+      loopsLeft.current = 1
+    }
+    const iteration = (e: AnimationEvent): void => {
+      if (!e.animationName.endsWith('-body') || loopsLeft.current === undefined) return
+      loopsLeft.current -= 1
+      if (loopsLeft.current <= 0) setPlaying(false)
+    }
+    target.addEventListener('mouseenter', enter)
+    target.addEventListener('mouseleave', leave)
+    svg.addEventListener('animationiteration', iteration)
+    let observer: IntersectionObserver | undefined
+    if (play === 'auto' && effects) {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return
+          observer?.disconnect()
+          if (loopsLeft.current === undefined) return
+          loopsLeft.current = 2
+          setPlaying(true)
+        },
+        { threshold: 0.6 }
+      )
+      observer.observe(svg)
+    }
+    return () => {
+      target.removeEventListener('mouseenter', enter)
+      target.removeEventListener('mouseleave', leave)
+      svg.removeEventListener('animationiteration', iteration)
+      observer?.disconnect()
+    }
+  }, [play, effects])
+
+  return (
+    <svg
+      ref={ref}
+      className={`sticker-art stk-${id}${playing ? ' stk-play' : ''}`}
+      width={size}
+      height={size}
+      viewBox={STICKER_VIEWBOX}
+      aria-hidden
+      dangerouslySetInnerHTML={{ __html: stickerInner(id) }}
+    />
+  )
 }
 
 /** Moshi sticker pack: one tab per logo character, twelve expressions each. */
@@ -131,7 +209,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
           ))}
         {items.map((id) => (
           <button key={id} className="sticker-cell" onClick={() => pick(id)} title={nameOf(id)} aria-label={nameOf(id)}>
-            <StickerArt id={id} size={68} />
+            <StickerArt id={id} size={68} play="hover" />
           </button>
         ))}
       </div>

@@ -665,7 +665,7 @@ function Bubble({
                 <img className="attachment-sticker" src={customUrl(sticker.sticker.slice(7))} alt={sticker.name ?? t('sticker')} draggable={false} />
               ) : sticker.sticker && isStickerId(sticker.sticker) ? (
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
-                  <StickerArt id={sticker.sticker} />
+                  <StickerArt id={sticker.sticker} play="auto" />
                 </span>
               ) : (
                 <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />

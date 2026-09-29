@@ -10722,3 +10722,8 @@ button.moment-card:hover {
   color: var(--text-tertiary);
   margin: 1px 0 3px;
 }
+
+/* Pack stickers have their own motion (sticker-motion.ts); the generic hover wiggle would fight it. */
+.attachment-sticker:has(.sticker-art):hover {
+  animation: none;
+}

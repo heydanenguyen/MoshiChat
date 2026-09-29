@@ -195,7 +195,7 @@ export function BirthdayBanner({ conversation, canSendStickers, onCelebrate }: {
                 })()
               }
             >
-              <StickerArt id={id} size={34} />
+              <StickerArt id={id} size={34} play="hover" />
             </button>
           ))}
         </span>
