@@ -5,6 +5,7 @@ import type { Account, Attachment, Conversation, ConversationStats, Message, Pee
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
 import { imageMetadata } from '../media/image-size'
+import { stickerAsGif } from '../media/sticker-gif'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -240,7 +241,7 @@ export class ZaloAdapter implements PlatformAdapter {
             ttl: quoteRaw.ttl
           }
         : undefined,
-      attachments: options.attachments?.length ? options.attachments.map((a) => a.path) : undefined
+      attachments: options.attachments?.length ? await Promise.all(options.attachments.map((a) => this.uploadPath(a))) : undefined
     }
     const result = await api.sendMessage(content, threadId, type)
     const msgId = String(result.message?.msgId ?? result.attachment[0]?.msgId ?? Date.now())
@@ -266,6 +267,17 @@ export class ZaloAdapter implements PlatformAdapter {
     this.cacheConverted(id, [message])
     this.lastActivity.set(threadId, message.sentAt)
     return message
+  }
+
+  /** Stickers go out as a small transparent GIF (see stickerAsGif); everything else as the file itself. */
+  private async uploadPath(a: NonNullable<SendOptions['attachments']>[number]): Promise<string> {
+    if (!a.sticker) return a.path
+    try {
+      return await stickerAsGif(a.path)
+    } catch (err) {
+      this.ctx.log('zalo sticker gif failed, sending the png', (err as Error).message)
+      return a.path
+    }
   }
 
   async markRead(id: string): Promise<void> {

@@ -198,9 +198,19 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   // word is committed, with the committed text.
   const composing = useRef(false)
   const sendWhenComposed = useRef(false)
+  const composedTimer = useRef<ReturnType<typeof setTimeout>>()
+  // Some input methods commit the word AND pass the Enter on, which sent the message twice 80 ms
+  // apart; the same text again within a moment is that echo, not a second message.
+  const lastSent = useRef<{ text: string; at: number }>()
 
   const submit = (value: string = text): void => {
     if ((!value.trim() && !pendingFiles.length) || disabled || translating) return
+    const now = Date.now()
+    if (value.trim() && !pendingFiles.length && lastSent.current?.text === value && now - lastSent.current.at < 800) {
+      setText('')
+      return
+    }
+    lastSent.current = { text: value, at: now }
     // Auto-translate: the message goes out in the other language, straight from the draft.
     if (translateAuto && value.trim() && !translated) {
       setTranslating(true)
@@ -253,7 +263,13 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
       return
     }
     e.preventDefault()
-    submit()
+    // An Enter right after the input method committed: send now, once (the scheduled send is dropped).
+    if (composedTimer.current) {
+      clearTimeout(composedTimer.current)
+      composedTimer.current = undefined
+    }
+    sendWhenComposed.current = false
+    submit(e.currentTarget.value)
   }
 
   const onCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>): void => {
@@ -263,7 +279,10 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     const value = e.currentTarget.value
     setText(value)
     // After the input method has finished writing into the box.
-    setTimeout(() => submit(value), 0)
+    composedTimer.current = setTimeout(() => {
+      composedTimer.current = undefined
+      submit(value)
+    }, 0)
   }
 
   const onPaste = (e: React.ClipboardEvent): void => {
