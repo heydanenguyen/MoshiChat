@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, ExternalLink, PenLine, X } from 'lucide-react'
 import { useStore, useT, type Lightbox as LightboxState } from '../store'
+import { ImageEditor } from './ImageEditor'
 
-export function Lightbox({ url, name, video, poster, externalUrl, externalLabel, gallery, index = 0 }: LightboxState): JSX.Element {
+export function Lightbox({ url, name, video, poster, externalUrl, externalLabel, gallery, index = 0, conversationId }: LightboxState): JSX.Element {
   const t = useT()
   const openLightbox = useStore((s) => s.openLightbox)
   const showToast = useStore((s) => s.showToast)
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [current, setCurrent] = useState(index)
   const count = gallery?.length ?? 0
   const item = gallery?.[current] ?? { url, video, poster }
@@ -14,7 +16,10 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
     if (count > 1) setCurrent((i) => (i + delta + count) % count)
   }
 
-  useEffect(() => setCurrent(index), [index, url])
+  useEffect(() => {
+    setCurrent(index)
+    setEditing(false)
+  }, [index, url])
 
   const download = async (): Promise<void> => {
     if (saving) return
@@ -33,14 +38,23 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
   }
 
   useEffect(() => {
+    if (editing) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') openLightbox(undefined)
       else if (e.key === 'ArrowRight') step(1)
       else if (e.key === 'ArrowLeft') step(-1)
+      else if (e.key.toLowerCase() === 'e' && !item.video && !e.metaKey && !e.ctrlKey && !e.altKey) setEditing(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  if (editing && !item.video)
+    return (
+      <div className="lightbox editing">
+        <ImageEditor src={item.url} name={count > 1 ? undefined : name} conversationId={conversationId} onClose={() => setEditing(false)} onDone={() => openLightbox(undefined)} />
+      </div>
+    )
 
   return (
     <div className="lightbox" onMouseDown={(e) => e.target === e.currentTarget && openLightbox(undefined)} role="dialog" aria-label={t('viewImage')}>
@@ -67,6 +81,12 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
           <button className="lightbox-pill" onClick={() => void window.unison.app.openExternal(externalUrl)}>
             <ExternalLink size={14} strokeWidth={2.4} />
             {externalLabel ?? externalUrl}
+          </button>
+        )}
+        {!item.video && (
+          <button className="lightbox-edit" onClick={() => setEditing(true)} title={`${t('editorOpen')} (E)`}>
+            <PenLine size={16} strokeWidth={2.4} />
+            {t('editorOpen')}
           </button>
         )}
         <button className="lightbox-close lightbox-download" onClick={() => void download()} disabled={saving} title={t('mediaDownload')} aria-label={t('mediaDownload')}>

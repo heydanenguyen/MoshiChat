@@ -488,7 +488,7 @@ function groupItems(messages: Message[]): GroupItem[] {
 function Album({ messages, outgoing, highlightId, language }: { messages: Message[]; outgoing: boolean; highlightId?: string; language: 'vi' | 'en' }): JSX.Element {
   return (
     <div className={`bubble-row album-row ${messages.some((m) => m.id === highlightId) ? 'highlight' : ''}`} data-message-id={messages[0].id}>
-      <MediaGrid tiles={messages.map((m) => ({ id: m.id, messageId: m.id, attachment: m.attachments[0] }))} className={outgoing ? 'out' : 'in'} />
+      <MediaGrid conversationId={messages[0]?.conversationId} tiles={messages.map((m) => ({ id: m.id, messageId: m.id, attachment: m.attachments[0] }))} className={outgoing ? 'out' : 'in'} />
       <span className="bubble-time">{formatTime(messages[messages.length - 1].sentAt, language)}</span>
     </div>
   )
@@ -506,7 +506,7 @@ function gridable(a: Attachment): boolean {
  * plus two, 4 as 2×2, 5 as 2 + 3, more in rows of three (the 9th tile shows "+N").
  * Clicking opens a gallery you can arrow through.
  */
-function MediaGrid({ tiles, className = '' }: { tiles: Tile[]; className?: string }): JSX.Element {
+function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; className?: string; conversationId?: string }): JSX.Element {
   const openLightbox = useStore((s) => s.openLightbox)
   const shown = tiles.slice(0, 9)
   const extra = tiles.length - shown.length
@@ -518,7 +518,7 @@ function MediaGrid({ tiles, className = '' }: { tiles: Tile[]; className?: strin
         const a = tile.attachment
         const src = a.thumbnailUrl ?? a.url
         return (
-          <button key={tile.id} className="album-tile" data-message-id={tile.messageId} onClick={() => openLightbox({ ...gallery[i], gallery, index: i })}>
+          <button key={tile.id} className="album-tile" data-message-id={tile.messageId} onClick={() => openLightbox({ ...gallery[i], gallery, index: i, conversationId })}>
             <img src={src} alt="" draggable={false} loading="lazy" />
             {a.kind === 'video' && (
               <span className="album-play">
@@ -670,7 +670,7 @@ function Bubble({
               ) : (
                 <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />
               ))}
-            {!sticker && gridded && <MediaGrid tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
+            {!sticker && gridded && <MediaGrid conversationId={message.conversationId} tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
             {!sticker &&
               inline
                 .filter((attachment) => !gridded?.has(attachment.id))
@@ -767,7 +767,7 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
   }
   const viewImage = async (): Promise<void> => {
     const url = attachment.url ?? (await loadAttachment(message.conversationId, message.id, attachment.id)) ?? attachment.thumbnailUrl
-    if (url) openLightbox({ url, name: attachment.name })
+    if (url) openLightbox({ url, name: attachment.name, conversationId: message.conversationId })
   }
   switch (attachment.kind) {
     case 'post':

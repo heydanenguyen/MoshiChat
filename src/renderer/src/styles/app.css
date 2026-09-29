@@ -10369,3 +10369,348 @@ button.moment-card:hover {
   opacity: 0.55;
   cursor: progress;
 }
+
+/* ================================================================== photo editor
+   Opened from the viewer. Always dark (it sits over the dimmed photo viewer), with the photo in the
+   middle, actions on top and a floating tool pill at the bottom like macOS Markup / CleanShot. */
+.lightbox.editing {
+  display: block;
+  background: rgba(8, 9, 20, 0.94);
+}
+.lightbox-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px 0 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background var(--duration-fast) ease;
+}
+.lightbox-edit:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.image-editor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  user-select: none;
+  -webkit-app-region: no-drag;
+  animation: fade-in var(--duration-fast) ease;
+}
+.ie-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* leave room for the macOS traffic lights on the left */
+  padding: 12px 16px 8px 84px;
+  min-height: 56px;
+}
+.ie-history {
+  display: flex;
+  gap: 2px;
+  margin-right: auto;
+}
+.ie-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ie-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) ease,
+    opacity var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
+}
+.ie-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+.ie-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.ie-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ie-btn.ghost {
+  background: transparent;
+  padding-left: 8px;
+}
+.ie-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.ie-btn.primary {
+  background: var(--accent-gradient, var(--accent));
+  color: var(--on-accent, #fff);
+  box-shadow: 0 6px 18px -6px var(--accent);
+}
+.ie-btn.primary:hover:not(:disabled) {
+  background: var(--accent-gradient, var(--accent));
+  filter: brightness(1.08);
+}
+.ie-btn.danger {
+  color: #ff6961;
+}
+.ie-btn.danger-solid {
+  background: #ff453a;
+}
+.ie-btn.danger-solid:hover {
+  background: #ff5c52;
+}
+.ie-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition:
+    background var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
+}
+.ie-icon:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+.ie-icon:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.ie-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.ie-canvas {
+  display: block;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  touch-action: none;
+  background:
+    repeating-conic-gradient(rgba(255, 255, 255, 0.06) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+.ie-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-md);
+  color: rgba(255, 255, 255, 0.75);
+}
+.ie-status.error {
+  color: #ffb4ae;
+}
+.ie-text {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 1.5px dashed rgba(10, 132, 255, 0.9);
+  outline-offset: 4px;
+  border-radius: 2px;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.25;
+  field-sizing: content;
+  min-width: 2ch;
+  max-width: 80%;
+  white-space: pre;
+  caret-color: currentColor;
+  -webkit-text-stroke: 0;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 1px var(--ie-outline),
+    0 0 2px var(--ie-outline),
+    0 0 3px var(--ie-outline);
+}
+.ie-text::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+.ie-crop-size {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.55);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.ie-bar {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  margin: 6px 12px 16px;
+  padding: 6px;
+  border-radius: 20px;
+  background: rgba(40, 42, 60, 0.82);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+.ie-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ie-divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.ie-tool {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.82);
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
+}
+.ie-tool:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.ie-tool.active {
+  background: #fff;
+  color: #111;
+}
+.ie-tool:active {
+  transform: scale(0.94);
+}
+.ie-number-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+.ie-colors {
+  gap: 4px;
+  padding: 0 2px;
+}
+.ie-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  transition: transform var(--duration-fast) var(--ease-spring, ease);
+}
+.ie-swatch:hover {
+  transform: scale(1.12);
+}
+.ie-swatch.active {
+  box-shadow:
+    0 0 0 2px rgba(40, 42, 60, 1),
+    0 0 0 4px #fff;
+}
+.ie-size {
+  width: 30px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+.ie-size span {
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ie-size:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.ie-size.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+}
+.ie-hint {
+  padding: 0 8px 0 6px;
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.7);
+}
+.ie-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade-in var(--duration-fast) ease;
+}
+.ie-confirm {
+  width: min(340px, calc(100% - 32px));
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(44, 46, 64, 0.96);
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ie-confirm strong {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+.ie-confirm p {
+  margin: 0 0 10px;
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.7);
+}
+.ie-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Narrow windows: icon-only secondary actions, the tool pill wraps. */
+@media (max-width: 760px) {
+  .ie-label {
+    display: none;
+  }
+  .ie-top {
+    padding-left: 80px;
+    gap: 6px;
+  }
+  .ie-divider {
+    display: none;
+  }
+}

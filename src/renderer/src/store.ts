@@ -73,6 +73,8 @@ export interface Lightbox {
   /** Photos/videos of an album: arrows and ←/→ move through them. */
   gallery?: Array<{ url: string; video?: boolean; poster?: string }>
   index?: number
+  /** The chat the photo came from: the editor's "Add to chat" puts the edited copy there. */
+  conversationId?: string
 }
 
 interface State {

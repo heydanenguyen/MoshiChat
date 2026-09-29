@@ -638,6 +638,8 @@ export type UpdateState =
 /** Events pushed from main to the renderer. */
 export type BridgeEvent =
   | { type: 'app:command'; command: AppCommand }
+  /** ⌘-shortcuts caught before the menu while the photo editor is open (undo, redo, copy, save, send, close). */
+  | { type: 'editor:key'; key: string; shift: boolean }
   | { type: 'update:state'; state: UpdateState }
   | { type: 'account:updated'; account: Account }
   | { type: 'account:removed'; accountId: string }

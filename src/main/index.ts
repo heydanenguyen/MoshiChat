@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
@@ -33,6 +33,9 @@ const BUILT_IN_GIF = { key: typeof __MOSHI_GIF_KEY__ === 'string' ? __MOSHI_GIF_
 let window: BrowserWindow | undefined
 /** Set once the app is really quitting, so closing the window on macOS stops hiding it. */
 let quitting = false
+/** The photo editor is open: its ⌘-shortcuts must reach it instead of the Edit/File menu. */
+let editorKeys = false
+const EDITOR_KEYS = new Set(['z', 'y', 'c', 's', 'w', 'enter'])
 
 /** Bring the main window back (Dock icon, second launch), creating it again if it was closed. */
 function showMain(): void {
@@ -382,6 +385,13 @@ function createWindow(): void {
     } else w.hide()
   })
   window.on('closed', () => (window = undefined))
+  window.webContents.on('before-input-event', (event, input) => {
+    if (!editorKeys || input.type !== 'keyDown' || !(isMac ? input.meta : input.control)) return
+    const key = input.key.toLowerCase()
+    if (!EDITOR_KEYS.has(key)) return
+    event.preventDefault()
+    window?.webContents.send(IPC.event, { type: 'editor:key', key, shift: input.shift } satisfies BridgeEvent)
+  })
   const sendState = (): void => {
     if (window && !window.isDestroyed()) window.webContents.send(IPC.event, { type: 'window:state', maximized: window.isMaximized() })
   }
@@ -493,13 +503,34 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
   for (const path of result.filePaths) {
     const info = await stat(path)
     const mime = mimeOf(path)
-    const preview = mime.startsWith('image/') && info.size < 3_000_000 ? `data:${mime};base64,${(await readFile(path)).toString('base64')}` : undefined
+    const preview = mime.startsWith('image/') && info.size < 60_000_000 ? imagePreview(await readFile(path), mime) : undefined
     files.push({ path, name: basename(path), mime, size: info.size, preview })
   }
   return files
 }
 
 /** A pasted image (screenshot from the clipboard) as a file the adapters can send. */
+/**
+ * A data URL the chat can show at once while a photo is sent: the file itself when it is small, else a
+ * copy scaled to 1600 px. Big photos and Retina screenshots used to get no preview at all, and platforms
+ * that do not echo your own photo back (Zalo) then showed a grey "Photo" box.
+ */
+function imagePreview(data: Buffer, mime: string): string | undefined {
+  if (!mime.startsWith('image/')) return undefined
+  if (data.length < 1_500_000) return `data:${mime};base64,${data.toString('base64')}`
+  const image = nativeImage.createFromBuffer(data)
+  if (image.isEmpty()) return undefined
+  const { width, height } = image.getSize()
+  const scale = Math.min(1, 1600 / Math.max(width, height))
+  const small = scale < 1 ? image.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'good' }) : image
+  if (mime === 'image/png') {
+    // Screenshots stay crisp as PNG; a photo saved as PNG can still be huge, so it falls back to JPEG.
+    const png = small.toPNG()
+    if (png.length < 2_500_000) return `data:image/png;base64,${png.toString('base64')}`
+  }
+  return `data:image/jpeg;base64,${small.toJPEG(85).toString('base64')}`
+}
+
 const MEDIA_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
@@ -595,7 +626,7 @@ async function saveImage(bytes: Uint8Array, mime: string, name?: string): Promis
     name: clean && clean !== 'image.png' ? clean : `screenshot-${stamp.slice(0, 19)}.${ext}`,
     mime,
     size: bytes.length,
-    preview: mime.startsWith('image/') && bytes.length < 3_000_000 ? `data:${mime};base64,${Buffer.from(bytes).toString('base64')}` : undefined
+    preview: imagePreview(Buffer.from(bytes), mime)
   }
 }
 
@@ -934,6 +965,21 @@ function registerIpc(): void {
   ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
   ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
   ipcMain.handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
+  // The photo editor draws on a canvas; remote images would taint it, so it gets the bytes as a data URL.
+  ipcMain.handle(IPC.appMediaData, async (_e, url: string) => {
+    const { data, type } = await mediaBytes(String(url ?? ''))
+    if (data.length > 80 * 1024 * 1024) throw new Error('This image is too large to edit')
+    const mime = type.startsWith('image/') ? type : 'image/png'
+    return `data:${mime};base64,${data.toString('base64')}`
+  })
+  ipcMain.on(IPC.appEditorKeys, (_e, on: unknown) => {
+    editorKeys = on === true
+  })
+  ipcMain.handle(IPC.appCopyImage, (_e, bytes: Uint8Array) => {
+    const image = nativeImage.createFromBuffer(Buffer.from(bytes))
+    if (image.isEmpty()) throw new Error('Could not copy this image')
+    clipboard.writeImage(image)
+  })
   ipcMain.handle(IPC.appDownloadFolder, async () => {
     const path = await downloadDir()
     const home = app.getPath('home')

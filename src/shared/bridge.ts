@@ -168,6 +168,11 @@ export interface MoshiBridge {
     /** Let the user choose a folder; its path, or undefined if cancelled. */
     pickDownloadFolder(): Promise<string | undefined>
     openDownloadFolder(): Promise<void>
+    /** A photo shown in the app as a data URL (the editor needs the bytes, not a cross-origin link). */
+    mediaData(url: string): Promise<string>
+    copyImage(bytes: Uint8Array): Promise<void>
+    /** While true, ⌘Z/⌘C/⌘S/⌘W/⌘↵ go to the photo editor instead of the menu. */
+    setEditorKeys(on: boolean): void
     /** A Moshi sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
@@ -247,6 +252,9 @@ export const IPC = {
   appDownloadFolder: 'app:downloadFolder',
   appPickDownloadFolder: 'app:pickDownloadFolder',
   appOpenDownloadFolder: 'app:openDownloadFolder',
+  appMediaData: 'app:mediaData',
+  appCopyImage: 'app:copyImage',
+  appEditorKeys: 'app:editorKeys',
   stickersList: 'stickers:list',
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',
