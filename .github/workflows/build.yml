@@ -99,6 +99,31 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      # Each macOS runner writes its own latest-mac.yml (x64 or arm64). Uploaded as they are, one would
+      # overwrite the other and Apple Silicon Macs would be offered the Intel build. Merge them into the
+      # single file electron-updater expects, listing both architectures.
+      - name: Merge macOS update metadata
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs = require('fs'), path = require('path')
+          const files = ['artifacts/Moshi-mac-x64/latest-mac.yml', 'artifacts/Moshi-mac-arm64/latest-mac.yml'].filter((f) => fs.existsSync(f))
+          if (files.length < 2) { console.log('nothing to merge:', files); process.exit(0) }
+          const entries = []
+          let head = ''
+          for (const f of files) {
+            const text = fs.readFileSync(f, 'utf8')
+            head ||= text
+            for (const m of text.matchAll(/  - url: (.+)\n    sha512: (.+)\n    size: (\d+)/g)) entries.push({ url: m[1].trim(), sha512: m[2].trim(), size: m[3] })
+            fs.unlinkSync(f)
+          }
+          const version = /^version: (.+)$/m.exec(head)[1].trim()
+          const date = /^releaseDate: (.+)$/m.exec(head)[1].trim()
+          const main = entries.find((e) => e.url.endsWith('.zip') && !/arm64/.test(e.url)) || entries[0]
+          const out = ['version: ' + version, 'files:', ...entries.map((e) => `  - url: ${e.url}\n    sha512: ${e.sha512}\n    size: ${e.size}`), 'path: ' + main.url, 'sha512: ' + main.sha512, 'releaseDate: ' + date, '']
+          fs.writeFileSync('artifacts/latest-mac.yml', out.join('\n'))
+          console.log(fs.readFileSync('artifacts/latest-mac.yml', 'utf8'))
+          JS
       # Published straight away: the in-app updater only sees published releases. The body comes from
       # RELEASE_NOTES.md at the tagged commit, so write the notes before tagging.
       - uses: softprops/action-gh-release@v2
