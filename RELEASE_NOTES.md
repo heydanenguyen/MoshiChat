@@ -1,23 +1,21 @@
-## Moshi 0.2.7
+## Moshi 0.2.8
 
 ### Mới
-- **Tắt bớt nút trên thanh hành động.** Cài đặt → Chat → *Thao tác trên tin nhắn*: bật/tắt từng nút (cảm xúc, trả lời, chuyển tiếp, dịch, đọc to, việc cần làm, lưu) để thanh hiện khi rê chuột gọn hơn.
-
-### Cải thiện
-- **Thanh hành động nằm sát bong bóng.** Hàng tin đến không còn giãn bằng tin dài nhất trong nhóm, nên các nút luôn cách bong bóng vài pixel ở cả hai chiều; trong pane hẹp thanh nằm ngay góc trên của bong bóng.
-- **Chọn nhắc việc từ tin nhắn** không còn biến mất khi rời chuột: thanh giữ nguyên khi picker đang mở, picker mở về phía bong bóng, tự lật xuống dưới khi sát mép trên và không bị cắt ở mép cột chat.
+- **Chỉnh ảnh ngay trong trình xem ảnh.** Mở ảnh → *Chỉnh sửa* (phím E): mũi tên, khung chữ nhật, khung tròn, bút vẽ, bút dạ quang, chữ, đánh số bước, che mờ thông tin, cắt ảnh; 8 màu, 3 cỡ nét. Chọn để di chuyển, đổi màu hay xoá nét đã vẽ; Hoàn tác / Làm lại (⌘Z, ⇧⌘Z); Shift để khoá góc 45° hoặc hình vuông. Xong thì *Chép* (⌘C), *Lưu* (⌘S) hoặc *Đưa vào chat* (⌘↵) để gửi kèm lời nhắn.
+- **Nút Tải về** trong trình xem ảnh: lưu thẳng vào Downloads, trùng tên tự thêm số. Cài đặt → Chat → *Tải ảnh và video* để đổi thư mục hoặc bật *Hỏi nơi lưu mỗi lần*.
 
 ### Sửa
-- **Sticker Zalo** hiện đúng hình thay vì ô "Sticker" trống: app tra ảnh theo id sticker một lần rồi nhớ lại.
-- **Ảnh Zalo** tải lỗi sẽ tự thử lại qua proxy của app; vẫn lỗi thì hiện ô "Ảnh" thay cho icon vỡ.
-- **Giao diện Liquid:** mở emoji / sticker / GIF không còn làm ô soạn tin phình to.
+- **Ảnh gửi đi không hiện xem trước** (rõ nhất trên Zalo): ảnh lớn và screenshot Retina giờ có bản thu nhỏ hiện ngay thay vì ô "Photo".
+- **Screenshot dán vào bị hiện thành sticker:** app không còn nhầm ảnh gửi ngay sau một sticker là sticker đó.
+- **Gõ tiếng Việt bị gửi lặp chữ cuối** ("đc", "bug"): nhấn Enter khi bộ gõ chưa chốt từ giờ gửi một lần, đủ câu.
+- **macOS: đóng cửa sổ không mở lại được.** Đóng giờ chỉ ẩn cửa sổ; bấm icon ở Dock hoặc mở Moshi lần nữa là hiện lại. ⌘W đóng ảnh / bảng đang mở trước rồi mới tới cửa sổ.
 
 ---
 
 ### English
-- Settings → Chat → Message actions: switch off the buttons you never use so the hover bar stays short.
-- The hover action bar now sits right beside the bubble on both sides; in a narrow pane it sits over the bubble's top corner.
-- The to-do "remind me" picker no longer vanishes when the mouse moves: the bar stays while it is open, it opens on the bubble's side, flips below near the top and stays inside the chat column.
-- Zalo stickers show their picture (looked up once by id and cached) instead of an empty "Sticker" box.
-- Zalo photos that fail to load retry through the app's image proxy, then fall back to a placeholder.
-- Liquid style: opening the emoji, sticker or GIF picker no longer inflates the composer.
+- Photo editor in the viewer (E): arrow, box, ellipse, pen, highlighter, text, numbered steps, pixelate and crop; 8 colours, 3 sizes; select to move, restyle or delete marks; undo/redo; then copy, save or add to the chat.
+- Download button in the viewer saves straight into Downloads (Settings → Chat to pick another folder or ask each time).
+- Big photos and Retina screenshots get an instant preview when sent (no more grey "Photo" box on Zalo).
+- A screenshot sent right after a sticker no longer shows up as that sticker.
+- Vietnamese/CJK input: Enter while the last word is still composing sends once, with the full text.
+- macOS: closing the window hides it; the Dock icon brings it back. ⌘W closes the photo or sheet on top first.
