@@ -1,13 +1,11 @@
-## Moshi 0.2.3
+## Moshi 0.2.4
 
-### Windows
-- **Cập nhật không còn bật cửa sổ gỡ cài đặt.** Khi cài đè bản mới (nút Cập nhật trong bộ cài, hoặc tự cập nhật trong app), bản cũ được gỡ im lặng phía sau. Lần cài đè từ 0.2.2 lên bản này có thể còn hiện cửa sổ đó một lần cuối, chỉ cần đóng nó lại.
-- **Thanh cuộn mỏng như macOS.** Vệt 4px trong khung chat và danh sách, chỉ hiện khi rê chuột hoặc đang cuộn; 6px ở các vùng khác. Không còn thanh cuộn dày có rãnh.
-- **Liquid Glass xuyên nền.** Trên Windows 11 (22H2 trở lên), chọn phong cách Liquid Glass là màn hình nền được làm mờ và hiện xuyên qua cửa sổ, rõ nhất ở panel trái. Windows 10 giữ nền phẳng.
+### Sửa lỗi
+- **Sticker tự làm tách nền được rồi.** Bản 0.2.3 báo lỗi khi tách chủ thể khỏi ảnh vì thư viện AI trong app không còn nhận model cũ (RMBG-1.4). Moshi chuyển sang MODNet: nhỏ hơn 6 lần (7 MB), giấy phép Apache-2.0, đẹp nhất với ảnh người và thú cưng. Nếu đã bấm tải model tách nền ở bản trước, vào Cài đặt → AI, xoá rồi tải lại.
+- **macOS Apple Silicon nhận đúng bản cập nhật.** Trước đây file mô tả cập nhật của bản Intel đè lên bản Apple Silicon, nên máy M1 trở lên có thể được đưa bản Intel (AI trên máy không chạy). Từ bản này danh sách cập nhật liệt kê đủ cả hai kiến trúc.
 
 ---
 
 ### English
-- Windows: updating no longer pops up the uninstall window; the old version is removed silently (installer Update button and in-app updates alike). Installing over 0.2.2 may show it one last time; just close it.
-- Windows: thin macOS-style scrollbars (4px in chat and list panes, shown on hover or while scrolling; 6px elsewhere).
-- Windows 11 22H2+: the Liquid Glass style shows the blurred desktop through the window (acrylic).
+- Custom stickers cut the background out again: the AI library no longer accepted the old model (RMBG-1.4), so Moshi now uses MODNet (7 MB, Apache-2.0, best with people and pets). If you downloaded the cut-out model on 0.2.3, remove it in Settings → AI and download again.
+- macOS: the update metadata now lists both Intel and Apple Silicon builds, so Apple Silicon Macs are offered the right one.
