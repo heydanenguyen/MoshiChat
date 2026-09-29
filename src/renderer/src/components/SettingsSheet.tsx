@@ -18,6 +18,19 @@ import { AiSettings } from './AiParts'
 import { UpdateSettings } from './UpdateCard'
 import { SoundSettings } from './SoundSettings'
 
+/** Whether the app is showing its dark look right now (the dark-background option only matters then). */
+function useDarkNow(): boolean {
+  const theme = useStore((s) => s.settings.theme)
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = (): void => setSystemDark(media.matches)
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [])
+  return theme === 'dark' || (theme === 'system' && systemDark)
+}
+
 /** The pages of Settings, in sidebar order. */
 export type SettingsPage = 'general' | 'appearance' | 'accounts' | 'chat' | 'notifications' | 'tags' | 'ai' | 'data'
 
@@ -158,6 +171,7 @@ function GeneralPage(): JSX.Element {
 
 function AppearancePage(): JSX.Element {
   const t = useT()
+  const darkNow = useDarkNow()
   const settings = useStore((s) => s.settings)
   const setSettings = useStore((s) => s.setSettings)
   const language = settings.language
@@ -215,6 +229,7 @@ function AppearancePage(): JSX.Element {
             ))}
           </div>
         </Row>
+        {darkNow && (
         <Row title={t('darkBackground')} sub={t('darkBackgroundHint')} stack>
           <div className="dark-base-picker" role="radiogroup" aria-label={t('darkBackground')}>
             {DARK_BASES.map((base) => {
@@ -237,6 +252,7 @@ function AppearancePage(): JSX.Element {
             })()}
           </div>
         </Row>
+        )}
         <Row title={t('accentColor')} sub={t('accentHint')} stack>
           <div className="accent-rows">
             {[false, true].map((flat) => (

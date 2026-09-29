@@ -2,6 +2,7 @@ import { Volume1, Volume2 } from 'lucide-react'
 import type { SoundId } from '@shared/types'
 import { useStore, useT } from '../store'
 import { SOUND_IDS, SOUND_NAMES, playSent, playSound } from '../sounds'
+import { SOUND_TINTS, SoundArt } from './SoundArt'
 
 /** Settings: pick the message sound (each tile plays itself), volume and the send whoosh. */
 export function SoundSettings(): JSX.Element {
@@ -26,8 +27,8 @@ export function SoundSettings(): JSX.Element {
           <div className="sound-picker" role="radiogroup" aria-label={t('sound')}>
             {[...SOUND_IDS, 'off' as const].map((id) => (
               <button key={id} role="radio" aria-checked={sound === id} className={`sound-tile ${sound === id ? 'active' : ''} ${id === 'off' ? 'off' : ''}`} onClick={() => choose(id)}>
-                <span className="sound-emoji" aria-hidden>
-                  {SOUND_NAMES[id].emoji}
+                <span className="sound-emoji" aria-hidden style={{ background: SOUND_TINTS[id] }}>
+                  <SoundArt id={id} size={32} />
                 </span>
                 <span className="sound-name">{SOUND_NAMES[id][language]}</span>
               </button>
