@@ -10132,3 +10132,60 @@ button.moment-card:hover {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* ================================================================== bubble width, second pass
+   The hover actions used to sit inside the row even while invisible, so every bubble lost ~200px
+   to buttons nobody could see. They now float beside the bubble; the body keeps just enough
+   room for them, so long messages read in wide lines like everywhere else. */
+.bubble-row {
+  position: relative;
+}
+.bubble-actions {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+.msg-group.in .bubble-actions {
+  left: calc(100% + 4px);
+}
+.msg-group.out .bubble-actions {
+  right: calc(100% + 4px);
+}
+.msg-group-body {
+  max-width: min(72%, 640px, calc(100% - 210px));
+}
+@container chat (min-width: 621px) {
+  .msg-group-body {
+    max-width: min(76%, 720px, calc(100% - 210px));
+  }
+}
+/* Narrow panes have no room beside the bubble: the actions hover above its outer corner instead. */
+@container chat (max-width: 620px) {
+  .msg-group-body {
+    max-width: min(86%, calc(100% - 56px));
+  }
+  .bubble-actions {
+    top: auto;
+    bottom: calc(100% - 6px);
+    transform: none;
+    padding: 2px;
+    border-radius: var(--radius-full);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-md);
+  }
+  /* Over the bubble's outer top corner, away from the sender name and the avatar. */
+  .msg-group.in .bubble-actions {
+    left: auto;
+    right: 8px;
+  }
+  .msg-group.out .bubble-actions {
+    right: auto;
+    left: 8px;
+  }
+}
+@container chat (max-width: 420px) {
+  .msg-group-body {
+    max-width: 92%;
+  }
+}
