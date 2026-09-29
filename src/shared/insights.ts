@@ -25,6 +25,11 @@ export interface ContactInsight {
   /** Consecutive days (ending today or yesterday) with at least one message. */
   streak: number
   lastAt: number
+  /** Days in the period with any message, and with messages both ways. */
+  days: number
+  bothDays: number
+  /** How close: two-way days count most, then days at all, the last week, and volume (dampened). */
+  score: number
 }
 
 export interface Insights {
@@ -69,16 +74,25 @@ export function streakDays(times: number[], now = Date.now()): number {
   return streak
 }
 
-export function computeInsights(records: InsightRecord[], titles: Record<string, string>, now = Date.now(), days = 30): Insights {
+/**
+ * Raw message counts rewarded whoever splits a thought into ten lines, a single busy afternoon, and
+ * busy group chats. Closeness is about talking with someone, often and lately: days with messages
+ * both ways weigh most, volume only as a square root.
+ */
+export function closeness(e: { days: number; bothDays: number; recentDays: number; total: number }): number {
+  return e.bothDays * 4 + e.days * 2 + e.recentDays * 1.5 + Math.sqrt(e.total) * 1.5
+}
+
+export function computeInsights(records: InsightRecord[], titles: Record<string, string>, now = Date.now(), days = 30, groups: ReadonlySet<string> = new Set()): Insights {
   const from = now - days * DAY
   const inPeriod = records.filter((r) => r.sentAt >= from && r.sentAt <= now)
-  const per = new Map<string, { sent: number; received: number; times: number[]; lastAt: number }>()
+  const per = new Map<string, { sent: number; received: number; times: number[]; outgoing: boolean[]; lastAt: number }>()
   const hours = Array(24).fill(0) as number[]
   const weekdays = Array(7).fill(0) as number[]
   let sent = 0
   let received = 0
   for (const r of inPeriod) {
-    const entry = per.get(r.conversationId) ?? { sent: 0, received: 0, times: [], lastAt: 0 }
+    const entry = per.get(r.conversationId) ?? { sent: 0, received: 0, times: [], outgoing: [], lastAt: 0 }
     if (r.isOutgoing) {
       entry.sent++
       sent++
@@ -87,6 +101,7 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
       received++
     }
     entry.times.push(r.sentAt)
+    entry.outgoing.push(r.isOutgoing)
     entry.lastAt = Math.max(entry.lastAt, r.sentAt)
     per.set(r.conversationId, entry)
     const d = new Date(r.sentAt)
@@ -94,17 +109,35 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
     weekdays[(d.getDay() + 6) % 7]++
   }
   const total = sent + received
-  const contacts: ContactInsight[] = [...per.entries()].map(([conversationId, e]) => ({
-    conversationId,
-    title: titles[conversationId] ?? conversationId,
-    sent: e.sent,
-    received: e.received,
-    total: e.sent + e.received,
-    share: total ? (e.sent + e.received) / total : 0,
-    streak: streakDays(e.times, now),
-    lastAt: e.lastAt
-  }))
-  contacts.sort((a, b) => b.total - a.total || b.lastAt - a.lastAt)
+  const contacts: ContactInsight[] = [...per.entries()]
+    .filter(([conversationId]) => !groups.has(conversationId))
+    .map(([conversationId, e]) => {
+      const out = new Set<string>()
+      const inc = new Set<string>()
+      const recent = new Set<string>()
+      e.times.forEach((t, i) => {
+        const key = dayKey(t)
+        ;(e.outgoing[i] ? out : inc).add(key)
+        if (t >= now - 7 * DAY) recent.add(key)
+      })
+      const all = new Set([...out, ...inc])
+      const bothDays = [...out].filter((k) => inc.has(k)).length
+      const totalOf = e.sent + e.received
+      return {
+        conversationId,
+        title: titles[conversationId] ?? conversationId,
+        sent: e.sent,
+        received: e.received,
+        total: totalOf,
+        share: total ? totalOf / total : 0,
+        streak: streakDays(e.times, now),
+        lastAt: e.lastAt,
+        days: all.size,
+        bothDays,
+        score: closeness({ days: all.size, bothDays, recentDays: recent.size, total: totalOf })
+      }
+    })
+  contacts.sort((a, b) => b.score - a.score || b.total - a.total || b.lastAt - a.lastAt)
   const withStreak = contacts.filter((c) => c.streak >= 2).sort((a, b) => b.streak - a.streak || b.total - a.total)
   const quiet = contacts
     .filter((c) => c.sent >= 2 && c.received === 0)

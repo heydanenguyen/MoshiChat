@@ -275,6 +275,24 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     return (this.history.get(id) ?? collected).filter((m) => collected.some((c) => c.id === m.id)).sort((a, b) => a.sentAt - b.sentAt)
   }
 
+  async historySince(id: string, from: number, onPage: (messages: Message[]) => void): Promise<'complete' | 'partial'> {
+    const threadId = this.threadIdFor(id)
+    if (!threadId) return 'complete'
+    let cursor: string | undefined
+    // 20 items a page: a very chatty month is a few thousand messages, so allow plenty of pages.
+    for (let i = 0; i < 250; i++) {
+      const page = await this.guard(() => this.page(threadId, cursor))
+      const messages = page.items.filter((item) => this.visible(item)).map((item) => this.toMessage(item, id))
+      if (messages.length) onPage(messages)
+      const times = page.items.map((item) => Number(item.timestamp) / 1000).filter((t) => t > 0)
+      if (!page.hasOlder || !page.cursor || !times.length) return 'complete'
+      if (Math.min(...times) < from) return 'complete'
+      cursor = page.cursor
+      await new Promise((resolve) => setTimeout(resolve, 350))
+    }
+    return 'partial'
+  }
+
   /** One page of a thread, newest first. */
   private async page(threadId: string, cursor?: string): Promise<{ items: IgItem[]; cursor?: string; hasOlder: boolean }> {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })

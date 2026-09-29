@@ -563,8 +563,9 @@ export class AccountManager {
     await this.insightStore.load()
     const now = Date.now()
     const from = now - days * 24 * 3600_000
+    // One-to-one chats only: the ranking is about people, and group history is the slowest to walk.
     const targets = this.listConversations()
-      .filter((c) => c.updatedAt >= from)
+      .filter((c) => c.updatedAt >= from && !c.isGroup)
       .filter((c) => {
         const adapter = this.adapters.get(c.accountId)
         if (!adapter || adapter.account.status !== 'connected') return false
@@ -572,37 +573,61 @@ export class AccountManager {
         return !(cover && cover.from <= from && now - cover.at < 6 * 3600_000)
       })
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 60)
+      .slice(0, 150)
     const total = targets.length
+    let done = 0
     this.emit({ type: 'insights:progress', done: 0, total })
-    for (const [i, c] of targets.entries()) {
-      const adapter = this.adapters.get(c.accountId)
-      if (!adapter || adapter.account.status !== 'connected') continue
-      let beforeId: string | undefined
-      let reached = false
-      try {
-        for (let page = 0; page < 12; page++) {
-          const list = await adapter.fetchMessages(c.id, { limit: 50, beforeId })
-          if (!list.length) {
-            reached = true
-            break
-          }
-          this.cache(list)
-          this.insightStore.add(list)
-          const oldest = list.reduce((a, b) => (a.sentAt <= b.sentAt ? a : b))
-          if (oldest.sentAt < from) {
-            reached = true
-            break
-          }
-          if (oldest.id === beforeId) break
-          beforeId = oldest.id
-          if (!adapter.account.demo) await new Promise((r) => setTimeout(r, 300))
+    // Accounts walk in parallel (each platform has its own rate limits); chats within one account in turn.
+    const byAccount = new Map<string, Conversation[]>()
+    for (const c of targets) byAccount.set(c.accountId, [...(byAccount.get(c.accountId) ?? []), c])
+    await Promise.all(
+      [...byAccount.values()].map(async (chats) => {
+        for (const c of chats) {
+          const adapter = this.adapters.get(c.accountId)
+          if (adapter && adapter.account.status === 'connected') await this.backfillChat(adapter, c, from, now)
+          done++
+          this.emit({ type: 'insights:progress', done, total })
         }
-        if (reached) this.insightStore.markCovered(c.id, from)
-      } catch (err) {
-        this.log('insights backfill stopped for', c.title, (err as Error).message)
+      })
+    )
+  }
+
+  /**
+   * One chat's messages back to `from`. A chat walked before only needs what came after that walk
+   * (an hour of overlap), so opening Close friends again is quick. It is marked covered only when the
+   * walk really reached the start of the period or the end of the history.
+   */
+  private async backfillChat(adapter: PlatformAdapter, c: Conversation, from: number, now: number): Promise<void> {
+    const cover = this.insightStore.coverageOf(c.id)
+    const stop = cover && cover.from <= from ? Math.max(from, cover.at - 3600_000) : from
+    try {
+      if (adapter.historySince) {
+        const result = await adapter.historySince(c.id, stop, (list) => this.insightStore.add(list))
+        if (result === 'complete') this.insightStore.markCovered(c.id, Math.min(from, cover?.from ?? from), now)
+        return
       }
-      this.emit({ type: 'insights:progress', done: i + 1, total })
+      let beforeId: string | undefined
+      const delay = adapter.account.demo ? 0 : c.platform === 'messenger' ? 300 : c.platform === 'telegram' ? 150 : 0
+      let ended = false
+      for (let page = 0; page < 60; page++) {
+        const list = await adapter.fetchMessages(c.id, { limit: 50, beforeId })
+        if (!list.length) {
+          ended = true
+          break
+        }
+        this.insightStore.add(list)
+        const oldest = list.reduce((a, b) => (a.sentAt <= b.sentAt ? a : b))
+        if (oldest.sentAt < stop || oldest.id === beforeId) {
+          this.insightStore.markCovered(c.id, Math.min(from, cover?.from ?? from), now)
+          return
+        }
+        beforeId = oldest.id
+        if (delay) await new Promise((r) => setTimeout(r, delay))
+      }
+      // The history ended before the period did (60 full pages without reaching it stays partial).
+      if (ended) this.insightStore.markCovered(c.id, Math.min(from, cover?.from ?? from), now)
+    } catch (err) {
+      this.log('insights backfill stopped for', c.title, (err as Error).message)
     }
   }
 

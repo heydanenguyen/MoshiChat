@@ -300,12 +300,15 @@ export function AiSettings(): JSX.Element {
 }
 
 /** Header button + card: a few bullet points about what was unread (or the recent conversation). */
-export function SummaryButton({ conversationId }: { conversationId: string }): JSX.Element {
+export function SummaryButton({ conversationId }: { conversationId: string }): JSX.Element | null {
   const t = useT()
   const summarize = useAi((s) => s.summarize)
   const state = useAi((s) => s.summaries[conversationId])
   const unread = useAi((s) => s.unreadAtOpen[conversationId] ?? 0)
+  // Only once the chat model is downloaded (Settings → AI); no AI buttons for people who never set it up.
+  const ready = useAi((s) => !!s.status?.chat.ready)
   const active = !!state?.bullets && !state.hidden
+  if (!ready) return null
   return (
     <button className={`icon-btn ${active ? 'active' : ''}`} onClick={() => void summarize(conversationId)} title={unread >= 3 ? t('aiSummaryUnread', { count: String(unread) }) : t('aiSummarize')}>
       <Sparkles size={18} strokeWidth={2} />
@@ -362,6 +365,7 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
   const setComposerDraft = useStore((s) => s.setComposerDraft)
   const last = useStore((s) => s.messages[conversationId]?.at(-1))
   if (!last || last.isOutgoing || last.system) return null
+  if (!ready && !state?.busy && !state?.items?.length) return null
   if (!state?.items?.length && !state?.busy) {
     // Nothing yet: a quiet chip asks for suggestions (and the download, the first time).
     return (

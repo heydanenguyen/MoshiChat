@@ -10714,3 +10714,11 @@ button.moment-card:hover {
     display: none;
   }
 }
+
+/* Close friends: how many days you talked, under the name. */
+.insight-row-days {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin: 1px 0 3px;
+}

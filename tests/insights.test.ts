@@ -49,6 +49,26 @@ describe('computeInsights', () => {
   })
 })
 
+describe('closeness ranking', () => {
+  it('puts a friend you talk with both ways most days above a one-afternoon burst and above groups', () => {
+    const records: InsightRecord[] = []
+    // "burst": 200 messages from them in one afternoon, you never answer
+    for (let i = 0; i < 200; i++) records.push(rec('burst', now - 3 * DAY + i * 1000))
+    // "friend": one message each way on 10 different days
+    for (let d = 1; d <= 10; d++) {
+      records.push(rec('friend', now - d * DAY, { isOutgoing: true }))
+      records.push(rec('friend', now - d * DAY + 60_000))
+    }
+    // a busy group
+    for (let i = 0; i < 400; i++) records.push(rec('team', now - (i % 20) * DAY, { isOutgoing: i % 2 === 0 }))
+    const i = computeInsights(records, { burst: 'Burst', friend: 'Friend', team: 'Team' }, now, 30, new Set(['team']))
+    expect(i.top.map((c) => c.title)).toEqual(['Friend', 'Burst'])
+    expect(i.top[0]).toMatchObject({ days: 10, bothDays: 10, total: 20 })
+    // group messages still count in the totals
+    expect(i.sent + i.received).toBe(620)
+  })
+})
+
 describe('onThisDay', () => {
   it('prefers the same date a year ago, then the same day last month, then last week', () => {
     const yearAgo = new Date(2025, 8, 29, 12).getTime()

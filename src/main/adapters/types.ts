@@ -56,6 +56,11 @@ export interface PlatformAdapter {
   getConversationStats?(conversationId: string): Promise<ConversationStats>
   /** Everything cached in memory, for insights and memories (no network). */
   cachedMessages?(): Message[]
+  /**
+   * Walk one chat's history newest to oldest until `from` (ms), handing each page to `onPage`, for the
+   * insights. Independent of the chat view's paging and cache. 'partial' when it had to stop early.
+   */
+  historySince?(conversationId: string, from: number, onPage: (messages: Message[]) => void): Promise<'complete' | 'partial'>
   /** People the account can message (friends, contacts, recent peers). */
   listContacts?(): Promise<Peer[]>
   /** Direct conversation with a contact, created lazily when the platform allows it. */

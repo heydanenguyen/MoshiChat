@@ -154,12 +154,13 @@ export function InsightsSheet(): JSX.Element {
   const insights = useMemo(() => {
     if (!records) return undefined
     const titles = Object.fromEntries(Object.values(conversations).map((c) => [c.id, c.title]))
-    return computeInsights(records, titles, Date.now(), period === 'month' ? 30 : 365)
+    const groups = new Set(Object.values(conversations).filter((c) => c.isGroup).map((c) => c.id))
+    return computeInsights(records, titles, Date.now(), period === 'month' ? 30 : 365, groups)
   }, [records, conversations, period])
   const weekdayNames = language === 'vi' ? ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const maxHour = insights ? Math.max(1, ...insights.hours) : 1
   const maxDay = insights ? Math.max(1, ...insights.weekdays) : 1
-  const maxTop = insights?.top[0]?.total ?? 1
+  const maxTop = insights?.top[0]?.score || 1
   const openChat = (id: string): void => {
     closeSheet()
     select(id)
@@ -239,8 +240,9 @@ export function InsightsSheet(): JSX.Element {
                             </span>
                           )}
                         </span>
+                        <span className="insight-row-days">{c.days === 1 ? t('insightsOneDayTalked') : t('insightsDaysTalked', { n: String(c.days) })}</span>
                         <span className="insight-bar">
-                          <span className="insight-bar-fill" style={{ width: `${Math.max(4, (c.total / maxTop) * 100)}%` }} />
+                          <span className="insight-bar-fill" style={{ width: `${Math.max(4, (c.score / maxTop) * 100)}%` }} />
                         </span>
                       </span>
                       <span className="insight-row-count">

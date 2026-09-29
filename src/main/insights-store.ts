@@ -12,7 +12,10 @@ const KEEP_MS = 400 * DAY
 export interface Coverage {
   from: number
   at: number
+  /** 2: walked to the period start for real. Older entries could be marked after a partial walk. */
+  v?: number
 }
+const COVERAGE_VERSION = 2
 
 export const toInsightRecord = (m: Message): InsightRecord => ({
   conversationId: m.conversationId,
@@ -73,11 +76,12 @@ export class InsightStore {
   }
 
   coverageOf(conversationId: string): Coverage | undefined {
-    return this.coverage[conversationId]
+    const cover = this.coverage[conversationId]
+    return cover?.v === COVERAGE_VERSION ? cover : undefined
   }
 
-  markCovered(conversationId: string, from: number): void {
-    this.coverage[conversationId] = { from, at: Date.now() }
+  markCovered(conversationId: string, from: number, at = Date.now()): void {
+    this.coverage[conversationId] = { from, at, v: COVERAGE_VERSION }
     this.scheduleSave()
   }
 
