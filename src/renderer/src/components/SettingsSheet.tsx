@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArchiveRestore, Bell, BellOff, ChevronRight, Database, FileArchive, FolderOpen, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
-import type { BubbleAction, Language, TextSize, ThemePreference } from '@shared/types'
+import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
+import type { BubbleAction, Language, SyncStatus, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
@@ -605,11 +605,91 @@ function AiPage(): JSX.Element {
   )
 }
 
+/** Sync between computers through a folder a cloud drive already keeps in step. */
+function SyncSettings(): JSX.Element {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const showToast = useStore((s) => s.showToast)
+  const [status, setStatus] = useState<SyncStatus>()
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const load = (): void => void window.unison.sync.status().then((s) => alive && setStatus(s))
+    load()
+    const timer = setInterval(load, 5000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  const run = async (action: () => Promise<SyncStatus | null>, done?: string): Promise<void> => {
+    setBusy(true)
+    try {
+      const next = await action()
+      if (next) {
+        setStatus(next)
+        if (next.error) showToast(next.error, 'error')
+        else if (done) showToast(done)
+      }
+    } catch (err) {
+      showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Group label={t('syncSection')}>
+      <Row title={t('syncTitle')} sub={t('syncHint')} />
+      {status?.enabled ? (
+        <>
+          <Row title={t('syncFolder')} sub={status.folder} />
+          <Row
+            title={t('syncDevices')}
+            sub={
+              status.devices.length
+                ? status.devices.map((d) => `${d.name} · ${formatListTime(d.updatedAt, language)}`).join(', ')
+                : t('syncNoDevices', { name: status.deviceName })
+            }
+          />
+          <Row
+            title={t('syncThisDevice', { name: status.deviceName })}
+            sub={status.error ? t('syncError', { error: status.error }) : status.lastSyncAt ? t('syncLast', { time: formatListTime(status.lastSyncAt, language) }) : undefined}
+          />
+          <div className="settings-row backup-buttons">
+            <button className="btn primary" disabled={busy} onClick={() => void run(() => window.unison.sync.now(), t('syncDone'))}>
+              <RefreshCw size={15} strokeWidth={2.2} /> {t('syncNow')}
+            </button>
+            <button className="btn" disabled={busy} onClick={() => void run(() => window.unison.sync.choose())}>
+              <FolderOpen size={15} strokeWidth={2.2} /> {t('syncChange')}
+            </button>
+            <button className="btn" disabled={busy} onClick={() => void run(() => window.unison.sync.disable())}>
+              <CloudOff size={15} strokeWidth={2.2} /> {t('syncOff')}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <Row title={t('syncHowTitle')} sub={t('syncHow')} />
+          <div className="settings-row backup-buttons">
+            <button className="btn primary" disabled={busy || !status} onClick={() => void run(() => window.unison.sync.choose(), t('syncOn'))}>
+              <FolderSync size={15} strokeWidth={2.2} /> {t('syncChoose')}
+            </button>
+          </div>
+        </>
+      )}
+    </Group>
+  )
+}
+
 function DataPage(): JSX.Element {
   const t = useT()
   const openSheet = useStore((s) => s.openSheet)
   return (
     <>
+      <SyncSettings />
       <Group>
         <Row title={t('backupSectionTitle')} sub={t('backupSectionHint')} />
         <div className="settings-row backup-buttons">

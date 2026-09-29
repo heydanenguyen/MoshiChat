@@ -565,6 +565,20 @@ export interface Settings {
   gif?: { provider: GifProvider; key: string }
 }
 
+/** Sync between computers through a shared folder (see shared/sync-merge). */
+export interface SyncStatus {
+  enabled: boolean
+  /** The "Moshi Sync" folder inside the one the user picked. */
+  folder?: string
+  /** This computer's name, as the others see it. */
+  deviceName: string
+  /** When this computer last wrote its changes to the folder. */
+  lastSyncAt?: number
+  error?: string
+  /** The other computers found in the folder, most recently changed first. */
+  devices: Array<{ name: string; updatedAt: number }>
+}
+
 /** A bookmarked message: enough to list it and jump back to it. */
 export interface SavedMessage {
   conversationId: string

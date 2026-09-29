@@ -22,6 +22,7 @@ import type { AiKind, SpeakLang } from '@shared/ai'
 import type { ChatLine } from '@shared/ai-prompts'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
 import { Updater } from './updater'
+import { SyncService } from './sync'
 import { BACKUP_EXTENSION, LEGACY_BACKUP_EXTENSION } from './backup-format'
 
 const isMac = process.platform === 'darwin'
@@ -95,6 +96,8 @@ const ai = new AiService(
   (progress) => emit({ type: 'ai:progress', progress }),
   log
 )
+
+const sync = new SyncService(storage, emit, log)
 
 const updater = new Updater((state) => emit({ type: 'update:state', state }), log)
 
@@ -209,7 +212,8 @@ async function pruneOrphanedSettings(): Promise<void> {
     patch.muted = { ...settings.muted, conversations: mutedChats ?? [], accounts: mutedAccounts ?? [] }
   }
   if (Object.keys(patch).length) {
-    await storage.setSettings(patch)
+    // Not a deletion to sync: another computer may still have these accounts.
+    await storage.setSettings(patch, 'tidy')
     log('pruned settings of removed accounts:', Object.keys(patch).join(', '))
   }
 }
@@ -954,6 +958,22 @@ function registerIpc(): void {
   ipcMain.handle(IPC.backupReveal, (_e, path: string) => {
     if (typeof path === 'string' && path.toLowerCase().endsWith(`.${BACKUP_EXTENSION}`)) shell.showItemInFolder(path)
   })
+  ipcMain.handle(IPC.syncStatus, () => sync.status())
+  ipcMain.handle(IPC.syncChoose, async () => {
+    const vi = storage.settings.language === 'vi'
+    const options: Electron.OpenDialogOptions = {
+      title: vi ? 'Chọn thư mục đồng bộ (OneDrive, Google Drive, Dropbox...)' : 'Choose a sync folder (OneDrive, Google Drive, Dropbox...)',
+      properties: ['openDirectory', 'createDirectory']
+    }
+    const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    if (picked.canceled || !picked.filePaths[0]) return null
+    return sync.enable(picked.filePaths[0])
+  })
+  ipcMain.handle(IPC.syncDisable, () => sync.disable())
+  ipcMain.handle(IPC.syncNow, async () => {
+    await sync.syncNow()
+    return sync.status()
+  })
   ipcMain.handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
   ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
   ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
@@ -1046,6 +1066,7 @@ if (!gotLock) {
     if (isWindows) app.setAppUserModelId('com.danenguyen.moshi')
     await storage.load()
     await pruneOrphanedSettings()
+    await sync.start()
     void scheduler.start()
     reminders.start()
     void pruneSafetyCopies()
@@ -1070,6 +1091,7 @@ if (!gotLock) {
     quitting = true
     updater.stop()
     scheduler.stop()
+    sync.stop()
     ai.stop()
     void manager.shutdown()
   })

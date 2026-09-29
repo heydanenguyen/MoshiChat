@@ -3134,6 +3134,8 @@ mark {
   color: var(--text-secondary);
   margin-top: 1px;
   line-height: 1.35;
+  /* Long folder paths wrap instead of widening the sheet. */
+  overflow-wrap: anywhere;
 }
 
 .platform-grid {

@@ -29,6 +29,7 @@ import type {
   Settings,
   WeatherInfo,
   BackupInfo,
+  SyncStatus,
   GifItem,
   GifPage,
   GifProvider,
@@ -130,6 +131,13 @@ export interface MoshiBridge {
     /** Replace this device's data with the backup, then Moshi restarts. Rejects with BACKUP_PASSWORD on a wrong password. */
     restore(input: { path: string; password: string }): Promise<void>
     reveal(path: string): Promise<void>
+  }
+  sync: {
+    status(): Promise<SyncStatus>
+    /** Ask for a folder a cloud drive syncs (OneDrive, Google Drive, Dropbox...) and start syncing there. Null when cancelled. */
+    choose(): Promise<SyncStatus | null>
+    disable(): Promise<SyncStatus>
+    now(): Promise<SyncStatus>
   }
   scheduled: {
     add(input: { conversationId: string; text: string; sendAt: number; replyToId?: string }): Promise<Settings>
@@ -234,6 +242,10 @@ export const IPC = {
   backupPick: 'backup:pick',
   backupRestore: 'backup:restore',
   backupReveal: 'backup:reveal',
+  syncStatus: 'sync:status',
+  syncChoose: 'sync:choose',
+  syncDisable: 'sync:disable',
+  syncNow: 'sync:now',
   scheduledAdd: 'scheduled:add',
   scheduledCancel: 'scheduled:cancel',
   scheduledSendNow: 'scheduled:sendNow',

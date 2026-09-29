@@ -15,6 +15,10 @@ export interface StoredAccount {
   secret?: string
 }
 
+/** Who changed the settings: the user (default), sync bringing in another computer's changes, or tidying away chats of removed accounts. */
+export type SettingsOrigin = 'user' | 'sync' | 'tidy'
+type SettingsListener = (before: Settings, after: Settings, origin: SettingsOrigin) => void
+
 interface StoreShape {
   version: 1
   accounts: StoredAccount[]
@@ -40,6 +44,7 @@ export class Storage {
   private data: StoreShape = structuredClone(EMPTY)
   private file = join(app.getPath('userData'), 'unison.json')
   private writing: Promise<void> = Promise.resolve()
+  private listeners: SettingsListener[] = []
 
   async load(): Promise<void> {
     try {
@@ -75,8 +80,20 @@ export class Storage {
     return this.data.settings
   }
 
-  async setSettings(patch: Partial<Settings>): Promise<Settings> {
+  onSettingsChanged(listener: SettingsListener): void {
+    this.listeners.push(listener)
+  }
+
+  async setSettings(patch: Partial<Settings>, origin: SettingsOrigin = 'user'): Promise<Settings> {
+    const before = this.data.settings
     this.data.settings = { ...this.data.settings, ...patch }
+    for (const listener of this.listeners) {
+      try {
+        listener(before, this.data.settings, origin)
+      } catch {
+        /* a listener's trouble never stops the save */
+      }
+    }
     await this.persist()
     return this.data.settings
   }

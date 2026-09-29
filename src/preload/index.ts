@@ -69,6 +69,12 @@ const bridge: MoshiBridge = {
     restore: (input) => ipcRenderer.invoke(IPC.backupRestore, input),
     reveal: (path) => ipcRenderer.invoke(IPC.backupReveal, path)
   },
+  sync: {
+    status: () => ipcRenderer.invoke(IPC.syncStatus),
+    choose: () => ipcRenderer.invoke(IPC.syncChoose),
+    disable: () => ipcRenderer.invoke(IPC.syncDisable),
+    now: () => ipcRenderer.invoke(IPC.syncNow)
+  },
   scheduled: {
     add: (input) => ipcRenderer.invoke(IPC.scheduledAdd, input),
     cancel: (id) => ipcRenderer.invoke(IPC.scheduledCancel, id),
