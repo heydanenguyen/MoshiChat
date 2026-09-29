@@ -886,6 +886,8 @@ export const useStore = create<State>((set, get) => ({
     if (override?.birthday) clean.birthday = override.birthday
     if (override?.bubble) clean.bubble = override.bubble
     if (override?.wallpaper) clean.wallpaper = override.wallpaper
+    if (override?.translateTo) clean.translateTo = override.translateTo
+    if (override?.translateAuto && override.translateTo) clean.translateAuto = true
     if (Object.keys(clean).length) overrides[conversationId] = clean
     else delete overrides[conversationId]
     await get().setSettings({ contactOverrides: overrides })

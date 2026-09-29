@@ -99,6 +99,8 @@ export interface MoshiBridge {
     /** `language`: ISO code of what is probably spoken (Whisper otherwise assumes English). */
     transcribe(key: string, pcm: Float32Array, language?: string): Promise<string>
     translate(key: string, text: string): Promise<{ text: string; from: string; same?: boolean }>
+    /** Translate typed text into `target` (ISO code) before sending. */
+    translateTo(text: string, target: string): Promise<{ text: string; from: string; same?: boolean }>
     cached(): Promise<{ transcripts: Record<string, string>; translations: Record<string, string>; summaries: Record<string, string> }>
     /** Bullet points about these lines (cached by `key`). */
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
@@ -211,6 +213,7 @@ export const IPC = {
   aiReadMedia: 'ai:readMedia',
   aiTranscribe: 'ai:transcribe',
   aiTranslate: 'ai:translate',
+  aiTranslateTo: 'ai:translateTo',
   aiCached: 'ai:cached',
   aiSummarize: 'ai:summarize',
   aiSuggest: 'ai:suggest',

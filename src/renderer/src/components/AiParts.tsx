@@ -7,7 +7,7 @@ import { formatBytes } from '../utils'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
 
-const LANGUAGE_NAMES: Record<string, { vi: string; en: string }> = {
+export const LANGUAGE_NAMES: Record<string, { vi: string; en: string }> = {
   vi: { vi: 'tiếng Việt', en: 'Vietnamese' },
   en: { vi: 'tiếng Anh', en: 'English' },
   zh: { vi: 'tiếng Trung', en: 'Chinese' },
@@ -194,6 +194,7 @@ export function AiSettings(): JSX.Element {
   const refresh = useAi((s) => s.refresh)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
   const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
+  const suggestLanguage = useStore((s) => s.settings.suggestLanguage)
   const aiSuggest = useStore((s) => s.settings.aiSuggest !== false)
   const setSettings = useStore((s) => s.setSettings)
 
@@ -230,13 +231,25 @@ export function AiSettings(): JSX.Element {
             </div>
           )}
           {kind === 'chat' && (
-            <div className="segmented ai-quality">
-              {(['small', 'better'] as ChatModel[]).map((m) => (
-                <button key={m} className={chatModel === m ? 'active' : ''} onClick={() => void setSettings({ chatModel: m }).then(() => refresh())}>
-                  {m === 'small' ? t('aiQualityFast') : t('aiQualityBetter')} · {AI_MODELS.chat[m].megabytes} MB
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="segmented ai-quality">
+                {(['small', 'better'] as ChatModel[]).map((m) => (
+                  <button key={m} className={chatModel === m ? 'active' : ''} onClick={() => void setSettings({ chatModel: m }).then(() => refresh())}>
+                    {m === 'small' ? t('aiQualityFast') : t('aiQualityBetter')} · {AI_MODELS.chat[m].megabytes} MB
+                  </button>
+                ))}
+              </div>
+              <div className="ai-suggest-lang">
+                <span className="ai-suggest-lang-label">{t('suggestLanguage')}</span>
+                <div className="segmented">
+                  {(['auto', 'vi', 'en'] as const).map((l) => (
+                    <button key={l} className={(suggestLanguage ?? 'auto') === l ? 'active' : ''} onClick={() => void setSettings({ suggestLanguage: l })}>
+                      {l === 'auto' ? t('suggestLangAuto') : l === 'vi' ? t('langVi') : t('langEn')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
           {busy && (
             <div className="ai-progress inline">

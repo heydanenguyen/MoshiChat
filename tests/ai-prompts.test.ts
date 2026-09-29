@@ -28,6 +28,10 @@ describe('prompts', () => {
     expect(vi[1].content).toContain('Lan: Mai họp 3h nhé')
     const en = suggestMessages(lines, 'en')
     expect(en[0].content).toMatch(/exactly 3 short replies/)
+    expect(en[0].content).toMatch(/language of the message being answered/)
+    expect(en[1].content).toMatch(/Message to answer: Lan:/)
+    expect(suggestMessages(lines, 'en', 'vi')[0].content).toMatch(/Write in Vietnamese/)
+    expect(suggestMessages(lines, 'vi', 'en')[0].content).toMatch(/Viết bằng tiếng Anh/)
   })
 })
 

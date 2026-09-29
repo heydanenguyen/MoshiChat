@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowUp, File, Mic, Paperclip, Reply, Smile, Sticker, Trash2, X } from 'lucide-react'
+import { AlarmClock, ArrowUp, File, Languages, Mic, Paperclip, Reply, Smile, Sticker, Trash2, Undo2, X } from 'lucide-react'
+import { useAi } from '../aiStore'
+import { TranslatePicker, languageName } from './TranslatePicker'
 import { readDraft, useStore, useT } from '../store'
 import { formatBytes } from '../utils'
 import { EmojiPicker } from './EmojiPicker'
@@ -63,6 +65,16 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const scheduleMessage = useStore((s) => s.scheduleMessage)
   const composerDraft = useStore((s) => s.composerDrafts[conversationId])
+  // Translating what you type: the language is remembered per chat; "auto" translates every message on send.
+  const language = useStore((s) => s.settings.language)
+  const override = useStore((s) => s.settings.contactOverrides?.[conversationId])
+  const setContactOverride = useStore((s) => s.setContactOverride)
+  const translateText = useAi((s) => s.translateText)
+  const [translateOpen, setTranslateOpen] = useState(false)
+  const [translating, setTranslating] = useState(false)
+  const [translated, setTranslated] = useState<{ original: string; to: string } | undefined>()
+  const translateTarget = override?.translateTo
+  const translateAuto = !!override?.translateAuto && !!translateTarget
   const partnerName = useStore((s) => s.conversations[conversationId]?.title)
   const quickReplies = useQuickReplies()
   // "/query" right before the caret opens the quick replies menu.
@@ -82,6 +94,8 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     switching.current = true
     setText(selectedId ? readDraft(selectedId) : '')
     setEmojiOpen(false)
+    setTranslated(undefined)
+    setTranslateOpen(false)
     if (active) focusInput()
     // The pane's active state only matters on the first render of this chat.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,10 +176,43 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     return () => clearInterval(timer)
   }, [recording])
 
+  const translateDraft = async (): Promise<void> => {
+    if (!translateTarget || !text.trim() || translating) return
+    setTranslating(true)
+    try {
+      const result = await translateText(text, translateTarget)
+      if (result && result.text.trim() && result.text !== text) {
+        setTranslated({ original: text, to: translateTarget })
+        setText(result.text)
+      }
+    } finally {
+      setTranslating(false)
+      setTranslateOpen(false)
+      focusInput()
+    }
+  }
+
   const submit = (): void => {
-    if ((!text.trim() && !pendingFiles.length) || disabled) return
+    if ((!text.trim() && !pendingFiles.length) || disabled || translating) return
+    // Auto-translate: the message goes out in the other language, straight from the draft.
+    if (translateAuto && text.trim() && !translated) {
+      setTranslating(true)
+      void translateText(text, translateTarget!)
+        .then((result) => {
+          if (!result) return
+          void send(conversationId, result.text.trim() ? result.text : text)
+          setText('')
+          setTranslated(undefined)
+        })
+        .finally(() => {
+          setTranslating(false)
+          focusInput()
+        })
+      return
+    }
     void send(conversationId, text)
     setText('')
+    setTranslated(undefined)
     focusInput()
   }
 
@@ -284,6 +331,26 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           </div>
           <button className="icon-btn" onClick={() => setReplyTo(conversationId, undefined)} title={t('cancelReply')}>
             <X size={14} strokeWidth={2.4} />
+          </button>
+        </div>
+      )}
+      {translated && (
+        <div className="reply-banner translate-strip">
+          <Languages size={14} strokeWidth={2.4} />
+          <div className="reply-banner-text">
+            <strong>{t('translatedTo', { lang: languageName(translated.to, language) })}</strong>
+            <span>{translated.original}</span>
+          </div>
+          <button
+            className="icon-btn"
+            title={t('translateUndo')}
+            onClick={() => {
+              setText(translated.original)
+              setTranslated(undefined)
+              focusInput()
+            }}
+          >
+            <Undo2 size={14} strokeWidth={2.4} />
           </button>
         </div>
       )}
@@ -409,6 +476,31 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
               <button className="icon-btn" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
                 <Mic size={18} strokeWidth={2} />
               </button>
+            )}
+            {(text.trim() || translateAuto) && (
+              <span className="emoji-anchor">
+                <button
+                  className={`icon-btn translate-btn ${translateOpen || translateAuto ? 'active' : ''}`}
+                  onMouseDown={(e) => translateOpen && e.stopPropagation()}
+                  onClick={() => setTranslateOpen((o) => !o)}
+                  title={translateAuto && translateTarget ? t('translateAutoOn', { lang: languageName(translateTarget, language) }) : t('translateDraft')}
+                  disabled={disabled}
+                >
+                  <Languages size={18} strokeWidth={2} />
+                  {translateAuto && translateTarget && <span className="translate-badge">{translateTarget.toUpperCase()}</span>}
+                </button>
+                {translateOpen && (
+                  <TranslatePicker
+                    target={translateTarget}
+                    auto={translateAuto}
+                    busy={translating}
+                    onTarget={(code) => void setContactOverride(conversationId, { ...override, translateTo: code })}
+                    onAuto={(on) => void setContactOverride(conversationId, { ...override, translateTo: translateTarget, translateAuto: on })}
+                    onTranslate={() => void translateDraft()}
+                    onClose={() => setTranslateOpen(false)}
+                  />
+                )}
+              </span>
             )}
             {text.trim() && !pendingFiles.length && (
               <span className="emoji-anchor">

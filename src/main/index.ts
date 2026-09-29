@@ -75,6 +75,7 @@ const ai = new AiService(
   () => storage.settings.voiceModel ?? 'turbo',
   () => storage.settings.chatModel ?? 'small',
   () => storage.settings.language,
+  () => storage.settings.suggestLanguage ?? 'auto',
   (progress) => emit({ type: 'ai:progress', progress }),
   log
 )
@@ -764,6 +765,7 @@ function registerIpc(): void {
     ai.transcribe(String(key), pcm, typeof language === 'string' && /^[a-z]{2}$/.test(language) ? language : undefined)
   )
   ipcMain.handle(IPC.aiTranslate, (_e, key: string, text: string) => ai.translate(String(key), String(text ?? '').slice(0, 5000)))
+  ipcMain.handle(IPC.aiTranslateTo, (_e, text: string, target: string) => ai.translateTo(String(text ?? '').slice(0, 5000), /^[a-z]{2}$/.test(String(target)) ? String(target) : 'en'))
   ipcMain.handle(IPC.aiCached, () => ai.cached())
   // Chat lines come from the renderer already trimmed; bound them again here.
   const cleanLines = (lines: unknown): ChatLine[] =>

@@ -61,6 +61,8 @@ interface AiState {
   dismissSummary(conversationId: string): void
   /** `manual`: the user asked (offers the download when the model is missing). */
   suggest(conversationId: string, manual?: boolean): Promise<void>
+  /** The draft in another language (offers the translation model download first); undefined when it could not be done. */
+  translateText(text: string, target: string): Promise<{ text: string; from: string } | undefined>
   clearSuggestions(conversationId: string): void
 }
 
@@ -344,6 +346,18 @@ export const useAi = create<AiState>((set, get) => {
           set({ suggestions: { ...get().suggestions, [conversationId]: { forId: last.id } } })
         }
       })
+    },
+
+    async translateText(text, target) {
+      let result: { text: string; from: string } | undefined
+      await withModel('translate', async () => {
+        try {
+          result = await window.unison.ai.translateTo(text, target)
+        } catch (err) {
+          useStore.getState().showToast(clean(err), 'error')
+        }
+      })
+      return result
     },
 
     clearSuggestions(conversationId) {

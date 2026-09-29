@@ -53,6 +53,7 @@ export class AiService {
     private voiceModel: () => VoiceModel,
     private chatModel: () => ChatModel,
     private language: () => string,
+    private suggestLanguage: () => 'auto' | 'vi' | 'en',
     private onProgress: (progress: AiProgress) => void,
     private log: (...args: unknown[]) => void
   ) {}
@@ -239,8 +240,20 @@ export class AiService {
 
   /** Three short ways to answer the newest message. Not cached: the chat moves on. */
   async suggest(lines: ChatLine[]): Promise<string[]> {
-    const text = await askChat(this, suggestMessages(lines, this.language()), 60)
+    const text = await askChat(this, suggestMessages(lines, this.language(), this.suggestLanguage()), 60)
     return parseSuggestions(text)
+  }
+
+  /** Translate what the user typed into another language (for chatting with someone who reads it). */
+  async translateTo(text: string, target: string): Promise<{ text: string; from: string; same?: boolean }> {
+    const from = detectLanguage(text)
+    if (from === target) return { text, from, same: true }
+    const src = NLLB[from] ?? NLLB.en
+    const tgt = NLLB[target] ?? NLLB.en
+    const paragraphs = translationChunks(text)
+    const parts = await this.request<string[]>({ type: 'translate', texts: paragraphs.flat(), src, tgt })
+    let i = 0
+    return { text: paragraphs.map((sentences) => sentences.map(() => parts[i++] ?? '').join(' ')).join('\n'), from }
   }
 
   /** Translate into the app language. `same` when the text already is in that language. */

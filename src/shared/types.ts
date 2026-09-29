@@ -489,6 +489,8 @@ export interface Settings {
   /** Conversation id -> tags picked by the user. */
   tags: Record<string, TagId[]>
   sidebarCollapsed: boolean
+  /** Sidebar groups folded away (true = folded), so the bar shows only what you look at. */
+  sidebarSections?: Partial<Record<SidebarSection, boolean>>
   mesh: MeshId
   /** Surface effects (glass, edges, rounding); absent = the Moshi look. */
   style?: StyleId
@@ -535,6 +537,8 @@ export interface Settings {
   voiceModel?: VoiceModel
   /** Size of the on-device chat model (summaries, reply suggestions). */
   chatModel?: ChatModel
+  /** What language reply suggestions are written in: the chat's own, or always Vietnamese / English. */
+  suggestLanguage?: 'auto' | 'vi' | 'en'
   /** Reply suggestions appear by themselves under new messages (once the chat model is installed). */
   aiSuggest?: boolean
   /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */
@@ -573,7 +577,13 @@ export interface ContactOverride {
   bubble?: string
   /** Chat wallpaper: a preset id (see shared/extras.ts WALLPAPERS) or an uploaded photo (data URL). */
   wallpaper?: string
+  /** Language code the composer translates into for this chat (last used). */
+  translateTo?: string
+  /** Translate every message to this chat on send. */
+  translateAuto?: boolean
 }
+
+export type SidebarSection = 'inboxes' | 'tags' | 'accounts'
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',

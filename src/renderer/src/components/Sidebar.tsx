@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BellOff, ChartNoAxesColumn, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import { BellOff, ChartNoAxesColumn, ChevronDown, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
+import type { SidebarSection } from '@shared/types'
 import { MemoryCard } from './Insights'
 import { useOpenTodos } from './TodoSheet'
 import { UpdateCard } from './UpdateCard'
@@ -31,6 +32,23 @@ export function Sidebar(): JSX.Element {
   const accounts = useStore((s) => s.accounts)
   const openSheet = useStore((s) => s.openSheet)
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const folded = useStore((s) => s.settings.sidebarSections)
+  const setSettings = useStore((s) => s.setSettings)
+  const isFolded = (section: SidebarSection): boolean => !collapsed && !!folded?.[section]
+  const toggleFold = (section: SidebarSection): void => {
+    void setSettings({ sidebarSections: { ...(folded ?? {}), [section]: !folded?.[section] } })
+  }
+  /** Section heading that folds its list away; a small count keeps the essentials visible while folded. */
+  const heading = (section: SidebarSection, label: string, summary?: JSX.Element, extra?: JSX.Element): JSX.Element => (
+    <div className={`sidebar-section-head foldable ${isFolded(section) ? 'folded' : ''}`}>
+      <button className="sidebar-section-title fold-toggle" onClick={() => toggleFold(section)} aria-expanded={!isFolded(section)} title={isFolded(section) ? t('expandSection') : t('collapseSection')}>
+        <ChevronDown size={12} strokeWidth={2.8} className="fold-chevron" />
+        {label}
+        {isFolded(section) && summary}
+      </button>
+      {extra}
+    </div>
+  )
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const language = useStore((s) => s.settings.language)
   const tags = useStore((s) => s.settings.tags)
@@ -115,7 +133,9 @@ export function Sidebar(): JSX.Element {
 
       <div className="sidebar-scroll scroll">
         <div className="sidebar-section">
-          {!collapsed && <div className="sidebar-section-title">{t('inboxes')}</div>}
+          {!collapsed && heading('inboxes', t('inboxes'), unread.total > 0 ? <span className="fold-count">{unread.total}</span> : undefined)}
+          {!isFolded('inboxes') && (
+          <>
           <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} title={t('allInboxes')}>
             <span className="nav-item-icon tile accent">
               <Inbox size={14} strokeWidth={2.4} />
@@ -156,18 +176,22 @@ export function Sidebar(): JSX.Element {
             </span>
             {!collapsed && <span className="nav-item-label">{t('insights')}</span>}
           </button>
+          </>
+          )}
         </div>
         <MemoryCard collapsed={collapsed} />
 
         <div className="sidebar-section">
-          {!collapsed && (
-            <div className="sidebar-section-head">
-              <span className="sidebar-section-title">{t('tags')}</span>
+          {!collapsed &&
+            heading(
+              'tags',
+              t('tags'),
+              tagList.length > 0 ? <span className="fold-count">{tagList.length}</span> : undefined,
               <button ref={addRef} className="section-add" onMouseDown={(e) => e.stopPropagation()} onClick={() => (creator ? setCreator(undefined) : openCreator(addRef.current))} title={t('tagNew')}>
                 <Plus size={14} strokeWidth={2.6} />
               </button>
-            </div>
-          )}
+            )}
+          {!isFolded('tags') && (
           <div className={`sidebar-tags ${collapsed ? 'rail' : ''}`}>
             {tagList.map((tag) => {
               const target: MuteTarget = { kind: 'tags', id: tag.id }
@@ -201,12 +225,13 @@ export function Sidebar(): JSX.Element {
               </button>
             )}
           </div>
+          )}
         </div>
 
         {accountList.length > 0 && (
           <div className="sidebar-section">
-            {!collapsed && <div className="sidebar-section-title">{t('accounts')}</div>}
-            {accountList.map((account) => {
+            {!collapsed && heading('accounts', t('accounts'), <span className="fold-count">{accountList.length}</span>)}
+            {!isFolded('accounts') && accountList.map((account) => {
               const target: MuteTarget = { kind: 'accounts', id: account.id }
               return (
                 <button
