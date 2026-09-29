@@ -122,6 +122,8 @@ export interface Attachment {
   sticker?: string
   /** A sticker the platform handed back on a white square (Instagram, Telegram). */
   flattened?: boolean
+  /** Tagged as a sticker by when it was sent or by its size, not by id: the bubble double-checks the picture. */
+  guessed?: boolean
 }
 
 /** Centered notices in a thread instead of a bubble. */

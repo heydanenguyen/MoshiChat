@@ -580,7 +580,24 @@ function Bubble({
     void react(message.conversationId, message.id, '❤️')
   }
   const direction = message.isOutgoing ? 'out' : 'in'
-  const sticker = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
+  const tagged = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
+  // A photo tagged as a sticker only by timing or size is checked against the pack's pictures; a
+  // pasted screenshot that happened to go out right after a sticker turns back into a photo.
+  const guessedUrl = tagged?.guessed && tagged.url && !tagged.sticker?.startsWith('custom:') ? tagged.url : undefined
+  const [verified, setVerified] = useState<{ url: string; sticker?: string } | undefined>()
+  useEffect(() => {
+    if (!guessedUrl) return
+    let live = true
+    void matchSticker(guessedUrl).then((id) => live && setVerified({ url: guessedUrl, sticker: id }))
+    return () => {
+      live = false
+    }
+  }, [guessedUrl])
+  const checked = guessedUrl && verified?.url === guessedUrl ? verified : undefined
+  const demoted = !!(guessedUrl && checked && !checked.sticker)
+  const sticker = demoted ? undefined : tagged && checked?.sticker ? { ...tagged, sticker: checked.sticker } : tagged
+  // The demoted one is shown as the photo it is.
+  const attachments = demoted ? message.attachments.map((a) => (a === tagged ? { ...a, kind: 'image' as const, sticker: undefined, flattened: undefined, guessed: undefined } : a)) : message.attachments
   // A stable selector (zustand v5): the array itself, not a fresh closure per render.
   const customStickers = useStore((s) => s.customStickers)
   const customUrl = (id: string): string | undefined => customStickers.find((c) => c.id === id)?.url
@@ -597,8 +614,8 @@ function Bubble({
       live = false
     }
   }, [unknownSticker, message.conversationId, message.id, message.sentAt, rememberSticker])
-  const story = message.attachments.find((a) => a.kind === 'story')
-  const inline = message.attachments.filter((a) => a.kind !== 'story')
+  const story = attachments.find((a) => a.kind === 'story')
+  const inline = attachments.filter((a) => a.kind !== 'story')
   const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')
   // Several photos in one message (Instagram, Messenger, Telegram albums) become a grid.
   const grid = inline.filter(gridable)

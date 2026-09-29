@@ -226,17 +226,35 @@ export function withStickers(messages: Message[], sent: SentSticker[] | undefine
   const records = sent?.filter((r) => r.conversationId === conversationId) ?? []
   const ids = records.length ? new Set(messages.map((m) => m.id)) : undefined
   const flattened = platform === 'instagram' || platform === 'telegram'
+  const photoOf = (m: Message): Message['attachments'][number] | undefined => {
+    const a = m.attachments.length === 1 ? m.attachments[0] : undefined
+    return a && a.kind === 'image' && m.isOutgoing && !m.text.trim() ? a : undefined
+  }
+  // A record whose message id the platform changed claims one photo only: the closest sent within a
+  // minute with unknown or sticker dimensions. (It used to tag every photo in a two-minute window,
+  // so a screenshot pasted right after a sticker came back drawn as that sticker.)
+  const byTime = new Map<string, SentSticker>()
+  for (const r of records) {
+    if (ids?.has(r.messageId)) continue
+    let best: { id: string; gap: number } | undefined
+    for (const m of messages) {
+      const a = photoOf(m)
+      if (!a || byTime.has(m.id) || records.some((x) => x.messageId === m.id)) continue
+      const sizeFits = a.width === undefined || (a.width === STICKER_PIXELS && a.height === STICKER_PIXELS)
+      const gap = Math.abs(r.sentAt - m.sentAt)
+      if (sizeFits && gap < 60_000 && (!best || gap < best.gap)) best = { id: m.id, gap }
+    }
+    if (best) byTime.set(best.id, r)
+  }
   let changed = false
   const out = messages.map((m) => {
-    const a = m.attachments.length === 1 ? m.attachments[0] : undefined
-    if (!a || a.kind !== 'image' || !m.isOutgoing || m.text.trim()) return m
-    const sizeFits = a.width === undefined || (a.width === STICKER_PIXELS && a.height === STICKER_PIXELS)
-    const record =
-      records.find((r) => r.messageId === m.id) ??
-      (sizeFits ? records.find((r) => !ids?.has(r.messageId) && Math.abs(r.sentAt - m.sentAt) < 120_000) : undefined)
+    const a = photoOf(m)
+    if (!a) return m
+    const exact = records.find((r) => r.messageId === m.id)
+    const record = exact ?? byTime.get(m.id)
     if (!record && !(a.width === STICKER_PIXELS && a.height === STICKER_PIXELS)) return m
     changed = true
-    return { ...m, attachments: [{ ...a, kind: 'sticker' as const, sticker: record?.sticker, flattened: !record && flattened }] }
+    return { ...m, attachments: [{ ...a, kind: 'sticker' as const, sticker: record?.sticker, flattened: !record && flattened, guessed: !exact }] }
   })
   return changed ? out : messages
 }

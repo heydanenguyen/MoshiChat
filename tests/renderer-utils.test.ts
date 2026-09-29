@@ -131,6 +131,18 @@ describe('withStickers', () => {
     expect(look(5)[0]).toBe('image')
     expect(withStickers([msg('photo', {}, { width: 800, height: 600 })], [], 'c', 'messenger')[0].attachments[0].kind).toBe('image')
   })
+  it('a record with a changed id claims only the closest photo, and marks guesses for a picture check', async () => {
+    const { withStickers } = await import('../src/renderer/src/utils')
+    const sent = [{ conversationId: 'c', messageId: 'gone', sticker: 'sunny-sweat', sentAt: 5_000_000 }]
+    // Instagram gives no sizes: the sticker echo and a screenshot pasted 20 s later both look alike.
+    const list = [msg('echo', { sentAt: 5_002_000 }), msg('shot', { sentAt: 5_020_000 }), msg('later', { sentAt: 5_090_000 }), msg('m1')]
+    const out = withStickers(list, sent, 'c', 'instagram')
+    expect(out[0].attachments[0]).toMatchObject({ kind: 'sticker', sticker: 'sunny-sweat', guessed: true })
+    expect(out[1].attachments[0].kind).toBe('image')
+    expect(out[2].attachments[0].kind).toBe('image')
+    const exact = withStickers([msg('m1')], [{ conversationId: 'c', messageId: 'm1', sticker: 'sunny-haha', sentAt: 1_000_000 }], 'c', 'instagram')
+    expect(exact[0].attachments[0].guessed).toBe(false)
+  })
 })
 
 describe('popoverShift', () => {

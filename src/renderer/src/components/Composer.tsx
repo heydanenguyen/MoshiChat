@@ -192,15 +192,22 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     }
   }
 
-  const submit = (): void => {
-    if ((!text.trim() && !pendingFiles.length) || disabled || translating) return
+  // Vietnamese and CJK input methods keep the last word "composing" until Enter commits it. Sending on
+  // that Enter read the draft, cleared it, and the input method then re-inserted the word, which went
+  // out as a second message ("đc", "bug"). Now Enter during composition only asks to send once the
+  // word is committed, with the committed text.
+  const composing = useRef(false)
+  const sendWhenComposed = useRef(false)
+
+  const submit = (value: string = text): void => {
+    if ((!value.trim() && !pendingFiles.length) || disabled || translating) return
     // Auto-translate: the message goes out in the other language, straight from the draft.
-    if (translateAuto && text.trim() && !translated) {
+    if (translateAuto && value.trim() && !translated) {
       setTranslating(true)
-      void translateText(text, translateTarget!)
+      void translateText(value, translateTarget!)
         .then((result) => {
           if (!result) return
-          void send(conversationId, result.text.trim() ? result.text : text)
+          void send(conversationId, result.text.trim() ? result.text : value)
           setText('')
           setTranslated(undefined)
         })
@@ -210,7 +217,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
         })
       return
     }
-    void send(conversationId, text)
+    void send(conversationId, value)
     setText('')
     setTranslated(undefined)
     focusInput()
@@ -240,10 +247,23 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     }
     if (e.key !== 'Enter') return
     const wantsSend = sendOnEnter ? !e.shiftKey : e.ctrlKey || e.metaKey
-    if (wantsSend) {
-      e.preventDefault()
-      submit()
+    if (!wantsSend) return
+    if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) {
+      sendWhenComposed.current = true
+      return
     }
+    e.preventDefault()
+    submit()
+  }
+
+  const onCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>): void => {
+    composing.current = false
+    if (!sendWhenComposed.current) return
+    sendWhenComposed.current = false
+    const value = e.currentTarget.value
+    setText(value)
+    // After the input method has finished writing into the box.
+    setTimeout(() => submit(value), 0)
   }
 
   const onPaste = (e: React.ClipboardEvent): void => {
@@ -411,6 +431,8 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
             }}
             onBlur={() => setSlash(null)}
             onKeyDown={onKeyDown}
+            onCompositionStart={() => (composing.current = true)}
+            onCompositionEnd={onCompositionEnd}
             onPaste={onPaste}
           />
           <div className="composer-tools">
@@ -518,7 +540,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
             )}
             <button
               className={`composer-send visible ${canSend ? '' : 'idle'}`}
-              onClick={submit}
+              onClick={() => submit()}
               onContextMenu={(e) => {
                 if (!text.trim() || pendingFiles.length) return
                 e.preventDefault()
