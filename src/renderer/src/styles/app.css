@@ -5097,6 +5097,23 @@ kbd {
   display: block;
   overflow: visible;
 }
+/* Mito stickers are pictures: the still, with the animation laid over it while it plays */
+.mito-art {
+  position: relative;
+}
+.mito-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sticker-tab-pic {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}
 /* stickers: no bubble, no frame, no background, about half a photo */
 .bubble.sticker .attachment-sticker {
   width: 120px;

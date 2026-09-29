@@ -15,8 +15,9 @@ import { useWallpaper } from './Wallpaper'
 import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
-import { StickerArt } from './StickerPicker'
+import { MitoArt, StickerArt } from './StickerPicker'
 import { isStickerId } from '@shared/stickers'
+import { isMitoId } from '@shared/mito'
 import { matchSticker } from '../stickerMatch'
 import { isSplit, type PaneIndex } from '../panes'
 import { CONVERSATION_DRAG } from './ConversationList'
@@ -666,6 +667,10 @@ function Bubble({
               ) : sticker.sticker && isStickerId(sticker.sticker) ? (
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
                   <StickerArt id={sticker.sticker} play="auto" />
+                </span>
+              ) : sticker.sticker && isMitoId(sticker.sticker) ? (
+                <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
+                  <MitoArt id={sticker.sticker} size={120} play="auto" />
                 </span>
               ) : (
                 <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />

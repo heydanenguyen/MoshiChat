@@ -3,7 +3,11 @@
  * Instagram / Telegram flattened on white; comparing a tiny thumbnail against the pack tells us which one it was,
  * so the chat can draw the transparent original instead of a white square.
  */
-import { stickerIds, stickerSvg, type StickerId } from '@shared/stickers'
+import { stickerIds, stickerSvg, type StickerId as LogoStickerId } from '@shared/stickers'
+import { MITO_STICKERS, mitoUrl, type MitoId } from '@shared/mito'
+
+/** A sticker from either pack: the logo characters (drawn) or Mito (pictures). */
+type StickerId = LogoStickerId | MitoId
 
 const SIDE = 32
 /** Average difference per colour channel (0..255): a real match scores ~1.5–2.5 even after JPEG, the next
@@ -35,9 +39,17 @@ function thumbnail(img: HTMLImageElement): Uint8ClampedArray {
 }
 
 function fingerprints(): Promise<Array<{ id: StickerId; data: Uint8ClampedArray }>> {
-  prints ??= Promise.all(
-    stickerIds().map(async (id) => ({ id, data: thumbnail(await load(`data:image/svg+xml;utf8,${encodeURIComponent(stickerSvg(id).replace('<svg ', '<svg width="384" height="384" '))}`)) }))
-  )
+  prints ??= Promise.all([
+    ...stickerIds().map(async (id) => ({ id: id as StickerId, data: thumbnail(await load(`data:image/svg+xml;utf8,${encodeURIComponent(stickerSvg(id).replace('<svg ', '<svg width="384" height="384" '))}`)) })),
+    // A Mito picture that fails to load is left out rather than failing the whole comparison.
+    ...MITO_STICKERS.map(async (m) => {
+      const id: MitoId = `mito:${m.id}`
+      return load(mitoUrl(id, 'still'), true).then(
+        (img) => ({ id: id as StickerId, data: thumbnail(img) }),
+        () => undefined
+      )
+    })
+  ]).then((list) => list.filter((p): p is { id: StickerId; data: Uint8ClampedArray } => !!p))
   return prints
 }
 

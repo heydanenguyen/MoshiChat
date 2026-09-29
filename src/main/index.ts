@@ -6,6 +6,7 @@ import type { AddAccountInput, AppCommand, BridgeEvent, GifItem, OutgoingAttachm
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
+import { isMitoId, mitoSticker } from '@shared/mito'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
 import { Storage } from './storage'
@@ -163,22 +164,36 @@ function applyTheme(theme: Settings['theme']): void {
 /** The legal documents shipped next to the app (Vietnamese first, English below). */
 const LEGAL_DOCS = { notice: 'NOTICE.md', license: 'LICENSE', terms: 'TERMS.md', privacy: 'PRIVACY.md', credits: 'CREDITS.md' } as const
 
-/** A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency. */
+const stickerDir = (): string => (app.isPackaged ? join(process.resourcesPath, 'stickers') : join(__dirname, '../../resources/stickers'))
+
+/**
+ * A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency,
+ * and for an animated Mito sticker its looping WebP (Zalo sends that one, moving).
+ */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
   if (id.startsWith('custom:')) return customStickerFile(id.slice(7))
-  if (!isStickerId(id)) throw new Error('Unknown sticker')
-  const dir = app.isPackaged ? join(process.resourcesPath, 'stickers') : join(__dirname, '../../resources/stickers')
-  const path = join(dir, `${id}.png`)
-  const opaque = join(dir, `${id}-white.png`)
-  const [data, opaqueInfo] = await Promise.all([readFile(path), stat(opaque).catch(() => undefined)])
+  const mito = isMitoId(id)
+  if (!mito && !isStickerId(id)) throw new Error('Unknown sticker')
+  const base = mito ? join(stickerDir(), 'mito', id.slice('mito:'.length)) : join(stickerDir(), id)
+  const path = `${base}.png`
+  const opaque = `${base}-white.png`
+  const animated = mito && mitoSticker(id).loop ? `${base}.webp` : undefined
+  const [data, opaqueInfo, animatedInfo] = await Promise.all([
+    readFile(path),
+    stat(opaque).catch(() => undefined),
+    animated ? stat(animated).catch(() => undefined) : undefined
+  ])
+  const alternates: NonNullable<OutgoingAttachment['alternates']> = []
+  if (opaqueInfo) alternates.push({ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' })
+  if (animated && animatedInfo) alternates.push({ path: animated, mime: 'image/webp', size: animatedInfo.size, role: 'animated' })
   return {
     path,
-    name: `${id}.png`,
+    name: `${basename(base)}.png`,
     mime: 'image/png',
     size: data.length,
     sticker: id,
     preview: `data:image/png;base64,${data.toString('base64')}`,
-    alternates: opaqueInfo ? [{ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' }] : undefined
+    alternates: alternates.length ? alternates : undefined
   }
 }
 
@@ -450,12 +465,24 @@ function installUiScript(win: BrowserWindow): void {
  * unison-img://img/?u=<https url> re-fetches a profile picture through the platform's own session.
  * Some Instagram/Facebook CDN links only load inside the signed-in site. Only image CDNs are allowed.
  */
-protocol.registerSchemesAsPrivileged([{ scheme: 'unison-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([{ scheme: 'unison-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 
 const IMAGE_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|t\.me|whatsapp\.net)$/i
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
+    // unison-img://sticker/mito/<id>.png|webp: the Mito pack's pictures, straight from the app's resources.
+    const url = new URL(request.url)
+    if (url.hostname === 'sticker') {
+      const m = /^\/mito\/([a-z]+)\.(png|webp)$/.exec(url.pathname)
+      if (!m || !isMitoId(`mito:${m[1]}`)) return new Response('blocked', { status: 403 })
+      try {
+        const data = await readFile(join(stickerDir(), 'mito', `${m[1]}.${m[2]}`))
+        return new Response(new Uint8Array(data), { status: 200, headers: { 'content-type': `image/${m[2]}`, 'cache-control': 'max-age=31536000', 'access-control-allow-origin': '*' } })
+      } catch {
+        return new Response('missing', { status: 404 })
+      }
+    }
     try {
       const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
       if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })

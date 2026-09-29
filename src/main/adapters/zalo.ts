@@ -5,8 +5,7 @@ import type { Account, Attachment, Conversation, ConversationStats, Message, Pee
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
 import { imageMetadata } from '../media/image-size'
-import { animatedStickerGif, stickerAsGif } from '../media/sticker-gif'
-import { isStickerId } from '@shared/stickers'
+import { outgoingStickerGif } from '../media/sticker-gif'
 import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
 
 export interface ZaloSecret {
@@ -296,7 +295,7 @@ export class ZaloAdapter implements PlatformAdapter {
     if (!a.sticker) return a.path
     try {
       // Pack stickers go out moving, the same loop Moshi plays; the user's own stickers as they are.
-      return isStickerId(a.sticker) ? await animatedStickerGif(a.sticker) : await stickerAsGif(a.path)
+      return await outgoingStickerGif(a)
     } catch (err) {
       this.ctx.log('zalo sticker gif failed, sending the png', (err as Error).message)
       return a.path

@@ -172,8 +172,11 @@ export interface OutgoingAttachment {
   /** Recorded voice note: platforms mark it as push-to-talk. */
   voice?: boolean
   duration?: number
-  /** The same recording in other formats (voice notes are recorded as Opus and AAC at once). */
-  alternates?: Array<{ path: string; mime: string; size: number; role?: 'opaque' }>
+  /**
+   * The same file in other formats: voice notes are recorded as Opus and AAC at once; a sticker carries a copy on
+   * white ('opaque', for platforms that flatten transparency) and, when it moves, its animation ('animated').
+   */
+  alternates?: Array<{ path: string; mime: string; size: number; role?: 'opaque' | 'animated' }>
   /** Moshi sticker id when this file is one of our stickers. */
   sticker?: string
   /** An animated GIF from the GIF picker (alternates carry an MP4 copy). */

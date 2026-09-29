@@ -3,7 +3,8 @@ import { createHash } from 'crypto'
 import { mkdir, stat } from 'fs/promises'
 import { join } from 'path'
 import sharp from 'sharp'
-import { stickerMarkup, type StickerId } from '@shared/stickers'
+import { isStickerId, stickerMarkup, type StickerId } from '@shared/stickers'
+import type { OutgoingAttachment } from '@shared/types'
 import { motionOf, stickerFrameAttrs } from '@shared/sticker-motion'
 
 const dir = async (): Promise<string> => {
@@ -56,4 +57,14 @@ export async function animatedStickerGif(id: StickerId, size = 216, fps = 25): P
     .gif({ delay: Array(count).fill(Math.round(1000 / fps)), loop: 0, effort: 8, dither: 0 })
     .toFile(out)
   return out
+}
+
+/**
+ * The GIF a sticker goes out as on platforms that show a GIF at its own size, moving and see-through (Zalo, Messenger):
+ * a logo-pack sticker with its motion, a sticker that has its own animation (Mito) as that animation, anything else
+ * (the user's own stickers) as it is.
+ */
+export async function outgoingStickerGif(a: Pick<OutgoingAttachment, 'sticker' | 'path' | 'alternates'>): Promise<string> {
+  if (a.sticker && isStickerId(a.sticker)) return animatedStickerGif(a.sticker)
+  return stickerAsGif(a.alternates?.find((alt) => alt.role === 'animated')?.path ?? a.path)
 }

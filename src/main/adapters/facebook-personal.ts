@@ -2,6 +2,7 @@ import { createReadStream } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join } from 'path'
 import { browserUserAgent } from '../user-agent'
+import { outgoingStickerGif } from '../media/sticker-gif'
 import { mapFcaAttachment, mapFcaEvent, type FcaAttachment } from './facebook-items'
 import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
@@ -152,8 +153,22 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
     const api = this.requireApi()
     const threadId = externalIdOf(id)
-    // Messenger plays AAC voice notes natively; recordings carry an .m4a copy.
-    const attachment = (options.attachments ?? []).map((f) => createReadStream(f.alternates?.find((alt) => alt.mime === 'audio/mp4')?.path ?? f.path))
+    // Messenger plays AAC voice notes natively; recordings carry an .m4a copy. Stickers go out as a GIF, which
+    // Messenger keeps as it is (moving, see-through, at its own size) where a PNG would become a photo.
+    const paths = await Promise.all(
+      (options.attachments ?? []).map(async (f) => {
+        if (f.sticker) {
+          try {
+            return await outgoingStickerGif(f)
+          } catch (err) {
+            this.ctx.log('messenger sticker gif failed, sending the png', (err as Error).message)
+            return f.path
+          }
+        }
+        return f.alternates?.find((alt) => alt.mime === 'audio/mp4')?.path ?? f.path
+      })
+    )
+    const attachment = paths.map((path) => createReadStream(path))
     const payload = attachment.length ? { body: text, attachment } : { body: text }
     const result = (await new Promise<{ messageID?: string; timestamp?: number | string }>((resolve, reject) => {
       const cb = (err: unknown, info?: { messageID?: string; timestamp?: number | string }): void => (err ? reject(err instanceof Error ? err : new Error(String(err))) : resolve(info ?? {}))
