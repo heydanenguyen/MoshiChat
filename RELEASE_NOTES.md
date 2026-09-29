@@ -1,26 +1,23 @@
-## Moshi 0.2.6
+## Moshi 0.2.7
 
 ### Mới
-- **Dịch nội dung đang soạn.** Nút dịch cạnh ô nhập: chọn ngôn ngữ, bấm *Dịch ngay* (có Hoàn tác), hoặc bật *Tự dịch khi gửi* cho từng người để gõ tiếng Việt mà gửi đi tiếng Anh, Nhật, Hàn… Ngôn ngữ được nhớ theo từng cuộc trò chuyện.
-- **Sidebar gập gọn.** Bấm vào tiêu đề Hộp thư / Nhãn / Tài khoản để gập nhóm đó lại, bấm lại để mở; khi gập vẫn thấy số tin chưa đọc.
-- **Ngôn ngữ gợi ý trả lời** trong Cài đặt → AI: tự động theo tin nhắn, hoặc luôn tiếng Việt / English.
+- **Tắt bớt nút trên thanh hành động.** Cài đặt → Chat → *Thao tác trên tin nhắn*: bật/tắt từng nút (cảm xúc, trả lời, chuyển tiếp, dịch, đọc to, việc cần làm, lưu) để thanh hiện khi rê chuột gọn hơn.
 
 ### Cải thiện
-- **Bong bóng tin nhắn rộng hơn hẳn.** Thanh hành động khi rê chuột không còn chiếm chỗ trong hàng, nên tin dài đọc thành dòng rộng (~76% khung) thay vì cột hẹp.
-- **Tóm tắt và gợi ý trả lời** có prompt mới: nêu rõ tin cần trả lời, ba ý khác nhau, ví dụ mẫu. Với tiếng Việt, hãy chọn model "Tốt hơn" (1.5B) trong Cài đặt → AI.
-- **Icon âm thanh** vẽ lại theo bộ nhân vật Moshi thay cho emoji hệ thống.
-- Mục **Nền tối** chỉ hiện khi app đang ở giao diện tối.
+- **Thanh hành động nằm sát bong bóng.** Hàng tin đến không còn giãn bằng tin dài nhất trong nhóm, nên các nút luôn cách bong bóng vài pixel ở cả hai chiều; trong pane hẹp thanh nằm ngay góc trên của bong bóng.
+- **Chọn nhắc việc từ tin nhắn** không còn biến mất khi rời chuột: thanh giữ nguyên khi picker đang mở, picker mở về phía bong bóng, tự lật xuống dưới khi sát mép trên và không bị cắt ở mép cột chat.
 
 ### Sửa
-- Instagram: lỗi "HTTP 500: unexpected response" lúc kết nối (Instagram trục trặc tạm thời ở bước tra tên) không còn làm hỏng cả tài khoản; app thử lại rồi dùng tên đã nhớ.
+- **Sticker Zalo** hiện đúng hình thay vì ô "Sticker" trống: app tra ảnh theo id sticker một lần rồi nhớ lại.
+- **Ảnh Zalo** tải lỗi sẽ tự thử lại qua proxy của app; vẫn lỗi thì hiện ô "Ảnh" thay cho icon vỡ.
+- **Giao diện Liquid:** mở emoji / sticker / GIF không còn làm ô soạn tin phình to.
 
 ---
 
 ### English
-- Translate what you type: pick a language next to the box, translate now (with undo) or turn on translate-when-sending per chat. Remembered per conversation.
-- Sidebar groups (Inboxes, Tags, Accounts) fold on click; a small count stays visible while folded.
-- Reply-suggestion language setting (auto / Vietnamese / English).
-- Much wider message bubbles: the hover action bar no longer takes room inside the row.
-- Sharper summary and reply prompts; for Vietnamese pick the "Better" (1.5B) model.
-- Sound icons redrawn in the Moshi character style; the dark-background option only shows in the dark look.
-- Instagram: a transient 500 at connect no longer fails the account.
+- Settings → Chat → Message actions: switch off the buttons you never use so the hover bar stays short.
+- The hover action bar now sits right beside the bubble on both sides; in a narrow pane it sits over the bubble's top corner.
+- The to-do "remind me" picker no longer vanishes when the mouse moves: the bar stays while it is open, it opens on the bubble's side, flips below near the top and stays inside the chat column.
+- Zalo stickers show their picture (looked up once by id and cached) instead of an empty "Sticker" box.
+- Zalo photos that fail to load retry through the app's image proxy, then fall back to a placeholder.
+- Liquid style: opening the emoji, sticker or GIF picker no longer inflates the composer.
