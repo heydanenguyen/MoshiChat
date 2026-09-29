@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, X } from 'lucide-react'
-import type { Account, Attachment, Conversation, Message, Platform } from '@shared/types'
+import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
+import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
 import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, withStickers, type MessageGroup } from '../utils'
@@ -555,6 +556,10 @@ function Bubble({
   const saved = useStore((s) => !!s.settings.savedMessages?.some((m) => m.messageId === message.id && m.conversationId === message.conversationId))
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
+  const [todoOpen, setTodoOpen] = useState(false)
+  // Which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
+  const bubbleActions = useStore((s) => s.settings.bubbleActions)
+  const wants = (action: BubbleAction): boolean => bubbleActions?.[action] !== false
   // Keep the full emoji sheet inside the chat column, whichever side the bubble is on.
   const fitInChat = useCallback((anchor: HTMLSpanElement | null) => {
     const sheet = anchor?.firstElementChild as HTMLElement | null
@@ -619,7 +624,7 @@ function Bubble({
   }, [picker])
 
   const settled = message.status !== 'sending' && message.status !== 'failed'
-  const showActions = settled && (features.reply || features.react || true)
+  const showActions = settled && BUBBLE_ACTIONS.some(wants)
 
   return (
     <div className={`bubble-row ${highlighted ? 'highlight' : ''}`} data-message-id={message.id}>
@@ -661,26 +666,30 @@ function Bubble({
         )}
       </div>
       {showActions && (
-        <div className={`bubble-actions ${picker || moreEmoji ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
-          {features.react && (
+        <div className={`bubble-actions ${picker || moreEmoji || todoOpen ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
+          {features.react && wants('react') && (
             <button className="icon-btn" title={t('react')} onClick={() => setPicker((p) => !p)}>
               <SmilePlus size={15} strokeWidth={2} />
             </button>
           )}
-          {features.reply && (
+          {features.reply && wants('reply') && (
             <button className="icon-btn" title={t('reply')} onClick={() => setReplyTo(message.conversationId, message)}>
               <Reply size={15} strokeWidth={2} />
             </button>
           )}
-          <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
-            <Forward size={15} strokeWidth={2} />
-          </button>
-          <TranslateButton message={message} />
-          <SpeakButton message={message} />
-          <TodoButton message={message} />
-          <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
-            <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
-          </button>
+          {wants('forward') && (
+            <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
+              <Forward size={15} strokeWidth={2} />
+            </button>
+          )}
+          {wants('translate') && <TranslateButton message={message} />}
+          {wants('speak') && <SpeakButton message={message} />}
+          {wants('todo') && <TodoButton message={message} onOpenChange={setTodoOpen} />}
+          {wants('save') && (
+            <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
+              <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+            </button>
+          )}
           {picker && (
             <div className="emoji-picker reaction-bar">
               {QUICK_REACTIONS.map((emoji) => (
@@ -730,6 +739,9 @@ function Bubble({
 
 function AttachmentView({ attachment, message, platform }: { attachment: Attachment; message: Message; platform: Platform }): JSX.Element {
   const t = useT()
+  // A photo the CDN refuses to serve straight to <img> is fetched again through the app's own
+  // session with the platform's referer; if that fails too, a placeholder instead of a broken icon.
+  const [imageLoad, setImageLoad] = useState<'direct' | 'proxy' | 'failed'>('direct')
   const openLightbox = useStore((s) => s.openLightbox)
   const loadAttachment = useStore((s) => s.loadAttachment)
   const openAttachment = useStore((s) => s.openAttachment)
@@ -745,13 +757,15 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
       return <PostCard attachment={attachment} platform={platform} />
     case 'image': {
       if (attachment.expired) return <GoneMedia />
-      const src = attachment.url ?? attachment.thumbnailUrl
-      return src ? (
+      const direct = attachment.url ?? attachment.thumbnailUrl
+      const src = imageLoad === 'proxy' && direct && /^https:/.test(direct) ? `unison-img://img/?u=${encodeURIComponent(direct)}` : direct
+      return src && imageLoad !== 'failed' ? (
         <img
           className="attachment-image"
           src={src}
           alt={t('photo')}
           draggable={false}
+          onError={() => setImageLoad((state) => (state === 'direct' && /^https:/.test(direct ?? '') ? 'proxy' : 'failed'))}
           onClick={() => void viewImage()}
           style={attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined}
         />

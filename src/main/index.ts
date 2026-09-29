@@ -420,12 +420,13 @@ function registerImageProxy(): void {
       const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
       if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
       const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
+      const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(target.hostname)
       const ses = /fbcdn|cdninstagram|instagram/.test(target.hostname)
         ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
         : /facebook|fbsbx/.test(target.hostname)
           ? session.fromPartition('persist:login-messenger')
           : session.defaultSession
-      const res = await ses.fetch(target.toString(), { headers: { Referer: instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
+      const res = await ses.fetch(target.toString(), { headers: { Referer: zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
       const type = res.headers.get('content-type') ?? ''
       if (!res.ok || !type.startsWith('image/')) return new Response('unavailable', { status: 404 })
       return new Response(res.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'max-age=86400' } })

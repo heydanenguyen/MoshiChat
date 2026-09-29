@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlarmClock, CalendarClock, Check, ChevronDown, ChevronRight, ListTodo, MessageSquare, Moon, Plus, Sunrise, Trash2, X } from 'lucide-react'
 import type { Message } from '@shared/types'
 import { TODO_GROUPS, dueInfo, groupTodos, quickTimes, type Todo, type TodoGroup } from '@shared/todos'
@@ -23,23 +23,41 @@ export function useOpenTodos(): number {
 }
 
 /** In the bubble's action bar: turn this message into a to-do, with or without a reminder. */
-export function TodoButton({ message }: { message: Message }): JSX.Element {
+export function TodoButton({ message, onOpenChange }: { message: Message; onOpenChange?(open: boolean): void }): JSX.Element {
   const t = useT()
   const addTodo = useStore((s) => s.addTodo)
   const already = useStore((s) => !!s.settings.todos?.some((x) => x.messageId === message.id && x.conversationId === message.conversationId && !x.done))
-  const [open, setOpen] = useState(false)
+  const [open, setOpenState] = useState(false)
+  const setOpen = (next: boolean): void => {
+    setOpenState(next)
+    onOpenChange?.(next)
+  }
   const text = message.text.trim() || message.attachments.map((a) => `[${a.kind}]`).join(' ')
   const add = (due?: number): void => {
     setOpen(false)
     void addTodo({ conversationId: message.conversationId, messageId: message.id, text: text.slice(0, 200), due })
   }
+  // Keep the picker inside the chat: slide it sideways at the column's edges, open it below the
+  // bar when the message is near the top (the bar itself floats beside the bubble).
+  const place = useCallback((anchor: HTMLSpanElement | null) => {
+    const sheet = anchor?.firstElementChild as HTMLElement | null
+    const bounds = anchor?.closest('.chat-scroll')?.getBoundingClientRect()
+    if (!anchor || !sheet || !bounds) return
+    const animation = sheet.style.animation
+    sheet.style.animation = 'none'
+    const r = sheet.getBoundingClientRect()
+    sheet.style.animation = animation
+    if (r.top < bounds.top + 8 && r.bottom + r.height < bounds.bottom) anchor.classList.add('below')
+    const dx = Math.min(0, bounds.right - 8 - r.right) || Math.max(0, bounds.left + 8 - r.left)
+    if (dx) sheet.style.translate = `${dx}px 0`
+  }, [])
   return (
     <>
-      <button className={`icon-btn ${already ? 'active' : ''}`} title={t('todoFromMessage')} onClick={() => setOpen((o) => !o)} aria-pressed={already}>
+      <button className={`icon-btn ${already || open ? 'active' : ''}`} title={t('todoFromMessage')} onClick={() => setOpen(!open)} aria-pressed={already}>
         <ListTodo size={15} strokeWidth={2} />
       </button>
       {open && (
-        <span className="todo-picker-anchor">
+        <span className="todo-picker-anchor" ref={place}>
           <SchedulePicker onPick={add} onClose={() => setOpen(false)} title={t('todoWhen')} noneLabel={t('todoNoDue')} onNone={() => add(undefined)} />
         </span>
       )}

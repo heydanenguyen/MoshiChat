@@ -89,6 +89,10 @@ export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'sticker' | 
 /** Why a story card is attached, shown as a small localized label above it. */
 export type StoryLabel = 'story_reply' | 'story_reaction' | 'story_mention' | 'story_share'
 
+/** The buttons in the bar that appears beside a hovered message, in order. */
+export type BubbleAction = 'react' | 'reply' | 'forward' | 'translate' | 'speak' | 'todo' | 'save'
+export const BUBBLE_ACTIONS: BubbleAction[] = ['react', 'reply', 'forward', 'translate', 'speak', 'todo', 'save']
+
 export interface Attachment {
   id: string
   kind: AttachmentKind
@@ -539,6 +543,8 @@ export interface Settings {
   chatModel?: ChatModel
   /** What language reply suggestions are written in: the chat's own, or always Vietnamese / English. */
   suggestLanguage?: 'auto' | 'vi' | 'en'
+  /** Buttons in the bar beside a hovered message; false hides one (all on by default). */
+  bubbleActions?: Partial<Record<BubbleAction, boolean>>
   /** Reply suggestions appear by themselves under new messages (once the chat model is installed). */
   aiSuggest?: boolean
   /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */

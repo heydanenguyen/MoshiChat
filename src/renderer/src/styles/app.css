@@ -8856,9 +8856,13 @@ button.moment-card:hover {
   pointer-events: none;
   z-index: -1;
 }
+:root[data-style='liquid'] .sheet {
+  position: relative;
+}
+/* The popover sheets stay absolutely positioned (that already anchors the sheen); making them
+   relative put the emoji, sticker and GIF pickers in the composer's flow and blew it up. */
 :root[data-style='liquid'] .sheet,
 :root[data-style='liquid'] .emoji-sheet {
-  position: relative;
   border: 1px solid var(--liquid-edge);
 }
 /* controls turn into pills */
@@ -10174,15 +10178,34 @@ button.moment-card:hover {
     background: var(--bg-elevated);
     box-shadow: var(--shadow-md);
   }
-  /* Over the bubble's outer top corner, away from the sender name and the avatar. */
+  /* Over the bubble's top corner on the bubble's own side (rows are as wide as their bubble now). */
   .msg-group.in .bubble-actions {
-    left: auto;
-    right: 8px;
+    left: 0;
+    right: auto;
   }
   .msg-group.out .bubble-actions {
-    right: auto;
-    left: 8px;
+    right: 0;
+    left: auto;
   }
+}
+/* Rows hug their bubble on both sides, so the actions sit right beside it instead of at the far
+   edge of the column (incoming rows used to stretch to the widest bubble in the group). */
+.msg-group.in .msg-group-body {
+  align-items: flex-start;
+}
+/* The to-do "remind me" picker opens above the bar, on the bubble's side, and flips below near the top. */
+.bubble-actions .todo-picker-anchor {
+  bottom: 30px;
+  left: 0;
+  right: auto;
+}
+.msg-group.out .bubble-actions .todo-picker-anchor {
+  left: auto;
+  right: 0;
+}
+.bubble-actions .todo-picker-anchor.below {
+  bottom: auto;
+  top: 30px;
 }
 @container chat (max-width: 420px) {
   .msg-group-body {

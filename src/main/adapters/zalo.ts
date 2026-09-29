@@ -52,6 +52,9 @@ export class ZaloAdapter implements PlatformAdapter {
   private cacheFile = ''
   private groupHistoryGone = false
   private saveTimer?: NodeJS.Timeout
+  /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
+  private stickerUrls = new Map<number, string>()
+  private stickerLookups = new Set<number>()
 
   constructor(
     initialId: string,
@@ -512,7 +515,7 @@ export class ZaloAdapter implements PlatformAdapter {
       senderName: outgoing ? this.account.displayName : raw.dName || this.names.get(raw.uidFrom) || 'Zalo',
       senderAvatarUrl: outgoing ? this.account.avatarUrl : this.avatars.get(raw.uidFrom),
       text: textOf(raw),
-      attachments: attachmentsOf(raw),
+      attachments: attachmentsOf(raw, this.stickerUrlFor(raw)),
       reactions: [],
       sentAt: Number(raw.ts),
       isOutgoing: outgoing,
@@ -522,6 +525,44 @@ export class ZaloAdapter implements PlatformAdapter {
       message.replyTo = { id: String(raw.quote.globalMsgId), senderName: raw.quote.fromD, text: raw.quote.msg || (raw.quote.attach ? 'Attachment' : '') }
     }
     return message
+  }
+
+  /** The picture for a sticker message; undefined while it is still being looked up (the message is updated then). */
+  private stickerUrlFor(raw: TMessage): string | undefined {
+    if (raw.msgType !== 'chat.sticker') return undefined
+    const stickerId = stickerIdOf(raw)
+    if (!stickerId) return undefined
+    const known = this.stickerUrls.get(stickerId)
+    if (known) return known
+    if (this.api && !this.stickerLookups.has(stickerId)) {
+      this.stickerLookups.add(stickerId)
+      void this.lookupSticker(stickerId)
+    }
+    return undefined
+  }
+
+  private async lookupSticker(stickerId: number): Promise<void> {
+    try {
+      const [detail] = await this.requireApi().getStickersDetail(stickerId)
+      // The animated WebP when there is one, else the still picture (the sprite sheet is no use on its own).
+      const url = detail?.stickerWebpUrl || detail?.stickerUrl
+      if (!url) throw new Error('no picture')
+      this.stickerUrls.set(stickerId, url)
+      this.scheduleSave()
+      // Every message with this sticker that is already on screen gets its picture.
+      for (const [id, list] of this.converted) {
+        for (const raw of this.raw.get(externalIdOf(id)) ?? []) {
+          if (raw.msgType !== 'chat.sticker' || stickerIdOf(raw) !== stickerId) continue
+          const index = list.findIndex((m) => m.id === raw.msgId)
+          if (index < 0) continue
+          list[index] = { ...list[index], attachments: attachmentsOf(raw, url) }
+          this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
+        }
+      }
+    } catch (err) {
+      this.stickerLookups.delete(stickerId)
+      this.ctx.log('zalo sticker lookup failed', String(stickerId), (err as Error).message)
+    }
   }
 
   private messagesFor(id: string, rebuild = false): Message[] {
@@ -584,7 +625,8 @@ export class ZaloAdapter implements PlatformAdapter {
 
   private async loadCache(): Promise<void> {
     try {
-      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as { threads?: Array<[string, 0 | 1, TMessage[]]> }
+      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as { threads?: Array<[string, 0 | 1, TMessage[]]>; stickers?: Array<[number, string]> }
+      for (const [stickerId, url] of data.stickers ?? []) this.stickerUrls.set(stickerId, url)
       for (const [threadId, type, list] of data.threads ?? []) {
         this.threadTypes.set(threadId, type)
         this.raw.set(threadId, list)
@@ -601,7 +643,7 @@ export class ZaloAdapter implements PlatformAdapter {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     this.saveTimer = setTimeout(() => {
       const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
-      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
+      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls] })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
     }, 2000)
   }
 
@@ -631,7 +673,14 @@ function textOf(raw: TMessage): string {
   return ''
 }
 
-function attachmentsOf(raw: TMessage): Attachment[] {
+function stickerIdOf(raw: TMessage): number | undefined {
+  if (typeof raw.content !== 'object' || !raw.content) return undefined
+  const c = raw.content as { id?: number | string; stickerId?: number | string }
+  const n = Number(c.id ?? c.stickerId)
+  return Number.isFinite(n) && n > 0 ? n : undefined
+}
+
+function attachmentsOf(raw: TMessage, stickerUrl?: string): Attachment[] {
   if (typeof raw.content !== 'object' || !raw.content) return []
   const c = raw.content as { href?: string; thumb?: string; title?: string; description?: string; params?: string; type?: string }
   const id = `${raw.msgId}-a`
@@ -643,7 +692,7 @@ function attachmentsOf(raw: TMessage): Attachment[] {
     case 'chat.voice':
       return [{ id, kind: 'audio', url: c.href, name: 'Voice message' }]
     case 'chat.sticker':
-      return [{ id, kind: 'sticker', name: '' }]
+      return [{ id, kind: 'sticker', name: '', url: stickerUrl }]
     case 'chat.gif':
       return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb }]
     case 'share.file':

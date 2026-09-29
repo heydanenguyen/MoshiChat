@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, Database, FileArchive, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
-import type { Language, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
+import type { BubbleAction, Language, TextSize, ThemePreference } from '@shared/types'
+import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
 import { LogoMark } from './Logo'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
 import { useStore, useT, useTagDefs } from '../store'
+import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
@@ -413,6 +414,17 @@ function AccountsPage(): JSX.Element {
   )
 }
 
+/** Settings rows reuse the buttons' own labels. */
+const BUBBLE_ACTION_LABELS: Record<BubbleAction, TKey> = {
+  react: 'react',
+  reply: 'reply',
+  forward: 'forward',
+  translate: 'aiTranslate',
+  speak: 'aiSpeak',
+  todo: 'todoFromMessage',
+  save: 'saveAction'
+}
+
 function ChatPage(): JSX.Element {
   const t = useT()
   const settings = useStore((s) => s.settings)
@@ -435,6 +447,14 @@ function ChatPage(): JSX.Element {
         <Row title={t('effects')} sub={t('effectsHint')}>
           <Switch on={settings.effects !== false} onChange={(on) => void setSettings({ effects: on })} />
         </Row>
+      </Group>
+      <Group label={t('bubbleActionsTitle')}>
+        <Row title={t('bubbleActionsTitle')} sub={t('bubbleActionsHint')} />
+        {BUBBLE_ACTIONS.map((action) => (
+          <Row key={action} title={t(BUBBLE_ACTION_LABELS[action])}>
+            <Switch on={settings.bubbleActions?.[action] !== false} onChange={(on) => void setSettings({ bubbleActions: { ...settings.bubbleActions, [action]: on } })} />
+          </Row>
+        ))}
       </Group>
       <Group>
         <Row title={t('quickReplies')} sub={t('quickRepliesHint')} />
