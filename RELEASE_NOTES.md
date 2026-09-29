@@ -1,21 +1,21 @@
-## Moshi 0.2.8
+## Moshi 0.2.9
 
 ### Mới
-- **Chỉnh ảnh ngay trong trình xem ảnh.** Mở ảnh → *Chỉnh sửa* (phím E): mũi tên, khung chữ nhật, khung tròn, bút vẽ, bút dạ quang, chữ, đánh số bước, che mờ thông tin, cắt ảnh; 8 màu, 3 cỡ nét. Chọn để di chuyển, đổi màu hay xoá nét đã vẽ; Hoàn tác / Làm lại (⌘Z, ⇧⌘Z); Shift để khoá góc 45° hoặc hình vuông. Xong thì *Chép* (⌘C), *Lưu* (⌘S) hoặc *Đưa vào chat* (⌘↵) để gửi kèm lời nhắn.
-- **Nút Tải về** trong trình xem ảnh: lưu thẳng vào Downloads, trùng tên tự thêm số. Cài đặt → Chat → *Tải ảnh và video* để đổi thư mục hoặc bật *Hỏi nơi lưu mỗi lần*.
+- **Sticker biết chuyển động.** Cả 72 sticker của Moshi giờ có chuyển động riêng theo từng biểu cảm: tim đập, cười lắc lư, bật nhảy quẩy, thở dài rơi nước mắt, gật gù đeo kính, ngáp ngủ bay chữ Z… Sticker tự chạy hai vòng khi hiện trong chat, chạy tiếp khi rê chuột, và trong bảng chọn thì chạy khi rê chuột. Máy bật *Giảm chuyển động* hoặc tắt *Hiệu ứng* trong Cài đặt thì sticker đứng yên.
+- **Sticker gửi qua Zalo là GIF động, nền trong suốt,** kích thước vừa phải thay vì ảnh to có nền trắng.
+
+### Cải thiện
+- **Close friends chính xác hơn:** xếp theo số ngày hai bên cùng nhắn rồi mới đến số tin; bỏ nhóm chat khỏi bảng xếp hạng; tải đủ 30 ngày lịch sử Instagram (trước đây chỉ vài ngày); các tài khoản tải song song và lần sau chỉ tải phần mới nên nhanh hơn nhiều. Lần đầu mở sau khi cập nhật sẽ mất chút thời gian để tải lại cho đủ.
+- **Nút tóm tắt và gợi ý trả lời** chỉ hiện khi đã tải model AI trong Cài đặt → AI.
 
 ### Sửa
-- **Ảnh gửi đi không hiện xem trước** (rõ nhất trên Zalo): ảnh lớn và screenshot Retina giờ có bản thu nhỏ hiện ngay thay vì ô "Photo".
-- **Screenshot dán vào bị hiện thành sticker:** app không còn nhầm ảnh gửi ngay sau một sticker là sticker đó.
-- **Gõ tiếng Việt bị gửi lặp chữ cuối** ("đc", "bug"): nhấn Enter khi bộ gõ chưa chốt từ giờ gửi một lần, đủ câu.
-- **macOS: đóng cửa sổ không mở lại được.** Đóng giờ chỉ ẩn cửa sổ; bấm icon ở Dock hoặc mở Moshi lần nữa là hiện lại. ⌘W đóng ảnh / bảng đang mở trước rồi mới tới cửa sổ.
+- **Gõ tiếng Việt bị gửi 2 lần cùng một câu:** bộ gõ vừa chốt từ vừa chuyển tiếp phím Enter khiến tin nhắn đi hai lần; giờ chỉ gửi một lần.
 
 ---
 
 ### English
-- Photo editor in the viewer (E): arrow, box, ellipse, pen, highlighter, text, numbered steps, pixelate and crop; 8 colours, 3 sizes; select to move, restyle or delete marks; undo/redo; then copy, save or add to the chat.
-- Download button in the viewer saves straight into Downloads (Settings → Chat to pick another folder or ask each time).
-- Big photos and Retina screenshots get an instant preview when sent (no more grey "Photo" box on Zalo).
-- A screenshot sent right after a sticker no longer shows up as that sticker.
-- Vietnamese/CJK input: Enter while the last word is still composing sends once, with the full text.
-- macOS: closing the window hides it; the Dock icon brings it back. ⌘W closes the photo or sheet on top first.
+- All 72 Moshi stickers move: each expression has its own loop. They play twice when they appear in a chat, while hovered, and in the picker on hover; reduced motion or Effects off keeps them still.
+- Stickers sent on Zalo go out as small animated GIFs with a transparent background.
+- Close friends: ranked by days you both wrote, groups left out, full 30 days of Instagram history, parallel and incremental loading.
+- The summary button and reply suggestions only show once the AI chat model is downloaded.
+- Fixed a Vietnamese input method sending the same message twice.
