@@ -471,6 +471,26 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
   return files
 }
 
+/** A pasted image (screenshot from the clipboard) as a file the adapters can send. */
+async function saveImage(bytes: Uint8Array, mime: string, name?: string): Promise<OutgoingAttachment> {
+  const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/gif' ? 'gif' : mime === 'image/webp' ? 'webp' : mime.startsWith('video/') ? 'mp4' : 'png'
+  if (!/^(image|video)\//.test(mime)) throw new Error('Only images and videos can be pasted')
+  if (bytes.length > 40 * 1024 * 1024) throw new Error('This image is too large to send')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const dir = join(app.getPath('temp'), 'unison-paste')
+  await mkdir(dir, { recursive: true })
+  const path = join(dir, `paste-${stamp}.${ext}`)
+  await writeFile(path, bytes)
+  const clean = (name ?? '').replace(/[\\/:*?"<>|]/g, '_').trim()
+  return {
+    path,
+    name: clean && clean !== 'image.png' ? clean : `screenshot-${stamp.slice(0, 19)}.${ext}`,
+    mime,
+    size: bytes.length,
+    preview: mime.startsWith('image/') && bytes.length < 3_000_000 ? `data:${mime};base64,${Buffer.from(bytes).toString('base64')}` : undefined
+  }
+}
+
 /** Persist a MediaRecorder voice note as Ogg/Opus so platforms treat it as a voice message. */
 async function saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -802,6 +822,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
   ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())
+  ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
+  ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
   ipcMain.handle(IPC.stickersList, () => listStickers())
   ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
   ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>

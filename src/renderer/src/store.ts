@@ -743,7 +743,16 @@ export const useStore = create<State>((set, get) => ({
   addDroppedFiles(conversationId, files) {
     for (const file of files) {
       const described = window.unison.app.describeFile(file)
-      if (!described.path) continue
+      if (!described.path) {
+        // Pasted from the clipboard (a screenshot): there is no file on disk yet, so main writes one.
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue
+        void file
+          .arrayBuffer()
+          .then((buf) => window.unison.app.saveImage(new Uint8Array(buf), file.type, file.name))
+          .then((attachment) => get().addFiles(conversationId, [attachment]))
+          .catch((err) => get().showToast(cleanError(err), 'error'))
+        continue
+      }
       if (file.type.startsWith('image/') && file.size < 3_000_000) {
         const reader = new FileReader()
         reader.onload = () => get().addFiles(conversationId, [{ ...described, preview: String(reader.result) }])

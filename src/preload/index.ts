@@ -53,6 +53,7 @@ const bridge: MoshiBridge = {
     suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines)
   },
   insights: {
+    backfill: (days) => ipcRenderer.invoke(IPC.insightsBackfill, days),
     records: () => ipcRenderer.invoke(IPC.insightsRecords)
   },
   stickers: {
@@ -94,6 +95,7 @@ const bridge: MoshiBridge = {
       size: file.size
     }),
     saveVoice: (bytes, durationSeconds, aac) => ipcRenderer.invoke(IPC.appSaveVoice, bytes, durationSeconds, aac),
+    saveImage: (bytes, mime, name) => ipcRenderer.invoke(IPC.appSaveImage, bytes, mime, name),
     sticker: (id) => ipcRenderer.invoke(IPC.appSticker, id),
     gifSearch: (query, page) => ipcRenderer.invoke(IPC.appGifSearch, query, page),
     gif: (item) => ipcRenderer.invoke(IPC.appGif, item),

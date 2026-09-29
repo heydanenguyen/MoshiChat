@@ -632,6 +632,8 @@ export type BridgeEvent =
   | { type: 'window:state'; maximized: boolean }
   | { type: 'settings:updated'; settings: Settings }
   | { type: 'ai:progress'; progress: AiProgress }
+  /** The insights backfill walking recent history: done of total chats. */
+  | { type: 'insights:progress'; done: number; total: number }
 
 export interface PlatformMeta {
   id: Platform

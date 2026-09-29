@@ -106,6 +106,8 @@ export interface MoshiBridge {
     suggest(lines: ChatLine[]): Promise<string[]>
   }
   insights: {
+    /** Walk the last `days` days of every active chat into the insight store (progress arrives as insights:progress events). */
+    backfill(days: number): Promise<void>
     /** Light records of the messages on this computer, for insights and memories. */
     records(): Promise<InsightRecord[]>
   }
@@ -155,6 +157,8 @@ export interface MoshiBridge {
     describeFile(file: File): OutgoingAttachment
     /** Persist a recorded voice note (WebM/Opus from MediaRecorder) as an OGG/Opus file ready to send. */
     saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8Array): Promise<OutgoingAttachment>
+    /** An image pasted from the clipboard (no file behind it yet): written to a temp file, ready to send. */
+    saveImage(bytes: Uint8Array, mime: string, name?: string): Promise<OutgoingAttachment>
     /** A Moshi sticker as a ready-to-send image file. */
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
@@ -227,6 +231,8 @@ export const IPC = {
   appSaveVoice: 'app:saveVoice',
   appSticker: 'app:sticker',
   insightsRecords: 'insights:records',
+  insightsBackfill: 'insights:backfill',
+  appSaveImage: 'app:saveImage',
   stickersList: 'stickers:list',
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',

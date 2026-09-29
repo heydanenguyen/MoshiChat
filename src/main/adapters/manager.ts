@@ -1,4 +1,5 @@
 import type { InsightRecord } from '@shared/insights'
+import { InsightStore } from '../insights-store'
 import { SendLimiter } from '../rate-limit'
 import { randomUUID } from 'crypto'
 import { app } from 'electron'
@@ -56,6 +57,8 @@ export class AccountManager {
   /** Keeps every account sending at a human pace (see rate-limit.ts). */
   private limiter = new SendLimiter()
   private pendingAuth = new Map<string, PendingAuth>()
+  private insightStore = new InsightStore()
+  private backfilling: Promise<void> | undefined
   private contactCache = new Map<string, { at: number; list: Contact[] }>()
 
   constructor(
@@ -534,27 +537,78 @@ export class AccountManager {
     }
   }
 
-  /** Light records of every message Moshi holds in memory (its own cache plus what each adapter keeps). */
-  insightRecords(): InsightRecord[] {
-    const seen = new Map<string, InsightRecord>()
-    const add = (m: Message): void => {
-      if (m.system) return
-      seen.set(`${m.conversationId}|${m.id}`, {
-        conversationId: m.conversationId,
-        id: m.id,
-        sentAt: m.sentAt,
-        isOutgoing: m.isOutgoing,
-        senderName: m.senderName,
-        text: m.text.slice(0, 140),
-        hasPhoto: m.attachments.some((a) => a.kind === 'image' || a.kind === 'video')
+  /** Light records of every message Moshi knows: the on-disk insight store plus what is in memory. */
+  async insightRecords(): Promise<InsightRecord[]> {
+    await this.insightStore.load()
+    const live: Message[] = []
+    for (const bucket of this.messages.values()) live.push(...bucket.values())
+    for (const adapter of this.adapters.values()) live.push(...(adapter.cachedMessages?.() ?? []))
+    this.insightStore.add(live)
+    return this.insightStore.all()
+  }
+
+  /**
+   * Make sure every chat active in the last `days` days has its history for that period on disk, so
+   * "who do I talk to most" counts real messages rather than whichever pages happen to be loaded.
+   * Walks newest to oldest, a page at a time, politely; chats covered within the last few hours are
+   * skipped. Progress goes out as insights:progress events.
+   */
+  backfillInsights(days: number): Promise<void> {
+    if (this.backfilling) return this.backfilling
+    this.backfilling = this.runBackfill(days).finally(() => (this.backfilling = undefined))
+    return this.backfilling
+  }
+
+  private async runBackfill(days: number): Promise<void> {
+    await this.insightStore.load()
+    const now = Date.now()
+    const from = now - days * 24 * 3600_000
+    const targets = this.listConversations()
+      .filter((c) => c.updatedAt >= from)
+      .filter((c) => {
+        const adapter = this.adapters.get(c.accountId)
+        if (!adapter || adapter.account.status !== 'connected') return false
+        const cover = this.insightStore.coverageOf(c.id)
+        return !(cover && cover.from <= from && now - cover.at < 6 * 3600_000)
       })
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 60)
+    const total = targets.length
+    this.emit({ type: 'insights:progress', done: 0, total })
+    for (const [i, c] of targets.entries()) {
+      const adapter = this.adapters.get(c.accountId)
+      if (!adapter || adapter.account.status !== 'connected') continue
+      let beforeId: string | undefined
+      let reached = false
+      try {
+        for (let page = 0; page < 12; page++) {
+          const list = await adapter.fetchMessages(c.id, { limit: 50, beforeId })
+          if (!list.length) {
+            reached = true
+            break
+          }
+          this.cache(list)
+          this.insightStore.add(list)
+          const oldest = list.reduce((a, b) => (a.sentAt <= b.sentAt ? a : b))
+          if (oldest.sentAt < from) {
+            reached = true
+            break
+          }
+          if (oldest.id === beforeId) break
+          beforeId = oldest.id
+          if (!adapter.account.demo) await new Promise((r) => setTimeout(r, 300))
+        }
+        if (reached) this.insightStore.markCovered(c.id, from)
+      } catch (err) {
+        this.log('insights backfill stopped for', c.title, (err as Error).message)
+      }
+      this.emit({ type: 'insights:progress', done: i + 1, total })
     }
-    for (const bucket of this.messages.values()) for (const m of bucket.values()) add(m)
-    for (const adapter of this.adapters.values()) for (const m of adapter.cachedMessages?.() ?? []) add(m)
-    return [...seen.values()]
   }
 
   private cache(messages: Message[]): void {
+    // Everything that passes through also feeds the insights, so counts stay right between backfills.
+    this.insightStore.add(messages)
     for (const message of messages) {
       let bucket = this.messages.get(message.conversationId)
       if (!bucket) {

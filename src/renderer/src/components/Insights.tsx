@@ -9,8 +9,14 @@ import { Avatar } from './Avatar'
 interface InsightsState {
   records?: InsightRecord[]
   loadedAt?: number
+  /** The 30-day backfill walking chats: done of total (undefined when idle). */
+  progress?: { done: number; total: number }
   load(force?: boolean): Promise<void>
+  /** Fill the last 30 days of every active chat, refreshing the numbers as chats complete. */
+  backfill(): Promise<void>
 }
+
+let listening = false
 
 /** The message records behind the insights, fetched once per session (or when asked again). */
 export const useInsights = create<InsightsState>((set, get) => ({
@@ -20,6 +26,30 @@ export const useInsights = create<InsightsState>((set, get) => ({
       set({ records: await window.unison.insights.records(), loadedAt: Date.now() })
     } catch {
       set({ records: [], loadedAt: Date.now() })
+    }
+  },
+
+  async backfill() {
+    if (get().progress) return
+    if (!listening) {
+      listening = true
+      let last = 0
+      window.unison.onEvent((event) => {
+        if (event.type !== 'insights:progress') return
+        set({ progress: event.done < event.total ? { done: event.done, total: event.total } : undefined })
+        // Numbers refresh as chats complete, at most twice a second.
+        if (Date.now() - last > 500 || event.done >= event.total) {
+          last = Date.now()
+          void get().load(true)
+        }
+      })
+    }
+    set({ progress: { done: 0, total: 0 } })
+    try {
+      await window.unison.insights.backfill(30)
+    } finally {
+      set({ progress: undefined })
+      await get().load(true)
     }
   }
 }))
@@ -115,10 +145,12 @@ export function InsightsSheet(): JSX.Element {
   const select = useStore((s) => s.select)
   const records = useInsights((s) => s.records)
   const load = useInsights((s) => s.load)
+  const backfill = useInsights((s) => s.backfill)
+  const progress = useInsights((s) => s.progress)
   const [period, setPeriod] = useState<'month' | 'year'>('month')
   useEffect(() => {
-    void load(true)
-  }, [load])
+    void load(true).then(() => backfill())
+  }, [load, backfill])
   const insights = useMemo(() => {
     if (!records) return undefined
     const titles = Object.fromEntries(Object.values(conversations).map((c) => [c.id, c.title]))
@@ -150,6 +182,14 @@ export function InsightsSheet(): JSX.Element {
           </button>
         </div>
         <div className="sheet-body scroll">
+          {progress && (
+            <div className="insight-progress" role="status">
+              <div className="ai-progress-track">
+                <div className="ai-progress-fill" style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 4}%` }} />
+              </div>
+              <span>{progress.total ? t('insightsFilling', { done: String(progress.done), total: String(progress.total) }) : t('insightsFillingStart')}</span>
+            </div>
+          )}
           {!insights && <div className="details-empty">{t('loading')}</div>}
           {insights && insights.sent + insights.received === 0 && <div className="details-empty">{t('insightsEmpty')}</div>}
           {insights && insights.sent + insights.received > 0 && (
@@ -262,7 +302,7 @@ export function InsightsSheet(): JSX.Element {
                 </div>
               )}
               <div className="insight-foot">
-                <ChartNoAxesColumn size={12} strokeWidth={2.4} /> {t('insightsNote')}
+                <ChartNoAxesColumn size={12} strokeWidth={2.4} /> {period === 'month' ? t('insightsNoteMonth') : t('insightsNoteYear')}
               </div>
             </>
           )}
