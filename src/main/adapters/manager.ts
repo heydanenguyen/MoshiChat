@@ -272,7 +272,10 @@ export class AccountManager {
     const adapter = this.adapters.get(accountId)
     if (!adapter) throw new Error('Unknown account')
     await adapter.disconnect().catch(() => undefined)
-    await this.connect(adapter)
+    // Unlike the background connect at start-up, the user pressed "Sign in again": tell them why it did not work.
+    await adapter.connect()
+    await this.storage.upsertAccount(adapter.account)
+    await this.loadConversations(adapter)
   }
 
   async fetchMessages(conversationId: string, beforeId?: string): Promise<Message[]> {

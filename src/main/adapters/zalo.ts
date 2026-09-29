@@ -57,6 +57,8 @@ export class ZaloAdapter implements PlatformAdapter {
   /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
   private stickerUrls = new Map<number, string>()
   private stickerLookups = new Set<number>()
+  /** Zalo ended this session (signed out elsewhere or the cookie stopped working); the next sign-in needs a fresh QR. */
+  private sessionEnded = false
 
   constructor(
     initialId: string,
@@ -77,6 +79,8 @@ export class ZaloAdapter implements PlatformAdapter {
     const zca = (this.zca ??= await import('zca-js'))
     const zalo = new zca.Zalo({ selfListen: true, checkUpdate: false, logging: false, imageMetadataGetter: imageMetadata })
     let api: API
+    // A session Zalo ended cannot be revived with the same cookie: signing in again means a new QR.
+    if (this.sessionEnded) this.secret = {}
     try {
       if (this.secret.credentials) {
         api = await zalo.login(this.secret.credentials)
@@ -84,14 +88,30 @@ export class ZaloAdapter implements PlatformAdapter {
         api = await this.loginWithQr(zalo, zca)
       }
     } catch (err) {
-      this.setStatus('error', (err as Error).message)
+      if (this.secret.credentials && isRejectedSession(err)) {
+        // The saved cookie no longer works (signed out, or signed in elsewhere). Ask for a new QR instead of retrying it.
+        this.sessionEnded = true
+        this.setStatus('needs_auth', 'Zalo signed this session out')
+        throw new Error('Zalo signed this session out. Sign in again with a new QR code.')
+      }
+      if (this.qrPromptId) this.ctx.dismissAuth(this.qrPromptId)
+      this.qrPromptId = undefined
+      this.setStatus(this.sessionEnded ? 'needs_auth' : 'error', (err as Error).message)
       throw err
     }
-    this.api = api
     if (this.qrPromptId) this.ctx.dismissAuth(this.qrPromptId)
     this.qrPromptId = undefined
 
-    this.meId = api.getOwnId()
+    const ownId = api.getOwnId()
+    if (this.meId && ownId !== this.meId) {
+      // Moshi keeps this account's chats under its id; another Zalo account belongs in "Add account".
+      this.secret = {}
+      this.setStatus('needs_auth', 'Zalo signed this session out')
+      throw new Error('That QR was scanned by a different Zalo account. Scan it with the account shown here, or add the other one as a new account.')
+    }
+    this.api = api
+    this.sessionEnded = false
+    this.meId = ownId
     this.account.id = `zalo:${this.meId}`
     try {
       const { profile } = await api.fetchAccountInfo()
@@ -488,7 +508,12 @@ export class ZaloAdapter implements PlatformAdapter {
     api.listener.on('error', (err) => this.ctx.log('zalo listener error', err))
     api.listener.on('closed', (code, reason) => {
       this.ctx.log('zalo listener closed', code, reason)
-      if (Number(code) === 3003) this.setStatus('error', 'Signed out from another device')
+      if (this.api !== api) return
+      // 3000: the same session was opened somewhere else; 3003: Zalo kicked it (signed in on another computer).
+      if (Number(code) === 3000 || Number(code) === 3003) {
+        this.sessionEnded = true
+        this.setStatus('needs_auth', 'Signed out from another device')
+      }
     })
   }
 
@@ -675,6 +700,12 @@ export class ZaloAdapter implements PlatformAdapter {
     this.account.error = error
     this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
   }
+}
+
+/** zca-js rejects a dead cookie with its own login errors; anything else (offline, timeouts) is worth retrying as is. */
+function isRejectedSession(err: unknown): boolean {
+  const message = (err as Error)?.message ?? ''
+  return (err as Error)?.name === 'ZcaApiError' || /Đăng nhập thất bại|Khởi tạo ngữ cảnh/i.test(message)
 }
 
 function textOf(raw: TMessage): string {
