@@ -1,15 +1,26 @@
-## Moshi 0.2.11
+## Moshi 0.2.12
 
 ### Mới
-- **Bộ sticker Mito.** Mito, chú mèo đen mắt hổ phách, chân trắng, mặt lúc nào cũng thản nhiên: 12 sticker, trong đó 4 cái biết chuyển động (Chào, Tặng tim, Đẩy cốc, Quẩy). Mở bảng sticker là thấy tab Mito ngay. Sticker động chạy khi rê chuột, và chạy hai vòng khi hiện trong chat. Máy bật *Giảm chuyển động* hoặc tắt *Hiệu ứng* thì sticker đứng yên.
-- **Sticker gửi qua Messenger giờ là GIF động, nền trong suốt,** giống Zalo, thay vì một tấm ảnh.
+- **Cả 12 sticker Mito đều chuyển động.** Thêm Tức giận, Ngủ, Tỏa sáng, Từ chối tình cảm, Lướt điện thoại, Khó hiểu, Nghĩ lại đi và Nhảy dây. Chào, Tỏa sáng và Tức giận cũng được làm mượt hơn.
+- **Thu hồi tin nhắn** trên Telegram, WhatsApp, Messenger, Zalo và Instagram: rê chuột vào tin mình gửi, bấm *Thu hồi* rồi xác nhận. Tin đã thu hồi (của mình, hoặc người kia thu hồi) hiện thành một dòng mờ "đã thu hồi", ở cả khung chat và danh sách chat.
+- **Bấm vào cảm xúc mình đã thả để gỡ nó đi**, khi lỡ thả nhầm. Zalo giờ cũng gỡ được.
+- **Tên nút khi rê chuột:** các nút cạnh tin nhắn hiện một dòng chữ nhỏ cho biết nút đó làm gì. Tắt được trong *Cài đặt › Chat › Nút cạnh tin nhắn*.
+
+### Cải thiện
+- Bôi chọn chữ trong chat rõ hơn: trên tin người khác, phần chọn mang màu bong bóng của bạn; trên tin bạn gửi thì ngược lại, nên luôn dễ nhìn.
+- Nút "…" ở danh sách chat chỉ mở khi bấm, không tự bật lên khi rê chuột qua.
 
 ### Lưu ý
-- Instagram không nhận GIF tải lên và biến ảnh nền trong suốt thành JPEG. Vì vậy sticker gửi qua Instagram vẫn là ảnh tĩnh trên nền trắng. Telegram và WhatsApp cũng nhận ảnh tĩnh.
+- Mỗi nền tảng có giới hạn thời gian thu hồi riêng. Nếu nền tảng từ chối, tin nhắn hiện lại như cũ kèm thông báo.
+- Trên Instagram, tin người kia thu hồi chưa tự đổi thành "đã thu hồi".
 
 ---
 
 ### English
-- New sticker pack: Mito the black cat, 12 stickers, 4 of them animated. They play on hover and twice when they appear in a chat; reduced motion or Effects off keeps them still.
-- Stickers sent on Messenger go out as moving GIFs with a transparent background, like on Zalo.
-- Instagram does not accept uploaded GIFs and turns transparent images into JPEGs, so stickers there stay still on white (Telegram and WhatsApp get the still too).
+- All 12 Mito stickers are animated now: Angry, Sleepy, Shine, No thanks, Scrolling, Suspicious, Think again and Jump rope join the four from 0.2.11, and Hi, Shine and Angry move more smoothly.
+- Unsend your messages on Telegram, WhatsApp, Messenger, Zalo and Instagram (hover a message you sent, *Unsend*, confirm). Unsent messages, yours or theirs, show as a faint "unsent" line in the chat and the chat list.
+- Click a reaction you gave to take it back, Zalo included.
+- The buttons beside a message show a small label on hover; turn it off in Settings › Chat › Message actions.
+- Selected text in a chat stands out in your bubble colour on their messages, and the reverse on yours.
+- The "…" on a chat in the list opens only when clicked.
+- Each platform limits how long you can unsend; if it refuses, the message comes back with a note. Messages the other side unsends on Instagram are not yet shown as unsent.
