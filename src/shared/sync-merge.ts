@@ -37,7 +37,7 @@ const VALUE_KEYS = [
 ] as const satisfies ReadonlyArray<keyof Settings>
 
 /** Maps keyed by conversation id: one entry per chat. */
-const RECORD_KEYS = ['tags', 'pins', 'contactOverrides', 'hidden'] as const satisfies ReadonlyArray<keyof Settings>
+const RECORD_KEYS = ['tags', 'pins', 'contactOverrides', 'hidden', 'markedUnread'] as const satisfies ReadonlyArray<keyof Settings>
 
 type ListKey = 'todos' | 'savedMessages' | 'sentStickers'
 

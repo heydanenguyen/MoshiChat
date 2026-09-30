@@ -537,6 +537,8 @@ export interface Settings {
   acceptedUnofficial?: Partial<Record<Platform, number>>
   /** Chats hidden from the list ("Strangers" in Settings): conversation id -> when it was hidden. Hidden chats are muted too. */
   hidden?: Record<string, number>
+  /** Chats marked unread in Moshi ("come back to this"): conversation id -> when. Cleared when the chat is opened or marked read. */
+  markedUnread?: Record<string, number>
   /** To-dos (from messages or typed), with optional reminders; the main process marks reminders shown. */
   todos?: Todo[]
   /** Text size across the app (bigger for high-resolution screens). */

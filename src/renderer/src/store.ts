@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import type { CustomSticker } from '@shared/bridge'
 import type { SettingsPage } from './components/SettingsSheet'
@@ -35,6 +35,7 @@ import { previewKindOf } from '@shared/preview'
 import { abstractIdUrl } from './components/AbstractAvatar'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
+import { applyQuickFilter, countQuickFilters, type QuickFilter, type QuickFilterContext } from './quickFilter'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
@@ -99,6 +100,8 @@ interface State {
   /** Per chat: the message to scroll to and flash (search hit, saved message). */
   highlightIds: Record<string, string | undefined>
   filter: Filter
+  /** The chip above the chat list (Unread, Needs reply...), applied on top of `filter`. */
+  quickFilter: QuickFilter
   search: string
   searchHits: SearchHit[]
   authPrompts: AuthPrompt[]
@@ -130,6 +133,7 @@ interface State {
   toggleSplit(): void
   setWide(wide: boolean): void
   setFilter(filter: Filter): void
+  setQuickFilter(quickFilter: QuickFilter): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
   /** Scroll to a message in the open thread, loading older pages until it appears. */
@@ -182,6 +186,10 @@ interface State {
   addTodo(input: { conversationId?: string; messageId?: string; text: string; due?: number }): Promise<void>
   updateTodo(id: string, patch: { text?: string; due?: number; done?: boolean }): Promise<void>
   removeTodo(id: string): Promise<void>
+  /** Flag a chat to come back to: it counts as unread until it is opened again. Nothing is sent to the platform. */
+  markUnread(conversationId: string): Promise<void>
+  /** Clear new messages and the unread flag without opening the chat. */
+  markRead(conversationId: string): Promise<void>
   /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
   hideConversation(conversationId: string): Promise<void>
   unhideConversation(conversationId: string): Promise<void>
@@ -322,6 +330,7 @@ export const useStore = create<State>((set, get) => ({
   wide: true,
   highlightIds: {},
   filter: 'all',
+  quickFilter: 'all',
   search: '',
   searchHits: [],
   authPrompts: [],
@@ -497,6 +506,10 @@ export const useStore = create<State>((set, get) => ({
 
   setWide(wide) {
     if (get().wide !== wide) set({ wide })
+  },
+
+  setQuickFilter(quickFilter) {
+    set({ quickFilter })
   },
 
   setFilter(filter) {
@@ -977,6 +990,23 @@ export const useStore = create<State>((set, get) => ({
     await get().setSettings({ todos: (get().settings.todos ?? []).filter((t) => t.id !== id) })
   },
 
+  async markUnread(conversationId) {
+    await updateMarkedUnread((record) => {
+      record[conversationId] = Date.now()
+      return true
+    })
+  },
+
+  async markRead(conversationId) {
+    await clearMarkedUnread([conversationId])
+    if (!get().conversations[conversationId]?.unreadCount) return
+    try {
+      await window.unison.conversations.markRead(conversationId)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
   async hideConversation(conversationId) {
     const { settings, conversations } = get()
     const muted = settings.muted.conversations.includes(conversationId) ? settings.muted.conversations : [...settings.muted.conversations, conversationId]
@@ -1133,6 +1163,33 @@ export const useStore = create<State>((set, get) => ({
   }
 }))
 
+let markedWrites = Promise.resolve()
+
+/**
+ * Change the chats marked unread, one change at a time: each reads the record the previous one wrote, so two
+ * chats cleared together (a split opening both) cannot put each other back.
+ */
+function updateMarkedUnread(change: (record: Record<string, number>) => boolean): Promise<void> {
+  markedWrites = markedWrites
+    .then(async () => {
+      const { settings, setSettings } = useStore.getState()
+      const markedUnread = { ...(settings.markedUnread ?? {}) }
+      if (change(markedUnread)) await setSettings({ markedUnread })
+    })
+    .catch(() => undefined)
+  return markedWrites
+}
+
+/** Opening a chat, or marking it read, answers "come back to this". */
+function clearMarkedUnread(ids: string[]): Promise<void> {
+  if (!ids.length) return Promise.resolve()
+  return updateMarkedUnread((record) => {
+    const before = Object.keys(record).length
+    for (const id of ids) delete record[id]
+    return Object.keys(record).length !== before
+  })
+}
+
 /**
  * Put a pane layout into effect: mirror the active chat into `selectedId`, close sheets, reset the
  * details tab when the active chat changed, mark newly shown chats read, load them and remember them.
@@ -1151,6 +1208,9 @@ function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): voi
   }
   useStore.setState(patch)
   saveLayout(layout)
+  // Only a chat you actually open answers its unread mark: not one that stays active while the layout changes
+  // around it (hiding another chat, closing the other pane).
+  void clearMarkedUnread(openIds(layout).filter((id) => !shownBefore.has(id) || (id === nextActive && id !== previousActive)))
   for (const id of openIds(layout)) {
     if (shownBefore.has(id) && id !== nextActive) continue
     const conversation = state.conversations[id]
@@ -1225,15 +1285,49 @@ useStore.subscribe((state, prev) => {
   if (changed) useStore.setState({ conversations: next })
 })
 
-/** Conversations for the current filter and search, pinned first then most recent. */
-export function useVisibleConversations(): Conversation[] {
+export interface ChatList {
+  /** What the list shows: sidebar filter, then search or the quick filter, pinned first then most recent. */
+  conversations: Conversation[]
+  /** How many chats each quick filter holds within the sidebar filter. */
+  counts: Record<QuickFilter, number>
+}
+
+/**
+ * The chat list. While searching, the quick filter steps aside so a search never misses a chat because a chip
+ * was left on.
+ */
+export function useChatList(): ChatList {
   const conversations = useStore((s) => s.conversations)
   const filter = useStore((s) => s.filter)
+  const quickFilter = useStore((s) => s.quickFilter)
   const search = useStore((s) => s.search)
   const tags = useStore((s) => s.settings.tags)
   const pins = useStore((s) => s.settings.pins)
   const hidden = useStore((s) => s.settings.hidden)
-  return useMemo(() => computeVisible(conversations, filter, search, tags, pins, hidden), [conversations, filter, search, tags, pins, hidden])
+  const muted = useStore((s) => s.settings.muted)
+  const markedUnread = useStore((s) => s.settings.markedUnread)
+  const drafts = useStore((s) => s.drafts)
+  const layout = useStore((s) => s.layout)
+  const scoped = useMemo(() => computeVisible(conversations, filter, search, tags, pins, hidden), [conversations, filter, search, tags, pins, hidden])
+  // `now` is read again whenever the chats change, which is often enough for a 30-day window.
+  const ctx = useMemo<QuickFilterContext>(
+    () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => !!c.muted || isMutedBy({ muted, tags }, c) }),
+    [drafts, markedUnread, muted, tags, conversations]
+  )
+  const counts = useMemo(() => countQuickFilters(search.trim() ? [] : scoped, ctx), [scoped, ctx, search])
+  // Rows listed under the current chip (and sidebar filter) last time, so an open chat that stops matching can
+  // stay put, while one that never matched does not appear under a chip it has nothing to do with.
+  const listed = useRef<{ key: string; ids: ReadonlySet<string> }>({ key: '', ids: new Set() })
+  const shown = useMemo(() => {
+    if (search.trim()) return scoped
+    const key = `${filter}|${quickFilter}`
+    const before = listed.current.key === key ? listed.current.ids : new Set<string>()
+    const keep = new Set(openIds(layout).filter((id) => before.has(id)))
+    const list = applyQuickFilter(scoped, quickFilter, ctx, keep)
+    listed.current = { key, ids: new Set(list.map((c) => c.id)) }
+    return list
+  }, [scoped, search, filter, quickFilter, ctx, layout])
+  return { conversations: shown, counts }
 }
 
 /** Pinned in Moshi, or on the platform when Moshi has no say. */
@@ -1296,21 +1390,24 @@ export function useUnreadCounts(): UnreadCounts {
   const conversations = useStore((s) => s.conversations)
   const tags = useStore((s) => s.settings.tags)
   const muted = useStore((s) => s.settings.muted)
-  return useMemo(() => computeUnread(conversations, tags, muted), [conversations, tags, muted])
+  const markedUnread = useStore((s) => s.settings.markedUnread)
+  return useMemo(() => computeUnread(conversations, tags, muted, markedUnread), [conversations, tags, muted, markedUnread])
 }
 
-function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>, muted?: MuteRules): UnreadCounts {
+function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>, muted?: MuteRules, markedUnread?: Record<string, number>): UnreadCounts {
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
   const byTag: Record<string, number> = {}
   let total = 0
   for (const c of Object.values(conversations)) {
-    if (!c.unreadCount || c.muted) continue
+    // A chat marked unread by hand counts as one, like a single new message.
+    const unread = c.unreadCount || (markedUnread?.[c.id] ? 1 : 0)
+    if (!unread || c.muted) continue
     if (muted && isMutedBy({ muted, tags }, c)) continue
-    total += c.unreadCount
-    byPlatform[c.platform] += c.unreadCount
-    byAccount[c.accountId] = (byAccount[c.accountId] ?? 0) + c.unreadCount
-    for (const tag of tags[c.id] ?? []) byTag[tag] = (byTag[tag] ?? 0) + c.unreadCount
+    total += unread
+    byPlatform[c.platform] += unread
+    byAccount[c.accountId] = (byAccount[c.accountId] ?? 0) + unread
+    for (const tag of tags[c.id] ?? []) byTag[tag] = (byTag[tag] ?? 0) + unread
   }
   return { total, byPlatform, byAccount, byTag }
 }

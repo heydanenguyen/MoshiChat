@@ -1,10 +1,12 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { BellOff, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { BellOff, CheckCheck, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
 import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
-import { isPinned, useShowPlatformBadge, useStore, useT, useTagDefs, useVisibleConversations } from '../store'
+import { isPinned, useChatList, useShowPlatformBadge, useStore, useT, useTagDefs } from '../store'
+import { formatBadge, isUnread } from '../quickFilter'
 import { formatListTime, modKey } from '../utils'
 import { openIds } from '../panes'
+import { popoverShift } from '../popover'
 
 /** Drag payload type for a chat row (dropped onto a pane of the chat area). */
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
@@ -13,6 +15,7 @@ import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
+import { QuickFilterEmpty, QuickFilters } from './QuickFilters'
 
 interface TagMenuState {
   conversationId: string
@@ -22,7 +25,12 @@ interface TagMenuState {
 
 export function ConversationList(): JSX.Element {
   const t = useT()
-  const conversations = useVisibleConversations()
+  const { conversations, counts } = useChatList()
+  const allConversations = useStore((s) => s.conversations)
+  const quickFilter = useStore((s) => s.quickFilter)
+  const markedUnread = useStore((s) => s.settings.markedUnread)
+  const markUnread = useStore((s) => s.markUnread)
+  const markRead = useStore((s) => s.markRead)
   const selectedId = useStore((s) => s.selectedId)
   const select = useStore((s) => s.select)
   const openBeside = useStore((s) => s.openBeside)
@@ -51,6 +59,7 @@ export function ConversationList(): JSX.Element {
   const openSheet = useStore((s) => s.openSheet)
   const showBadge = useShowPlatformBadge()
   const [menu, setMenu] = useState<TagMenuState | undefined>()
+  const menuRef = useRef<HTMLDivElement>(null)
   const hidden = useStore((s) => s.settings.hidden)
   const hideConversation = useStore((s) => s.hideConversation)
   /**
@@ -63,6 +72,11 @@ export function ConversationList(): JSX.Element {
   }
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
+  // A chip with nothing in it; a sidebar filter with no chats at all keeps the usual "no conversations" note.
+  const quickEmpty = !searching && quickFilter !== 'all' && counts.all > 0 && conversations.length === 0
+  // From the store, not the list: a chat can leave the filtered list while its menu is open (untagging it).
+  const menuConversation = menu ? allConversations[menu.conversationId] : undefined
+  const menuUnread = !!menuConversation && isUnread(menuConversation, markedUnread)
 
   useEffect(() => {
     if (!menu) return
@@ -73,6 +87,17 @@ export function ConversationList(): JSX.Element {
       window.removeEventListener('mousedown', close)
       window.removeEventListener('keydown', close)
     }
+  }, [menu])
+
+  // A right-click low in the list, or near the window's right edge, used to open the menu past the window: move
+  // it back inside. offsetWidth/Height ignore the open animation's scale, so this is the size the menu settles at.
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!el || !menu) return
+    const dx = popoverShift({ left: menu.x, right: menu.x + el.offsetWidth }, { left: 0, right: window.innerWidth })
+    const dy = popoverShift({ left: menu.y, right: menu.y + el.offsetHeight }, { left: 0, right: window.innerHeight })
+    el.style.left = `${menu.x + dx}px`
+    el.style.top = `${menu.y + dy}px`
   }, [menu])
 
   const title =
@@ -115,6 +140,8 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
+      {!searching && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
+
       {Object.values(accounts)
         .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
         .filter((a) => filter === 'all' || filter === a.platform || filter === `account:${a.id}`)
@@ -128,7 +155,8 @@ export function ConversationList(): JSX.Element {
           />
         ))}
       <div className="conv-list scroll">
-        {conversations.length === 0 && (!searching || visibleHits.length === 0) && (
+        {quickEmpty && <QuickFilterEmpty filter={quickFilter} />}
+        {!quickEmpty && conversations.length === 0 && (!searching || visibleHits.length === 0) && (
           <div className="conv-empty">
             <strong>{searching ? t('noResults') : t('noConversations')}</strong>
             {!searching && !hasAccounts && t('noConversationsHint')}
@@ -142,10 +170,11 @@ export function ConversationList(): JSX.Element {
             preview && !isTyping && (preview.isOutgoing || c.isGroup) ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: ` : ''
           const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
           const pinned = isPinned(c, pins)
+          const unread = isUnread(c, markedUnread)
           return (
             <button
               key={c.id}
-              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${c.unreadCount ? 'unread' : ''}`}
+              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${unread ? 'unread' : ''}`}
               onClick={(e) => (canSplit && (e.metaKey || e.ctrlKey) ? openBeside(c.id) : select(c.id))}
               draggable={canSplit}
               onDragStart={(e) => {
@@ -207,7 +236,11 @@ export function ConversationList(): JSX.Element {
                   <span className="conv-meta">
                     {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
                     {(c.muted || isMutedBy({ muted, tags }, c)) && <BellOff size={12} strokeWidth={2.2} />}
-                    {c.unreadCount > 0 && <span className="unread-pill">{c.unreadCount > 99 ? '99+' : c.unreadCount}</span>}
+                    {c.unreadCount > 0 ? (
+                      <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
+                    ) : (
+                      unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
+                    )}
                   </span>
                 </span>
               </span>
@@ -256,10 +289,23 @@ export function ConversationList(): JSX.Element {
       {menu &&
         createPortal(
           <div
+            ref={menuRef}
             className="context-menu"
-            style={{ left: menu.x, top: menu.y }}
+            style={{ left: menu.x, top: menu.y, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
             onMouseDown={(e) => e.stopPropagation()}
           >
+            {menuConversation && (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  void (menuUnread ? markRead : markUnread)(menuConversation.id)
+                  setMenu(undefined)
+                }}
+              >
+                {menuUnread ? <CheckCheck size={15} /> : <CircleDot size={15} />}
+                <span>{menuUnread ? t('markRead') : t('markUnread')}</span>
+              </button>
+            )}
             {canSplit && menu.conversationId !== selectedId && (
               <button
                 className="context-menu-item"
@@ -280,21 +326,13 @@ export function ConversationList(): JSX.Element {
                 setMenu(undefined)
               }}
             >
-              {isPinned(
-                conversations.find((c) => c.id === menu.conversationId),
-                pins
-              ) ? (
+              {isPinned(menuConversation, pins) ? (
                 <PinOff size={15} />
               ) : (
                 <Pin size={15} />
               )}
               <span>
-                {isPinned(
-                  conversations.find((c) => c.id === menu.conversationId),
-                  pins
-                )
-                  ? t('unpin')
-                  : t('pin')}
+                {isPinned(menuConversation, pins) ? t('unpin') : t('pin')}
               </span>
             </button>
             <button

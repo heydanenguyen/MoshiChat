@@ -613,6 +613,172 @@ a {
   display: block;
 }
 
+/* Quick filters: a row of chips under the search field (All, Unread, Needs reply, Groups, Drafts). */
+.quick-filters {
+  --fade: 18px;
+  display: flex;
+  gap: 5px;
+  margin: 0 0 var(--space-2);
+  padding: 2px var(--space-3);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: var(--space-3);
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.quick-filters::-webkit-scrollbar {
+  display: none;
+}
+/* Fade whichever edge has more chips behind it. */
+.quick-filters.fade-start {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+.quick-filters.fade-end {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+}
+.quick-filters.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+
+.quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px var(--separator);
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease,
+    transform var(--duration-base) var(--ease-spring);
+}
+.quick-chip:hover {
+  background: var(--fill-secondary);
+  color: var(--text-primary);
+}
+.quick-chip:active {
+  transform: scale(0.95);
+}
+.quick-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.quick-chip.active {
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  font-weight: 700;
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.quick-chip-count {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+/* Unread and Needs reply are calls to act: their counts carry the accent until picked. */
+.quick-chip-count.strong {
+  color: var(--accent);
+}
+.quick-chip.active .quick-chip-count {
+  color: var(--on-accent);
+  opacity: 0.85;
+}
+
+/* Drafts appears once there is one: it grows in rather than popping. */
+.quick-chip.enters {
+  animation: quick-chip-in var(--duration-slow) var(--ease-spring) both;
+}
+@keyframes quick-chip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* An empty chip: good news, and a way back to everything. */
+.quick-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-8) var(--space-5) var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+  animation: quick-empty-in var(--duration-slow) var(--ease-out) both;
+}
+.quick-empty-glyph {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-2);
+  border-radius: 20px;
+  font-size: 26px;
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent-soft-2));
+  box-shadow: inset 0 0 0 1px var(--separator);
+}
+.quick-empty strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+.quick-empty p {
+  margin: 0;
+  max-width: 250px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.quick-empty-reset {
+  margin-top: var(--space-3);
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  background: var(--accent-soft);
+  transition:
+    background var(--duration-fast) ease,
+    transform var(--duration-base) var(--ease-spring);
+}
+.quick-empty-reset:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.quick-empty-reset:active {
+  transform: scale(0.95);
+}
+.quick-empty-reset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@keyframes quick-empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-chip,
+  .quick-chip.enters,
+  .quick-empty {
+    animation: none;
+    transition: none;
+  }
+}
+
 .conv-list {
   flex: 1;
   padding: 0 var(--space-2) var(--space-2);
@@ -730,6 +896,14 @@ a {
   place-items: center;
   font-variant-numeric: tabular-nums;
   box-shadow: 0 4px 10px rgba(91, 140, 255, 0.35);
+}
+
+/* Marked unread by hand: a dot, since there is no number to show. */
+.unread-pill.dot {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
 }
 
 .conv-item.unread .conv-title {
