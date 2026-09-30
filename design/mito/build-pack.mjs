@@ -1,4 +1,4 @@
-// Builds the Mito sticker pack (Mèo Bơ, the black cat) for the app from the design sources in this folder.
+// Builds the Mito sticker pack (Mito, the black cat) for the app from the design sources in this folder.
 //
 //   node design/mito/build-pack.mjs [ids…]   (all stickers when none are named)
 //

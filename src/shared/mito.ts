@@ -1,5 +1,5 @@
 /**
- * Mito: a sticker pack of Mèo Bơ, a black cat with amber eyes and white paws, drawn as pictures rather than built
+ * Mito: a sticker pack of the black cat Mito with amber eyes and white paws, drawn as pictures rather than built
  * from the logo characters. Each sticker is a 384 px PNG with the Moshi sticker edge, a copy on white, and for the animated ones a
  * looping animated WebP (resources/stickers/mito, made by design/mito/build-pack.mjs).
  */

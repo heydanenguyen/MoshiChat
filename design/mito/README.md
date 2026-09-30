@@ -1,6 +1,6 @@
 # Mito sticker pack
 
-Mèo Bơ, the black cat with amber eyes and white paws: 12 stickers, all animated.
+Mito, the black cat with amber eyes and white paws: 12 stickers, all animated.
 
 - `stills/` still stickers cut from the drawn sheets (transparent PNG), for any that are not animated (none now).
 - `animation.html` the animated stickers (all twelve). Open it in a browser to watch them. Each one bends the original drawing on a WebGL mesh (one shared context for the whole page), so the art stays exactly as drawn.
