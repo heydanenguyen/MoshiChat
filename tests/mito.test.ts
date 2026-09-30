@@ -35,8 +35,9 @@ describe('Mito sticker pack', () => {
       if (s.loop) {
         const anim = await sharp(join(dir, `${s.id}.webp`), { animated: true }).metadata()
         expect(anim.width).toBe(384)
-        // one loop at 25 fps
-        expect(anim.pages).toBe(Math.round((s.loop / 1000) * 25))
+        // exactly one loop (25 fps, or 30 for the fast ones), so hover play stops on a loop boundary
+        expect(anim.delay?.reduce((a, b) => a + b, 0)).toBe(s.loop)
+        expect([Math.round((s.loop / 1000) * 25), Math.round((s.loop / 1000) * 30)]).toContain(anim.pages)
       }
     }
   })

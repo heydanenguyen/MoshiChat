@@ -1,4 +1,5 @@
-// Renders the animated Mito stickers from animation.html into frames/<id>/: one loop at 25 fps, transparent,
+// Renders the animated Mito stickers from animation.html into frames/<id>/: one loop at 25 fps (30 for the fast
+// ones, written to frames/<id>/fps.txt for build-pack.mjs), transparent,
 // 344 × 338 px, without the sticker edge (build-pack.mjs adds it). Each frame is taken in layers: NNN.png is the cat
 // (and what it holds), NNN-back.png and NNN-front.png the effects behind and in front of it (confetti, stars, z's,
 // motion lines), which get no sticker edge.
@@ -9,7 +10,7 @@
 // install chromium), or CHROMIUM=/path/to/chromium. Each loop is started at the pose
 // of the drawing, so the first frame is also the sticker's still.
 import { chromium } from 'playwright'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -29,7 +30,8 @@ const STICKERS = {
   dienthoai: { loop: 3.2, start: 0 },
   khohieu: { loop: 2.8, start: 0 },
   nghilai: { loop: 2.4, start: 0 },
-  nhayday: { loop: 2.4, start: 0 }
+  // the rope turns fast: 30 fps is two refreshes a frame on a 60 Hz screen, so it turns evenly
+  nhayday: { loop: 2.4, start: 0, fps: 30 }
 }
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(STICKERS)
 
@@ -38,7 +40,7 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
 })
 for (const name of names) {
-  const { loop, start, page: pageName = name } = STICKERS[name]
+  const { loop, start, page: pageName = name, fps = FPS } = STICKERS[name]
   const out = join(here, 'frames', name)
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
@@ -71,7 +73,8 @@ for (const name of names) {
         if (role === 'cat') for (const c of k.querySelectorAll('*')) c.style.visibility = role === which ? 'visible' : 'hidden'
       })
     }, which)
-  const n = Math.round(loop * FPS)
+  const n = Math.round(loop * fps)
+  writeFileSync(join(out, 'fps.txt'), String(fps))
   for (let i = 0; i < n; i++) {
     await page.evaluate((u) => window.__seekEach(u), (i / n + start) % 1)
     const base = join(out, String(i).padStart(3, '0'))

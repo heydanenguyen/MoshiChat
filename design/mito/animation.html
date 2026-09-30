@@ -1168,8 +1168,8 @@
   const NHAYDAY = (() => {
     const VIEW = { x: 48, y: -12, w: 600, h: 590 }, LOOP = 2.4
     // Three skips a loop, one straight after the other: a quick bounce off the ground (squash on touching, stretch on
-    // leaving) and a smooth arc through the air, the rope turning once a skip at an even speed, 20 frames a turn,
-    // with a faint trail so it reads as a swish rather than a flicker. The rope goes over the head (the drawing),
+    // leaving) and a smooth arc through the air, the rope turning once a skip at an even speed, 24 frames a turn
+    // (exported at 30 fps), with a soft trail so it reads as a swish rather than a flicker. The rope goes over the head (the drawing),
     // down in front, under the feet while the cat is up, and back up behind; it is drawn inside the sticker's edge,
     // just behind or in front of the cat, as in the drawing. The hands give a little on each landing, the tail lags
     // behind the jump, the shadow shrinks as the cat rises.
@@ -1218,8 +1218,11 @@
       }
       ctx.restore()
     }
-    // The rope and its trail, each drawn on the side of the cat it is on (in front while it comes down).
-    const TRAIL = [[0.34, 0.16], [0.17, 0.32]]
+    // The rope and its trail, each drawn on the side of the cat it is on (in front while it comes down). The trail
+    // fills the angle the rope turns between two frames (2π / 24) with close, fading copies: one continuous swish.
+    // Two copies spread over that angle read as three separate ropes flashing on and off.
+    const STEP = (2 * Math.PI) / 24, TRAIL_N = 6
+    const TRAIL = Array.from({ length: TRAIL_N }, (_, i) => [(STEP * (i + 1)) / TRAIL_N, 0.3 * (1 - (i + 1) / (TRAIL_N + 1))]).reverse()
     function ropes(ctx, t, front) {
       const th = 2 * Math.PI * phase(t)
       for (const [back, alpha] of TRAIL) if (Math.sin(th - back) > 1e-6 === front) rope(ctx, t, th - back, alpha)
