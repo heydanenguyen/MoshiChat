@@ -2,7 +2,7 @@ import { AlertCircle, AudioLines, Captions, Cpu, Languages, RefreshCw, ShieldChe
 import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import type { Attachment, Message } from '@shared/types'
 import { textKey, useAi, voiceKey } from '../aiStore'
-import { useStore, useT } from '../store'
+import { useStore, useT, useThread } from '../store'
 import { formatBytes, tip } from '../utils'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
@@ -363,7 +363,8 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
   const clear = useAi((s) => s.clearSuggestions)
   const ready = useAi((s) => !!s.status?.chat.ready)
   const setComposerDraft = useStore((s) => s.setComposerDraft)
-  const last = useStore((s) => s.messages[conversationId]?.at(-1))
+  // A merged person's newest message, whichever of its chats it came in.
+  const last = useThread(conversationId).messages?.at(-1)
   if (!last || last.isOutgoing || last.system) return null
   if (!ready && !state?.busy && !state?.items?.length) return null
   if (!state?.items?.length && !state?.busy) {

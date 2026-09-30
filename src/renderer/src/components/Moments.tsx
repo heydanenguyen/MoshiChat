@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ChevronRight, Sparkles, X } from 'lucide-react'
 import type { SavedMessage } from '@shared/types'
-import { useStore, useT } from '../store'
+import { useStore, useT, personIn } from '../store'
 import { formatAgo, formatMomentDate, formatMonthLabel } from '../utils'
 import { PreviewText } from './MessageParts'
 import { LogoMark } from './Logo'
@@ -11,7 +11,11 @@ const NO_MOMENTS: SavedMessage[] = []
 /** The moments kept with one person, newest first. */
 function useMoments(conversationId: string): SavedMessage[] {
   const saved = useStore((s) => s.settings.savedMessages ?? NO_MOMENTS)
-  return useMemo(() => saved.filter((m) => m.conversationId === conversationId).sort((a, b) => b.sentAt - a.sentAt), [saved, conversationId])
+  const people = useStore((s) => s.settings.people)
+  const conversations = useStore((s) => s.conversations)
+  // A merged person's moments come from all of its chats.
+  const ids = useMemo(() => personIn(people, conversations, conversationId)?.members ?? [conversationId], [people, conversations, conversationId])
+  return useMemo(() => saved.filter((m) => ids.includes(m.conversationId)).sort((a, b) => b.sentAt - a.sentAt), [saved, ids])
 }
 
 function MomentQuote({ moment }: { moment: SavedMessage }): JSX.Element {

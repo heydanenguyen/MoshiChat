@@ -149,7 +149,8 @@ interface State {
   setSearch(search: string): void
   openHit(hit: SearchHit): void
   /** Scroll to a message in the open thread, loading older pages until it appears. */
-  jumpTo(messageId: string, maxPages?: number): Promise<void>
+  /** Scroll to a message, loading older pages until it is there; `from` is the chat it lives in (for a merged person). */
+  jumpTo(messageId: string, options?: { maxPages?: number; from?: string }): Promise<void>
   toggleSaved(message: Message): Promise<void>
   openSaved(saved: SavedMessage): Promise<void>
   /** `resolveFiles` prepares the real files after the optimistic bubble is shown (GIF downloads). */
@@ -250,6 +251,8 @@ interface State {
 }
 
 const PAGE = 50
+/** What the platforms return for a search inside one chat (manager SEARCH_LIMIT). */
+const IN_CHAT_RESULTS = 60
 let toastCounter = 0
 let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -442,8 +445,10 @@ export const useStore = create<State>((set, get) => ({
         case 'message:new': {
           maybePlaySound(event.message)
           const list = upsertMessage(state.messages[event.message.conversationId], event.message)
+          // Its chat's cached media and stats are stale now, and a merged person's too.
+          const stale = [event.message.conversationId, anchorFor(state, event.message.conversationId)]
           const shared = { ...state.shared }
-          for (const key of Object.keys(shared)) if (key.startsWith(event.message.conversationId + '|')) delete shared[key]
+          for (const key of Object.keys(shared)) if (stale.some((id) => key.startsWith(id + '|'))) delete shared[key]
           const stats = { ...state.stats }
           delete stats[event.message.conversationId]
           // The person finished typing: their message just arrived.
@@ -511,7 +516,7 @@ export const useStore = create<State>((set, get) => ({
           break
         case 'focus-conversation':
           get().select(event.conversationId)
-          if (event.messageId) setTimeout(() => void get().jumpTo(event.messageId!), 400)
+          if (event.messageId) setTimeout(() => void get().jumpTo(event.messageId!, { from: event.conversationId }), 400)
           break
       }
     })
@@ -582,6 +587,8 @@ export const useStore = create<State>((set, get) => ({
 
   openHit(hit) {
     get().select(hit.conversation.id, hit.message.id)
+    // A hit in one of a merged person's chats may sit beyond what the merged thread has loaded.
+    if (personFor(get(), hit.conversation.id)) void get().jumpTo(hit.message.id, { from: hit.conversation.id })
   },
 
   async toggleSaved(message) {
@@ -610,18 +617,28 @@ export const useStore = create<State>((set, get) => ({
 
   async openSaved(saved) {
     // Already open (clicked from its Moments tab): stay on that tab and just jump.
-    if (get().selectedId !== saved.conversationId) get().select(saved.conversationId)
+    if (get().selectedId !== anchorFor(get(), saved.conversationId)) get().select(saved.conversationId)
     // Wait for the first page, then walk back until the message is loaded and highlight it.
     for (let i = 0; i < 50 && !get().messages[saved.conversationId]; i++) await new Promise((r) => setTimeout(r, 100))
-    await get().jumpTo(saved.messageId, 40)
+    await get().jumpTo(saved.messageId, { maxPages: 40, from: saved.conversationId })
   },
 
-  async jumpTo(messageId, maxPages = 8) {
+  async jumpTo(messageId, { maxPages = 8, from } = {}) {
     const id = get().selectedId
     if (!id) return
-    for (let page = 0; page < maxPages; page++) {
+    const person = personFor(get(), id)
+    // In a merged thread, the chat holding the message pages back first; the others then catch up to it.
+    const home = person && from && person.members.includes(from) ? from : undefined
+    if (home) await settled(home)
+    for (let page = 0; page < (home ? maxPages * 3 : maxPages); page++) {
       const thread = threadOf(get(), id)
       if (thread.messages?.some((m) => m.id === messageId)) break
+      if (home && !get().messages[home]?.some((m) => m.id === messageId)) {
+        if (!get().hasMore[home]) break
+        await loadOlder(home)
+        await settled(home)
+        continue
+      }
       if (!thread.hasMore) break
       await get().loadMore(id)
     }
@@ -1258,7 +1275,8 @@ export const useStore = create<State>((set, get) => ({
     const key = `${conversationId}|${kind}`
     if (!force && get().shared[key]) return
     try {
-      const messages = await window.unison.conversations.shared(conversationId, kind)
+      const members = personFor(get(), conversationId)?.members ?? [conversationId]
+      const messages = (await Promise.all(members.map((id) => window.unison.conversations.shared(id, kind)))).flat().sort((a, b) => b.sentAt - a.sentAt)
       set({ shared: { ...get().shared, [key]: messages } })
     } catch (err) {
       get().showToast(cleanError(err), 'error')
@@ -1267,7 +1285,12 @@ export const useStore = create<State>((set, get) => ({
 
   async searchIn(conversationId, query) {
     try {
-      return await window.unison.conversations.searchIn(conversationId, query)
+      const members = personFor(get(), conversationId)?.members ?? [conversationId]
+      // As many results as a single chat gives (the newest), not that many per chat.
+      return (await Promise.all(members.map((id) => window.unison.conversations.searchIn(id, query))))
+        .flat()
+        .sort((a, b) => b.sentAt - a.sentAt)
+        .slice(0, IN_CHAT_RESULTS)
     } catch (err) {
       get().showToast(cleanError(err), 'error')
       return []
@@ -1364,6 +1387,9 @@ export const useStore = create<State>((set, get) => ({
 
 // ---------------------------------------------------------------- one person across apps
 
+/** What the person helpers read: the people record and the chats that exist. */
+type PeopleState = { settings: Pick<Settings, 'people'>; conversations: Record<string, Conversation> }
+
 let indexCache: { people?: Record<string, Person>; index: Map<string, string> } = { index: new Map() }
 
 /** member chat id -> person id, worked out again only when the people record changes. */
@@ -1376,7 +1402,7 @@ export function peopleIndex(people: Record<string, Person> | undefined): Map<str
  * The person a chat belongs to, with the member chats that exist right now (anchor first). With a single one
  * left (an account removed or signed out), the chat shows on its own again.
  */
-export function personFor(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): { id: string; person: Person; members: string[] } | undefined {
+export function personFor(state: PeopleState, conversationId: string): { id: string; person: Person; members: string[] } | undefined {
   return personIn(state.settings.people, state.conversations, conversationId)
 }
 
@@ -1393,7 +1419,7 @@ export function personIn(
 }
 
 /** The chat a conversation is shown and opened as: its person's first member, or itself. */
-export function anchorFor(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): string {
+export function anchorFor(state: PeopleState, conversationId: string): string {
   return personFor(state, conversationId)?.members[0] ?? conversationId
 }
 
@@ -1493,6 +1519,19 @@ export function useSendVia(conversationId: string): string {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the slices above are what the choice reads
     [conversationId, merged, messages, picks, replyTo, conversations, people]
   )
+}
+
+/**
+ * A chat's first page is in and nothing is loading for it (opening a merged person starts its members loading
+ * in the background; a jump into one must wait for that rather than give up). At most about five seconds.
+ */
+async function settled(conversationId: string): Promise<void> {
+  for (let i = 0; i < 50; i++) {
+    const s = useStore.getState()
+    if (!s.messages[conversationId] && !s.loading[conversationId]) await s.prefetch(conversationId, false)
+    if (s.messages[conversationId] && !s.loading[conversationId]) return
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
 }
 
 /** One more page of a chat's history, older than what is loaded. */

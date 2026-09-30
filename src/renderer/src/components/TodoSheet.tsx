@@ -127,7 +127,7 @@ export function TodoSheet(): JSX.Element {
     if (!todo.conversationId) return
     closeSheet()
     select(todo.conversationId)
-    if (todo.messageId) setTimeout(() => void jumpTo(todo.messageId!), 350)
+    if (todo.messageId) setTimeout(() => void jumpTo(todo.messageId!, { from: todo.conversationId }), 350)
   }
   const commitEdit = (): void => {
     if (!editing) return

@@ -3,7 +3,7 @@ import { detectLanguage, type AiKind, type AiProgress, type AiStatus, type Speak
 import { playPcm, speakWithSystem, stopSpeaking, systemVoice } from './tts'
 import type { Attachment, Message } from '@shared/types'
 import type { ChatLine } from '@shared/ai-prompts'
-import { useStore } from './store'
+import { personFor, shownConversation, threadOf, useStore } from './store'
 import { translate as tr } from './i18n'
 
 export interface AiResult {
@@ -88,12 +88,17 @@ async function decodeTo16k(bytes: Uint8Array): Promise<Float32Array> {
 
 const language = (): 'vi' | 'en' => useStore.getState().settings.language
 
+/** A chat's loaded messages; a merged person's from all of its chats, in one timeline. */
+function threadMessages(conversationId: string): Message[] {
+  return threadOf(useStore.getState(), conversationId).messages ?? []
+}
+
 /**
  * What a voice note in this chat is probably spoken in: the language most of its recent text messages
  * use (Whisper, as run here, would otherwise assume English), else the app language.
  */
 function spokenLanguage(conversationId: string): string {
-  const texts = (useStore.getState().messages[conversationId] ?? []).filter((m) => m.text.trim().length > 3 && !m.system).slice(-30)
+  const texts = threadMessages(conversationId).filter((m) => m.text.trim().length > 3 && !m.system).slice(-30)
   const votes = new Map<string, number>()
   for (const m of texts) {
     const lang = detectLanguage(m.text)
@@ -116,7 +121,7 @@ const ATTACHMENT_LABEL: Record<string, { vi: string; en: string }> = {
 /** The newest `count` messages of a chat as lines the model can read (attachments become short labels). */
 function linesFor(conversationId: string, count: number): ChatLine[] {
   const lang = language()
-  return (useStore.getState().messages[conversationId] ?? [])
+  return threadMessages(conversationId)
     .filter((m) => !m.system && (m.text.trim() || m.attachments.length))
     .slice(-count)
     .map((m) => ({
@@ -167,14 +172,16 @@ export const useAi = create<AiState>((set, get) => {
       // Remember how many messages were unread when a chat is opened, and offer replies as new ones arrive.
       useStore.subscribe((s, prev) => {
         if (s.selectedId && s.selectedId !== prev.selectedId) {
-          set({ unreadAtOpen: { ...get().unreadAtOpen, [s.selectedId]: prev.conversations[s.selectedId]?.unreadCount ?? 0 } })
+          set({ unreadAtOpen: { ...get().unreadAtOpen, [s.selectedId]: shownConversation(prev, s.selectedId)?.unreadCount ?? 0 } })
         }
         const id = s.selectedId
         if (!id) return
-        const list = s.messages[id]
-        if (list === prev.messages[id] && id === prev.selectedId) return
-        const last = list?.at(-1)
-        if (!last) return
+        // Nothing new in this chat (or any of a merged person's chats): nothing to do.
+        const ids = personFor(s, id)?.members ?? [id]
+        if (id === prev.selectedId && ids.every((m) => s.messages[m] === prev.messages[m])) return
+        // A merged person's newest message may be in any of its chats.
+        const last = threadOf(s, id).messages?.at(-1)
+        if (!last || (id === prev.selectedId && last === threadOf(prev, id).messages?.at(-1))) return
         if (last.isOutgoing) {
           if (get().suggestions[id]?.items?.length) get().clearSuggestions(id)
           return
@@ -300,7 +307,7 @@ export const useAi = create<AiState>((set, get) => {
         const unread = get().unreadAtOpen[conversationId] ?? 0
         const count = unread >= 3 ? Math.min(unread, 60) : 0
         const lines = linesFor(conversationId, count || 40)
-        const messages = useStore.getState().messages[conversationId] ?? []
+        const messages = threadMessages(conversationId)
         const last = messages.at(-1)
         if (lines.length < 2 || !last) {
           useStore.getState().showToast(tr(language(), 'aiNothingToSummarize'))
@@ -326,7 +333,7 @@ export const useAi = create<AiState>((set, get) => {
       if (!manual && settings.aiSuggest === false) return
       const status = get().status
       if (!manual && !status?.chat.ready) return
-      const list = useStore.getState().messages[conversationId] ?? []
+      const list = threadMessages(conversationId)
       const last = list.at(-1)
       if (!last || last.isOutgoing || last.system) return
       const current = get().suggestions[conversationId]
@@ -336,7 +343,7 @@ export const useAi = create<AiState>((set, get) => {
         try {
           const items = await window.unison.ai.suggest(linesFor(conversationId, 12))
           // The chat may have moved on while the model was thinking.
-          const now = useStore.getState().messages[conversationId]?.at(-1)
+          const now = threadMessages(conversationId).at(-1)
           if (now && now.id !== last.id && now.isOutgoing) {
             get().clearSuggestions(conversationId)
             return

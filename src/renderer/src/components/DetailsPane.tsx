@@ -325,7 +325,7 @@ function SearchTab({ conversationId }: { conversationId: string }): JSX.Element 
       {busy && <BuddyLoader size={34} className="details-loader" />}
       {!busy && query.trim().length >= 2 && results.length === 0 && <div className="details-empty">{t('noResults')}</div>}
       {results.map((m) => (
-        <button key={m.id} className="result-item" onClick={() => void jumpTo(m.id)} title={t('jumpToMessage')}>
+        <button key={m.id} className="result-item" onClick={() => void jumpTo(m.id, { from: m.conversationId })} title={t('jumpToMessage')}>
           <Avatar {...(conversation ? personLook(conversation, { id: m.senderId, name: m.senderName, avatarUrl: m.senderAvatarUrl, isOutgoing: m.isOutgoing }) : { name: m.senderName, url: m.senderAvatarUrl })} size={26} />
           <span className="result-text">
             <span className="result-meta">
@@ -465,7 +465,7 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
           onClick={() => void openAttachment(message.conversationId, message.id, attachment.id)}
           onContextMenu={(e) => {
             e.preventDefault()
-            void jumpTo(message.id)
+            void jumpTo(message.id, { from: message.conversationId })
           }}
           title={t('openFile')}
         >

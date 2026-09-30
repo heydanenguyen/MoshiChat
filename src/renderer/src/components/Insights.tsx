@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { ChartNoAxesColumn, Flame, Sparkles, X } from 'lucide-react'
 import { computeInsights, onThisDay, type InsightRecord, type Memory } from '@shared/insights'
-import { useStore, useT } from '../store'
+import { useStore, useT, anchorFor, useShownConversations } from '../store'
 import { formatListTime } from '../utils'
 import { Avatar } from './Avatar'
 
@@ -91,7 +91,7 @@ export function MemoryCard({ collapsed }: { collapsed: boolean }): JSX.Element |
         : t('memoryWeekAgo')
   const open = (): void => {
     select(memory.record.conversationId)
-    setTimeout(() => void jumpTo(memory.record.id), 400)
+    setTimeout(() => void jumpTo(memory.record.id, { from: memory.record.conversationId }), 400)
   }
   const dismiss = (): void => {
     setDismissed(true)
@@ -140,7 +140,9 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i)
 export function InsightsSheet(): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
-  const conversations = useStore((s) => s.conversations)
+  const conversations = useShownConversations()
+  const rawConversations = useStore((s) => s.conversations)
+  const people = useStore((s) => s.settings.people)
   const closeSheet = useStore((s) => s.closeSheet)
   const select = useStore((s) => s.select)
   const records = useInsights((s) => s.records)
@@ -153,10 +155,12 @@ export function InsightsSheet(): JSX.Element {
   }, [load, backfill])
   const insights = useMemo(() => {
     if (!records) return undefined
+    // One person across apps counts as one friend: their chats' messages (and days) add up under the person.
+    const byPerson = people ? records.map((r) => ({ ...r, conversationId: anchorFor({ settings: { people }, conversations: rawConversations }, r.conversationId) })) : records
     const titles = Object.fromEntries(Object.values(conversations).map((c) => [c.id, c.title]))
     const groups = new Set(Object.values(conversations).filter((c) => c.isGroup).map((c) => c.id))
-    return computeInsights(records, titles, Date.now(), period === 'month' ? 30 : 365, groups)
-  }, [records, conversations, period])
+    return computeInsights(byPerson, titles, Date.now(), period === 'month' ? 30 : 365, groups)
+  }, [records, conversations, rawConversations, people, period])
   const weekdayNames = language === 'vi' ? ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const maxHour = insights ? Math.max(1, ...insights.hours) : 1
   const maxDay = insights ? Math.max(1, ...insights.weekdays) : 1
