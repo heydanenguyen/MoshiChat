@@ -989,6 +989,8 @@ mark {
   padding: var(--space-4) var(--space-5) var(--space-2);
   display: flex;
   flex-direction: column;
+  /* nothing here scrolls sideways; a sticker mid-wiggle or a popping bubble must not raise a bar */
+  overflow-x: hidden;
 }
 
 .chat-scroll-inner {
@@ -9728,8 +9730,18 @@ button.moment-card:hover {
   animation: sticker-land var(--duration-slow) var(--ease-spring);
   transform-origin: 50% 90%;
 }
-.attachment-sticker:hover {
-  animation: sticker-wiggle 0.6s ease-in-out;
+/* The wiggle hangs off the bubble, which does not move, so a pointer near the sticker's edge cannot flick
+   hover on and off as the sticker swings under it. sticker-land stays first in the list: dropping it would
+   replay the pop-in (from transparent) every time the pointer leaves. */
+.bubble.sticker:hover > .attachment-sticker {
+  animation:
+    sticker-land var(--duration-slow) var(--ease-spring),
+    sticker-wiggle 0.6s ease-in-out;
+}
+.bubble.sticker:hover > .attachment-sticker.flattened {
+  animation:
+    sticker-reveal 0.2s ease 0.6s forwards,
+    sticker-wiggle 0.6s ease-in-out;
 }
 @keyframes sticker-land {
   from {
@@ -10832,6 +10844,6 @@ button.moment-card:hover {
 }
 
 /* Pack stickers have their own motion (sticker-motion.ts); the generic hover wiggle would fight it. */
-.attachment-sticker:has(.sticker-art):hover {
-  animation: none;
+.bubble.sticker:hover > .attachment-sticker:has(.sticker-art) {
+  animation: sticker-land var(--duration-slow) var(--ease-spring);
 }
