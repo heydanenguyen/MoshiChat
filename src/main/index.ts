@@ -2,14 +2,14 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, nat
 import { join, basename } from 'path'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
-import type { AddAccountInput, AppCommand, BridgeEvent, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
 import { isMitoId, mitoSticker } from '@shared/mito'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
-import { accountNames, isForMe } from '@shared/inbox'
+import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
@@ -85,7 +85,7 @@ const log = (...args: unknown[]): void => {
 
 const emit = (event: BridgeEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
-  if (event.type === 'message:new' && !event.message.isOutgoing) notify(event)
+  if (event.type === 'message:new' && !event.message.isOutgoing) void notify(event)
 }
 
 const manager = new AccountManager(storage, emit, log)
@@ -134,14 +134,29 @@ const scheduler = new Scheduler(
   log
 )
 
-function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
+/**
+ * The chat a new message belongs to. The first message from a stranger arrives before its adapter has looked the
+ * chat up, so wait a moment for it: whether it is a message request decides whether it may notify at all.
+ */
+async function conversationOf(conversationId: string): Promise<Conversation | undefined> {
+  for (let tries = 0; tries < 8; tries++) {
+    const conversation = manager.listConversations().find((c) => c.id === conversationId)
+    if (conversation) return conversation
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  return undefined
+}
+
+async function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): Promise<void> {
   if (!storage.settings.notifications || !Notification.isSupported()) return
   if (window?.isFocused()) return
   // Ignore history that is older than a minute (initial syncs replay old messages).
   if (Date.now() - event.message.sentAt > 60_000) return
-  const conversation = manager.listConversations().find((c) => c.id === event.message.conversationId)
+  const conversation = await conversationOf(event.message.conversationId)
   if (conversation?.muted) return
   if (conversation && isMutedBy(storage.settings, conversation)) return
+  // Message requests wait silently, except a one-time code (a login or payment can hang on it).
+  if (conversation && isPendingRequest(conversation, storage.settings.acceptedRequests) && !looksLikeCode(event.message.text)) return
   if (conversation && storage.settings.mentionsOnly?.[conversation.id]) {
     const account = storage.accounts.find((a) => a.id === conversation.accountId)
     if (!isForMe(event.message, accountNames(account), manager.ownMessageIds(conversation.id))) return
@@ -203,7 +218,7 @@ async function stickerFile(id: string): Promise<OutgoingAttachment> {
 }
 
 /**
- * Drop per-chat settings (tags, pins, hidden, marked-unread, archived and mentions-only chats, nicknames, saved messages, mutes) that belong to accounts
+ * Drop per-chat settings (tags, pins, hidden, marked-unread, archived, mentions-only and accepted-request chats, nicknames, saved messages, mutes) that belong to accounts
  * which no longer exist, so counts and lists never include chats that are gone.
  */
 async function pruneOrphanedSettings(): Promise<void> {
@@ -222,7 +237,7 @@ async function pruneOrphanedSettings(): Promise<void> {
   if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
   const hidden = keep(settings.hidden)
   if (hidden && Object.keys(hidden).length !== Object.keys(settings.hidden ?? {}).length) patch.hidden = hidden
-  for (const key of ['markedUnread', 'archived', 'mentionsOnly'] as const) {
+  for (const key of ['markedUnread', 'archived', 'mentionsOnly', 'acceptedRequests'] as const) {
     const kept = keep<number | boolean>(settings[key])
     if (kept && Object.keys(kept).length !== Object.keys(settings[key] ?? {}).length) Object.assign(patch, { [key]: kept })
   }
@@ -906,6 +921,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.contactsOpen, (_e, accountId: string, peerId: string) => manager.openConversation(accountId, peerId))
   ipcMain.handle(IPC.conversationsList, () => manager.listConversations())
   ipcMain.handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
+  ipcMain.handle(IPC.conversationsAcceptRequest, (_e, id: string) => manager.acceptRequest(id))
   ipcMain.handle(IPC.conversationsProfile, (_e, id: string) => manager.profile(id))
   ipcMain.handle(IPC.conversationsShared, (_e, id: string, kind: SharedKind) => manager.shared(id, kind))
   ipcMain.handle(IPC.conversationsSearchIn, (_e, id: string, query: string) => manager.searchIn(id, query))

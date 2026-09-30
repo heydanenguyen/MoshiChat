@@ -80,6 +80,11 @@ export interface Conversation {
   unreadCount: number
   pinned?: boolean
   muted?: boolean
+  /**
+   * A message request: someone you do not know wrote first (Instagram's and Messenger's request folders, a Zalo
+   * stranger). It waits apart from the inbox, silently, until you accept it or reply.
+   */
+  request?: boolean
   lastMessage?: MessagePreview
   /** Renderer only: the platform's name/photo when a nickname or custom photo is shown instead. */
   originalTitle?: string
@@ -543,6 +548,8 @@ export interface Settings {
   archived?: Record<string, number>
   /** Group chats that only notify when a message @mentions you or replies to you. */
   mentionsOnly?: Record<string, boolean>
+  /** Message requests accepted in Moshi: conversation id -> when. Also covers platforms with no "accept" of their own (Zalo). */
+  acceptedRequests?: Record<string, number>
   /** To-dos (from messages or typed), with optional reminders; the main process marks reminders shown. */
   todos?: Todo[]
   /** Text size across the app (bigger for high-resolution screens). */

@@ -21,6 +21,7 @@ const bridge: MoshiBridge = {
   conversations: {
     list: () => ipcRenderer.invoke(IPC.conversationsList),
     markRead: (id) => ipcRenderer.invoke(IPC.conversationsMarkRead, id),
+    acceptRequest: (id) => ipcRenderer.invoke(IPC.conversationsAcceptRequest, id),
     profile: (id) => ipcRenderer.invoke(IPC.conversationsProfile, id),
     shared: (id, kind) => ipcRenderer.invoke(IPC.conversationsShared, id, kind),
     searchIn: (id, query) => ipcRenderer.invoke(IPC.conversationsSearchIn, id, query),

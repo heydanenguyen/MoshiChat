@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, UserRoundPlus, X } from 'lucide-react'
 import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useStore, useT, useTagDefs } from '../store'
 import { formatBadge, isUnread } from '../quickFilter'
@@ -16,7 +16,7 @@ import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
 import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
-import { isArchived, isChatMuted } from '@shared/inbox'
+import { isArchived, isChatMuted, isPendingRequest } from '@shared/inbox'
 
 interface TagMenuState {
   conversationId: string
@@ -26,9 +26,10 @@ interface TagMenuState {
 
 export function ConversationList(): JSX.Element {
   const t = useT()
-  const { conversations, counts, archivedCount } = useChatList()
-  const showArchive = useStore((s) => s.showArchive)
-  const setShowArchive = useStore((s) => s.setShowArchive)
+  const { conversations, counts, archivedCount, requestCount } = useChatList()
+  const listView = useStore((s) => s.listView)
+  const setListView = useStore((s) => s.setListView)
+  const acceptedRequests = useStore((s) => s.settings.acceptedRequests)
   const archived = useStore((s) => s.settings.archived)
   const archive = useStore((s) => s.archive)
   const unarchive = useStore((s) => s.unarchive)
@@ -131,9 +132,11 @@ export function ConversationList(): JSX.Element {
   const empty =
     conversations.length > 0 ? undefined
     : searching ? (visibleHits.length === 0 ? 'no-results' : undefined)
-    : showArchive ? 'archive'
+    : listView === 'archive' ? 'archive'
+    : listView === 'requests' ? 'requests'
     : counts.all > 0 && quickFilter !== 'all' ? 'chip'
     : archivedCount > 0 ? 'inbox-zero'
+    : requestCount > 0 ? undefined // only requests so far: the Requests row says it all
     : 'no-chats'
 
   const ringFor = (id: string): string | undefined => {
@@ -142,22 +145,27 @@ export function ConversationList(): JSX.Element {
 
   return (
     <section className="list-col">
-      <header className={`list-header drag ${showArchive ? 'in-archive' : ''}`}>
-        {showArchive ? (
-          <div className="list-title-row">
-            <button className="icon-btn no-drag list-back" onClick={() => setShowArchive(false)} title={`${t('archiveBack')} (${shortcutLabel(';')})`} aria-label={t('archiveBack')}>
+      <header className={`list-header drag ${listView !== 'inbox' ? 'in-archive' : ''}`}>
+        {listView !== 'inbox' ? (
+          <div className="list-title-row" key={listView}>
+            <button
+              className="icon-btn no-drag list-back"
+              onClick={() => setListView('inbox')}
+              title={listView === 'archive' ? `${t('archiveBack')} (${shortcutLabel(';')})` : t('archiveBack')}
+              aria-label={t('archiveBack')}
+            >
               <ChevronLeft size={20} strokeWidth={2.2} />
             </button>
-            <h1 className="list-title">{t('archiveTitle')}</h1>
+            <h1 className="list-title">{listView === 'archive' ? t('archiveTitle') : t('requestsTitle')}</h1>
           </div>
         ) : (
           <h1 className="list-title">{title}</h1>
         )}
         <div className="list-header-actions no-drag">
-          {!showArchive && archivedCount > 0 && (
+          {listView === 'inbox' && archivedCount > 0 && (
             <button
               className="icon-btn archive-btn"
-              onClick={() => setShowArchive(true)}
+              onClick={() => setListView('archive')}
               title={`${t('archiveShow')} (${shortcutLabel(';')})`}
               aria-label={`${t('archiveShow')}, ${archivedCount}`}
             >
@@ -183,7 +191,8 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
-      {!searching && !showArchive && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
+      {!searching && listView === 'inbox' && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
+      {!searching && listView === 'requests' && <p className="requests-note">{t('requestsNote')}</p>}
 
       {Object.values(accounts)
         .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
@@ -199,9 +208,23 @@ export function ConversationList(): JSX.Element {
         ))}
       <div className="conv-list scroll">
         {empty === 'chip' && quickFilter !== 'all' && <QuickFilterEmpty filter={quickFilter} />}
+        {!searching && listView === 'inbox' && requestCount > 0 && (
+          <button className="requests-row" onClick={() => setListView('requests')}>
+            <span className="requests-row-icon" aria-hidden>
+              <UserRoundPlus size={18} strokeWidth={2.2} />
+            </span>
+            <span className="requests-row-text">
+              <span className="requests-row-title">{t('requestsTitle')}</span>
+              <span className="requests-row-sub">{t('requestsRowHint', { count: requestCount })}</span>
+            </span>
+            <span className="requests-row-count">{formatBadge(requestCount)}</span>
+            <ChevronRight size={16} strokeWidth={2.2} className="requests-row-chevron" aria-hidden />
+          </button>
+        )}
+        {empty === 'requests' && <ListEmpty glyph="📬" title={t('requestsEmpty')} hint={t('requestsEmptyHint')} />}
         {empty === 'archive' && <ListEmpty glyph="🗂️" title={t('archiveEmpty')} hint={t('archiveEmptyHint', { key: shortcutLabel('E') })} />}
         {empty === 'inbox-zero' && (
-          <ListEmpty glyph="🌤️" title={t('inboxZero')} hint={t('inboxZeroHint')} action={{ label: t('archiveShow'), run: () => setShowArchive(true) }} />
+          <ListEmpty glyph="🌤️" title={t('inboxZero')} hint={t('inboxZeroHint')} action={{ label: t('archiveShow'), run: () => setListView('archive') }} />
         )}
         {(empty === 'no-results' || empty === 'no-chats') && (
           <div className="conv-empty">
@@ -288,6 +311,7 @@ export function ConversationList(): JSX.Element {
                       mentionsOnly?.[c.id] && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />
                     )}
                     {searching && archivedChat(c) && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
+                    {searching && isPendingRequest(c, acceptedRequests) && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
                     {c.unreadCount > 0 ? (
                       <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
                     ) : (

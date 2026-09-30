@@ -42,6 +42,32 @@ export function accountNames(account: Pick<Account, 'displayName' | 'handle'> | 
   return names
 }
 
+/** A message request still waiting: not accepted in Moshi (replying accepts it too; the adapter then drops the flag). */
+export function isPendingRequest(conversation: Pick<Conversation, 'id' | 'request'>, accepted: Record<string, number> | undefined): boolean {
+  return !!conversation.request && !accepted?.[conversation.id]
+}
+
+/**
+ * For platforms with no request folder (Zalo): a one-to-one chat is a request when the other person is not a
+ * friend (or contact), you did not start it, and you have never written in it. Unknown until the friend list
+ * has loaded, so nothing flickers into Requests at start-up.
+ */
+export function isStrangerChat(chat: { isGroup: boolean; friendsKnown: boolean; isFriend: boolean; startedByMe: boolean; youWrote: boolean }): boolean {
+  return !chat.isGroup && chat.friendsKnown && !chat.isFriend && !chat.startedByMe && !chat.youWrote
+}
+
+/**
+ * A one-time code (OTP, verification, login code): it gets through even from a message request, the way
+ * time-sensitive messages get past Apple's unknown-senders filter. A 4-8 digit number next to words that
+ * name a verification code, in Vietnamese or English.
+ */
+export function looksLikeCode(text: string): boolean {
+  // 4-8 digits standing alone: not part of a longer number, a price (150.000) or a decimal.
+  if (!/(?<!\d|\d[.,])\d{4,8}(?!\d|[.,]\d)/.test(text)) return false
+  // Words that name a code you are meant to type somewhere; not "mã giảm giá" (a discount) or "pin" (a battery).
+  return /\b(otp|passcode|one[- ]time|verification|verify|security code|login code|confirmation code|auth(entication)? code)\b|mã (otp|pin|xác|bảo mật|đăng nhập|kích hoạt)|xác (thực|minh|nhận)/iu.test(text)
+}
+
 /** Lower case, no Vietnamese marks, single spaces: "Nguyễn  Minh Anh" and "nguyen minh anh" compare equal. */
 export function foldName(text: string): string {
   return text

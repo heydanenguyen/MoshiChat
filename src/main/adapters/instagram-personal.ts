@@ -40,6 +40,8 @@ interface IgThread {
   oldest_cursor?: string
   has_older?: boolean
   last_seen_at?: Record<string, { item_id?: string; timestamp?: string }>
+  /** In the message requests folder (not accepted yet). */
+  pending?: boolean
 }
 
 interface InboxResponse {
@@ -49,6 +51,8 @@ interface InboxResponse {
 
 /** Walking whole histories for counts/"talking since" is paused: too slow for what it shows. */
 const HISTORY_CRAWL = false
+/** Message requests are checked less often than the inbox: they are not urgent, and each check is a request. */
+const REQUESTS_INTERVAL = 3 * 60_000
 /** Safety poll; realtime events trigger refreshes within a second. */
 const POLL_INTERVAL = 45_000
 /** Instagram silently truncates bigger pages (100 returns 75 and claims there is nothing older). */
@@ -101,6 +105,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private typingTimers = new Map<string, NodeJS.Timeout>()
   private mePk = ''
   private threads = new Map<string, IgThread>()
+  /** Threads in the message requests folder, as of the last check. */
+  private requestIds = new Set<string>()
+  private requestsCheckedAt = 0
   /** Placeholder items ("update to the latest version") resolved through the web client's GraphQL. */
   private slideResolved = new Map<string, MappedItem>()
   private slideCache = new Map<string, { at: number; nodes: Map<string, SlideNode> }>()
@@ -217,8 +224,14 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   async listConversations(): Promise<Conversation[]> {
-    const inbox = await this.inbox()
-    const list = inbox.map((thread) => this.toConversation(thread))
+    const [inbox, requests] = await Promise.all([
+      this.inbox(),
+      this.requestsFolder().catch((err) => {
+        this.ctx.log('instagram requests failed', (err as Error).message)
+        return [] as IgThread[]
+      })
+    ])
+    const list = [...inbox, ...requests].map((thread) => this.toConversation(thread))
     // Count the most recent threads quietly so their numbers are ready when opened.
     for (const thread of inbox.slice(0, 12)) this.ensureCrawl(thread.thread_id, conversationId(this.account.id, thread.thread_id), true)
     void this.resolveListPreviews(inbox.slice(0, 20))
@@ -757,8 +770,52 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       this.threads.set(thread.thread_id, thread)
       this.absorbUsers(thread.users)
       this.applySeen(thread)
+      // In the inbox now: accepted (here, on the phone or on the web).
+      this.requestIds.delete(thread.thread_id)
+      thread.pending = false
     }
     return threads
+  }
+
+  /**
+   * The message requests folder: people you do not follow who wrote first. Read-only, nothing is marked seen.
+   * Only the newest page is read, so a request that drops off it stays a request: a thread leaves Requests when
+   * it shows up in the inbox (accepted), never by going missing here.
+   */
+  private async requestsFolder(): Promise<IgThread[]> {
+    // Counted as checked even if it fails, so a rate limit is not hit again on every poll.
+    this.requestsCheckedAt = Date.now()
+    const res = await this.web.json<InboxResponse>('/api/v1/direct_v2/pending_inbox/?persistentBadging=true&limit=20&thread_message_limit=1', { headers: APP_HEADERS })
+    const threads = res.inbox?.threads ?? []
+    for (const thread of threads) {
+      if (this.threads.get(thread.thread_id)?.pending === false && !this.requestIds.has(thread.thread_id)) continue
+      this.requestIds.add(thread.thread_id)
+      this.threads.set(thread.thread_id, { ...thread, pending: true })
+      this.absorbUsers(thread.users)
+    }
+    return threads
+  }
+
+  /** Every few minutes: new requests appear (ones accepted elsewhere leave through the inbox). */
+  private async refreshRequests(): Promise<void> {
+    if (Date.now() - this.requestsCheckedAt < REQUESTS_INTERVAL) return
+    for (const thread of await this.requestsFolder()) {
+      if (!this.requestIds.has(thread.thread_id)) continue
+      this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(this.threads.get(thread.thread_id) ?? thread) })
+    }
+  }
+
+  /** Accept a message request: the thread moves to the inbox on Instagram too. */
+  async acceptRequest(id: string): Promise<void> {
+    const threadId = this.threadIdFor(id)
+    if (!threadId || !this.requestIds.has(threadId)) return
+    await this.guard(() => this.web.json(`/api/v1/direct_v2/threads/${threadId}/approve/`, { method: 'POST', form: {}, headers: APP_HEADERS }))
+    this.requestIds.delete(threadId)
+    const thread = this.threads.get(threadId)
+    if (thread) {
+      thread.pending = false
+      this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
+    }
   }
 
   private async poll(): Promise<void> {
@@ -807,6 +864,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         // Includes messages the user sent from another device; the app dedupes by id.
         for (const message of fresh) this.ctx.emit({ type: 'message:new', message })
       }
+      await this.refreshRequests().catch((err) => {
+        if (err instanceof SessionExpiredError) throw err
+        this.ctx.log('instagram requests failed', (err as Error).message)
+      })
       this.backoff = 1
     } catch (err) {
       if (err instanceof SessionExpiredError) {
@@ -929,6 +990,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       participants: [{ id: this.mePk, name: this.account.displayName, isMe: true }, ...others.map((u) => this.toPeer(u))],
       unreadCount: unread,
       muted: !!thread.muted,
+      request: !!thread.pending || this.requestIds.has(thread.thread_id),
       lastMessage: last
         ? { id: last.item_id, ...this.previewOf(last), senderName: lastMine ? this.account.displayName : (others[0]?.full_name || others[0]?.username || ''), isOutgoing: lastMine, sentAt: lastAt }
         : undefined,

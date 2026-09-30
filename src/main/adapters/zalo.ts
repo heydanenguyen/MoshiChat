@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'fs/promises'
+import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
@@ -39,7 +40,13 @@ export class ZaloAdapter implements PlatformAdapter {
   private zca?: ZcaModule
   private api?: API
   private meId = ''
+  /** Profiles of everyone met: friends, group members, strangers who wrote. */
   private friends = new Map<string, User>()
+  /** Actual Zalo friends (from the friend list), which `friends` above is not limited to. */
+  private friendIds = new Set<string>()
+  private friendsKnown = false
+  /** One-to-one chats you opened yourself from the contact list: never a message request. */
+  private startedByMe = new Set<string>()
   private groups = new Map<string, GroupInfo>()
   private names = new Map<string, string>()
   private avatars = new Map<string, string>()
@@ -167,6 +174,8 @@ export class ZaloAdapter implements PlatformAdapter {
   async listConversations(): Promise<Conversation[]> {
     const api = this.requireApi()
     const [friends, groupList] = await Promise.all([api.getAllFriends(), api.getAllGroups()])
+    this.friendIds = new Set(friends.map((f) => f.userId))
+    this.friendsKnown = true
     for (const friend of friends) {
       this.friends.set(friend.userId, friend)
       this.names.set(friend.userId, friend.displayName || friend.zaloName)
@@ -186,7 +195,30 @@ export class ZaloAdapter implements PlatformAdapter {
         }
       }
     }
+    await this.discoverStrangers(api)
     return this.buildConversations()
+  }
+
+  /**
+   * One-to-one chats with people who are not friends (message requests, shops, a buyer who found you in a group)
+   * only have history in the cache: look up who they are, the most recent first, so they show up at start.
+   */
+  private async discoverStrangers(api: API): Promise<void> {
+    const unknown = [...this.raw.keys()]
+      .filter((threadId) => this.threadTypes.get(threadId) === 0 && !this.friends.has(threadId) && !this.groups.has(threadId))
+      .sort((a, b) => (this.lastActivity.get(b) ?? 0) - (this.lastActivity.get(a) ?? 0))
+      .slice(0, 30)
+    if (!unknown.length) return
+    try {
+      const info = await api.getUserInfo(unknown)
+      for (const [userId, user] of Object.entries(info.changed_profiles)) {
+        this.friends.set(userId, user)
+        this.names.set(userId, user.displayName || user.zaloName)
+        if (user.avatar) this.avatars.set(userId, user.avatar)
+      }
+    } catch (err) {
+      this.ctx.log('zalo stranger lookup failed', (err as Error).message)
+    }
   }
 
   private buildConversations(): Conversation[] {
@@ -204,7 +236,8 @@ export class ZaloAdapter implements PlatformAdapter {
     const id = conversationId(this.account.id, threadId)
     const friend = this.friends.get(threadId)
     const group = this.groups.get(threadId)
-    const last = this.messagesFor(id).at(-1)
+    const history = this.messagesFor(id)
+    const last = history.at(-1)
     // Only real message times: a friend's lastActionTime is when they were last online, not when you talked.
     const activity = this.lastActivity.get(threadId) ?? 0
     return {
@@ -221,6 +254,13 @@ export class ZaloAdapter implements PlatformAdapter {
           : [{ id: threadId, name: friend?.displayName ?? '', handle: friend?.username ? `@${friend.username}` : undefined, avatarUrl: friend?.avatar }])
       ],
       unreadCount: this.unread.get(threadId) ?? 0,
+      request: isStrangerChat({
+        isGroup,
+        friendsKnown: this.friendsKnown,
+        isFriend: this.friendIds.has(threadId),
+        startedByMe: this.startedByMe.has(threadId),
+        youWrote: history.some((m) => m.isOutgoing)
+      }),
       lastMessage: last && previewOf(last),
       updatedAt: last?.sentAt ?? (activity > 1e12 ? activity : activity * 1000)
     }
@@ -395,10 +435,16 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 
   async listContacts(): Promise<Peer[]> {
-    return [...this.friends.values()].map((f) => ({ id: f.userId, name: f.displayName || f.zaloName, handle: f.username ? `@${f.username}` : f.phoneNumber || undefined, avatarUrl: f.avatar || undefined }))
+    // Friends only: the profile cache also holds strangers who wrote (message requests), not contacts.
+    const friends = this.friendsKnown ? [...this.friends.values()].filter((f) => this.friendIds.has(f.userId)) : [...this.friends.values()]
+    return friends.map((f) => ({ id: f.userId, name: f.displayName || f.zaloName, handle: f.username ? `@${f.username}` : f.phoneNumber || undefined, avatarUrl: f.avatar || undefined }))
   }
 
   async openConversation(peerId: string): Promise<Conversation> {
+    if (!this.startedByMe.has(peerId)) {
+      this.startedByMe.add(peerId)
+      this.scheduleSave()
+    }
     if (!this.friends.has(peerId)) await this.discoverThread(peerId, 0)
     this.threadTypes.set(peerId, 0)
     return this.toConversation(peerId, false)
@@ -704,7 +750,14 @@ export class ZaloAdapter implements PlatformAdapter {
 
   private async loadCache(): Promise<void> {
     try {
-      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as { threads?: Array<[string, 0 | 1, TMessage[]]>; stickers?: Array<[number, string]>; sync?: Partial<Record<0 | 1, SyncCursor>> }
+      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as {
+        threads?: Array<[string, 0 | 1, TMessage[]]>
+        stickers?: Array<[number, string]>
+        sync?: Partial<Record<0 | 1, SyncCursor>>
+        /** Chats with non-friends you opened yourself (never message requests). */
+        started?: string[]
+      }
+      for (const threadId of data.started ?? []) this.startedByMe.add(threadId)
       for (const [stickerId, url] of data.stickers ?? []) this.stickerUrls.set(stickerId, url)
       this.syncCursors = { 0: data.sync?.[0] ?? {}, 1: data.sync?.[1] ?? {} }
       for (const [threadId, type, list] of data.threads ?? []) {
@@ -723,7 +776,7 @@ export class ZaloAdapter implements PlatformAdapter {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     this.saveTimer = setTimeout(() => {
       const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
-      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
+      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe] })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
     }, 2000)
   }
 

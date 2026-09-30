@@ -53,7 +53,7 @@ function inboxKey(e: KeyboardEvent): 'archive' | 'toggle-unread' | 'show-archive
 function runInboxCommand(command: 'archive' | 'toggle-unread' | 'show-archive'): void {
   const state = useStore.getState()
   if (state.sheet.kind !== 'none' || state.lightbox || state.forwarding) return
-  if (command === 'show-archive') return state.setShowArchive(!state.showArchive)
+  if (command === 'show-archive') return state.setListView(state.listView === 'archive' ? 'inbox' : 'archive')
   const id = state.selectedId
   if (!id) return
   if (command === 'toggle-unread') void state.toggleUnread(id)

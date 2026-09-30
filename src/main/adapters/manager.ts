@@ -1,4 +1,5 @@
 import type { InsightRecord } from '@shared/insights'
+import { isPendingRequest } from '@shared/inbox'
 import { InsightStore } from '../insights-store'
 import { SendLimiter } from '../rate-limit'
 import { randomUUID } from 'crypto'
@@ -472,13 +473,25 @@ export class AccountManager {
       conversation.unreadCount = 0
       this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
     }
-    // Private reading: clear the badge in Moshi only, the platform is not told.
-    if (this.storage.settings.sendReadReceipts === false) return
+    // Private reading: clear the badge in Moshi only, the platform is not told. A message request is always
+    // read privately: whoever wrote it must not learn you saw it before you accept it.
+    if (this.storage.settings.sendReadReceipts === false || this.isPendingRequest(conversationId)) return
     await this.adapterFor(conversationId).markRead(conversationId)
   }
 
   async setTyping(conversationId: string): Promise<void> {
+    if (this.isPendingRequest(conversationId)) return
     await this.adapterFor(conversationId).setTyping?.(conversationId)
+  }
+
+  /** Accept a message request: on the platform where it has that step, and read it (the "seen" now goes out). */
+  async acceptRequest(conversationId: string): Promise<void> {
+    await this.adapterFor(conversationId).acceptRequest?.(conversationId)
+  }
+
+  isPendingRequest(conversationId: string): boolean {
+    const conversation = this.conversations.get(conversationId)
+    return !!conversation && isPendingRequest(conversation, this.storage.settings.acceptedRequests)
   }
 
   respondAuth(requestId: string, value: string): void {

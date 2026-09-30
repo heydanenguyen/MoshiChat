@@ -63,6 +63,8 @@ export interface MoshiBridge {
   conversations: {
     list(): Promise<Conversation[]>
     markRead(conversationId: string): Promise<void>
+    /** Accept a message request on the platform (where it has that step). */
+    acceptRequest(conversationId: string): Promise<void>
     /** Profile of the other side (or the group). */
     profile(conversationId: string): Promise<PeerProfile | undefined>
     /** Messages carrying photos/videos, links or files, newest first. */
@@ -215,6 +217,7 @@ export const IPC = {
   contactsOpen: 'contacts:open',
   conversationsList: 'conversations:list',
   conversationsMarkRead: 'conversations:markRead',
+  conversationsAcceptRequest: 'conversations:acceptRequest',
   conversationsProfile: 'conversations:profile',
   conversationsShared: 'conversations:shared',
   conversationsSearchIn: 'conversations:searchIn',

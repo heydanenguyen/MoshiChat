@@ -24,6 +24,9 @@ export interface FacebookPersonalSecret {
 type FcaModule = typeof import('ws3-fca')
 type FcaApi = import('ws3-fca').API
 type FcaThread = import('ws3-fca').ThreadInfo
+
+/** Messenger's folders for message requests: PENDING, and OTHER for the ones Messenger filtered as likely spam. */
+const REQUEST_FOLDERS: readonly string[] = ['PENDING', 'OTHER']
 type FcaMessage = import('ws3-fca').Message
 
 interface FcaUser {
@@ -129,7 +132,17 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
 
   async listConversations(): Promise<Conversation[]> {
     const api = this.requireApi()
-    const threads = (await api.getThreadList(60, null, ['INBOX'])) ?? []
+    // Message requests (PENDING) and filtered requests (OTHER): a smaller page each, listed apart by the app.
+    const [inbox, ...requests] = await Promise.all([
+      api.getThreadList(60, null, ['INBOX']),
+      ...REQUEST_FOLDERS.map((folder) =>
+        api.getThreadList(20, null, [folder]).catch((err: Error) => {
+          this.ctx.log(`facebook ${folder} list failed`, err.message)
+          return []
+        })
+      )
+    ])
+    const threads = [...(inbox ?? []), ...requests.flatMap((list) => list ?? [])]
     const list: Conversation[] = []
     for (const thread of threads) {
       this.threads.set(thread.threadID, thread)
@@ -326,6 +339,12 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
         const message = this.toMessage(event as unknown as FcaMessage, id)
         this.remember(id, [message])
         if (!this.threads.has(event.threadID)) void this.discoverThread(event.threadID)
+        const thread = this.threads.get(event.threadID)
+        if (message.isOutgoing && thread && REQUEST_FOLDERS.includes(thread.folder)) {
+          // You replied (here or on another device): Messenger moves the chat to the inbox.
+          thread.folder = 'INBOX'
+          this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
+        }
         this.ctx.emit({ type: 'message:new', message })
         break
       }
@@ -397,6 +416,7 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
         ...others.map((p) => ({ id: p, name: this.users.get(p)?.name ?? p, avatarUrl: this.users.get(p)?.thumbSrc }))
       ],
       unreadCount: thread.unreadCount ?? 0,
+      request: REQUEST_FOLDERS.includes(thread.folder),
       muted: !!thread.muteUntil && (thread.muteUntil === -1 || thread.muteUntil * 1000 > Date.now()),
       lastMessage: last ? previewOf(last) : this.snippetPreview(thread),
       updatedAt: Number(thread.timestamp) || last?.sentAt || 0

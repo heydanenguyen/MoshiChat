@@ -18,6 +18,8 @@ interface SeedThread {
   unread?: number
   pinned?: boolean
   muted?: boolean
+  /** A message request (someone you do not know wrote first). */
+  request?: boolean
   history: Array<[from: 'me' | string, text: string, minutesAgo: number]>
   replies: string[]
 }
@@ -29,6 +31,25 @@ const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThrea
     name: 'Minh Anh',
     handle: 'minhanh',
     threads: [
+      {
+        key: 'nguoila',
+        title: 'Trần Văn Tài',
+        unread: 2,
+        request: true,
+        history: [
+          ['Trần Văn Tài', 'Chào chị, em thấy chị bán sỉ áo thun trên nhóm Chợ Sỉ Sài Gòn', 42],
+          ['Trần Văn Tài', 'Chị cho em xin bảng giá sỉ từ 50 cái với ạ', 41]
+        ],
+        replies: ['Dạ em cảm ơn chị', 'Chị gửi em mẫu size M với ạ']
+      },
+      {
+        key: 'vi',
+        title: 'Ví Điện Tử',
+        unread: 1,
+        request: true,
+        history: [['Ví Điện Tử', 'Mã xác thực của bạn là 482913. Không chia sẻ mã này cho bất kỳ ai.', 3]],
+        replies: []
+      },
       {
         key: 'khachhang',
         title: 'Chị Hạnh - Khách sỉ',
@@ -156,6 +177,15 @@ const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThrea
     name: 'minhanh.creates',
     handle: 'minhanh.creates',
     threads: [
+      {
+        key: 'collab',
+        title: 'lumiere.studio',
+        handle: 'lumiere.studio',
+        unread: 1,
+        request: true,
+        history: [['lumiere.studio', 'Hi! We love your feed. Would you be open to a paid collab next month? 🌿', 95]],
+        replies: ['Amazing, sending the brief now!']
+      },
       {
         key: 'brand',
         title: 'Aurora Skincare',
@@ -405,6 +435,7 @@ export class DemoAdapter implements PlatformAdapter {
         unreadCount: thread.unread ?? 0,
         pinned: thread.pinned,
         muted: thread.muted,
+        request: thread.request,
         lastMessage: last && preview(last),
         updatedAt: last?.sentAt ?? now
       })

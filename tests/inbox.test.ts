@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Conversation, Message } from '../src/shared/types'
-import { accountNames, archiveMark, foldName, hasReturned, isArchived, isChatMuted, isForMe } from '../src/shared/inbox'
+import { accountNames, archiveMark, foldName, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, isStrangerChat, looksLikeCode } from '../src/shared/inbox'
 import { flatten } from '../src/shared/sync-merge'
 
 const AT = 1_800_000_000_000
@@ -95,5 +95,42 @@ describe('messages for me', () => {
   it('syncs archive and mentions-only marks per chat', () => {
     const paths = [...flatten({ archived: { 'zalo:1/2': AT }, mentionsOnly: { 'zalo:1/3': true } }).keys()]
     expect(paths).toEqual(['archived\u001fzalo:1/2', 'mentionsOnly\u001fzalo:1/3'])
+  })
+})
+
+describe('message requests', () => {
+  it('waits until accepted in Moshi', () => {
+    expect(isPendingRequest({ id: 'a', request: true }, undefined)).toBe(true)
+    expect(isPendingRequest({ id: 'a', request: true }, { a: AT })).toBe(false)
+    expect(isPendingRequest({ id: 'b' }, {})).toBe(false)
+  })
+
+  it('treats a Zalo chat with a stranger as a request only until you write or it was yours to begin with', () => {
+    const base = { isGroup: false, friendsKnown: true, isFriend: false, startedByMe: false, youWrote: false }
+    expect(isStrangerChat(base)).toBe(true)
+    expect(isStrangerChat({ ...base, isFriend: true })).toBe(false)
+    expect(isStrangerChat({ ...base, youWrote: true })).toBe(false)
+    expect(isStrangerChat({ ...base, startedByMe: true })).toBe(false)
+    expect(isStrangerChat({ ...base, isGroup: true })).toBe(false)
+    // Before the friend list has loaded nothing is a request, so chats do not flicker into Requests.
+    expect(isStrangerChat({ ...base, friendsKnown: false })).toBe(false)
+  })
+
+  it('lets one-time codes through, in Vietnamese and English', () => {
+    expect(looksLikeCode('Mã xác thực của bạn là 482913. Không chia sẻ mã này.')).toBe(true)
+    expect(looksLikeCode('Mã OTP: 1234')).toBe(true)
+    expect(looksLikeCode('Your verification code is 55012')).toBe(true)
+    expect(looksLikeCode('Mã đăng nhập 889900')).toBe(true)
+  })
+
+  it('does not take prices, phone numbers or chatter for a code', () => {
+    expect(looksLikeCode('Chị cho em xin bảng giá sỉ từ 50 cái với ạ')).toBe(false)
+    expect(looksLikeCode('Giá 150.000đ, mã hàng A12')).toBe(false)
+    expect(looksLikeCode('Gọi em số 0912345678 nhé')).toBe(false)
+    expect(looksLikeCode('Chúc mừng năm mới 2026!')).toBe(false)
+    // Promotions that look like codes: a discount code, a power bank.
+    expect(looksLikeCode('Mã giảm giá 50000đ cho đơn đầu tiên')).toBe(false)
+    expect(looksLikeCode('Pin sạc dự phòng 20000mAh giá sốc')).toBe(false)
+    expect(looksLikeCode('Use code SALE 2026 at checkout')).toBe(false)
   })
 })

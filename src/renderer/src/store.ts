@@ -36,10 +36,12 @@ import { abstractIdUrl } from './components/AbstractAvatar'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
 import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
-import { accountNames, archiveMark, hasReturned, isArchived, isChatMuted, isForMe } from '@shared/inbox'
+import { accountNames, archiveMark, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
+
+export type ListView = 'inbox' | 'archive' | 'requests'
 
 export type LegalDoc = 'notice' | 'license' | 'terms' | 'privacy' | 'credits'
 
@@ -105,8 +107,8 @@ interface State {
   filter: Filter
   /** The chip above the chat list (Unread, Needs reply...), applied on top of `filter`. */
   quickFilter: QuickFilter
-  /** The list shows archived chats instead of the inbox. */
-  showArchive: boolean
+  /** Which list shows: the inbox, the archive, or message requests. */
+  listView: ListView
   search: string
   searchHits: SearchHit[]
   authPrompts: AuthPrompt[]
@@ -139,7 +141,7 @@ interface State {
   setWide(wide: boolean): void
   setFilter(filter: Filter): void
   setQuickFilter(quickFilter: QuickFilter): void
-  setShowArchive(showArchive: boolean): void
+  setListView(listView: ListView): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
   /** Scroll to a message in the open thread, loading older pages until it appears. */
@@ -206,6 +208,8 @@ interface State {
   unarchive(conversationId: string): Promise<void>
   /** Group chats: notify only for messages that @mention you or reply to you. */
   toggleMentionsOnly(conversationId: string): Promise<void>
+  /** Move a message request into the inbox (and accept it on the platform where that is a step). */
+  acceptRequest(conversationId: string): Promise<void>
   /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
   hideConversation(conversationId: string): Promise<void>
   unhideConversation(conversationId: string): Promise<void>
@@ -319,6 +323,7 @@ function maybePlaySound(message: Message): void {
   if (sound === 'off' || message.isOutgoing || message.system || Date.now() - message.sentAt > 60_000) return
   const conversation = conversations[message.conversationId]
   if (!conversation || conversation.muted || settings.muted.conversations.includes(conversation.id) || isMutedBy(settings, conversation)) return
+  if (isPendingRequest(conversation, settings.acceptedRequests) && !looksLikeCode(message.text)) return
   if (settings.mentionsOnly?.[conversation.id] && !isForMe(message, accountNames(useStore.getState().accounts[conversation.accountId]), ownIds(conversation.id))) return
   const watching = document.hasFocus() && onScreen(message.conversationId)
   playSound(sound, (settings.soundVolume ?? 0.7) * (watching ? 0.45 : 1))
@@ -353,7 +358,7 @@ export const useStore = create<State>((set, get) => ({
   highlightIds: {},
   filter: 'all',
   quickFilter: 'all',
-  showArchive: false,
+  listView: 'inbox',
   search: '',
   searchHits: [],
   authPrompts: [],
@@ -535,8 +540,8 @@ export const useStore = create<State>((set, get) => ({
     set({ quickFilter })
   },
 
-  setShowArchive(showArchive) {
-    set({ showArchive })
+  setListView(listView) {
+    set({ listView })
   },
 
   setFilter(filter) {
@@ -608,11 +613,14 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async send(selectedId, text, files, resolveFiles) {
-    const { messages, settings } = get()
+    const { messages, settings, conversations } = get()
     const replyTo = get().replyTos[selectedId]
     const pendingFiles = files ?? get().pendingFiles[selectedId] ?? []
     const trimmed = text.trim()
     if (!selectedId || (!trimmed && !pendingFiles.length)) return
+    // Replying to a message request accepts it, as it does on the platforms.
+    const conversation = conversations[selectedId]
+    if (conversation && isPendingRequest(conversation, settings.acceptedRequests)) void get().acceptRequest(selectedId)
     const tempId = `temp-${Date.now()}`
     const optimistic: Message = {
       id: tempId,
@@ -1066,6 +1074,21 @@ export const useStore = create<State>((set, get) => ({
     await updateRecord('archived', (record) => delete record[conversationId])
   },
 
+  async acceptRequest(conversationId) {
+    await updateRecord('acceptedRequests', (record) => {
+      record[conversationId] = Date.now()
+      return true
+    })
+    try {
+      await window.unison.conversations.acceptRequest(conversationId)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+    // Accepted while open: now they may see that you read it (opening it only read it privately, so the count
+    // is already 0 here and the platform has not been told).
+    if (onScreen(conversationId)) void window.unison.conversations.markRead(conversationId)
+  },
+
   async toggleMentionsOnly(conversationId) {
     await updateRecord('mentionsOnly', (record) => {
       if (record[conversationId]) delete record[conversationId]
@@ -1242,7 +1265,7 @@ export const useStore = create<State>((set, get) => ({
 }))
 
 /** Per-chat records changed from the list, often several in a row (a key held down, a split opening two chats). */
-type ChatRecords = Required<Pick<Settings, 'markedUnread' | 'archived' | 'mentionsOnly'>>
+type ChatRecords = Required<Pick<Settings, 'markedUnread' | 'archived' | 'mentionsOnly' | 'acceptedRequests'>>
 
 let recordWrites = Promise.resolve()
 
@@ -1395,6 +1418,8 @@ export interface ChatList {
   counts: Record<QuickFilter, number>
   /** Archived chats within the sidebar filter. */
   archivedCount: number
+  /** Message requests waiting within the sidebar filter. */
+  requestCount: number
 }
 
 /** Rows the list shows right now, top to bottom (what "archive and open the next one" walks). */
@@ -1406,14 +1431,14 @@ let listedIds: string[] = []
 let chipListed: { key: string; ids: ReadonlySet<string> } = { key: '', ids: new Set() }
 
 /**
- * The chat list. Archived chats wait in their own view; a search looks everywhere (inbox and archive) and past
+ * The chat list. Archived chats and message requests wait in their own views; a search looks everywhere and past
  * the quick filter, so it never misses a chat because a chip was left on.
  */
 export function useChatList(): ChatList {
   const conversations = useStore((s) => s.conversations)
   const filter = useStore((s) => s.filter)
   const quickFilter = useStore((s) => s.quickFilter)
-  const showArchive = useStore((s) => s.showArchive)
+  const listView = useStore((s) => s.listView)
   const search = useStore((s) => s.search)
   const tags = useStore((s) => s.settings.tags)
   const pins = useStore((s) => s.settings.pins)
@@ -1421,6 +1446,7 @@ export function useChatList(): ChatList {
   const muted = useStore((s) => s.settings.muted)
   const markedUnread = useStore((s) => s.settings.markedUnread)
   const archived = useStore((s) => s.settings.archived)
+  const accepted = useStore((s) => s.settings.acceptedRequests)
   const drafts = useStore((s) => s.drafts)
   const layout = useStore((s) => s.layout)
   const searching = search.trim().length > 0
@@ -1430,16 +1456,22 @@ export function useChatList(): ChatList {
     () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => isChatMuted({ muted, tags }, c) }),
     [drafts, markedUnread, muted, tags, conversations]
   )
-  const [inbox, archive] = useMemo(() => {
+  const [inbox, archive, requests] = useMemo(() => {
     const inbox: Conversation[] = []
     const archive: Conversation[] = []
-    for (const c of scoped) (isArchived(c, archived?.[c.id], ctx.isMuted(c)) ? archive : inbox).push(c)
-    return [inbox, archive]
-  }, [scoped, archived, ctx])
+    const requests: Conversation[] = []
+    for (const c of scoped) {
+      if (isPendingRequest(c, accepted)) requests.push(c)
+      else if (isArchived(c, archived?.[c.id], ctx.isMuted(c))) archive.push(c)
+      else inbox.push(c)
+    }
+    return [inbox, archive, requests]
+  }, [scoped, archived, accepted, ctx])
   const counts = useMemo(() => countQuickFilters(searching ? [] : inbox, ctx), [inbox, ctx, searching])
   const shown = useMemo(() => {
     if (searching) return scoped
-    if (showArchive) return archive
+    if (listView === 'archive') return archive
+    if (listView === 'requests') return requests
     // An open chat that stops matching the chip stays put, but only if it was already listed under it: one that
     // never matched does not appear under a chip it has nothing to do with.
     const key = `${filter}|${quickFilter}`
@@ -1448,9 +1480,9 @@ export function useChatList(): ChatList {
     const list = applyQuickFilter(inbox, quickFilter, ctx, keep)
     chipListed = { key, ids: new Set(list.map((c) => c.id)) }
     return list
-  }, [searching, scoped, showArchive, archive, inbox, filter, quickFilter, ctx, layout])
+  }, [searching, scoped, listView, archive, requests, inbox, filter, quickFilter, ctx, layout])
   listedIds = shown.map((c) => c.id)
-  return { conversations: shown, counts, archivedCount: archive.length }
+  return { conversations: shown, counts, archivedCount: archive.length, requestCount: requests.length }
 }
 
 /** Pinned in Moshi, or on the platform when Moshi has no say. */
@@ -1515,7 +1547,11 @@ export function useUnreadCounts(): UnreadCounts {
   const muted = useStore((s) => s.settings.muted)
   const markedUnread = useStore((s) => s.settings.markedUnread)
   const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
-  return useMemo(() => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly), [conversations, tags, muted, markedUnread, mentionsOnly])
+  const accepted = useStore((s) => s.settings.acceptedRequests)
+  return useMemo(
+    () => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly, accepted),
+    [conversations, tags, muted, markedUnread, mentionsOnly, accepted]
+  )
 }
 
 function computeUnread(
@@ -1523,7 +1559,8 @@ function computeUnread(
   tags: Record<string, TagId[]>,
   muted?: MuteRules,
   markedUnread?: Record<string, number>,
-  mentionsOnly?: Record<string, boolean>
+  mentionsOnly?: Record<string, boolean>,
+  accepted?: Record<string, number>
 ): UnreadCounts {
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
@@ -1533,7 +1570,8 @@ function computeUnread(
     // A chat marked unread by hand counts as one, like a single new message.
     const unread = c.unreadCount || (markedUnread?.[c.id] ? 1 : 0)
     // Muted and mentions-only chats keep their own count in the list but stay out of the badges.
-    if (!unread || c.muted || mentionsOnly?.[c.id]) continue
+    // Message requests wait silently too, until accepted.
+    if (!unread || c.muted || mentionsOnly?.[c.id] || isPendingRequest(c, accepted)) continue
     if (muted && isMutedBy({ muted, tags }, c)) continue
     total += unread
     byPlatform[c.platform] += unread

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, X } from 'lucide-react'
+import { isPendingRequest } from '@shared/inbox'
+import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
@@ -320,9 +321,48 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
+      <RequestBanner conversation={conversation} />
       <ScheduledStrip conversationId={conversation.id} />
       <Composer conversationId={conversation.id} active={active} disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
     </section>
+  )
+}
+
+/**
+ * Above the composer of a message request: who this is, that reading stays private, and the two ways out.
+ * Replying accepts it too.
+ */
+function RequestBanner({ conversation }: { conversation: Conversation }): JSX.Element | null {
+  const t = useT()
+  const accepted = useStore((s) => s.settings.acceptedRequests)
+  const acceptRequest = useStore((s) => s.acceptRequest)
+  const hideConversation = useStore((s) => s.hideConversation)
+  const showToast = useStore((s) => s.showToast)
+  if (!isPendingRequest(conversation, accepted)) return null
+  return (
+    <div className="request-banner" role="region" aria-label={t('requestBannerTitle')}>
+      <span className="request-banner-icon" aria-hidden>
+        <UserRoundPlus size={18} strokeWidth={2.2} />
+      </span>
+      <span className="request-banner-text">
+        <strong>{t('requestBannerTitle')}</strong>
+        <span>{t('requestBannerBody', { name: conversation.title })}</span>
+      </span>
+      <span className="request-banner-actions">
+        <button className="btn secondary" onClick={() => void hideConversation(conversation.id)}>
+          {t('requestHide')}
+        </button>
+        <button
+          className="btn primary"
+          onClick={() => {
+            void acceptRequest(conversation.id)
+            showToast(t('requestAcceptedToast', { name: conversation.title }))
+          }}
+        >
+          {t('requestAccept')}
+        </button>
+      </span>
+    </div>
   )
 }
 

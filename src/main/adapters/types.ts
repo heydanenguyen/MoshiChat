@@ -39,6 +39,8 @@ export interface PlatformAdapter {
   sendMessage(conversationId: string, text: string, options?: SendOptions): Promise<Message>
   markRead(conversationId: string): Promise<void>
   setTyping?(conversationId: string): Promise<void>
+  /** Accept a message request on the platform, where it has such a step (Instagram). Replying accepts it everywhere. */
+  acceptRequest?(conversationId: string): Promise<void>
   react?(conversationId: string, messageId: string, emoji: string): Promise<void>
   /** Take one of my messages back for everyone. The adapter emits the message as unsent (see `unsentCopy`). */
   unsend?(conversationId: string, messageId: string): Promise<void>
