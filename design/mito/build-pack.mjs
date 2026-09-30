@@ -73,6 +73,15 @@ function outline(rgba) {
   }
   return res
 }
+/** One raw RGBA picture over another (lower first). */
+function stack(lower, upper) {
+  const res = Buffer.alloc(SIZE * SIZE * 4)
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const [r, g, b, a] = over([upper[i * 4], upper[i * 4 + 1], upper[i * 4 + 2], upper[i * 4 + 3] / 255], [lower[i * 4], lower[i * 4 + 1], lower[i * 4 + 2], lower[i * 4 + 3] / 255])
+    res[i * 4] = Math.round(r); res[i * 4 + 1] = Math.round(g); res[i * 4 + 2] = Math.round(b); res[i * 4 + 3] = Math.round(a * 255)
+  }
+  return res
+}
 function over([sr, sg, sb, sa], [dr, dg, db, da]) {
   const a = sa + da * (1 - sa)
   if (a <= 0) return [0, 0, 0, 0]
@@ -105,24 +114,39 @@ for (const file of readdirSync(join(here, 'stills')).filter((f) => f.endsWith('.
 
 const framesDir = join(here, 'frames')
 for (const id of existsSync(framesDir) ? readdirSync(framesDir).filter(wanted) : []) {
-  const files = readdirSync(join(framesDir, id)).filter((f) => f.endsWith('.png')).sort()
+  // Frames come in layers: NNN.png (the cat, which gets the sticker edge) and, when there are effects,
+  // NNN-back.png / NNN-front.png (drawn behind / over it, without an edge).
+  const files = readdirSync(join(framesDir, id)).filter((f) => /^\d+\.png$/.test(f)).sort()
+  const layer = (f, suffix) => {
+    const path = join(framesDir, id, f.replace('.png', `${suffix}.png`))
+    return existsSync(path) ? path : undefined
+  }
   // Every frame gets the same framing, so nothing jumps: the box around everything that shows in any frame of the loop.
   let box = null
   for (const f of files) {
-    const { data, info } = await sharp(join(framesDir, id, f)).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-    for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
-      if (data[(y * info.width + x) * 4 + 3] < 8) continue
-      box = box ? { x0: Math.min(box.x0, x), y0: Math.min(box.y0, y), x1: Math.max(box.x1, x), y1: Math.max(box.y1, y) } : { x0: x, y0: y, x1: x, y1: y }
+    for (const path of [join(framesDir, id, f), layer(f, '-back'), layer(f, '-front')].filter(Boolean)) {
+      const { data, info } = await sharp(path).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+        if (data[(y * info.width + x) * 4 + 3] < 8) continue
+        box = box ? { x0: Math.min(box.x0, x), y0: Math.min(box.y0, y), x1: Math.max(box.x1, x), y1: Math.max(box.y1, y) } : { x0: x, y0: y, x1: x, y1: y }
+      }
     }
   }
   const crop = (file) => sharp(file).extract({ left: box.x0, top: box.y0, width: box.x1 - box.x0 + 1, height: box.y1 - box.y0 + 1 }).png().toBuffer()
+  const frame = async (f) => {
+    let rgba = outline(await fit(await crop(join(framesDir, id, f)), 'keep'))
+    const back = layer(f, '-back'), front = layer(f, '-front')
+    if (back) rgba = stack(await fit(await crop(back), 'keep'), rgba)
+    if (front) rgba = stack(rgba, await fit(await crop(front), 'keep'))
+    return rgba
+  }
   const frames = []
-  for (const f of files) frames.push(await raw(outline(await fit(await crop(join(framesDir, id, f)), 'keep'))).png().toBuffer())
+  for (const f of files) frames.push(await raw(await frame(f)).png().toBuffer())
   await sharp(frames, { join: { animated: true } })
     .webp({ loop: 0, delay: Array(frames.length).fill(Math.round(1000 / FPS)), quality: 90, alphaQuality: 100, effort: 6, smartSubsample: true })
     .toFile(join(out, `${id}.webp`))
   // The still for the picker, previews and platforms that cannot show the animation: the first frame, which each
   // loop is made to start and end on (the drawing's own pose).
-  await writeStill(id, outline(await fit(await crop(join(framesDir, id, files[0])), 'keep')))
+  await writeStill(id, await frame(files[0]))
   console.log('animated', id, frames.length, 'frames')
 }

@@ -574,7 +574,7 @@
       [534, 187, 217], [542, 184, 214], [550, 182, 211], [558, 181, 208], [566, 181, 206], [574, 182, 203], [582, 184, 201], [590, 188, 199],
       [598, 193, 197], [604, 195, 197]], true)
     // Ears: everything beyond the line where each ear meets the head.
-    const earL = (x, y) => smooth(0, 25, ((x - 235) * -75 + (y - 290) * -110) / 133) * smooth(362, 332, x)
+    const earL = (x, y) => smooth(0, 25, ((x - 235) * -75 + (y - 290) * -110) / 133) * smooth(362, 332, x) * smooth(305, 288, y) * smooth(200, 215, x)
     const earR = (x, y) => smooth(0, 25, ((x - 470) * 85 + (y - 215) * -105) / 135) * smooth(438, 468, x)
     function warp(x, y, t) {
       const x0 = x, y0 = y, inh = inhale(t), ye = yell(t), sh = shake(t)
@@ -584,7 +584,7 @@
       const wL = earL(x0, y0), wR = earR(x0, y0)
       if (wL > 0) [x, y] = rotAround(x, y, 290, 262, -0.2 * ye * wL)
       if (wR > 0) [x, y] = rotAround(x, y, 520, 250, 0.2 * ye * wR)
-      const side = TAIL(x0, y0), wTail = side * smooth(640, 360, y0) * smooth(335, 350, y0)
+      const side = TAIL(x0, y0), wTail = side * smooth(640, 360, y0)
       if (wTail > 0) {
         // The tail lashes while it yells.
         const a = (0.05 * Math.sin(2 * Math.PI * (t - 0.1 * wTail)) + 0.09 * sh * Math.sin(2 * Math.PI * (6 * t - 0.15 * wTail))) * wTail
@@ -651,7 +651,7 @@
       const x0 = x, y0 = y, b = breathe(t, 1)
       const wEar = earL(x0, y0)
       if (wEar > 0) [x, y] = rotAround(x, y, 245, 215, -0.16 * twitch(t) * wEar)
-      const side = TAIL(x0, y0), wTail = side * smooth(600, 350, y0) * smooth(318, 334, y0)
+      const side = TAIL(x0, y0), wTail = side * smooth(600, 350, y0)
       if (wTail > 0) {
         const s = Math.sin(2 * Math.PI * (t - 0.12 * wTail))
         ;[x, y] = rotAround(x, y, 118, 600, (0.045 * s - 0.015 * s * s) * wTail)
@@ -693,7 +693,7 @@
   const SANG = (() => {
     const VIEW = { x: 75, y: 58, w: 600, h: 590 }, LOOP = 2.4
     // Two fist pumps, the second bigger; the head lifts proudly with each; the stars twinkle in turn.
-    const pump = track([[0, 0], [0.06, 0, 'soft'], [0.12, -6, 'soft'], [0.19, 16, 'out'], [0.3, 0, 'soft'], [0.36, -6, 'soft'], [0.44, 22, 'out'], [0.6, 0, 'soft'], [1, 0]])
+    const pump = track([[0, 0], [0.06, 0, 'soft'], [0.13, -5, 'soft'], [0.23, 15, 'soft'], [0.34, 0, 'soft'], [0.41, -5, 'soft'], [0.52, 20, 'soft'], [0.7, 0, 'soft'], [1, 0]])
     const TAIL = gapSide([[360, 154, 250], [368, 164, 254], [376, 171, 259], [384, 177, 264], [392, 182, 272], [400, 186, 281], [408, 189, 276],
       [416, 192, 262], [424, 193, 250], [432, 195, 239], [440, 195, 231], [448, 195, 223], [456, 195, 217], [464, 195, 213], [472, 194, 210],
       [480, 193, 209], [488, 192, 209], [496, 191, 210], [504, 189, 213], [512, 189, 217], [520, 190, 223], [528, 191, 230], [536, 193, 238],
@@ -721,7 +721,7 @@
         x += AXIS[0] * p * wArm; y += AXIS[1] * p * wArm
         ;[x, y] = rotAround(x, y, SHOULDER[0], SHOULDER[1], -0.004 * p * wArm)
       }
-      const side = TAIL(x0, y0), wTail = side * smooth(600, 370, y0) * smooth(352, 366, y0)
+      const side = TAIL(x0, y0), wTail = side * smooth(600, 370, y0)
       if (wTail > 0) {
         const s = Math.sin(2 * Math.PI * (2 * t - 0.1 * wTail))
         ;[x, y] = rotAround(x, y, 170, 600, (0.06 * s - 0.02 * s * s) * wTail)
@@ -735,14 +735,10 @@
       y = 606 - (606 - y) * (1 + 0.01 * breathe(t))
       return [x, y]
     }
-    // The four stars, each twinkling in its turn and flashing on the big punch.
-    const STARS = [
-      { box: [502, 115, 56, 62], at: 0.1 },
-      { box: [144, 250, 74, 80], at: 0.35 },
-      { box: [603, 357, 51, 55], at: 0.6 },
-      { box: [553, 430, 74, 81], at: 0.85 }
-    ]
-    const flash = track([[0, 0], [0.42, 0, 'out'], [0.47, 1, 'soft'], [0.6, 0, 'soft'], [1, 0]])
+    // The four stars shimmer all the time, each a quarter of a beat after the other: they swell and brighten softly,
+    // turn a little, and glow together on the big punch. They are drawn without the sticker edge.
+    const STARS = [[502, 115, 56, 62], [144, 250, 74, 80], [603, 357, 51, 55], [553, 430, 74, 81]]
+    const flash = track([[0, 0], [0.44, 0, 'soft'], [0.53, 1, 'soft'], [0.7, 0, 'soft'], [1, 0]])
     return {
       view: VIEW, loop: LOOP, warp,
       skinKey: () => 'still',
@@ -750,18 +746,18 @@
         ctx.clearRect(0, 0, SIZE, SIZE)
         ctx.drawImage(imgs.sang, 0, 0)
       },
-      over(ctx, t, imgs) {
-        const f = flash(t)
-        for (const st of STARS) {
-          const [bx, by, bw, bh] = st.box, cx = bx + bw / 2, cy = by + bh / 2
-          const d = wrap(t - st.at)
-          const tw = d < 0.16 ? Math.sin((Math.PI * d) / 0.16) : 0
-          const sc = 1 + 0.32 * tw + 0.22 * f, rot = 0.5 * tw
+      front(ctx, t, imgs) {
+        const f = flash(t), u = wrap(t)
+        STARS.forEach(([bx, by, bw, bh], i) => {
+          const cx = bx + bw / 2, cy = by + bh / 2
+          const beat = 0.5 - 0.5 * Math.cos(2 * Math.PI * (2 * u + i / 4))
+          const sc = 0.92 + 0.2 * beat + 0.15 * f
           ctx.save()
-          ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(sc, sc); ctx.translate(-cx, -cy)
+          ctx.translate(cx, cy); ctx.rotate(0.14 * Math.sin(2 * Math.PI * (u + i / 4))); ctx.scale(sc, sc); ctx.translate(-cx, -cy)
+          ctx.filter = `brightness(${(1 + 0.1 * beat + 0.1 * f).toFixed(3)})`
           ctx.drawImage(imgs.sangStars, bx, by, bw, bh, bx, by, bw, bh)
           ctx.restore()
-        }
+        })
       }
     }
   })()
@@ -785,6 +781,7 @@
     // The arm bends from the armpit: no pull there, growing along the arm to the full turn at the paw, so the
     // armpit keeps its shape instead of folding into a dent. Next to the head, only the arm's side of the gap moves.
     const ARMPIT = [512, 366], AXIS = [0.586, -0.81]
+    const PAW_ANGLE = Math.atan2(270 - 366, 585 - 512)   // where the paw is, seen from the armpit
     function armWeight(x, y) {
       const s = (x - ARMPIT[0]) * AXIS[0] + (y - ARMPIT[1]) * AXIS[1]
       return ARM_GAP(x, y) * smooth(0, 110, s)
@@ -809,8 +806,6 @@
       y = 577 - (577 - y) * (1 + 0.01 * breathe(t))
       return [x, y]
     }
-    // The drawing's motion lines, redrawn so they can come and go with the wave.
-    const STROKES = [[[586, 160], [582, 187]], [[632, 162], [610, 196]], [[658, 201], [633, 216]], [[632, 350], [641, 395], [628, 440]], [[614, 389], [604, 436], [584, 471]]]
     return {
       view: VIEW, loop: LOOP, warp,
       skinKey: () => 'still',
@@ -818,20 +813,21 @@
         ctx.clearRect(0, 0, SIZE, SIZE)
         ctx.drawImage(imgs.chao, 0, 0)
       },
-      // At the end of each outward swing the lines pop out around the paw, turned with the arm, and fade opening out.
+      // Motion lines: arcs round the armpit that trail behind the paw while it swings back in, where the drawing has
+      // them (outside the arm); brightest next to the paw, fading along the way it came.
       front(ctx, t) {
-        const k = whoosh(t)
-        if (k < 0.01) return
-        const a = wave(t), sc = 1 + 0.2 * (1 - k), [px, py] = warp(585, 275, t)
-        const at = (x, y) => { const [X, Y] = rotAround(x, y, ARMPIT[0], ARMPIT[1], a); const [rx, ry] = rotAround(585, 275, ARMPIT[0], ARMPIT[1], a); return [px + (X - rx) * sc, py + (Y - ry) * sc] }
+        const a = wave(t), sweep = Math.min(0.6, wave(t - 0.15) - a)
+        if (sweep < 0.03) return
+        const strength = clamp(sweep / 0.18), length = 0.2 + 0.8 * sweep
         ctx.save()
-        ctx.globalAlpha = k; ctx.strokeStyle = '#808080'; ctx.lineWidth = 8; ctx.lineCap = 'round'
-        for (const s of STROKES) {
-          const p = s.map(([x, y]) => at(x, y))
-          ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1])
-          if (p.length === 2) ctx.lineTo(p[1][0], p[1][1])
-          else ctx.quadraticCurveTo(2 * p[1][0] - (p[0][0] + p[2][0]) / 2, 2 * p[1][1] - (p[0][1] + p[2][1]) / 2, p[2][0], p[2][1])
-          ctx.stroke()
+        ctx.strokeStyle = '#808080'; ctx.lineCap = 'round'
+        for (const [r, half, width] of [[174, 0.22, 7.5], [140, 0.4, 7]]) {
+          const from = PAW_ANGLE + a + half, n = 10
+          for (let i = 0; i < n; i++) {
+            ctx.globalAlpha = strength * Math.min(1, 2 * (1 - i / n))
+            ctx.lineWidth = width * (1 - (0.35 * i) / n)
+            ctx.beginPath(); ctx.arc(ARMPIT[0], ARMPIT[1], r, from + (length * i) / n, from + (length * (i + 1)) / n); ctx.stroke()
+          }
         }
         ctx.restore()
       }

@@ -1,5 +1,7 @@
-// Renders the animated Mito stickers from animation.html into frames/<id>/NNN.png: one loop at 25 fps, transparent,
-// 344 × 338 px, without the sticker edge (build-pack.mjs adds it).
+// Renders the animated Mito stickers from animation.html into frames/<id>/: one loop at 25 fps, transparent,
+// 344 × 338 px, without the sticker edge (build-pack.mjs adds it). Each frame is taken in layers: NNN.png is the cat
+// (and what it holds), NNN-back.png and NNN-front.png the effects behind and in front of it (confetti, stars, z's,
+// motion lines), which get no sticker edge.
 //
 //   node design/mito/export-frames.mjs [chao tim coc quay gian ngu toasang]
 //
@@ -11,7 +13,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const here = dirname(fileURLToPath(import.meta.url))
+const here = process.env.MITO_DIR || dirname(fileURLToPath(import.meta.url))
 const FPS = 25
 const W = 344
 // Sticker id → its loop in seconds, where the loop starts (the drawing's pose), and its name in animation.html.
@@ -48,10 +50,32 @@ for (const name of names) {
     host.querySelector('.art').style.filter = 'none'
     host.scrollIntoView()
   }, { name: pageName, W })
+  // The layers of the sticker: [effects behind, the cat, effects in front] (either effects layer may be missing).
+  const layers = await page.evaluate(() => {
+    const kids = [...document.querySelector('#target .stick').children]
+    const art = kids.findIndex((k) => k.classList.contains('art'))
+    return { back: art > 0, front: art < kids.length - 1 }
+  })
+  const show = (which) =>
+    page.evaluate((which) => {
+      const kids = [...document.querySelector('#target .stick').children]
+      const art = kids.findIndex((k) => k.classList.contains('art'))
+      kids.forEach((k, i) => {
+        const role = i < art ? 'back' : i === art ? 'cat' : 'front'
+        k.style.visibility = role === which ? 'visible' : 'hidden'
+        if (role === 'cat') for (const c of k.querySelectorAll('*')) c.style.visibility = role === which ? 'visible' : 'hidden'
+      })
+    }, which)
   const n = Math.round(loop * FPS)
   for (let i = 0; i < n; i++) {
     await page.evaluate((u) => window.__seekEach(u), (i / n + start) % 1)
-    await (await page.$('#target')).screenshot({ path: join(out, `${String(i).padStart(3, '0')}.png`), omitBackground: true })
+    const base = join(out, String(i).padStart(3, '0'))
+    const target = await page.$('#target')
+    for (const [which, suffix] of [['cat', ''], ['back', '-back'], ['front', '-front']]) {
+      if (which !== 'cat' && !layers[which]) continue
+      await show(which)
+      await target.screenshot({ path: `${base}${suffix}.png`, omitBackground: true })
+    }
   }
   await page.close()
   console.log(name, n, 'frames')
