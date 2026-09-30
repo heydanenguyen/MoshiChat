@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { isPendingRequest } from '@shared/inbox'
-import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
+import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
-import { bubbleVarsOf, useStore, useT } from '../store'
+import { anchorFor, bubbleVarsOf, useSendVia, useShownConversations, useStore, useT, useThread } from '../store'
+import { PlatformIcon } from './PlatformIcon'
 import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, tip, withStickers, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
@@ -34,7 +35,9 @@ const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 export function ChatView(): JSX.Element {
   const t = useT()
   const layout = useStore((s) => s.layout)
-  const conversations = useStore((s) => s.conversations)
+  const shown = useShownConversations()
+  // A pane may still hold a chat that has since been merged: show its person.
+  const conversationFor = (id: string): Conversation | undefined => shown[id] ?? shown[anchorFor(useStore.getState(), id)]
   const canSplit = useStore((s) => s.wide && !s.narrow)
   const openInPane = useStore((s) => s.openInPane)
   const [dragOver, setDragOver] = useState<0 | 1 | undefined>()
@@ -50,14 +53,14 @@ export function ChatView(): JSX.Element {
   let body: JSX.Element
   if (!split) {
     const id = layout.panes[layout.active]
-    const conversation = id ? conversations[id] : undefined
+    const conversation = id ? conversationFor(id) : undefined
     body = !id || !conversation ? <EmptyState kind="no-selection" /> : <Thread key={conversation.id} conversation={conversation} pane={layout.active} split={false} active />
   } else {
     body = (
       <>
         {layout.panes.map((id, index) => {
           const pane = index as PaneIndex
-          const conversation = id ? conversations[id] : undefined
+          const conversation = id ? conversationFor(id) : undefined
           if (!id || !conversation) return <EmptyPane key={`empty-${pane}`} pane={pane} active={layout.active === pane} />
           return <Thread key={`${pane}:${conversation.id}`} conversation={conversation} pane={pane} split active={layout.active === pane} />
         })}
@@ -92,7 +95,7 @@ export function ChatView(): JSX.Element {
         dragDepth.current = 0
         setDragOver(undefined)
         const id = e.dataTransfer.getData(CONVERSATION_DRAG)
-        if (id && conversations[id]) openInPane(id, zoneAt(e))
+        if (id && conversationFor(id)) openInPane(id, zoneAt(e))
       }}
     >
       {body}
@@ -138,17 +141,38 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const closePane = useStore((s) => s.closePane)
   const toggleSplit = useStore((s) => s.toggleSplit)
   const canSplit = useStore((s) => s.wide && !s.narrow)
-  const stored = useStore((s) => s.messages[conversation.id])
+  const thread = useThread(conversation.id)
+  const stored = thread.messages
   const sentStickers = useStore((s) => s.settings.sentStickers)
-  // Our own stickers come back from the platforms as photos: show them as stickers again.
-  const messages = useMemo(
-    () => stored && withStickers(stored, sentStickers, conversation.id, conversation.platform),
-    [stored, sentStickers, conversation.id, conversation.platform]
+  const rawConversations = useStore((s) => s.conversations)
+  const accounts = useStore((s) => s.accounts)
+  const members = conversation.members
+  // Our own stickers come back from the platforms as photos: show them as stickers again (per app, for a person).
+  const messages = useMemo(() => {
+    if (!stored) return stored
+    if (!members) return withStickers(stored, sentStickers, conversation.id, conversation.platform)
+    return members
+      .flatMap((id) => withStickers(stored.filter((m) => m.conversationId === id), sentStickers, id, rawConversations[id]?.platform ?? conversation.platform))
+      .sort((a, b) => a.sentAt - b.sentAt)
+  }, [stored, sentStickers, conversation.id, conversation.platform, members, rawConversations])
+  const loading = thread.loading
+  const hasMore = thread.hasMore
+  const typing = useStore((s) => (members ?? [conversation.id]).map((id) => s.typing[id]).find(Boolean))
+  // A merged person writes through one of its chats: that chat's account decides what the composer can do.
+  const via = useSendVia(conversation.id)
+  const viaConversation = rawConversations[via] ?? conversation
+  const account = accounts[viaConversation.accountId]
+  const memberOf = useCallback((m: Message): Conversation => rawConversations[m.conversationId] ?? conversation, [rawConversations, conversation])
+  // Every chat of a merged person loads, also when it joined while the thread was open.
+  const prefetch = useStore((s) => s.prefetch)
+  const memberKey = members?.join('\n')
+  useEffect(() => {
+    for (const id of memberKey?.split('\n') ?? []) void prefetch(id, false)
+  }, [memberKey, prefetch])
+  const featuresOf = useCallback(
+    (m: Message): Account['features'] => accounts[memberOf(m).accountId]?.features ?? { reply: false, react: false, attachments: false },
+    [accounts, memberOf]
   )
-  const loading = useStore((s) => !!s.loading[conversation.id])
-  const hasMore = useStore((s) => !!s.hasMore[conversation.id])
-  const typing = useStore((s) => s.typing[conversation.id])
-  const account = useStore((s) => s.accounts[conversation.accountId])
   const detailsOpen = useStore((s) => s.detailsOpen)
   const toggleDetails = useStore((s) => s.toggleDetails)
   const loadMore = useStore((s) => s.loadMore)
@@ -214,9 +238,11 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
     ? conversation.isGroup
       ? t('typingIn', { name: typing.name })
       : t('typing')
-    : conversation.isGroup
-      ? t('members', { count: conversation.participants.length })
-      : (conversation.participants.find((p) => !p.isMe)?.handle ?? PLATFORMS[conversation.platform].name)
+    : members
+      ? members.map((id) => PLATFORMS[rawConversations[id]?.platform ?? conversation.platform].name).join(' · ')
+      : conversation.isGroup
+        ? t('members', { count: conversation.participants.length })
+        : (conversation.participants.find((p) => !p.isMe)?.handle ?? PLATFORMS[conversation.platform].name)
 
   // Only real files light up the drop overlay; a chat dragged from the list is handled by the chat area.
   const isFileDrag = (e: React.DragEvent): boolean => e.dataTransfer.types.includes('Files')
@@ -290,16 +316,22 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
           {sections.map((section) => (
             <div key={section.day} style={{ display: 'contents' }}>
               <div className="day-sep">{formatDayLabel(section.day, language)}</div>
-              {section.groups.map((group) => (
+              {section.groups.map((group, index) => (
+                <div key={group.key} style={{ display: 'contents' }}>
+                  {members && (index === 0 || section.groups[index - 1].messages[0].conversationId !== group.messages[0].conversationId) && (
+                    <ViaSeparator conversation={memberOf(group.messages[0])} />
+                  )}
                 <Group
-                  key={group.key}
                   group={group}
                   conversation={conversation}
                   features={features}
+                  featuresOf={members ? featuresOf : undefined}
+                  platformOf={members ? (m) => memberOf(m).platform : undefined}
                   lastOutgoingId={lastOutgoing?.id}
                   highlightId={highlightId}
                   language={language}
                 />
+                </div>
               ))}
             </div>
           ))}
@@ -322,9 +354,99 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
       <RequestBanner conversation={conversation} />
-      <ScheduledStrip conversationId={conversation.id} />
+      <ScheduledStrip conversationId={conversation.id} members={members} />
+      {members && <SendViaChip conversation={conversation} via={via} />}
       <Composer conversationId={conversation.id} active={active} disabled={account?.status !== 'connected'} canAttach={features.attachments} canVoice={features.voice ?? features.attachments} />
     </section>
+  )
+}
+
+/** Where a merged person's thread switches app: a quiet label with the app and account. */
+function ViaSeparator({ conversation }: { conversation: Conversation }): JSX.Element {
+  const t = useT()
+  const account = useStore((s) => s.accounts[conversation.accountId])
+  return (
+    <div className="via-sep">
+      <PlatformIcon platform={conversation.platform} size={12} />
+      <span>{t('viaLabel', { app: PLATFORMS[conversation.platform].name })}</span>
+      {account?.handle && <span className="via-sep-account">{account.handle}</span>}
+    </div>
+  )
+}
+
+/**
+ * Which app a merged person's message goes out on, always in sight above the composer. It follows the app they
+ * last wrote on (pulsing when it switches by itself); a click lists their chats to pick another.
+ */
+function SendViaChip({ conversation, via }: { conversation: Conversation; via: string }): JSX.Element {
+  const t = useT()
+  const rawConversations = useStore((s) => s.conversations)
+  const accounts = useStore((s) => s.accounts)
+  const pickSendVia = useStore((s) => s.pickSendVia)
+  const replyingFrom = useStore((s) => s.replyTos[conversation.id]?.conversationId)
+  const [open, setOpen] = useState(false)
+  const [pulse, setPulse] = useState(0)
+  const previous = useRef(via)
+  useEffect(() => {
+    if (previous.current !== via) setPulse((n) => n + 1)
+    previous.current = via
+  }, [via])
+  useEffect(() => {
+    if (!open) return
+    const close = (): void => setOpen(false)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [open])
+  const current = rawConversations[via]
+  if (!current) return <></>
+  const locked = replyingFrom === via && (conversation.members?.length ?? 0) > 1
+  const label = (c: Conversation): string => accounts[c.accountId]?.handle ?? accounts[c.accountId]?.displayName ?? ''
+  return (
+    <div className="send-via" onMouseDown={(e) => e.stopPropagation()}>
+      <button
+        key={pulse}
+        type="button"
+        className={`send-via-chip ${pulse ? 'pulse' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={locked ? t('sendViaReply') : t('sendViaHint')}
+        disabled={locked}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <PlatformIcon platform={current.platform} size={13} />
+        <span>{t('sendVia', { app: PLATFORMS[current.platform].name })}</span>
+        <span className="send-via-account">{label(current)}</span>
+        {!locked && <ChevronDown size={13} strokeWidth={2.4} aria-hidden />}
+      </button>
+      {open && (
+        <div className="send-via-menu" role="listbox" aria-label={t('sendVia', { app: '' }).trim()}>
+          {(conversation.members ?? []).map((id) => {
+            const member = rawConversations[id]
+            if (!member) return null
+            return (
+              <button
+                key={id}
+                type="button"
+                role="option"
+                aria-selected={id === via}
+                className={`send-via-option ${id === via ? 'active' : ''}`}
+                onClick={() => {
+                  pickSendVia(conversation.id, id)
+                  setOpen(false)
+                }}
+              >
+                <PlatformIcon platform={member.platform} size={15} />
+                <span className="send-via-option-text">
+                  <strong>{PLATFORMS[member.platform].name}</strong>
+                  <span>{label(member)}</span>
+                </span>
+                {id === via && <Check size={14} strokeWidth={2.6} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -411,7 +533,9 @@ export function ReconnectBanner({ accountId, status, reason, label }: { accountI
 function Group({
   group,
   conversation,
-  features,
+  features: chatFeatures,
+  featuresOf,
+  platformOf,
   lastOutgoingId,
   highlightId,
   language
@@ -419,6 +543,9 @@ function Group({
   group: MessageGroup
   conversation: Conversation
   features: Account['features']
+  /** A merged person: each message's own app decides what it can do and how it looks. */
+  featuresOf?: (message: Message) => Account['features']
+  platformOf?: (message: Message) => Platform
   lastOutgoingId?: string
   highlightId?: string
   language: 'vi' | 'en'
@@ -426,7 +553,10 @@ function Group({
   const t = useT()
   const react = useStore((s) => s.react)
   const showSender = !group.isOutgoing && conversation.isGroup
-  if (group.system) return <SystemRow message={group.messages[0]} platform={conversation.platform} />
+  // A group never mixes apps (sectionize splits them), so its first message speaks for it.
+  const features = featuresOf?.(group.messages[0]) ?? chatFeatures
+  const platform = platformOf?.(group.messages[0]) ?? conversation.platform
+  if (group.system) return <SystemRow message={group.messages[0]} platform={platform} />
   return (
     <div className={`msg-group ${group.isOutgoing ? 'out' : 'in'}`}>
       {!group.isOutgoing && (
@@ -459,7 +589,7 @@ function Group({
           const message = item.message
           return (
             <div key={message.id} style={{ display: 'contents' }}>
-              <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={conversation.platform} />
+              <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={platform} />
               {message.reactions.length > 0 && (
                 <div className="reactions">
                   {message.reactions.map((r) => (

@@ -22,6 +22,7 @@ import { BackupSheet } from './components/BackupSheet'
 import { LegalSheet } from './components/LegalSheet'
 import { TodoSheet } from './components/TodoSheet'
 import { InsightsSheet } from './components/Insights'
+import { MergeSheet } from './components/MergeSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
@@ -324,6 +325,7 @@ export default function App(): JSX.Element {
             {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
             {sheet.kind === 'todos' && <TodoSheet />}
             {sheet.kind === 'insights' && <InsightsSheet />}
+            {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
             <AiSetupSheet />
             {forwarding && <ForwardSheet message={forwarding} />}
             {lightbox && <Lightbox {...lightbox} />}

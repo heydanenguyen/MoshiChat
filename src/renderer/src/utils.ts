@@ -155,7 +155,8 @@ export function sectionize(messages: Message[]): DaySection[] {
       section.groups.push({ key: message.id, senderId: message.senderId, senderName: message.senderName, isOutgoing: message.isOutgoing, messages: [message], system: true })
       continue
     }
-    if (!group || group.system || group.senderId !== message.senderId || !last || message.sentAt - last.sentAt > GROUP_WINDOW) {
+    // A merged person's thread mixes apps: a run of bubbles never does.
+    if (!group || group.system || group.senderId !== message.senderId || !last || last.conversationId !== message.conversationId || message.sentAt - last.sentAt > GROUP_WINDOW) {
       group = {
         key: message.id,
         senderId: message.senderId,

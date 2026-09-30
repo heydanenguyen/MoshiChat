@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, UserRoundPlus, X } from 'lucide-react'
+import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, Link2, SquarePen, UserRoundPlus, X } from 'lucide-react'
 import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
-import { isPinned, useChatList, useShowPlatformBadge, useStore, useT, useTagDefs } from '../store'
+import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
+import { PlatformIcon } from './PlatformIcon'
 import { formatBadge, isUnread } from '../quickFilter'
 import { formatListTime, modKey, shortcutLabel } from '../utils'
 import { openIds } from '../panes'
@@ -35,7 +36,8 @@ export function ConversationList(): JSX.Element {
   const unarchive = useStore((s) => s.unarchive)
   const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
   const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
-  const allConversations = useStore((s) => s.conversations)
+  const allConversations = useShownConversations()
+  const rawConversations = useStore((s) => s.conversations)
   const quickFilter = useStore((s) => s.quickFilter)
   const markedUnread = useStore((s) => s.settings.markedUnread)
   const markUnread = useStore((s) => s.markUnread)
@@ -241,6 +243,10 @@ export function ConversationList(): JSX.Element {
           const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
           const pinned = isPinned(c, pins)
           const unread = isUnread(c, markedUnread)
+          // A merged person: the badge shows the app of the newest message, the title lists every app.
+          const memberChats = c.members?.map((id) => rawConversations[id]).filter((m): m is Conversation => !!m)
+          const merged = !!memberChats && memberChats.length > 1
+          const latestApp = memberChats?.find((m) => m.lastMessage && m.lastMessage.id === c.lastMessage?.id)?.platform ?? c.platform
           return (
             <button
               key={c.id}
@@ -264,11 +270,18 @@ export function ConversationList(): JSX.Element {
                 setMenu({ conversationId: c.id, x: e.clientX, y: e.clientY })
               }}
             >
-              <Avatar name={c.title} url={c.avatarUrl} size={44} platform={showBadge ? c.platform : undefined} ring={ringFor(c.id)} />
+              <Avatar name={c.title} url={c.avatarUrl} size={44} platform={merged ? latestApp : showBadge ? c.platform : undefined} ring={ringFor(c.id)} />
               <span className="conv-body">
                 <span className="conv-top">
                   <span className="conv-title">
                     {c.title}
+                    {merged && (
+                      <span className="conv-apps" title={memberChats!.map((m) => PLATFORMS[m.platform].name).join(' · ')}>
+                        {[...new Set(memberChats!.map((m) => m.platform))].map((p) => (
+                          <PlatformIcon key={p} platform={p} size={12} />
+                        ))}
+                      </span>
+                    )}
                     {isBirthdayToday(overrides?.[c.id]?.birthday) && (
                       <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
                         🎂
@@ -381,6 +394,18 @@ export function ConversationList(): JSX.Element {
                 {menuUnread ? <CheckCheck size={15} /> : <CircleDot size={15} />}
                 <span>{menuUnread ? t('markRead') : t('markUnread')}</span>
                 <span className="context-menu-shortcut">{shortcutLabel('U', true)}</span>
+              </button>
+            )}
+            {menuConversation && !menuConversation.isGroup && (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  openSheet({ kind: 'merge', conversationId: menuConversation.id })
+                  setMenu(undefined)
+                }}
+              >
+                <Link2 size={15} />
+                <span>{t('mergeWith')}</span>
               </button>
             )}
             {menuConversation && (

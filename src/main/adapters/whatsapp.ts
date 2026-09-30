@@ -315,7 +315,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       isGroup: false,
       participants: [
         { id: this.meJid, name: this.account.displayName, isMe: true },
-        { id: peerId, name, handle: `+${peerId.split('@')[0]}` }
+        { id: peerId, name, handle: `+${peerId.split('@')[0]}`, phone: phoneOfJid(peerId) }
       ],
       unreadCount: 0,
       updatedAt: Date.now()
@@ -511,7 +511,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       isGroup,
       participants: [
         { id: this.meJid, name: this.account.displayName, isMe: true },
-        ...(isGroup ? [] : [{ id: jid, name: title, handle: `+${jid.split('@')[0]}` }])
+        ...(isGroup ? [] : [{ id: jid, name: title, handle: `+${jid.split('@')[0]}`, phone: phoneOfJid(jid) }])
       ],
       unreadCount: Math.max(0, chat.unreadCount ?? 0),
       pinned: !!chat.pinned,
@@ -719,3 +719,7 @@ function statusOf(status: number | undefined, isOutgoing: boolean): Message['sta
   }
 }
 
+/** A phone number only for classic ids (number@s.whatsapp.net); privacy ids (…@lid) are not phone numbers. */
+function phoneOfJid(jid: string): string | undefined {
+  return jid.endsWith('@s.whatsapp.net') ? `+${jid.split('@')[0].split(':')[0]}` : undefined
+}

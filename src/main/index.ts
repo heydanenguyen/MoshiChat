@@ -10,6 +10,7 @@ import { isMitoId, mitoSticker } from '@shared/mito'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
 import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
+import { memberIndex } from '@shared/people'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
@@ -147,21 +148,36 @@ async function conversationOf(conversationId: string): Promise<Conversation | un
   return undefined
 }
 
+/** The person a chat is merged into, when two or more of its chats are around: its anchor and name. */
+function shownPerson(conversationId: string): { anchor: string; name?: string; request?: boolean } | undefined {
+  const people = storage.settings.people
+  const personId = memberIndex(people).get(conversationId)
+  const person = personId ? people?.[personId] : undefined
+  if (!person) return undefined
+  const known = new Map(manager.listConversations().map((c) => [c.id, c]))
+  const members = person.members.filter((id) => known.has(id))
+  if (members.length < 2) return undefined
+  return { anchor: members[0], name: person.name?.trim() || undefined, request: members.every((id) => known.get(id)?.request) || undefined }
+}
+
 async function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): Promise<void> {
   if (!storage.settings.notifications || !Notification.isSupported()) return
   if (window?.isFocused()) return
   // Ignore history that is older than a minute (initial syncs replay old messages).
   if (Date.now() - event.message.sentAt > 60_000) return
-  const conversation = await conversationOf(event.message.conversationId)
+  const found = await conversationOf(event.message.conversationId)
+  // A merged person is muted, named and so on as a whole, under its first chat's id; a request only as a whole.
+  const person = shownPerson(event.message.conversationId)
+  const conversation = found && person ? { ...found, id: person.anchor, request: person.request } : found
   if (conversation?.muted) return
   if (conversation && isMutedBy(storage.settings, conversation)) return
   // Message requests wait silently, except a one-time code (a login or payment can hang on it).
   if (conversation && isPendingRequest(conversation, storage.settings.acceptedRequests) && !looksLikeCode(event.message.text)) return
   if (conversation && storage.settings.mentionsOnly?.[conversation.id]) {
     const account = storage.accounts.find((a) => a.id === conversation.accountId)
-    if (!isForMe(event.message, accountNames(account), manager.ownMessageIds(conversation.id))) return
+    if (!isForMe(event.message, accountNames(account), manager.ownMessageIds(event.message.conversationId))) return
   }
-  const nickname = storage.settings.contactOverrides?.[event.message.conversationId]?.nickname?.trim()
+  const nickname = person?.name || storage.settings.contactOverrides?.[conversation?.id ?? event.message.conversationId]?.nickname?.trim()
   const title = conversation?.isGroup ? `${event.message.senderName} in ${nickname || conversation.title}` : nickname || event.message.senderName
   const notification = new Notification({
     title,
@@ -237,6 +253,8 @@ async function pruneOrphanedSettings(): Promise<void> {
   if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
   const hidden = keep(settings.hidden)
   if (hidden && Object.keys(hidden).length !== Object.keys(settings.hidden ?? {}).length) patch.hidden = hidden
+  // People are left as they are: another computer may have the accounts of the chats missing here (a person
+  // with one chat around simply shows as that chat).
   for (const key of ['markedUnread', 'archived', 'mentionsOnly', 'acceptedRequests'] as const) {
     const kept = keep<number | boolean>(settings[key])
     if (kept && Object.keys(kept).length !== Object.keys(settings[key] ?? {}).length) Object.assign(patch, { [key]: kept })

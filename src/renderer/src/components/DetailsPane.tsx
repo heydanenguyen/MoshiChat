@@ -5,7 +5,8 @@ import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { ContactCustomizer } from './ContactCustomizer'
 import { TagChip } from './Tag'
-import { isPinned, useStore, useT, useTagDefs, type DetailsTab } from '../store'
+import { isPinned, peopleIndex, personIn, useShownConversations, useStore, useT, useTagDefs, type DetailsTab } from '../store'
+import { candidatesFor } from '@shared/people'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo, personLook } from '../utils'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -27,7 +28,9 @@ const EMPTY_TAGS: TagId[] = []
 
 export function DetailsPane(): JSX.Element | null {
   const t = useT()
-  const conversation = useStore((s) => (s.selectedId ? s.conversations[s.selectedId] : undefined))
+  const selectedId = useStore((s) => s.selectedId)
+  // A merged person shows under its own name.
+  const conversation = useShownConversations()[selectedId ?? '']
   const tab = useStore((s) => s.detailsTab)
   const setTab = useStore((s) => s.setDetailsTab)
   const toggleDetails = useStore((s) => s.toggleDetails)
@@ -77,7 +80,7 @@ function ActivityChip({ at }: { at: number }): JSX.Element {
 
 function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const t = useT()
-  const conversation = useStore((s) => s.conversations[conversationId])
+  const conversation = useShownConversations()[conversationId]
   const account = useStore((s) => s.accounts[conversation?.accountId ?? ''])
   const profile = useStore((s) => s.profiles[conversationId])
   const loadProfile = useStore((s) => s.loadProfile)
@@ -194,6 +197,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           </div>
         </div>
       )}
+
+      <PersonCard conversationId={conversationId} />
 
       <MomentsPreviewCard conversationId={conversationId} />
 
@@ -474,5 +479,84 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
         </button>
       ))}
     </>
+  )
+}
+
+/**
+ * One person across apps, in the details: the chats a merged person is made of (each can be taken back out),
+ * or for a single chat, who else it could be (same phone number or a similar name) with Merge / Not them.
+ */
+function PersonCard({ conversationId }: { conversationId: string }): JSX.Element | null {
+  const t = useT()
+  const conversations = useStore((s) => s.conversations)
+  const accounts = useStore((s) => s.accounts)
+  const people = useStore((s) => s.settings.people)
+  const dismissed = useStore((s) => s.settings.mergeDismissed)
+  const mergeChats = useStore((s) => s.mergeChats)
+  const unmergeChat = useStore((s) => s.unmergeChat)
+  const dismissMerge = useStore((s) => s.dismissMerge)
+  const openSheet = useStore((s) => s.openSheet)
+  const person = useMemo(() => personIn(people, conversations, conversationId), [people, conversations, conversationId])
+  const conversation = conversations[conversationId]
+  const suggestions = useMemo(
+    () => (person || !conversation || conversation.isGroup ? [] : candidatesFor(conversation, Object.values(conversations), peopleIndex(people), dismissed).slice(0, 2)),
+    [person, conversation, conversations, people, dismissed]
+  )
+  const accountLabel = (accountId: string): string => accounts[accountId]?.handle ?? accounts[accountId]?.displayName ?? ''
+
+  if (person) {
+    return (
+      <div className="details-card person-card">
+        <div className="details-card-title">{t('mergedFrom')}</div>
+        {person.members.map((id) => {
+          const member = conversations[id]
+          if (!member) return null
+          return (
+            <div key={id} className="person-row">
+              <PlatformIcon platform={member.platform} size={18} />
+              <span className="person-row-text">
+                <strong>{member.originalTitle ?? member.title}</strong>
+                <span>
+                  {PLATFORMS[member.platform].name}
+                  {accountLabel(member.accountId) ? ` · ${accountLabel(member.accountId)}` : ''}
+                </span>
+              </span>
+              <button className="btn small" onClick={() => void unmergeChat(id)}>
+                {t('unmerge')}
+              </button>
+            </div>
+          )
+        })}
+        <button className="person-more" onClick={() => openSheet({ kind: 'merge', conversationId })}>
+          <Plus size={14} strokeWidth={2.4} />
+          {t('mergeWith')}
+        </button>
+      </div>
+    )
+  }
+  if (!suggestions.length) return null
+  return (
+    <div className="details-card person-card suggest">
+      <div className="details-card-title">{t('maybeSame')}</div>
+      {suggestions.map(({ conversation: other, reason }) => (
+        <div key={other.id} className="person-row">
+          <Avatar name={other.title} url={other.avatarUrl} size={30} platform={other.platform} />
+          <span className="person-row-text">
+            <strong>{other.title}</strong>
+            <span>
+              {PLATFORMS[other.platform].name} · {reason === 'phone' ? t('mergeReasonPhone') : t('mergeReasonName')}
+            </span>
+          </span>
+          <span className="person-row-actions">
+            <button className="btn small ghost" onClick={() => void dismissMerge(conversationId, other.id)}>
+              {t('notSamePerson')}
+            </button>
+            <button className="btn small primary" onClick={() => void mergeChats([conversationId, other.id])}>
+              {t('mergeAction')}
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }

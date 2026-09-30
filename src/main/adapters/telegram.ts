@@ -105,7 +105,7 @@ export class TelegramAdapter implements PlatformAdapter {
         isGroup: dialog.isGroup || dialog.isChannel,
         participants: [
           { id: this.meId, name: this.account.displayName, isMe: true },
-          ...(dialog.isUser ? [{ id: externalId, name: dialog.title || dialog.name || '', handle: usernameOf(entity) }] : [])
+          ...(dialog.isUser ? [{ id: externalId, name: dialog.title || dialog.name || '', handle: usernameOf(entity), phone: phoneOf(entity) }] : [])
         ],
         unreadCount: dialog.unreadCount,
         pinned: dialog.pinned,
@@ -316,7 +316,7 @@ export class TelegramAdapter implements PlatformAdapter {
       isGroup: !(entity instanceof Api.User),
       participants: [
         { id: this.meId, name: this.account.displayName, isMe: true },
-        { id: peerId, name, handle: usernameOf(entity), avatarUrl }
+        { id: peerId, name, handle: usernameOf(entity), avatarUrl, phone: phoneOf(entity) }
       ],
       unreadCount: 0,
       updatedAt: Date.now()
@@ -601,6 +601,11 @@ function fullName(user: Api.User): string {
 
 function usernameOf(entity: Entity): string | undefined {
   return 'username' in entity && entity.username ? `@${entity.username}` : undefined
+}
+
+/** A user's phone, which Telegram shares for your contacts (without the "+"). */
+function phoneOf(entity: Entity): string | undefined {
+  return 'phone' in entity && entity.phone ? `+${entity.phone}` : undefined
 }
 
 function peerToId(peer: Api.TypePeer | undefined): string | undefined {

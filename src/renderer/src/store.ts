@@ -36,6 +36,7 @@ import { abstractIdUrl } from './components/AbstractAvatar'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
 import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
+import { mergeConversation, mergeTimeline, memberIndex, pairKey, pickSendVia as chooseSendVia, type Person } from '@shared/people'
 import { accountNames, archiveMark, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
@@ -55,6 +56,7 @@ export type Sheet =
   | { kind: 'legal'; doc: LegalDoc }
   | { kind: 'todos' }
   | { kind: 'insights' }
+  | { kind: 'merge'; conversationId: string }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
 
@@ -109,6 +111,8 @@ interface State {
   quickFilter: QuickFilter
   /** Which list shows: the inbox, the archive, or message requests. */
   listView: ListView
+  /** Merged chats: the app picked by hand in the composer (anchor id -> member chat, and when). */
+  sendPicks: Record<string, { id: string; at: number }>
   search: string
   searchHits: SearchHit[]
   authPrompts: AuthPrompt[]
@@ -210,6 +214,14 @@ interface State {
   toggleMentionsOnly(conversationId: string): Promise<void>
   /** Move a message request into the inbox (and accept it on the platform where that is a step). */
   acceptRequest(conversationId: string): Promise<void>
+  /** One person across apps: fold these chats into one (the first stays the anchor). */
+  mergeChats(conversationIds: string[], name?: string): Promise<void>
+  /** Take one chat back out of its person. */
+  unmergeChat(conversationId: string): Promise<void>
+  /** "Not the same person": never suggest this pair again. */
+  dismissMerge(a: string, b: string): Promise<void>
+  /** Write a merged chat's messages through this member chat until they write from another app. */
+  pickSendVia(anchorId: string, memberId: string): void
   /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
   hideConversation(conversationId: string): Promise<void>
   unhideConversation(conversationId: string): Promise<void>
@@ -308,7 +320,8 @@ function saveLayout(layout: PaneLayout): void {
 
 /** Chats on screen right now (both panes when split). */
 function onScreen(conversationId: string): boolean {
-  return openIds(useStore.getState().layout).includes(conversationId)
+  const state = useStore.getState()
+  return openIds(state.layout).includes(anchorFor(state, conversationId))
 }
 
 /** Your messages in a chat, as far as they are loaded (so a reply to one of them is recognised exactly). */
@@ -321,10 +334,13 @@ function maybePlaySound(message: Message): void {
   const { settings, conversations } = useStore.getState()
   const sound = settings.sound ?? 'bubbles'
   if (sound === 'off' || message.isOutgoing || message.system || Date.now() - message.sentAt > 60_000) return
-  const conversation = conversations[message.conversationId]
+  const raw = conversations[message.conversationId]
+  // A merged person is muted (and so on) as a whole, under the anchor's id, and a request only as a whole.
+  const shownId = raw && anchorFor(useStore.getState(), raw.id)
+  const conversation = raw && shownId && { ...raw, id: shownId, request: shownConversation(useStore.getState(), shownId)?.request }
   if (!conversation || conversation.muted || settings.muted.conversations.includes(conversation.id) || isMutedBy(settings, conversation)) return
   if (isPendingRequest(conversation, settings.acceptedRequests) && !looksLikeCode(message.text)) return
-  if (settings.mentionsOnly?.[conversation.id] && !isForMe(message, accountNames(useStore.getState().accounts[conversation.accountId]), ownIds(conversation.id))) return
+  if (settings.mentionsOnly?.[conversation.id] && !isForMe(message, accountNames(useStore.getState().accounts[conversation.accountId]), ownIds(message.conversationId))) return
   const watching = document.hasFocus() && onScreen(message.conversationId)
   playSound(sound, (settings.soundVolume ?? 0.7) * (watching ? 0.45 : 1))
 }
@@ -359,6 +375,7 @@ export const useStore = create<State>((set, get) => ({
   filter: 'all',
   quickFilter: 'all',
   listView: 'inbox',
+  sendPicks: {},
   search: '',
   searchHits: [],
   authPrompts: [],
@@ -500,8 +517,9 @@ export const useStore = create<State>((set, get) => ({
     })
   },
 
-  select(id, highlightId) {
+  select(rawId, highlightId) {
     const { layout } = get()
+    const id = rawId && anchorFor(get(), rawId)
     if (!id) {
       // Back to the list on a phone-sized window (where a split is never shown anyway).
       applyLayout(single())
@@ -512,11 +530,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   openBeside(id) {
-    applyLayout(openBeside(get().layout, id), { focus: true })
+    applyLayout(openBeside(get().layout, anchorFor(get(), id)), { focus: true })
   },
 
   openInPane(id, pane) {
-    applyLayout(openIn(get().layout, id, pane), { focus: true })
+    applyLayout(openIn(get().layout, anchorFor(get(), id), pane), { focus: true })
   },
 
   activatePane(pane, focusComposer = false) {
@@ -602,9 +620,9 @@ export const useStore = create<State>((set, get) => ({
     const id = get().selectedId
     if (!id) return
     for (let page = 0; page < maxPages; page++) {
-      const list = get().messages[id] ?? []
-      if (list.some((m) => m.id === messageId)) break
-      if (!get().hasMore[id]) break
+      const thread = threadOf(get(), id)
+      if (thread.messages?.some((m) => m.id === messageId)) break
+      if (!thread.hasMore) break
       await get().loadMore(id)
     }
     // Re-trigger the highlight even when the same message is chosen twice.
@@ -612,12 +630,16 @@ export const useStore = create<State>((set, get) => ({
     setTimeout(() => set({ highlightIds: { ...get().highlightIds, [id]: messageId } }), 0)
   },
 
-  async send(selectedId, text, files, resolveFiles) {
-    const { messages, settings, conversations } = get()
-    const replyTo = get().replyTos[selectedId]
-    const pendingFiles = files ?? get().pendingFiles[selectedId] ?? []
+  async send(composerId, text, files, resolveFiles) {
+    const { settings, conversations } = get()
+    const replyTo = get().replyTos[composerId]
+    const pendingFiles = files ?? get().pendingFiles[composerId] ?? []
     const trimmed = text.trim()
-    if (!selectedId || (!trimmed && !pendingFiles.length)) return
+    if (!composerId || (!trimmed && !pendingFiles.length)) return
+    // A merged chat's composer writes through one of its member chats; the draft, reply and files stay with it.
+    const selectedId = sendViaOf(get(), composerId)
+    // Its history first, if it never loaded: a list holding only this message would never load the rest.
+    if (selectedId !== composerId && !get().messages[selectedId]) await get().prefetch(selectedId, false)
     // Replying to a message request accepts it, as it does on the platforms.
     const conversation = conversations[selectedId]
     if (conversation && isPendingRequest(conversation, settings.acceptedRequests)) void get().acceptRequest(selectedId)
@@ -643,10 +665,11 @@ export const useStore = create<State>((set, get) => ({
       status: 'sending'
     }
     if (settings.sendSound !== false && settings.sound !== 'off') playSent(settings.soundVolume ?? 0.7)
+    const { messages } = get()
     set({
       messages: { ...messages, [selectedId]: [...(messages[selectedId] ?? []), optimistic] },
-      replyTos: { ...get().replyTos, [selectedId]: undefined },
-      pendingFiles: files ? get().pendingFiles : { ...get().pendingFiles, [selectedId]: [] }
+      replyTos: { ...get().replyTos, [composerId]: undefined },
+      pendingFiles: files ? get().pendingFiles : { ...get().pendingFiles, [composerId]: [] }
     })
     try {
       const outgoing = resolveFiles ? await resolveFiles() : pendingFiles
@@ -748,7 +771,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setReplyTo(conversationId, message) {
-    set({ replyTos: { ...get().replyTos, [conversationId]: message } })
+    // Replying from a merged thread: the quote belongs to the person's composer (the message keeps its own chat).
+    set({ replyTos: { ...get().replyTos, [anchorFor(get(), conversationId)]: message } })
   },
 
   startForward(message) {
@@ -860,24 +884,15 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadMore(conversationId) {
-    const state = get()
-    const list = state.messages[conversationId]
-    if (!list?.length || state.loading[conversationId] || !state.hasMore[conversationId]) return
-    set({ loading: { ...state.loading, [conversationId]: true } })
-    try {
-      const older = await window.unison.messages.list(conversationId, list[0].id)
-      const s = get()
-      const known = new Set((s.messages[conversationId] ?? []).map((m) => m.id))
-      const merged = [...older.filter((m) => !known.has(m.id)), ...(s.messages[conversationId] ?? [])]
-      set({
-        messages: { ...s.messages, [conversationId]: merged },
-        hasMore: { ...s.hasMore, [conversationId]: older.filter((m) => !known.has(m.id)).length > 0 },
-        loading: { ...s.loading, [conversationId]: false }
-      })
-    } catch (err) {
-      set({ loading: { ...get().loading, [conversationId]: false } })
-      get().showToast((err as Error).message, 'error')
+    const person = personFor(get(), conversationId)
+    if (person) {
+      // A merged thread pages back through the chats that hold its edge (the others already reach further).
+      const { cut } = mergeTimeline(person.members.map((id) => ({ messages: get().messages[id], hasMore: !!get().hasMore[id] })))
+      const edge = person.members.filter((id) => get().hasMore[id] && (get().messages[id]?.[0]?.sentAt ?? 0) >= cut)
+      await Promise.all(edge.map((id) => loadOlder(id)))
+      return
     }
+    await loadOlder(conversationId)
   },
 
   openSheet(sheet) {
@@ -899,8 +914,10 @@ export const useStore = create<State>((set, get) => ({
   async scheduleMessage(selectedId, text, sendAt) {
     const replyTo = get().replyTos[selectedId]
     if (!selectedId || !text.trim()) return
+    // A merged person: scheduled through the app the composer shows (a quote pins its own app).
+    const target = sendViaOf(get(), selectedId)
     try {
-      const settings = await window.unison.scheduled.add({ conversationId: selectedId, text, sendAt, replyToId: replyTo?.id })
+      const settings = await window.unison.scheduled.add({ conversationId: target, text, sendAt, replyToId: replyTo?.conversationId === target ? replyTo.id : undefined })
       set({ settings: { ...DEFAULT_SETTINGS, ...settings }, replyTos: { ...get().replyTos, [selectedId]: undefined } })
       const when = new Date(sendAt)
       const time = when.toLocaleString(get().settings.language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit', ...(when.toDateString() === new Date().toDateString() ? {} : { weekday: 'short', day: 'numeric', month: 'numeric' }) })
@@ -1033,14 +1050,15 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async toggleUnread(conversationId) {
-    const conversation = get().conversations[conversationId]
+    const conversation = shownConversation(get(), conversationId)
     if (!conversation) return
     await (isUnread(conversation, get().settings.markedUnread) ? get().markRead(conversationId) : get().markUnread(conversationId))
   },
 
   async archive(conversationId) {
-    const { conversations, selectedId, layout, settings } = get()
-    const conversation = conversations[conversationId]
+    const { selectedId, layout, settings } = get()
+    // As the list shows it: a merged person's newest message decides when it comes back.
+    const conversation = shownConversation(get(), conversationId)
     if (!conversation) return
     const wasOpen = conversationId === selectedId
     const wasUnread = isUnread(conversation, settings.markedUnread)
@@ -1089,6 +1107,85 @@ export const useStore = create<State>((set, get) => ({
     if (onScreen(conversationId)) void window.unison.conversations.markRead(conversationId)
   },
 
+  async mergeChats(conversationIds, name) {
+    const { settings } = get()
+    const index = memberIndex(settings.people)
+    const people = { ...(settings.people ?? {}) }
+    const personId = conversationIds.map((id) => index.get(id)).find((id): id is string => !!id) ?? `p-${crypto.randomUUID()}`
+    const members: string[] = [...(people[personId]?.members ?? [])]
+    for (const id of conversationIds) {
+      const other = index.get(id)
+      // Someone already merged elsewhere joins with all of their chats.
+      const joining = other && other !== personId ? people[other].members : [id]
+      if (other && other !== personId) delete people[other]
+      for (const member of joining) if (!members.includes(member)) members.push(member)
+    }
+    if (members.length < 2) return
+    people[personId] = { ...people[personId], members, ...(name?.trim() ? { name: name.trim() } : {}) }
+    // The merged chat carries what its members had: every tag, and a pin if any was pinned.
+    const anchor = members[0]
+    const tags = { ...settings.tags }
+    const union = [...new Set(members.flatMap((id) => settings.tags[id] ?? []))]
+    if (union.length) tags[anchor] = union
+    const pins = members.some((id) => isPinned(get().conversations[id], settings.pins)) ? { ...(settings.pins ?? {}), [anchor]: true } : settings.pins
+    // And what any member had: muted, accepted as a request, marked unread, a nickname or photo.
+    const muted = members.some((id) => settings.muted.conversations.includes(id)) && !settings.muted.conversations.includes(anchor)
+      ? { ...settings.muted, conversations: [...settings.muted.conversations, anchor] }
+      : settings.muted
+    const firstOf = <T,>(record: Record<string, T> | undefined): T | undefined => members.map((id) => record?.[id]).find((v) => v !== undefined)
+    const accepted = firstOf(settings.acceptedRequests)
+    const marked = firstOf(settings.markedUnread)
+    const override = settings.contactOverrides?.[anchor] ?? firstOf(settings.contactOverrides)
+    await get().setSettings({
+      people,
+      tags,
+      pins,
+      muted,
+      ...(accepted && !settings.acceptedRequests?.[anchor] ? { acceptedRequests: { ...settings.acceptedRequests, [anchor]: accepted } } : {}),
+      ...(marked && !settings.markedUnread?.[anchor] ? { markedUnread: { ...settings.markedUnread, [anchor]: marked } } : {}),
+      ...(override && !settings.contactOverrides?.[anchor] ? { contactOverrides: { ...settings.contactOverrides, [anchor]: override } } : {})
+    })
+    // Panes showing a member now show the person.
+    const layout = get().layout
+    const panes = layout.panes.map((id) => (id && members.includes(id) ? anchor : id))
+    if (panes.some((id, i) => id !== layout.panes[i])) applyLayout(panes.length > 1 && panes[0] === panes[1] ? single(anchor) : { ...layout, panes })
+    get().showToast(translate(settings.language, 'mergedToast', { name: people[personId].name ?? get().conversations[anchor]?.title ?? '' }))
+  },
+
+  async unmergeChat(conversationId) {
+    const { settings } = get()
+    const personId = memberIndex(settings.people).get(conversationId)
+    if (!personId || !settings.people?.[personId]) return
+    const people = { ...settings.people }
+    const person = people[personId]
+    const members = person.members.filter((id) => id !== conversationId)
+    const patch: Partial<Settings> = {}
+    if (members.length < 2) delete people[personId]
+    else people[personId] = { ...person, members, via: person.via === conversationId ? undefined : person.via }
+    // The anchor leaving: the next member takes over what the merged chat carried.
+    if (person.members[0] === conversationId && members[0]) {
+      const tags = settings.tags[conversationId]
+      if (tags?.length) patch.tags = { ...settings.tags, [members[0]]: [...new Set([...(settings.tags[members[0]] ?? []), ...tags])] }
+      if (settings.pins?.[conversationId]) patch.pins = { ...settings.pins, [members[0]]: true }
+      if (settings.muted.conversations.includes(conversationId) && !settings.muted.conversations.includes(members[0])) {
+        patch.muted = { ...settings.muted, conversations: [...settings.muted.conversations, members[0]] }
+      }
+      if (settings.acceptedRequests?.[conversationId]) patch.acceptedRequests = { ...settings.acceptedRequests, [members[0]]: settings.acceptedRequests[conversationId] }
+    }
+    await get().setSettings({ ...patch, people })
+  },
+
+  async dismissMerge(a, b) {
+    await updateRecord('mergeDismissed', (record) => {
+      record[pairKey(a, b)] = Date.now()
+      return true
+    })
+  },
+
+  pickSendVia(anchorId, memberId) {
+    set({ sendPicks: { ...get().sendPicks, [anchorId]: { id: memberId, at: Date.now() } } })
+  },
+
   async toggleMentionsOnly(conversationId) {
     await updateRecord('mentionsOnly', (record) => {
       if (record[conversationId]) delete record[conversationId]
@@ -1099,9 +1196,10 @@ export const useStore = create<State>((set, get) => ({
 
   async markRead(conversationId) {
     await clearMarkedUnread([conversationId])
-    if (!get().conversations[conversationId]?.unreadCount) return
+    // A merged person: each of its chats.
+    const unread = (personFor(get(), conversationId)?.members ?? [conversationId]).filter((id) => get().conversations[id]?.unreadCount)
     try {
-      await window.unison.conversations.markRead(conversationId)
+      await Promise.all(unread.map((id) => window.unison.conversations.markRead(id)))
     } catch (err) {
       get().showToast(cleanError(err), 'error')
     }
@@ -1247,7 +1345,7 @@ export const useStore = create<State>((set, get) => ({
     const now = Date.now()
     if (now - lastTypingSent < 4000) return
     lastTypingSent = now
-    void window.unison.messages.typing(conversationId).catch(() => undefined)
+    void window.unison.messages.typing(sendViaOf(get(), conversationId)).catch(() => undefined)
   },
 
   showToast(text, kind = 'info', action) {
@@ -1264,8 +1362,163 @@ export const useStore = create<State>((set, get) => ({
   }
 }))
 
+// ---------------------------------------------------------------- one person across apps
+
+let indexCache: { people?: Record<string, Person>; index: Map<string, string> } = { index: new Map() }
+
+/** member chat id -> person id, worked out again only when the people record changes. */
+export function peopleIndex(people: Record<string, Person> | undefined): Map<string, string> {
+  if (indexCache.people !== people) indexCache = { people, index: memberIndex(people) }
+  return indexCache.index
+}
+
+/**
+ * The person a chat belongs to, with the member chats that exist right now (anchor first). With a single one
+ * left (an account removed or signed out), the chat shows on its own again.
+ */
+export function personFor(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): { id: string; person: Person; members: string[] } | undefined {
+  return personIn(state.settings.people, state.conversations, conversationId)
+}
+
+export function personIn(
+  people: Record<string, Person> | undefined,
+  conversations: Record<string, Conversation>,
+  conversationId: string
+): { id: string; person: Person; members: string[] } | undefined {
+  const personId = peopleIndex(people).get(conversationId)
+  const person = personId ? people?.[personId] : undefined
+  if (!personId || !person) return undefined
+  const members = person.members.filter((id) => conversations[id])
+  return members.length > 1 ? { id: personId, person, members } : undefined
+}
+
+/** The chat a conversation is shown and opened as: its person's first member, or itself. */
+export function anchorFor(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): string {
+  return personFor(state, conversationId)?.members[0] ?? conversationId
+}
+
+let foldCache: { conversations?: Record<string, Conversation>; people?: Record<string, Person>; folded: Record<string, Conversation> } = { folded: {} }
+
+/** The chats as the app shows them: a merged person as one chat under the anchor's id, the others folded in. */
+export function foldPeople(conversations: Record<string, Conversation>, people: Record<string, Person> | undefined): Record<string, Conversation> {
+  if (foldCache.conversations === conversations && foldCache.people === people) return foldCache.folded
+  let folded = conversations
+  for (const person of Object.values(people ?? {})) {
+    const members = person.members.map((id) => conversations[id]).filter((c): c is Conversation => !!c)
+    if (members.length < 2) continue
+    if (folded === conversations) folded = { ...conversations }
+    for (const member of members.slice(1)) delete folded[member.id]
+    folded[members[0].id] = mergeConversation(person, members)
+  }
+  foldCache = { conversations, people, folded }
+  return folded
+}
+
+/** A chat as the app shows it (a merged person's anchor id gives the merged chat). */
+export function shownConversation(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): Conversation | undefined {
+  return foldPeople(state.conversations, state.settings.people)[conversationId] ?? state.conversations[conversationId]
+}
+
+export function useShownConversations(): Record<string, Conversation> {
+  const conversations = useStore((s) => s.conversations)
+  const people = useStore((s) => s.settings.people)
+  return foldPeople(conversations, people)
+}
+
+export interface ThreadView {
+  messages?: Message[]
+  hasMore: boolean
+  loading: boolean
+}
+
+/** A chat's messages; for a merged person, every member's in one timeline (see mergeTimeline). */
+export function threadOf(state: Pick<State, 'settings' | 'conversations' | 'messages' | 'hasMore' | 'loading'>, conversationId: string): ThreadView {
+  const person = personFor(state, conversationId)
+  if (!person) return { messages: state.messages[conversationId], hasMore: !!state.hasMore[conversationId], loading: !!state.loading[conversationId] }
+  const loading = person.members.some((id) => state.loading[id])
+  const parts = person.members.map((id) => ({ messages: state.messages[id], hasMore: !!state.hasMore[id] }))
+  if (parts.every((part) => !part.messages)) return { messages: undefined, hasMore: false, loading }
+  const merged = mergeTimeline(parts)
+  return { messages: merged.messages, hasMore: merged.hasMore, loading }
+}
+
+export function useThread(conversationId: string): ThreadView {
+  const merged = useStore((s) => !!personFor(s, conversationId))
+  // A plain chat listens to its own messages only; a merged one to all of them (rarely more than one open).
+  const messages = useStore((s) => (merged ? s.messages : s.messages[conversationId]))
+  const hasMore = useStore((s) => (merged ? s.hasMore : s.hasMore[conversationId]))
+  const loading = useStore((s) => (merged ? s.loading : s.loading[conversationId]))
+  const settings = useStore((s) => s.settings)
+  const conversations = useStore((s) => s.conversations)
+  return useMemo(
+    () => threadOf(useStore.getState(), conversationId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the slices above are what the thread reads
+    [conversationId, merged, messages, hasMore, loading, settings.people, conversations]
+  )
+}
+
+/**
+ * Which member chat a merged chat's composer writes to: where they last wrote to you, unless an app was picked
+ * by hand or a message from one app is being quoted (see pickSendVia). A plain chat writes to itself.
+ */
+export function sendViaOf(state: Pick<State, 'settings' | 'conversations' | 'messages' | 'sendPicks' | 'replyTos'>, conversationId: string): string {
+  const person = personFor(state, conversationId)
+  if (!person) return conversationId
+  const lastIncoming: Record<string, number | undefined> = {}
+  for (const id of person.members) {
+    const list = state.messages[id] ?? []
+    let loaded: number | undefined
+    for (let i = list.length - 1; i >= 0 && loaded === undefined; i--) if (!list[i].isOutgoing && !list[i].system) loaded = list[i].sentAt
+    const preview = state.conversations[id]?.lastMessage
+    lastIncoming[id] = Math.max(loaded ?? 0, preview && !preview.isOutgoing ? preview.sentAt : 0) || undefined
+  }
+  return chooseSendVia({
+    members: person.members,
+    lastIncoming,
+    picked: state.sendPicks[conversationId],
+    replyTo: state.replyTos[conversationId]?.conversationId,
+    via: person.person.via
+  })
+}
+
+export function useSendVia(conversationId: string): string {
+  const merged = useStore((s) => !!personFor(s, conversationId))
+  const messages = useStore((s) => (merged ? s.messages : undefined))
+  const picks = useStore((s) => s.sendPicks[conversationId])
+  const replyTo = useStore((s) => s.replyTos[conversationId])
+  const conversations = useStore((s) => s.conversations)
+  const people = useStore((s) => s.settings.people)
+  return useMemo(
+    () => sendViaOf(useStore.getState(), conversationId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the slices above are what the choice reads
+    [conversationId, merged, messages, picks, replyTo, conversations, people]
+  )
+}
+
+/** One more page of a chat's history, older than what is loaded. */
+async function loadOlder(conversationId: string): Promise<void> {
+  const state = useStore.getState()
+  const list = state.messages[conversationId]
+  if (!list?.length || state.loading[conversationId] || !state.hasMore[conversationId]) return
+  useStore.setState({ loading: { ...state.loading, [conversationId]: true } })
+  try {
+    const older = await window.unison.messages.list(conversationId, list[0].id)
+    const s = useStore.getState()
+    const known = new Set((s.messages[conversationId] ?? []).map((m) => m.id))
+    const merged = [...older.filter((m) => !known.has(m.id)), ...(s.messages[conversationId] ?? [])]
+    useStore.setState({
+      messages: { ...s.messages, [conversationId]: merged },
+      hasMore: { ...s.hasMore, [conversationId]: older.filter((m) => !known.has(m.id)).length > 0 },
+      loading: { ...s.loading, [conversationId]: false }
+    })
+  } catch (err) {
+    useStore.setState({ loading: { ...useStore.getState().loading, [conversationId]: false } })
+    useStore.getState().showToast((err as Error).message, 'error')
+  }
+}
+
 /** Per-chat records changed from the list, often several in a row (a key held down, a split opening two chats). */
-type ChatRecords = Required<Pick<Settings, 'markedUnread' | 'archived' | 'mentionsOnly' | 'acceptedRequests'>>
+type ChatRecords = Required<Pick<Settings, 'markedUnread' | 'archived' | 'mentionsOnly' | 'acceptedRequests' | 'mergeDismissed'>>
 
 let recordWrites = Promise.resolve()
 
@@ -1317,9 +1570,11 @@ function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): voi
   void clearMarkedUnread(openIds(layout).filter((id) => !shownBefore.has(id) || (id === nextActive && id !== previousActive)))
   for (const id of openIds(layout)) {
     if (shownBefore.has(id) && id !== nextActive) continue
-    const conversation = state.conversations[id]
-    if (conversation?.unreadCount) void window.unison.conversations.markRead(id)
-    void useStore.getState().prefetch(id, false)
+    // A merged person: read and load each of its chats.
+    for (const member of personFor(state, id)?.members ?? [id]) {
+      if (state.conversations[member]?.unreadCount) void window.unison.conversations.markRead(member)
+      void useStore.getState().prefetch(member, false)
+    }
   }
 }
 
@@ -1435,7 +1690,7 @@ let chipListed: { key: string; ids: ReadonlySet<string> } = { key: '', ids: new 
  * the quick filter, so it never misses a chat because a chip was left on.
  */
 export function useChatList(): ChatList {
-  const conversations = useStore((s) => s.conversations)
+  const conversations = useShownConversations()
   const filter = useStore((s) => s.filter)
   const quickFilter = useStore((s) => s.quickFilter)
   const listView = useStore((s) => s.listView)
@@ -1548,9 +1803,10 @@ export function useUnreadCounts(): UnreadCounts {
   const markedUnread = useStore((s) => s.settings.markedUnread)
   const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
   const accepted = useStore((s) => s.settings.acceptedRequests)
+  const people = useStore((s) => s.settings.people)
   return useMemo(
-    () => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly, accepted),
-    [conversations, tags, muted, markedUnread, mentionsOnly, accepted]
+    () => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly, accepted, people),
+    [conversations, tags, muted, markedUnread, mentionsOnly, accepted, people]
   )
 }
 
@@ -1560,23 +1816,28 @@ function computeUnread(
   muted?: MuteRules,
   markedUnread?: Record<string, number>,
   mentionsOnly?: Record<string, boolean>,
-  accepted?: Record<string, number>
+  accepted?: Record<string, number>,
+  people?: Record<string, Person>
 ): UnreadCounts {
+  // Settings of a merged person live under its anchor's id; so does whether it is still a request.
+  const shownAs = (id: string): string => personIn(people, conversations, id)?.members[0] ?? id
+  const folded = foldPeople(conversations, people)
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
   const byTag: Record<string, number> = {}
   let total = 0
   for (const c of Object.values(conversations)) {
-    // A chat marked unread by hand counts as one, like a single new message.
-    const unread = c.unreadCount || (markedUnread?.[c.id] ? 1 : 0)
+    const key = shownAs(c.id)
+    // A chat marked unread by hand counts as one, like a single new message (once for a merged person).
+    const unread = c.unreadCount || (key === c.id && markedUnread?.[key] ? 1 : 0)
     // Muted and mentions-only chats keep their own count in the list but stay out of the badges.
     // Message requests wait silently too, until accepted.
-    if (!unread || c.muted || mentionsOnly?.[c.id] || isPendingRequest(c, accepted)) continue
-    if (muted && isMutedBy({ muted, tags }, c)) continue
+    if (!unread || c.muted || mentionsOnly?.[key] || isPendingRequest(key === c.id ? c : (folded[key] ?? c), accepted)) continue
+    if (muted && isMutedBy({ muted, tags }, { ...c, id: key })) continue
     total += unread
     byPlatform[c.platform] += unread
     byAccount[c.accountId] = (byAccount[c.accountId] ?? 0) + unread
-    for (const tag of tags[c.id] ?? []) byTag[tag] = (byTag[tag] ?? 0) + unread
+    for (const tag of tags[key] ?? []) byTag[tag] = (byTag[tag] ?? 0) + unread
   }
   return { total, byPlatform, byAccount, byTag }
 }

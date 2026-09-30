@@ -251,7 +251,7 @@ export class ZaloAdapter implements PlatformAdapter {
         { id: this.meId, name: this.account.displayName, isMe: true },
         ...(isGroup
           ? (group?.memberIds ?? []).filter((m) => m !== this.meId).slice(0, 50).map((m) => ({ id: m, name: this.names.get(m) ?? m, avatarUrl: this.avatars.get(m) }))
-          : [{ id: threadId, name: friend?.displayName ?? '', handle: friend?.username ? `@${friend.username}` : undefined, avatarUrl: friend?.avatar }])
+          : [{ id: threadId, name: friend?.displayName ?? '', handle: friend?.username ? `@${friend.username}` : undefined, avatarUrl: friend?.avatar, phone: friend?.phoneNumber || undefined }])
       ],
       unreadCount: this.unread.get(threadId) ?? 0,
       request: isStrangerChat({

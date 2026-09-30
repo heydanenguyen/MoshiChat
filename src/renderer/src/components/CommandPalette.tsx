@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { PLATFORMS } from '@shared/types'
-import { useShowPlatformBadge, useStore, useT } from '../store'
+import { useShowPlatformBadge, useShownConversations, useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 
 export function CommandPalette(): JSX.Element {
   const t = useT()
-  const conversations = useStore((s) => s.conversations)
+  const conversations = useShownConversations()
   const hidden = useStore((s) => s.settings.hidden)
   const select = useStore((s) => s.select)
   const closeSheet = useStore((s) => s.closeSheet)

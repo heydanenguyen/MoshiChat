@@ -218,13 +218,17 @@ export function BirthdayBanner({ conversation, canSendStickers, onCelebrate }: {
 }
 
 /** Messages waiting to be sent in this chat, above the composer. */
-export function ScheduledStrip({ conversationId }: { conversationId: string }): JSX.Element | null {
+export function ScheduledStrip({ conversationId, members }: { conversationId: string; members?: string[] }): JSX.Element | null {
   const t = useT()
   const all = useStore((s) => s.settings.scheduled)
   const language = useStore((s) => s.settings.language)
   const applySettings = useStore((s) => s.applySettings)
   const showToast = useStore((s) => s.showToast)
-  const items = useMemo(() => (all ?? []).filter((m) => m.conversationId === conversationId).sort((a, b) => a.sendAt - b.sendAt), [all, conversationId])
+  // A merged person's are scheduled through any of its chats.
+  const items = useMemo(
+    () => (all ?? []).filter((m) => (members ?? [conversationId]).includes(m.conversationId)).sort((a, b) => a.sendAt - b.sendAt),
+    [all, conversationId, members]
+  )
   if (!items.length) return null
   const run = (action: Promise<unknown>): void => {
     void action.then((settings) => applySettings(settings as never)).catch((err: Error) => showToast(err.message, 'error'))

@@ -43,6 +43,17 @@ const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThrea
         replies: ['Dạ em cảm ơn chị', 'Chị gửi em mẫu size M với ạ']
       },
       {
+        key: 'lanphuong',
+        title: 'Lan Phương',
+        unread: 1,
+        history: [
+          ['Lan Phương', 'Chị ơi tối nay em gửi bản in thử qua Zalo cho tiện nha', 70],
+          ['me', 'Ok em, gửi chị file PDF nhé', 66],
+          ['Lan Phương', 'Em gửi rồi đó chị, chị xem màu in có bị lệch không', 6]
+        ],
+        replies: ['Dạ chị', 'Em chỉnh lại độ bão hoà nha', 'Ok chị ơi']
+      },
+      {
         key: 'vi',
         title: 'Ví Điện Tử',
         unread: 1,

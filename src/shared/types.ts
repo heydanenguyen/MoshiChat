@@ -1,3 +1,4 @@
+import type { Person } from './people'
 import type { AiProgress, ChatModel, VoiceModel } from './ai'
 import type { Todo } from './todos'
 import type { LogoId } from './logos'
@@ -37,6 +38,8 @@ export interface Peer {
   id: string
   name: string
   handle?: string
+  /** Phone number in international form (+84…), when the platform shares it: how one person is recognised across apps. */
+  phone?: string
   avatarUrl?: string
   isMe?: boolean
 }
@@ -86,6 +89,8 @@ export interface Conversation {
    */
   request?: boolean
   lastMessage?: MessagePreview
+  /** Renderer only: a merged person's chats (anchor first), when this is one. */
+  members?: string[]
   /** Renderer only: the platform's name/photo when a nickname or custom photo is shown instead. */
   originalTitle?: string
   originalAvatarUrl?: string
@@ -550,6 +555,10 @@ export interface Settings {
   mentionsOnly?: Record<string, boolean>
   /** Message requests accepted in Moshi: conversation id -> when. Also covers platforms with no "accept" of their own (Zalo). */
   acceptedRequests?: Record<string, number>
+  /** One person across apps: person id -> their chats (see shared/people.ts). */
+  people?: Record<string, Person>
+  /** Merge suggestions turned down ("not the same person"): pair key -> when. */
+  mergeDismissed?: Record<string, number>
   /** To-dos (from messages or typed), with optional reminders; the main process marks reminders shown. */
   todos?: Todo[]
   /** Text size across the app (bigger for high-resolution screens). */
