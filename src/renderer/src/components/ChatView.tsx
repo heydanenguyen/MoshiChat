@@ -25,6 +25,25 @@ import { modKey } from '../utils'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
+const WIGGLE: Keyframe[] = [
+  { transform: 'rotate(0)' },
+  { transform: 'rotate(-6deg) scale(1.04)', offset: 0.25 },
+  { transform: 'rotate(6deg) scale(1.04)', offset: 0.75 },
+  { transform: 'rotate(0)' }
+]
+
+/**
+ * A picture sticker gives a little wiggle when the pointer comes onto its bubble, and always plays it to the end:
+ * leaving halfway does not snap it back, and coming back mid-wiggle does not restart it. Pack stickers (Moshi, Mito)
+ * have their own motion and are left alone.
+ */
+function wiggleSticker(e: React.MouseEvent<HTMLElement>): void {
+  const art = e.currentTarget.querySelector<HTMLElement>(':scope > .attachment-sticker')
+  if (!art || art.querySelector('.sticker-art') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (art.getAnimations().some((a) => a.id === 'sticker-wiggle' && a.playState === 'running')) return
+  art.animate(WIGGLE, { duration: 600, easing: 'ease-in-out', id: 'sticker-wiggle' })
+}
+
 /**
  * The chat cell of the app: one pane, or two side by side (split chat). A split is only shown when
  * the window is wide enough; otherwise the active pane stands in for it and the split is kept.
@@ -671,7 +690,7 @@ function Bubble({
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
-          <div className={classes.join(' ')} onDoubleClick={heart}>
+          <div className={classes.join(' ')} onDoubleClick={heart} onMouseEnter={sticker ? wiggleSticker : undefined}>
             {burst > 0 && (
               <span key={burst} className="heart-burst" aria-hidden onAnimationEnd={() => setBurst(0)}>
                 ❤️

@@ -9730,19 +9730,8 @@ button.moment-card:hover {
   animation: sticker-land var(--duration-slow) var(--ease-spring);
   transform-origin: 50% 90%;
 }
-/* The wiggle hangs off the bubble, which does not move, so a pointer near the sticker's edge cannot flick
-   hover on and off as the sticker swings under it. sticker-land stays first in the list: dropping it would
-   replay the pop-in (from transparent) every time the pointer leaves. */
-.bubble.sticker:hover > .attachment-sticker {
-  animation:
-    sticker-land var(--duration-slow) var(--ease-spring),
-    sticker-wiggle 0.6s ease-in-out;
-}
-.bubble.sticker:hover > .attachment-sticker.flattened {
-  animation:
-    sticker-reveal 0.2s ease 0.6s forwards,
-    sticker-wiggle 0.6s ease-in-out;
-}
+/* The hover wiggle is played from ChatView (wiggleSticker) so it always runs to the end. It must not
+   touch `animation` here: swapping sticker-land out and back in replays the pop-in from transparent. */
 @keyframes sticker-land {
   from {
     transform: scale(0.6) rotate(-6deg);
@@ -9751,18 +9740,6 @@ button.moment-card:hover {
   to {
     transform: none;
     opacity: 1;
-  }
-}
-@keyframes sticker-wiggle {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  25% {
-    transform: rotate(-6deg) scale(1.04);
-  }
-  75% {
-    transform: rotate(6deg) scale(1.04);
   }
 }
 
@@ -10843,7 +10820,3 @@ button.moment-card:hover {
   margin: 1px 0 3px;
 }
 
-/* Pack stickers have their own motion (sticker-motion.ts); the generic hover wiggle would fight it. */
-.bubble.sticker:hover > .attachment-sticker:has(.sticker-art) {
-  animation: sticker-land var(--duration-slow) var(--ease-spring);
-}

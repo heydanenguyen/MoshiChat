@@ -3,7 +3,7 @@ import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promi
 import { join } from 'path'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, isShared, matchesQuery, unsentCopy } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
 import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
 import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
 import type { WebCookie } from './facebook-personal'
@@ -146,7 +146,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     private secret: InstagramPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true, unsend: true } }
+    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true } }
   }
 
   async connect(): Promise<void> {
@@ -478,22 +478,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       .catch(() => undefined)
   }
 
-  /** Unsend: the same call Instagram's own apps make to take a message back for everyone. */
-  async unsend(id: string, messageId: string): Promise<void> {
-    const threadId = this.threadIdFor(id)
-    if (!threadId) throw new Error('Conversation not found')
-    await this.web.json(`/api/v1/direct_v2/threads/${threadId}/items/${messageId}/delete/`, {
-      method: 'POST',
-      form: { is_shh_mode: '0', send_attribution: 'direct_thread', original_message_client_context: '' },
-      headers: APP_HEADERS
-    })
-    const list = this.history.get(id)
-    const index = list?.findIndex((m) => m.id === messageId) ?? -1
-    if (list && index >= 0) {
-      list[index] = unsentCopy(list[index])
-      this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
-    }
-  }
+  /*
+   * No unsend: instagram.com does not serve the direct_v2 write endpoints (the delete call comes back as a 404
+   * page), and the legacy REST writes get web sessions logged out. It would have to go through the hidden
+   * composer window, like sending.
+   */
 
   async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
     const thread = this.threads.get(this.threadIdFor(id) ?? '')
