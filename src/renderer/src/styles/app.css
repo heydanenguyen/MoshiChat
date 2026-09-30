@@ -291,6 +291,37 @@ a {
   padding-bottom: var(--space-2);
 }
 
+/* Soft edges say there is more to scroll (the overlay scrollbar hides until you scroll); useScrollFade sets
+   more-above / more-below, so the very top and bottom stay sharp. Sidebar, chat list and chat. */
+.edge-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+}
+.edge-fade.more-above {
+  --fade-top: var(--fade-size-top, 18px);
+}
+.edge-fade.more-below {
+  --fade-bottom: var(--fade-size-bottom, 28px);
+}
+.conv-list.edge-fade {
+  --fade-size-top: 16px;
+  --fade-size-bottom: 32px;
+}
+/* The chat and the details fade only at the bottom (the header above already frames the top). */
+.chat-scroll.edge-fade {
+  --fade-size-top: 0px;
+  --fade-size-bottom: 24px;
+}
+.details-body.edge-fade {
+  --fade-size-top: 0px;
+  --fade-size-bottom: 32px;
+}
+/* A mask makes the chat a backdrop root, which would flatten the Liquid Glass bubbles' own blur. */
+:root[data-style='liquid'] .chat-scroll.edge-fade {
+  mask-image: none;
+}
+
 .sidebar-section {
   margin-top: var(--space-4);
 }
@@ -467,12 +498,19 @@ a {
   position: relative;
 }
 
+.sidebar.collapsed .rail-dot {
+  display: block;
+}
+
 .sidebar.collapsed .nav-item-icon {
   width: 22px;
   height: 22px;
 }
 
+/* Unread marker for the icon rail: shown whenever the sidebar is a rail (folded by hand, beside the details,
+   while split, or on a narrow window), where the numeric badges are hidden. */
 .rail-dot {
+  display: none;
   position: absolute;
   top: 7px;
   right: 7px;
@@ -602,7 +640,7 @@ a {
   font-size: var(--text-xs);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-primary));
 }
 .requests-row-chevron {
   color: var(--text-tertiary);
@@ -915,8 +953,130 @@ a {
   font-weight: 700;
   color: var(--accent);
 }
-.person-card.suggest {
-  box-shadow: var(--shadow-sm), inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+/* Details: "same person on another app?" — both faces, a plain question, why we think so, then yes / no. */
+/* Same surface as the other details cards; the link badge and Merge carry the accent. */
+.details-card.same-person {
+  padding: 14px;
+  animation: same-person-in var(--duration-slow) var(--ease-out) both;
+}
+.same-person-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.same-person-item + .same-person-item {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--separator);
+}
+.same-pair {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.same-pair > .avatar:first-child {
+  margin-right: -6px;
+}
+.same-pair > .avatar:last-child {
+  margin-left: -6px;
+}
+.same-pair-link {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  box-shadow: 0 0 0 3px var(--ring-gap), 0 4px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.same-question {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.same-who {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.same-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-primary));
+  background: var(--accent-soft);
+}
+.same-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+}
+.same-actions .btn {
+  height: 34px;
+  padding: 0 10px;
+  font-size: var(--text-sm);
+  justify-content: center;
+  gap: 6px;
+}
+.same-actions .btn.secondary {
+  background: var(--bg-hover);
+  box-shadow: none;
+  transition: background var(--duration-base) var(--ease-out);
+}
+/* Merge invites the click without moving the button or changing its colour (hover shifts make text jump on
+   Windows): the accent glow blooms and the link icon clicks shut. */
+.same-actions .btn.primary {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: box-shadow var(--duration-slow) var(--ease-out);
+}
+.same-actions .btn.primary svg {
+  will-change: transform;
+  transition: transform 420ms var(--ease-spring);
+}
+.same-actions .btn.primary:hover svg {
+  transform: rotate(-45deg);
+}
+.same-actions .btn.primary:hover {
+  transform: none;
+  box-shadow:
+    0 10px 26px color-mix(in srgb, var(--accent) 48%, transparent),
+    0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.same-actions .btn.primary:active {
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 36%, transparent);
+  transition-duration: var(--duration-fast);
+}
+.same-actions .btn.secondary:hover {
+  background: var(--bg-active);
+}
+@keyframes same-person-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .details-card.same-person {
+    animation: none;
+  }
+  .same-actions .btn.primary svg {
+    transition: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1036,11 +1196,44 @@ a {
 }
 
 /* Quick filters: a row of chips under the search field (All, Unread, Needs reply, Groups, Drafts). */
+.quick-filters-wrap {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 0 var(--space-2);
+}
+/* A small round arrow over the faded edge: more chips this way, and a click pages the row. */
+.quick-scroll {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-sm);
+  transition:
+    color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+}
+.quick-scroll:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+.quick-scroll.start {
+  left: 6px;
+}
+.quick-scroll.end {
+  right: 6px;
+}
 .quick-filters {
-  --fade: 18px;
+  --fade: 44px;
   display: flex;
   gap: 5px;
-  margin: 0 0 var(--space-2);
+  margin: 0;
   padding: 2px var(--space-3);
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1111,7 +1304,8 @@ a {
 }
 /* Unread and Needs reply are calls to act: their counts carry the accent until picked. */
 .quick-chip-count.strong {
-  color: var(--accent);
+  /* pulled towards the text colour so an 11px number stays readable (4.5:1) on any accent */
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-primary));
 }
 .quick-chip.active .quick-chip-count {
   color: var(--on-accent);
@@ -1231,43 +1425,64 @@ a {
   box-shadow: var(--shadow-md);
 }
 
-.conv-item.selected::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 22%;
-  bottom: 22%;
-  width: 3px;
-  border-radius: var(--radius-full);
-  background: var(--accent-gradient);
-}
-
 .conv-body {
   flex: 1;
   min-width: 0;
 }
 
+/* Row anatomy: name and its marks (apps, birthday, tags) on the left, one corner on the right that shows the
+   time and, under the pointer, the "more" button in the same spot. The line below: preview, then a fixed
+   status cluster (pin, mute, unread). Only the name shrinks, so the marks never get cut or pushed around. */
 .conv-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
+  min-height: 22px;
 }
 
 .conv-title {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 700;
   font-size: var(--text-base);
+}
+
+.conv-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.conv-apps,
+.conv-birthday {
+  flex-shrink: 0;
+}
+
 .conv-tags {
   display: inline-flex;
-  gap: 1px;
-  margin-left: 5px;
-  font-size: 11px;
-  vertical-align: 1px;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.conv-tags-more {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.conv-corner {
+  display: grid;
+  justify-items: end;
+  align-items: center;
+  flex-shrink: 0;
+}
+.conv-corner > * {
+  grid-area: 1 / 1;
 }
 
 .conv-time {
@@ -1318,7 +1533,12 @@ a {
   display: grid;
   place-items: center;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 4px 10px rgba(91, 140, 255, 0.35);
+}
+
+/* A muted chat still counts, but quietly. */
+.conv-item.muted .unread-pill {
+  background: var(--fill-secondary);
+  color: var(--text-secondary);
 }
 
 /* Marked unread by hand: a dot, since there is no number to show. */
@@ -1587,6 +1807,10 @@ mark {
   display: flex;
   flex-direction: column;
 }
+/* The chat only ever scrolls up and down: hidden hover tooltips must not open a sideways scroll. */
+.chat-scroll.scroll {
+  overflow-x: hidden;
+}
 
 .chat-scroll-inner {
   margin-top: auto;
@@ -1798,7 +2022,7 @@ mark {
   position: relative;
 }
 .bubble-actions.tips [data-tip]::after {
-  content: attr(data-tip);
+  content: none;
   position: absolute;
   left: 50%;
   bottom: calc(100% + 6px);
@@ -1817,6 +2041,19 @@ mark {
     opacity 120ms ease,
     translate 120ms ease;
   z-index: 6;
+}
+/* Tips exist only on the row under the pointer, so the hidden ones never widen the chat. */
+.bubble-row:hover .bubble-actions.tips [data-tip]::after {
+  content: attr(data-tip);
+}
+/* The outermost button's tip grows inwards instead of past the chat's edge. */
+.msg-group.in .bubble-actions.tips [data-tip]:last-child::after {
+  left: auto;
+  right: 0;
+  translate: 0 3px;
+}
+.msg-group.in .bubble-actions.tips [data-tip]:last-child:hover::after {
+  translate: 0 0;
 }
 .bubble-actions.tips [data-tip]:hover::after {
   opacity: 1;
@@ -1938,6 +2175,17 @@ mark {
   padding: 4px 4px 4px 2px;
   min-width: 180px;
   cursor: pointer;
+  text-align: left;
+  color: inherit;
+  border-radius: var(--radius-md);
+}
+.attachment-file:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.attachment-file-name,
+.attachment-file-meta {
+  display: block;
 }
 
 .attachment-file-icon {
@@ -1973,30 +2221,61 @@ mark {
   padding: 6px 9px 4px;
 }
 
+/* Reactions hang off the bubble's lower edge as small borderless pills: a soft shadow lifts them off the
+   bubble, and your own reaction is tinted with the accent instead of ringed. */
 .reactions {
   display: flex;
   gap: 4px;
-  margin-top: -8px;
-  padding: 0 8px;
+  margin-top: -9px;
+  padding: 0 10px;
   position: relative;
   z-index: 1;
 }
 
 .reaction-chip {
   height: 24px;
-  padding: 0 8px;
+  min-width: 26px;
+  padding: 0 6px;
   border-radius: var(--radius-full);
   background: var(--bg-elevated);
-  box-shadow: var(--shadow-sm);
-  font-size: var(--text-sm);
+  box-shadow:
+    0 2px 8px rgba(31, 38, 135, 0.14),
+    0 1px 2px rgba(31, 38, 135, 0.08);
+  font-size: 14px;
+  line-height: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   cursor: default;
+  transition: background var(--duration-fast) ease;
+}
+:root[data-theme='dark'] .reaction-chip {
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.reaction-chip span {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+button.reaction-chip {
+  cursor: pointer;
+}
+button.reaction-chip:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
 }
 
 .reaction-chip.mine {
-  box-shadow: 0 0 0 1.5px var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-elevated));
+}
+.reaction-chip.mine span {
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-primary));
+}
+button.reaction-chip.mine:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-elevated));
 }
 
 .status-line {
@@ -2588,46 +2867,45 @@ mark {
 
 /* ================================================================== quick pin on hover */
 
+/* In the time's corner, same size as the line: hovering swaps the time for it, nothing floats over the row. */
 .conv-more {
-  position: absolute;
-  top: 7px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-full);
+  /* 24px square target; the negative margins keep the row height unchanged */
+  width: 24px;
+  height: 24px;
+  margin: -1px -4px -1px 0;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   color: var(--text-secondary);
-  background: var(--glass-strong);
-  box-shadow: var(--shadow-sm);
   opacity: 0;
-  transform: scale(0.8);
   pointer-events: none;
   transition:
     opacity var(--duration-fast) ease,
-    transform var(--duration-base) var(--ease-spring),
     color var(--duration-fast) ease,
     background var(--duration-fast) ease;
 }
-.conv-item:hover .conv-more {
+.conv-item:hover .conv-more,
+.conv-more.open {
   opacity: 1;
-  transform: scale(1);
   pointer-events: auto;
 }
-.conv-more:hover,
+.conv-more:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
 .conv-more.open {
   color: var(--on-accent);
   background: var(--accent-gradient);
 }
-/* the time sits where the pin button appears */
-.conv-item:hover .conv-time {
+.conv-item:hover .conv-time,
+.conv-item:has(.conv-more.open) .conv-time {
   opacity: 0;
 }
 .conv-time {
   transition: opacity var(--duration-fast) ease;
 }
 .conv-pinned-mark {
-  color: var(--accent);
+  color: var(--text-tertiary);
   transform: rotate(35deg);
 }
 
@@ -3064,11 +3342,14 @@ mark {
 }
 
 .details-tabs button {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   color: var(--text-tertiary);
   transition:
     background var(--duration-fast) ease,
@@ -3081,8 +3362,15 @@ mark {
 }
 
 .details-tabs button.active {
+  flex: 0 0 auto;
+  padding: 0 11px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-primary));
+}
+.details-tab-label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .details-body {
@@ -4012,6 +4300,50 @@ mark {
   white-space: nowrap;
 }
 
+/* Commands: an icon tile, the name and the shortcut, under their own heading after the chats. */
+.command-section {
+  padding: 10px 10px 4px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.command-item.action {
+  padding: 6px 10px;
+}
+.command-item.action .command-item-title {
+  flex: 1;
+  font-weight: 600;
+}
+.command-item-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+}
+.command-item.active .command-item-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+}
+.command-item-key {
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--fill-tertiary);
+}
+.command-item.active .command-item-key {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.22);
+}
+
 .command-hint {
   padding: 8px var(--space-4);
   font-size: var(--text-xs);
@@ -4193,49 +4525,53 @@ kbd {
   width: 64px;
 }
 
-.traffic-lights {
+/* Windows/Linux caption buttons: flush with the top-right corner, full title-bar height, like the system's. */
+.caption-buttons {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  align-self: stretch;
+  margin-left: auto;
+  margin-right: -14px;
 }
 
-.traffic-lights .light {
-  width: 13px;
-  height: 13px;
-  border-radius: var(--radius-full);
+.caption-btn {
+  width: 46px;
   display: grid;
   place-items: center;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
-  transition: transform var(--duration-fast) var(--ease-spring);
+  color: var(--text-primary);
+  background: transparent;
+  transition: background var(--duration-fast) ease;
 }
 
-.traffic-lights .light svg {
-  width: 8px;
-  height: 8px;
-  stroke: rgba(0, 0, 0, 0.55);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  fill: rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  transition: opacity var(--duration-fast) ease;
+.caption-btn svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
 }
 
-.traffic-lights:hover .light svg {
-  opacity: 1;
+.caption-btn:hover {
+  background: var(--bg-hover);
 }
 
-.traffic-lights .light:active {
-  transform: scale(0.9);
+.caption-btn:active {
+  background: var(--bg-active);
 }
 
-.light.close {
-  background: #ff5f57;
+.caption-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
 }
-.light.min {
-  background: #febc2e;
+
+.caption-btn.close:active {
+  background: #b22a1d;
+  color: #fff;
 }
-.light.max {
-  background: #28c840;
+
+.caption-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .titlebar-title {
@@ -4247,6 +4583,11 @@ kbd {
   text-overflow: ellipsis;
   max-width: 50%;
   pointer-events: none;
+}
+
+/* Keep the centred greeting clear of the caption buttons on the right (138px) on small windows. */
+.platform-win .titlebar-title {
+  max-width: min(50%, calc(100% - 320px));
 }
 
 .titlebar-title strong {
@@ -4841,6 +5182,9 @@ kbd {
     height: 42px;
     position: relative;
   }
+  .app.details-open .sidebar .rail-dot {
+    display: block;
+  }
 }
 /* Invisible click-catcher under the floating details: a click anywhere else closes them. It never dims
    the app (a tint here reads as a cut under the title bar and muddies the glass panels). */
@@ -4894,6 +5238,9 @@ kbd {
     padding: 0;
     height: 42px;
     position: relative;
+  }
+  .sidebar .rail-dot {
+    display: block;
   }
 }
 
@@ -5244,13 +5591,6 @@ kbd {
   gap: 8px;
 }
 
-/* conversation rows: tiny icon pills after the name */
-.conv-tags {
-  display: inline-flex;
-  gap: 3px;
-  margin-left: 6px;
-  vertical-align: -3px;
-}
 
 /* context menu: a pill per tag, calm hover instead of the accent fill */
 .context-menu-item.tag-row:hover {
@@ -5282,8 +5622,8 @@ kbd {
   margin-bottom: 0;
 }
 .section-add {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
   display: grid;
   place-items: center;
@@ -9204,6 +9544,9 @@ button.moment-card:hover {
   height: 42px;
   position: relative;
 }
+.app.split .sidebar .rail-dot {
+  display: block;
+}
 
 /* Panes: the active one carries the accent along its top edge, the other rests a little. */
 .chat-pane {
@@ -9488,6 +9831,15 @@ button.moment-card:hover {
   --shadow-panel: 0 24px 70px rgba(31, 38, 135, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(255, 255, 255, 0.4);
   --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 38%);
   --liquid-edge: rgba(255, 255, 255, 0.8);
+  --liquid-pane: rgba(255, 255, 255, 0.3);
+  --liquid-rim: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0.55) 22%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.3) 78%,
+    rgba(255, 255, 255, 0.85) 100%
+  );
 }
 :root[data-style='liquid'][data-theme='dark'] {
   --glass: color-mix(in srgb, var(--bg-window) 46%, transparent);
@@ -9505,82 +9857,88 @@ button.moment-card:hover {
   --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
   --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 38%);
   --liquid-edge: rgba(255, 255, 255, 0.22);
+  --liquid-pane: color-mix(in srgb, var(--bg-window) 34%, transparent);
+  --liquid-rim: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.34) 0%,
+    rgba(255, 255, 255, 0.14) 22%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0.08) 78%,
+    rgba(255, 255, 255, 0.24) 100%
+  );
 }
 /* the mesh spreads wider and softer, like a photo out of focus */
 :root[data-style='liquid'] .mesh-blob {
   filter: blur(130px);
   opacity: 0.85;
 }
-/* Windows 11 draws a blurred acrylic backdrop behind the window (see main/index.ts); the page keeps the
-   ground translucent so it shows through everything, the sidebar first of all. Older Windows shows the
-   window's own colour underneath, which reads the same as before. */
-.platform-win[data-style='liquid'],
-.platform-win[data-style='liquid'] body {
-  background: transparent;
-}
-.platform-win[data-style='liquid'] .mesh {
-  background: transparent;
-}
-/* nothing of the app's own backdrop: what you see behind the panels is the desktop and other windows,
-   blurred by the system */
-.platform-win[data-style='liquid'] .mesh-blob {
-  display: none;
-}
-/* graded like a native vibrancy layout: nothing under the sidebar, half under the list, most under the chat */
-.platform-win[data-style='liquid'] {
-  --glass-blur: 30px;
-}
-.platform-win[data-style='liquid']:not([data-theme='dark']) {
+/* The glass is drawn by the page on every platform: panes blur and saturate the app's own soft backdrop, with
+   bright specular rims and capsule controls. The window itself stays opaque: on Windows a see-through window
+   (acrylic behind a transparent page) was never cleared between frames, so old text and bands stayed on
+   screen and backdrop-filter had to be switched off (see main/index.ts). */
+:root[data-style='liquid']:not([data-theme='dark']) {
   --text-primary: #0f1117;
   --text-secondary: rgba(15, 17, 23, 0.72);
-  --text-tertiary: rgba(15, 17, 23, 0.5);
-  --liquid-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%);
+  --text-tertiary: rgba(15, 17, 23, 0.64);
 }
-.platform-win[data-style='liquid'][data-theme='dark'] {
+:root[data-style='liquid'][data-theme='dark'] {
   --text-primary: #f4f5fb;
   --text-secondary: rgba(244, 245, 251, 0.74);
-  --text-tertiary: rgba(244, 245, 251, 0.5);
+  --text-tertiary: rgba(244, 245, 251, 0.56);
 }
-/* A white veil over the system blur: Windows' light acrylic alone turns grey over dark wallpapers or
-   windows, so the see-through areas are lifted towards white while still showing what is behind. */
-.platform-win[data-style='liquid'] body {
-  background: rgba(255, 255, 255, 0.58);
+/* The sidebar floats as its own, clearer glass pane inset from the window edge (macOS Tahoe), so the rail
+   icons sit on a surface instead of on the bare backdrop. */
+:root[data-style='liquid'] .sidebar {
+  position: relative;
+  margin-left: var(--gutter);
+  padding: 0 8px 12px;
+  border-radius: var(--radius-panel);
+  background: var(--liquid-pane);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--shadow-panel);
 }
-.platform-win[data-style='liquid'][data-theme='dark'] body {
-  background: rgba(0, 0, 0, 0.32);
+:root[data-style='liquid'] .sidebar.collapsed {
+  padding: 0 4px 10px;
 }
-/* the reading surfaces are solid white: nothing moves behind the text; only the sidebar shows the desktop */
-.platform-win[data-style='liquid'] .list-col,
-.platform-win[data-style='liquid'] .chat-col,
-.platform-win[data-style='liquid'] .details-col {
-  background: #ffffff;
+/* Specular rim: a 1px light edge, brightest where the light falls (top left), fading along the sides and
+   catching again at the bottom corner, drawn as a masked gradient ring so it follows the rounding. */
+:root[data-style='liquid'] .sidebar::after,
+:root[data-style='liquid'] .list-col::after,
+:root[data-style='liquid'] .chat-col::after,
+:root[data-style='liquid'] .details-col::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--liquid-rim);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
 }
-.platform-win[data-style='liquid'] .list-col::before,
-.platform-win[data-style='liquid'] .chat-col::before,
-.platform-win[data-style='liquid'] .details-col::before {
-  display: none;
+:root[data-style='liquid'] .list-col,
+:root[data-style='liquid'] .chat-col,
+:root[data-style='liquid'] .details-col {
+  border-color: transparent;
 }
-/* With a transparent window the blur is the system's job. Chromium's own backdrop-filter over a see-through
-   root samples stale GPU memory and leaves ghost rectangles (a translucent band across the top, outlines of
-   closed sheets), so no element uses it under Liquid Glass on Windows. */
-.platform-win[data-style='liquid'] *,
-.platform-win[data-style='liquid'] *::before,
-.platform-win[data-style='liquid'] *::after {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-.platform-win[data-style='liquid'][data-theme='dark'] .list-col,
-.platform-win[data-style='liquid'][data-theme='dark'] .chat-col,
-.platform-win[data-style='liquid'][data-theme='dark'] .details-col {
-  background: var(--bg-window);
+/* Every glass pane re-blurs whatever moves beneath it on every frame: with the backdrop drifting that kept the
+   GPU process near a full core at rest (measured 115% of one core, 36% with the backdrop still). The Liquid
+   backdrop stays put; it is just as soft standing still. */
+:root[data-style='liquid'] .mesh-blob {
+  animation: none;
 }
 /* panels: stronger refraction and a light sheen along the top edge */
 :root[data-style='liquid'] .panel,
 :root[data-style='liquid'] .list-col,
 :root[data-style='liquid'] .chat-col,
 :root[data-style='liquid'] .details-col {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
 }
 :root[data-style='liquid'] .list-col::before,
 :root[data-style='liquid'] .chat-col::before,
@@ -10354,13 +10712,11 @@ button.moment-card:hover {
 .sticker-remove:hover {
   color: var(--danger);
 }
-/* stickers come alive: a little pop when they land, a wiggle under the pointer */
+/* stickers land with a little pop, once. Nothing changes under the pointer: swapping the animation on hover
+   replayed the landing when the pointer left, so the sticker shrank and popped again. */
 .attachment-sticker {
   animation: sticker-land var(--duration-slow) var(--ease-spring);
   transform-origin: 50% 90%;
-}
-.attachment-sticker:hover {
-  animation: sticker-wiggle 0.6s ease-in-out;
 }
 @keyframes sticker-land {
   from {
@@ -10370,18 +10726,6 @@ button.moment-card:hover {
   to {
     transform: none;
     opacity: 1;
-  }
-}
-@keyframes sticker-wiggle {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  25% {
-    transform: rotate(-6deg) scale(1.04);
-  }
-  75% {
-    transform: rotate(6deg) scale(1.04);
   }
 }
 
@@ -10461,195 +10805,671 @@ button.moment-card:hover {
   margin-left: auto;
   margin-right: 8px;
 }
-.insight-tiles {
+/* Close friends: your people in orbit under a night sky tinted by your accent (nearer and bigger is closer),
+   the story of the period in plain sentences with the numbers set large, then each friendship's character:
+   its vibe and who carries the chat. One moment of motion: the friends fly out from you when it opens. */
+.insights-sheet {
+  --cf-you: var(--accent);
+  --cf-them: #2ab3a6;
+  --cf-flame: #ff6a2b;
+  --cf-gold: #ffd36b;
+}
+.cf-orbit {
+  position: relative;
+  flex-shrink: 0;
+  height: 300px;
+  margin: 2px 0 16px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(1.6px 1.6px at 9% 18%, rgba(255, 255, 255, 0.85) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 23% 72%, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(1.8px 1.8px at 38% 11%, rgba(255, 255, 255, 0.7) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 57% 88%, rgba(255, 255, 255, 0.55) 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 71% 14%, rgba(255, 255, 255, 0.8) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 88% 64%, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(1.7px 1.7px at 94% 30%, rgba(255, 255, 255, 0.75) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 5% 86%, rgba(255, 255, 255, 0.5) 50%, transparent 52%),
+    radial-gradient(38% 55% at 86% 12%, rgba(255, 122, 192, 0.42), transparent 70%),
+    radial-gradient(42% 60% at 8% 92%, rgba(91, 140, 255, 0.4), transparent 70%),
+    radial-gradient(60% 72% at 50% 50%, color-mix(in oklab, var(--accent) 58%, #2a1878) 0%, color-mix(in oklab, var(--accent) 24%, #120b36) 70%, #0b0720 100%);
+}
+.cf-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+.cf-ring.inner {
+  width: 52%;
+  height: 54%;
+}
+.cf-ring.outer {
+  width: 84%;
+  height: 82%;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.11);
+}
+.cf-me {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -42%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cf-me .avatar {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.92),
+    0 0 0 10px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 44px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.cf-me-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+.cf-friend {
+  position: absolute;
+  left: calc(50% + var(--x));
+  top: calc(50% + var(--y));
+  translate: -50% -50%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-lg);
+  animation: cf-fly 720ms var(--ease-spring) var(--delay) both;
+}
+@keyframes cf-fly {
+  from {
+    left: 50%;
+    top: 50%;
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+.cf-friend:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+.cf-friend-face {
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.5px rgba(255, 255, 255, 0.85),
+    0 8px 22px rgba(0, 0, 0, 0.35);
+  transition: box-shadow var(--duration-base) var(--ease-out);
+}
+.cf-friend:hover .cf-friend-face {
+  box-shadow:
+    0 0 0 2.5px #fff,
+    0 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.4);
+}
+.cf-friend.first .cf-friend-face {
+  box-shadow:
+    0 0 0 3px var(--cf-gold),
+    0 0 30px rgba(255, 211, 107, 0.55),
+    0 10px 26px rgba(0, 0, 0, 0.4);
+}
+.cf-crown {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  translate: -50% 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cf-gold);
+  color: #6b4200;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.cf-flame {
+  position: absolute;
+  right: -8px;
+  bottom: -5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 6px 1px 4px;
+  border-radius: var(--radius-full);
+  background: var(--cf-flame);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px #140e33;
+}
+.cf-friend-name {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+
+.cf-headline {
+  margin: 0 2px 12px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+/* The period as bold story cards (Wrapped / Replay): big colour blocks, oversized numbers, a playful line. */
+.cf-story {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 30px;
+}
+.cf-story-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.cf-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
+  padding: 20px 22px;
+  border-radius: 26px;
+  color: #fff;
+}
+.cf-card p {
+  margin: 0;
+}
+.cf-kicker {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  opacity: 0.86;
+}
+.cf-giant {
+  margin-top: 12px;
+  font-family: var(--font-display);
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 0.88;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.cf-unit {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.cf-card-sub {
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+/* How much: a deep block in your accent, speech bubbles in your logo character's colour drifting off the edge. */
+.cf-card.messages {
+  min-height: 250px;
+  background: linear-gradient(140deg, color-mix(in oklab, var(--accent) 76%, #2f1bb0) 0%, color-mix(in oklab, var(--accent) 38%, #110a36) 100%);
+}
+.cf-bubbles i {
+  position: absolute;
+  z-index: -1;
+}
+.cf-bubbles i:nth-child(1) {
+  right: -34px;
+  top: -24px;
+  width: 190px;
+  height: 128px;
+  border-radius: 72px 72px 72px 14px;
+  background: var(--cf-them);
+  opacity: 0.9;
+}
+.cf-bubbles i:nth-child(2) {
+  right: 118px;
+  top: 76px;
+  width: 92px;
+  height: 64px;
+  border-radius: 34px 34px 8px 34px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.cf-bubbles i:nth-child(3) {
+  right: -18px;
+  bottom: -30px;
+  width: 150px;
+  height: 104px;
+  border-radius: 56px 56px 56px 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.cf-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.cf-split span {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.16);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.cf-split b {
+  font-weight: 800;
+}
+.cf-fun {
+  margin-top: auto;
+  padding-top: 16px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  opacity: 0.92;
+}
+
+/* When: the card takes the colours of your golden hour, with the day drawn as a clock of 24 rays. */
+.cf-card.time {
+  align-items: center;
+  text-align: center;
+}
+.cf-card.time.night {
+  background:
+    radial-gradient(1.4px 1.4px at 18% 26%, #fff 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 82% 18%, rgba(255, 255, 255, 0.8) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 70% 88%, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 12% 78%, rgba(255, 255, 255, 0.5) 50%, transparent 52%),
+    linear-gradient(165deg, #34278a 0%, #150f3b 100%);
+}
+.cf-card.time.early {
+  color: #3a1d05;
+  background: linear-gradient(165deg, #ffe08f 0%, #ff9d6c 100%);
+}
+.cf-card.time.lunch {
+  color: #06301f;
+  background: linear-gradient(165deg, #aef0cf 0%, #35c493 100%);
+}
+.cf-card.time.afternoon {
+  background: linear-gradient(165deg, #6cc4ff 0%, #2f6fe8 100%);
+}
+.cf-card.time.evening {
+  background: linear-gradient(165deg, #ff9a7a 0%, #7a45d6 100%);
+}
+.cf-clock {
+  width: 118px;
+  height: 118px;
+  margin: 10px 0 4px;
+}
+.cf-clock line {
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.cf-clock line.off {
+  opacity: 0.18;
+}
+.cf-clock line.on {
+  opacity: 0.55;
+}
+.cf-clock line.peak {
+  stroke-width: 5.5;
+}
+.cf-clock-face {
+  fill: currentColor;
+  opacity: 0.12;
+}
+.cf-clock-hour {
+  fill: currentColor;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+}
+.cf-persona {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* The streak, on fire (or grey, waiting for the first one). */
+.cf-card.streak {
+  background: linear-gradient(165deg, #ffb341 0%, #ff5b2e 55%, #e3263a 100%);
+}
+.cf-card.streak.none {
+  background: linear-gradient(165deg, color-mix(in oklab, var(--accent) 30%, #9aa3b5) 0%, color-mix(in oklab, var(--accent) 22%, #5b6275) 100%);
+}
+.cf-card.streak .cf-giant {
+  font-size: 104px;
+}
+.cf-streak-art {
+  position: absolute;
+  right: -30px;
+  bottom: -26px;
+  z-index: -1;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+/* Hall of fame: second, first, third on metal steps, each wearing a medal on a ribbon. */
+.cf-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
   gap: 10px;
-  margin-bottom: 18px;
+  margin: 8px 0 30px;
 }
-.insight-tile {
-  padding: 14px 14px 12px;
+.cf-place {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
   border-radius: var(--radius-lg);
-  background: var(--bg-input);
-  border: 1px solid var(--glass-border);
 }
-.insight-tile.accent {
-  background: var(--accent-gradient);
-  color: var(--on-accent);
-  border-color: transparent;
+.cf-place:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
-.insight-tile.fire {
-  background: linear-gradient(135deg, #ff9f43, #ff5b1f);
-  color: white;
-  border-color: transparent;
+.cf-place-face {
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  transition: box-shadow var(--duration-base) var(--ease-out);
 }
-.insight-number {
+.cf-place.gold .cf-place-face {
+  box-shadow:
+    0 0 0 3px #f6c445,
+    0 10px 30px rgba(246, 196, 69, 0.5);
+}
+.cf-place.silver .cf-place-face {
+  box-shadow:
+    0 0 0 3px #c3cad6,
+    0 8px 22px rgba(120, 130, 150, 0.35);
+}
+.cf-place.bronze .cf-place-face {
+  box-shadow:
+    0 0 0 3px #d88b52,
+    0 8px 22px rgba(184, 106, 53, 0.35);
+}
+.cf-place:hover .cf-place-name {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.cf-medal {
+  position: absolute;
+  left: 50%;
+  bottom: -15px;
+  translate: -50% 0;
+  width: 30px;
+  height: 30px;
+}
+/* the ribbon the medal hangs from, peeking out above it */
+.cf-ribbon {
+  position: absolute;
+  left: 50%;
+  top: -13px;
+  translate: -50% 0;
+  width: 24px;
+  height: 22px;
+  clip-path: polygon(0 0, 38% 0, 50% 55%, 62% 0, 100% 0, 72% 100%, 28% 100%);
+}
+.cf-medal-disc {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+}
+.cf-place.gold .cf-ribbon {
+  background: linear-gradient(90deg, #e5484d 0 50%, #c93338 50% 100%);
+}
+.cf-place.silver .cf-ribbon {
+  background: linear-gradient(90deg, #3d7bf5 0 50%, #2c63d6 50% 100%);
+}
+.cf-place.bronze .cf-ribbon {
+  background: linear-gradient(90deg, #2f9e6e 0 50%, #248058 50% 100%);
+}
+.cf-place.gold .cf-medal-disc {
+  color: #6b4200;
+  background: radial-gradient(circle at 35% 30%, #fff6c9 0%, #f6c445 45%, #c98a12 100%);
+}
+.cf-place.silver .cf-medal-disc {
+  color: #3d4453;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #d5dbe5 45%, #8e97a8 100%);
+}
+.cf-place.bronze .cf-medal-disc {
+  color: #4a230a;
+  background: radial-gradient(circle at 35% 30%, #ffe0c2 0%, #e39a5e 45%, #9c5424 100%);
+}
+.cf-place-name {
+  max-width: 100%;
+  margin-top: 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 800;
+}
+.cf-place-meta {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cf-step {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  margin-top: 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px 16px 6px 6px;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 8px 18px rgba(0, 0, 0, 0.08);
 }
-.insight-label {
-  margin-top: 4px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.85;
+/* a still shine across the metal */
+.cf-step::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 34%, rgba(255, 255, 255, 0.45) 48%, transparent 62%);
 }
-.insight-sub {
-  margin-top: 4px;
-  font-size: var(--text-xs);
-  opacity: 0.8;
+.cf-place.gold .cf-step {
+  height: 98px;
+  color: #8a5a00;
+  background: linear-gradient(180deg, #ffe99c 0%, #f6c445 48%, #d9981c 100%);
 }
-.insight-section + .insight-section {
-  margin-top: 18px;
+.cf-place.silver .cf-step {
+  height: 74px;
+  color: #5b6476;
+  background: linear-gradient(180deg, #f7f9fc 0%, #d3d9e3 48%, #a3acbb 100%);
 }
-.insight-title {
-  margin: 0 4px 8px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+.cf-place.bronze .cf-step {
+  height: 56px;
+  color: #6f3814;
+  background: linear-gradient(180deg, #ffd6b0 0%, #e49b60 48%, #b86b35 100%);
 }
-.insight-row {
+@media (max-width: 560px) {
+  .cf-story-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cf-giant {
+    font-size: 72px;
+  }
+}
+
+.cf-title {
+  margin: 0 2px 8px;
+  font-size: var(--text-md);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.cf-people {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cf-person {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  font: inherit;
-  color: inherit;
+  padding: 10px;
+  border-radius: var(--radius-lg);
   text-align: left;
-  cursor: pointer;
+  transition: background var(--duration-fast) ease;
 }
-.insight-row:hover {
-  background: var(--bg-selected);
+.cf-person:hover {
+  background: var(--bg-hover);
 }
-.insight-rank {
-  width: 18px;
-  font-size: var(--text-xs);
+.cf-rank {
+  width: 20px;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--text-tertiary);
-  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.insight-row-text {
+.cf-person-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
-.insight-row-name {
+.cf-person-top {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  white-space: nowrap;
+}
+.cf-person-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
 }
-.insight-streak {
+.cf-streak-chip {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 7px;
+  flex-shrink: 0;
+  padding: 1px 7px 1px 5px;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, #ff5b1f 16%, transparent);
-  color: #ff5b1f;
+  background: color-mix(in srgb, var(--cf-flame) 16%, transparent);
+  color: color-mix(in srgb, var(--cf-flame) 72%, var(--text-primary));
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+.cf-total {
+  margin-left: auto;
+  flex-shrink: 0;
   font-size: var(--text-xs);
   font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
-.insight-bar {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  overflow: hidden;
-}
-.insight-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent-gradient);
-  transition: width var(--duration-slow) var(--ease-out);
-}
-.insight-row-count {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+.cf-vibe {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--text-secondary);
 }
-.insight-row-count strong {
-  font-size: var(--text-md);
-  color: var(--text-primary);
+.cf-vibe.night svg {
+  color: #6f5bd6;
 }
-.insight-hours {
+.cf-vibe.you svg {
+  color: var(--cf-you);
+}
+.cf-vibe.them svg {
+  color: color-mix(in srgb, var(--cf-them) 80%, var(--text-primary));
+}
+.cf-vibe.even svg {
+  color: #2f9e6e;
+}
+/* who carries the chat: your share in your accent, theirs in teal */
+.cf-balance {
   display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 64px;
-  padding: 0 4px;
+  gap: 2px;
+  height: 6px;
+  margin-top: 2px;
 }
-.insight-hour {
+.cf-balance-you,
+.cf-balance-them {
+  min-width: 4px;
+  border-radius: var(--radius-full);
+}
+.cf-balance-you {
+  background: var(--cf-you);
+}
+.cf-balance-them {
   flex: 1;
-  height: 100%;
-  display: flex;
-  align-items: flex-end;
+  background: var(--cf-them);
 }
-.insight-hour-fill {
-  display: block;
-  width: 100%;
-  border-radius: 3px 3px 1px 1px;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.insight-hour.peak .insight-hour-fill {
-  background: var(--accent-gradient);
-}
-.insight-hours-axis {
+.cf-balance-legend {
   display: flex;
   justify-content: space-between;
-  padding: 4px 4px 0;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
-.insight-weekdays {
-  display: flex;
-  gap: 8px;
-  height: 84px;
-  padding: 0 4px;
+
+@media (max-width: 560px) {
+  .cf-orbit {
+    height: 250px;
+  }
+  .cf-friend-name {
+    display: none;
+  }
+  .cf-headline {
+    font-size: 20px;
+  }
 }
-.insight-weekday {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-}
-.insight-weekday-fill {
-  display: block;
-  width: 100%;
-  max-width: 34px;
-  border-radius: 6px 6px 2px 2px;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.insight-weekday.peak .insight-weekday-fill {
-  background: var(--accent-gradient);
-}
-.insight-weekday-name {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-tertiary);
+@media (prefers-reduced-motion: reduce) {
+  .cf-friend {
+    animation: none;
+  }
 }
 .insight-foot {
   display: flex;
@@ -10659,12 +11479,6 @@ button.moment-card:hover {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
-@media (max-width: 520px) {
-  .insight-tiles {
-    grid-template-columns: 1fr;
-  }
-}
-
 .insight-progress {
   display: flex;
   flex-direction: column;
@@ -11454,15 +12268,43 @@ button.moment-card:hover {
   }
 }
 
-/* Close friends: how many days you talked, under the name. */
-.insight-row-days {
-  display: block;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  margin: 1px 0 3px;
+
+
+/* Decorative loops (the drifting backdrop, the buddies blinking and bobbing, the floating logos) rest while
+   the window is in the background: nobody is watching them and they cost CPU and GPU all day (App.tsx sets
+   window-idle). Loaders and typing dots keep going, they say something. */
+:root.window-idle .mesh-blob,
+:root.window-idle .buddy-eyes,
+:root.window-idle .buddy-pupils,
+:root.window-idle .buddy-body,
+:root.window-idle .buddy-pink,
+:root.window-idle .welcome-logos .platform-icon {
+  animation-play-state: paused;
 }
 
-/* Pack stickers have their own motion (sticker-motion.ts); the generic hover wiggle would fight it. */
-.attachment-sticker:has(.sticker-art):hover {
-  animation: none;
+/* Windows "Transparency effects" off / macOS "Reduce transparency": every glass surface (both styles) turns
+   solid and nothing blurs, so text always sits on a plain, steady colour. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: #f8f9fc !important;
+    --glass-strong: #ffffff !important;
+    --liquid-pane: #eef0f6 !important;
+    --bg-elevated: #ffffff !important;
+    --bg-input: #ffffff !important;
+    --bubble-in: #ffffff !important;
+  }
+  :root[data-theme='dark'] {
+    --glass: var(--bg-sidebar-solid) !important;
+    --glass-strong: color-mix(in srgb, var(--bg-sidebar-solid) 90%, white 6%) !important;
+    --liquid-pane: var(--bg-window) !important;
+    --bg-elevated: color-mix(in srgb, var(--bg-sidebar-solid) 92%, white 5%) !important;
+    --bg-input: color-mix(in srgb, var(--bg-sidebar-solid) 88%, white 8%) !important;
+    --bubble-in: color-mix(in srgb, var(--bg-sidebar-solid) 84%, white 12%) !important;
+  }
+  *,
+  *::before,
+  *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }

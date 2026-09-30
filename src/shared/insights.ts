@@ -30,6 +30,24 @@ export interface ContactInsight {
   bothDays: number
   /** How close: two-way days count most, then days at all, the last week, and volume (dampened). */
   score: number
+  /** Messages between 22:00 and 04:59, either way. */
+  night: number
+}
+
+/** The one-word character of a friendship in the period, for the Close friends list. */
+export type Vibe = 'night' | 'you' | 'them' | 'even'
+
+/**
+ * Night owls first: at least 40% of the talking after 22:00 and clearly more than your own habit (1.5 times
+ * your overall night share, so someone who texts at night anyway does not make everyone an owl); then who
+ * carries the chat: one side writing at least 1.6 times as much as the other; otherwise it is even.
+ */
+export function vibeOf(c: Pick<ContactInsight, 'sent' | 'received' | 'total' | 'night'>, overallNight = 0): Vibe {
+  const share = c.total ? c.night / c.total : 0
+  if (c.total >= 6 && share >= 0.4 && share >= overallNight * 1.5) return 'night'
+  if (c.sent >= 1.6 * Math.max(1, c.received)) return 'you'
+  if (c.received >= 1.6 * Math.max(1, c.sent)) return 'them'
+  return 'even'
 }
 
 export interface Insights {
@@ -44,6 +62,8 @@ export interface Insights {
   weekdays: number[]
   busiestHour: number
   busiestWeekday: number
+  /** Share (0..1) of all messages in the period sent between 22:00 and 04:59. */
+  nightShare: number
   /** The longest current streak, if any. */
   streak?: ContactInsight
   /** Chats you wrote to but never heard back from in the period (max 5). */
@@ -86,13 +106,13 @@ export function closeness(e: { days: number; bothDays: number; recentDays: numbe
 export function computeInsights(records: InsightRecord[], titles: Record<string, string>, now = Date.now(), days = 30, groups: ReadonlySet<string> = new Set()): Insights {
   const from = now - days * DAY
   const inPeriod = records.filter((r) => r.sentAt >= from && r.sentAt <= now)
-  const per = new Map<string, { sent: number; received: number; times: number[]; outgoing: boolean[]; lastAt: number }>()
+  const per = new Map<string, { sent: number; received: number; night: number; times: number[]; outgoing: boolean[]; lastAt: number }>()
   const hours = Array(24).fill(0) as number[]
   const weekdays = Array(7).fill(0) as number[]
   let sent = 0
   let received = 0
   for (const r of inPeriod) {
-    const entry = per.get(r.conversationId) ?? { sent: 0, received: 0, times: [], outgoing: [], lastAt: 0 }
+    const entry = per.get(r.conversationId) ?? { sent: 0, received: 0, night: 0, times: [], outgoing: [], lastAt: 0 }
     if (r.isOutgoing) {
       entry.sent++
       sent++
@@ -105,6 +125,7 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
     entry.lastAt = Math.max(entry.lastAt, r.sentAt)
     per.set(r.conversationId, entry)
     const d = new Date(r.sentAt)
+    if (d.getHours() >= 22 || d.getHours() < 5) entry.night++
     hours[d.getHours()]++
     weekdays[(d.getDay() + 6) % 7]++
   }
@@ -134,7 +155,8 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
         lastAt: e.lastAt,
         days: all.size,
         bothDays,
-        score: closeness({ days: all.size, bothDays, recentDays: recent.size, total: totalOf })
+        score: closeness({ days: all.size, bothDays, recentDays: recent.size, total: totalOf }),
+        night: e.night
       }
     })
   contacts.sort((a, b) => b.score - a.score || b.total - a.total || b.lastAt - a.lastAt)
@@ -155,6 +177,7 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
     weekdays,
     busiestHour: argmax(hours),
     busiestWeekday: argmax(weekdays),
+    nightShare: total ? (hours.slice(22).reduce((a, b) => a + b, 0) + hours.slice(0, 5).reduce((a, b) => a + b, 0)) / total : 0,
     streak: withStreak[0],
     quiet
   }

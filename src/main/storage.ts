@@ -57,6 +57,8 @@ export class Storage {
           ...DEFAULT_SETTINGS,
           language: systemLanguage(),
           ...(parsed.settings ?? {}),
+          // Weather became opt-in: installs from before the switch keep it while their greetings are on.
+          weather: parsed.settings?.weather ?? parsed.settings?.greetings !== false,
           muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) }
         }
       }

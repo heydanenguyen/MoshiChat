@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useScrollFade } from '../scrollFade'
 import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, Link2, SquarePen, UserRoundPlus, X } from 'lucide-react'
 import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
@@ -17,7 +18,7 @@ import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
 import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
-import { isArchived, isChatMuted, isPendingRequest } from '@shared/inbox'
+import { isArchived, isChatMuted, isPendingRequest, maskCode } from '@shared/inbox'
 
 interface TagMenuState {
   conversationId: string
@@ -71,6 +72,8 @@ export function ConversationList(): JSX.Element {
   const showBadge = useShowPlatformBadge()
   const [menu, setMenu] = useState<TagMenuState | undefined>()
   const menuRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  useScrollFade(listRef)
   const hidden = useStore((s) => s.settings.hidden)
   const hideConversation = useStore((s) => s.hideConversation)
   /**
@@ -141,10 +144,6 @@ export function ConversationList(): JSX.Element {
     : requestCount > 0 ? undefined // only requests so far: the Requests row says it all
     : 'no-chats'
 
-  const ringFor = (id: string): string | undefined => {
-    return (tags[id] ?? []).map((tag) => tagById[tag]).find(Boolean)?.color
-  }
-
   return (
     <section className="list-col">
       <header className={`list-header drag ${listView !== 'inbox' ? 'in-archive' : ''}`}>
@@ -208,7 +207,7 @@ export function ConversationList(): JSX.Element {
             label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`}
           />
         ))}
-      <div className="conv-list scroll">
+      <div className="conv-list scroll edge-fade" ref={listRef}>
         {empty === 'chip' && quickFilter !== 'all' && <QuickFilterEmpty filter={quickFilter} />}
         {!searching && listView === 'inbox' && requestCount > 0 && (
           <button className="requests-row" onClick={() => setListView('requests')}>
@@ -250,7 +249,7 @@ export function ConversationList(): JSX.Element {
           return (
             <button
               key={c.id}
-              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${unread ? 'unread' : ''}`}
+              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${unread ? 'unread' : ''} ${mutedChat(c) ? 'muted' : ''}`}
               onClick={(e) => (canSplit && (e.metaKey || e.ctrlKey) ? openBeside(c.id) : select(c.id))}
               draggable={canSplit}
               onDragStart={(e) => {
@@ -270,11 +269,11 @@ export function ConversationList(): JSX.Element {
                 setMenu({ conversationId: c.id, x: e.clientX, y: e.clientY })
               }}
             >
-              <Avatar name={c.title} url={c.avatarUrl} size={44} platform={merged ? latestApp : showBadge ? c.platform : undefined} ring={ringFor(c.id)} />
+              <Avatar name={c.title} url={c.avatarUrl} size={44} platform={merged ? latestApp : showBadge ? c.platform : undefined} />
               <span className="conv-body">
                 <span className="conv-top">
                   <span className="conv-title">
-                    {c.title}
+                    <span className="conv-name">{c.title}</span>
                     {merged && (
                       <span className="conv-apps" title={memberChats!.map((m) => PLATFORMS[m.platform].name).join(' · ')}>
                         {[...new Set(memberChats!.map((m) => m.platform))].map((p) => (
@@ -289,13 +288,29 @@ export function ConversationList(): JSX.Element {
                     )}
                     {convTags.length > 0 && (
                       <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
-                        {convTags.map((tag) => (
+                        {convTags.slice(0, 2).map((tag) => (
                           <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
                         ))}
+                        {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
                       </span>
                     )}
                   </span>
-                  <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
+                  <span className="conv-corner">
+                    <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
+                    <span
+                      className={`conv-more ${menu?.conversationId === c.id ? 'open' : ''}`}
+                      role="button"
+                      tabIndex={-1}
+                      title={t('moreActions')}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openMenuAt(e.currentTarget, c.id)
+                      }}
+                    >
+                      <MoreHorizontal size={15} strokeWidth={2.4} />
+                    </span>
+                  </span>
                 </span>
                 <span className="conv-bottom">
                   <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
@@ -312,7 +327,7 @@ export function ConversationList(): JSX.Element {
                     ) : (
                       <>
                         {prefix}
-                        <PreviewText kind={preview?.kind} text={preview?.text ?? ''} />
+                        <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
                       </>
                     )}
                   </span>
@@ -332,19 +347,6 @@ export function ConversationList(): JSX.Element {
                     )}
                   </span>
                 </span>
-              </span>
-              <span
-                className={`conv-more ${menu?.conversationId === c.id ? 'open' : ''}`}
-                role="button"
-                tabIndex={-1}
-                title={t('moreActions')}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openMenuAt(e.currentTarget, c.id)
-                }}
-              >
-                <MoreHorizontal size={16} strokeWidth={2.4} />
               </span>
             </button>
           )

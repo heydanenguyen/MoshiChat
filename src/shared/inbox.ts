@@ -68,6 +68,15 @@ export function looksLikeCode(text: string): boolean {
   return /\b(otp|passcode|one[- ]time|verification|verify|security code|login code|confirmation code|auth(entication)? code)\b|mã (otp|pin|xác|bảo mật|đăng nhập|kích hoạt)|xác (thực|minh|nhận)/iu.test(text)
 }
 
+/**
+ * The same text with a one-time code's digits replaced by dots, for previews that anyone near the screen
+ * can see (the chat list, the jump palette). The message itself still shows the code.
+ */
+export function maskCode(text: string): string {
+  if (!looksLikeCode(text)) return text
+  return text.replace(/(?<!\d|\d[.,])\d{4,8}(?!\d|[.,]\d)/g, (digits) => '•'.repeat(digits.length))
+}
+
 /** Lower case, no Vietnamese marks, single spaces: "Nguyễn  Minh Anh" and "nguyen minh anh" compare equal. */
 export function foldName(text: string): string {
   return text

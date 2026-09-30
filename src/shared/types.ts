@@ -523,8 +523,10 @@ export interface Settings {
   accent: AccentId | CustomAccentId
   font: FontId
   muted: MuteRules
-  /** Cheerful rotating line (with local weather) in the title bar. */
+  /** Cheerful rotating line in the title bar. */
   greetings: boolean
+  /** Local weather in the greetings (coarse IP location from ipapi.co). Opt-in; absent = off. */
+  weather?: boolean
   /** Tag definitions (built-in and custom) in display order; absent means the built-in six. */
   tagDefs?: TagMeta[]
   /** Pins set in Moshi: conversation id -> pinned. Overrides the platform's own pin. */

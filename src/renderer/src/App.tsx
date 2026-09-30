@@ -116,6 +116,22 @@ export default function App(): JSX.Element {
     return () => document.removeEventListener('scroll', onScroll, true)
   }, [])
 
+  // Decorative animations rest while the window is in the background (see .window-idle in app.css).
+  useEffect(() => {
+    const apply = (): void => {
+      document.documentElement.classList.toggle('window-idle', document.hidden || !document.hasFocus())
+    }
+    apply()
+    window.addEventListener('focus', apply)
+    window.addEventListener('blur', apply)
+    document.addEventListener('visibilitychange', apply)
+    return () => {
+      window.removeEventListener('focus', apply)
+      window.removeEventListener('blur', apply)
+      document.removeEventListener('visibilitychange', apply)
+    }
+  }, [])
+
   useEffect(() => {
     const media = window.matchMedia('(max-width: 720px)')
     const apply = (): void => setNarrow(media.matches)

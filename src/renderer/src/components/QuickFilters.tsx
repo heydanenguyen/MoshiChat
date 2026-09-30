@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { TKey } from '../i18n'
 import { QUICK_FILTERS, formatBadge, type QuickFilter } from '../quickFilter'
 import { useStore, useT } from '../store'
@@ -63,6 +64,14 @@ export function QuickFilters({ counts }: { counts: Record<QuickFilter, number> }
     chip?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: smooth ? 'smooth' : 'auto' })
   }, [current])
 
+  // The arrows at a faded edge page the row for pointer users (keyboard users have the arrow keys).
+  const page = (direction: 1 | -1): void => {
+    const row = rowRef.current
+    if (!row) return
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    row.scrollBy({ left: direction * row.clientWidth * 0.6, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
   const pick = (filter: QuickFilter, focus = false): void => {
     setQuickFilter(filter)
     if (focus) requestAnimationFrame(() => rowRef.current?.querySelector<HTMLElement>(`[data-filter="${filter}"]`)?.focus())
@@ -82,46 +91,58 @@ export function QuickFilters({ counts }: { counts: Record<QuickFilter, number> }
   }
 
   return (
-    <div
-      ref={rowRef}
-      className={`quick-filters ${edges.start ? 'fade-start' : ''} ${edges.end ? 'fade-end' : ''}`}
-      role="radiogroup"
-      aria-label={t('quickFilters')}
-      onKeyDown={onKeyDown}
-      onScroll={measure}
-      onWheel={(e) => {
-        // A mouse wheel only scrolls up and down; turn that into sideways travel along the row.
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
-      }}
-    >
-      {chips.map((filter) => {
-        const active = filter === current
-        const count = counts[filter]
-        const showCount = COUNTED.has(filter) && count > 0
-        const label = t(LABEL[filter])
-        const hint = HINT[filter]
-        return (
-          <button
-            key={filter}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={showCount ? `${label}, ${count}` : label}
-            tabIndex={active ? 0 : -1}
-            data-filter={filter}
-            title={hint ? t(hint) : undefined}
-            className={`quick-chip ${active ? 'active' : ''} ${filter === 'drafts' ? 'enters' : ''}`}
-            onClick={() => pick(filter)}
-          >
-            <span className="quick-chip-label">{label}</span>
-            {showCount && (
-              <span className={`quick-chip-count ${filter === 'unread' || filter === 'awaiting' ? 'strong' : ''}`} aria-hidden>
-                {formatBadge(count)}
-              </span>
-            )}
-          </button>
-        )
-      })}
+    <div className="quick-filters-wrap">
+      <div
+        ref={rowRef}
+        className={`quick-filters ${edges.start ? 'fade-start' : ''} ${edges.end ? 'fade-end' : ''}`}
+        role="radiogroup"
+        aria-label={t('quickFilters')}
+        onKeyDown={onKeyDown}
+        onScroll={measure}
+        onWheel={(e) => {
+          // A mouse wheel only scrolls up and down; turn that into sideways travel along the row.
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
+        {chips.map((filter) => {
+          const active = filter === current
+          const count = counts[filter]
+          const showCount = COUNTED.has(filter) && count > 0
+          const label = t(LABEL[filter])
+          const hint = HINT[filter]
+          return (
+            <button
+              key={filter}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={showCount ? `${label}, ${count}` : label}
+              tabIndex={active ? 0 : -1}
+              data-filter={filter}
+              title={hint ? t(hint) : undefined}
+              className={`quick-chip ${active ? 'active' : ''} ${filter === 'drafts' ? 'enters' : ''}`}
+              onClick={() => pick(filter)}
+            >
+              <span className="quick-chip-label">{label}</span>
+              {showCount && (
+                <span className={`quick-chip-count ${filter === 'unread' || filter === 'awaiting' ? 'strong' : ''}`} aria-hidden>
+                  {formatBadge(count)}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      {edges.start && (
+        <button type="button" className="quick-scroll start" tabIndex={-1} aria-hidden onClick={() => page(-1)}>
+          <ChevronLeft size={14} strokeWidth={2.6} />
+        </button>
+      )}
+      {edges.end && (
+        <button type="button" className="quick-scroll end" tabIndex={-1} aria-hidden onClick={() => page(1)}>
+          <ChevronRight size={14} strokeWidth={2.6} />
+        </button>
+      )}
     </div>
   )
 }

@@ -24,6 +24,7 @@ import { matchSticker } from '../stickerMatch'
 import { isSplit, type PaneIndex } from '../panes'
 import { CONVERSATION_DRAG } from './ConversationList'
 import { modKey } from '../utils'
+import { useScrollFade } from '../scrollFade'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -186,6 +187,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const select = useStore((s) => s.select)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  useScrollFade(scrollRef)
   const stickToBottom = useRef(true)
   const prevHeight = useRef(0)
   const prevFirstId = useRef<string | undefined>(undefined)
@@ -305,7 +307,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
 
       <SummaryCard conversationId={conversation.id} />
       <BirthdayBanner conversation={conversation} canSendStickers={features.attachments} onCelebrate={celebrate} />
-      <div className="chat-scroll scroll" ref={scrollRef}>
+      <div className="chat-scroll scroll edge-fade" ref={scrollRef}>
         <div className="chat-scroll-inner">
           {loading && !messages && <BuddyLoader size={56} label={t('loadingMessages')} className="chat-loading" />}
           {hasMore && messages && (
@@ -1031,15 +1033,20 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
       )
     default:
       return (
-        <div className="attachment-file" onClick={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))}>
+        <button
+          type="button"
+          className="attachment-file"
+          title={t('openFile')}
+          onClick={() => (attachment.url && /^https?:/.test(attachment.url) ? openExternal(attachment.url) : void openAttachment(message.conversationId, message.id, attachment.id))}
+        >
           <span className="attachment-file-icon">
             <File size={18} />
           </span>
           <span>
-            <div className="attachment-file-name">{attachment.name ?? t('file')}</div>
-            <div className="attachment-file-meta">{formatBytes(attachment.size) || attachment.kind}</div>
+            <span className="attachment-file-name">{attachment.name ?? t('file')}</span>
+            <span className="attachment-file-meta">{formatBytes(attachment.size) || attachment.kind}</span>
           </span>
-        </div>
+        </button>
       )
   }
 }

@@ -162,6 +162,11 @@ function GeneralPage(): JSX.Element {
         <Row title={t('greetings')} sub={t('greetingsHint')}>
           <Switch on={settings.greetings} onChange={(greetings) => void setSettings({ greetings })} />
         </Row>
+        {settings.greetings && (
+          <Row title={t('greetingsWeather')} sub={t('greetingsWeatherHint')}>
+            <Switch on={!!settings.weather} onChange={(weather) => void setSettings({ weather })} />
+          </Row>
+        )}
       </Group>
       <Group label={t('updateSection')}>
         <UpdateSettings />

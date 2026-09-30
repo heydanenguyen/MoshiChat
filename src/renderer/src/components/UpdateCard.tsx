@@ -116,11 +116,11 @@ export function UpdateSettings(): JSX.Element {
           {t('updateRestart')}
         </button>
       ) : state.phase === 'error' ? (
-        <button className="btn" onClick={openPage}>
+        <button className="btn secondary" onClick={openPage}>
           {t('updateOpenPage')}
         </button>
       ) : (
-        <button className="btn" onClick={() => void check()} disabled={busy}>
+        <button className="btn secondary" onClick={() => void check()} disabled={busy}>
           {busy ? <BuddyLoader size={16} inline /> : t('updateCheck')}
         </button>
       )}

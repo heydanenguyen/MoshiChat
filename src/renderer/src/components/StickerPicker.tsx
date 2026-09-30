@@ -33,6 +33,8 @@ function saveRecent(list: PackSticker[]): void {
   }
 }
 
+const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 /** Keyframes for a sticker are added to the page the first time it is shown moving. */
 const motionStyles = new Set<string>()
 function ensureMotion(id: StickerId): void {
@@ -47,8 +49,9 @@ function ensureMotion(id: StickerId): void {
 /**
  * A sticker drawn inline (crisp at any size), optionally alive:
  * - 'hover': moves while the pointer is over it (or its button), and finishes the loop when it leaves;
- * - 'auto': also plays twice the first time it scrolls into view (a new sticker in a chat).
- * It always stops on a loop boundary, where every part is back on the still pose, so it never snaps.
+ * - 'auto' (in a chat): moves all the time while it is on screen and rests once scrolled away; the pointer
+ *   does nothing, so hovering never restarts it (with chat effects off it falls back to 'hover').
+ * Hover play always stops on a loop boundary, where every part is back on the still pose, so it never snaps.
  */
 export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; size?: number; play?: 'none' | 'hover' | 'auto' }): JSX.Element {
   const ref = useRef<SVGSVGElement>(null)
@@ -65,6 +68,19 @@ export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; si
     const svg = ref.current
     const target = svg?.parentElement
     if (!svg || !target || play === 'none') return
+    // In a chat it simply lives while it is on screen; the pointer does nothing (no restart, no flicker).
+    if (play === 'auto' && effects && !reducedMotion()) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries.some((entry) => entry.isIntersecting)
+          loopsLeft.current = visible ? undefined : 0
+          setPlaying(visible)
+        },
+        { threshold: 0.3 }
+      )
+      observer.observe(svg)
+      return () => observer.disconnect()
+    }
     const enter = (): void => {
       loopsLeft.current = undefined
       setPlaying(true)
@@ -80,25 +96,10 @@ export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; si
     target.addEventListener('mouseenter', enter)
     target.addEventListener('mouseleave', leave)
     svg.addEventListener('animationiteration', iteration)
-    let observer: IntersectionObserver | undefined
-    if (play === 'auto' && effects) {
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (!entries.some((entry) => entry.isIntersecting)) return
-          observer?.disconnect()
-          if (loopsLeft.current === undefined) return
-          loopsLeft.current = 2
-          setPlaying(true)
-        },
-        { threshold: 0.6 }
-      )
-      observer.observe(svg)
-    }
     return () => {
       target.removeEventListener('mouseenter', enter)
       target.removeEventListener('mouseleave', leave)
       svg.removeEventListener('animationiteration', iteration)
-      observer?.disconnect()
     }
   }, [play, effects])
 
@@ -117,7 +118,7 @@ export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; si
 
 /**
  * A Mito sticker (a picture, not drawn in code). The animated ones move like StickerArt: while hovered ('hover',
- * finishing the loop when the pointer leaves) and twice when first seen in a chat ('auto'). Each play loads the
+ * finishing the loop when the pointer leaves) and all the time while on screen in a chat ('auto'). Each play loads the
  * animation afresh so it starts at its first frame, which is the still pose, and it hands back to the still on a loop
  * boundary, so nothing snaps. Until the animation has loaded the still stays in place.
  */
@@ -149,7 +150,29 @@ export function MitoArt({ id, size = 72, play = 'none' }: { id: MitoId; size?: n
 
   useEffect(() => {
     const target = ref.current?.parentElement
-    if (!target || play === 'none' || !loop || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!target || play === 'none' || !loop || reducedMotion()) return
+    // In a chat it plays on and on while on screen (the WebP loops by itself) and rests as the still once
+    // scrolled away; the pointer does nothing, so hovering never swaps pictures or restarts it.
+    if (play === 'auto' && effects) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            pending.current = undefined
+            if (!started.current) setRun((r) => (r.n ? r : { n: ++plays.current, shown: false }))
+          } else {
+            window.clearTimeout(timer.current)
+            started.current = 0
+            setRun({ n: 0, shown: false })
+          }
+        },
+        { threshold: 0.3 }
+      )
+      observer.observe(target)
+      return () => {
+        observer.disconnect()
+        window.clearTimeout(timer.current)
+      }
+    }
     const begin = (loops: number | undefined): void => {
       window.clearTimeout(timer.current)
       pending.current = loops
@@ -163,22 +186,9 @@ export function MitoArt({ id, size = 72, play = 'none' }: { id: MitoId; size?: n
     }
     target.addEventListener('mouseenter', enter)
     target.addEventListener('mouseleave', leave)
-    let observer: IntersectionObserver | undefined
-    if (play === 'auto' && effects) {
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (!entries.some((entry) => entry.isIntersecting)) return
-          observer?.disconnect()
-          begin(2)
-        },
-        { threshold: 0.6 }
-      )
-      observer.observe(target)
-    }
     return () => {
       target.removeEventListener('mouseenter', enter)
       target.removeEventListener('mouseleave', leave)
-      observer?.disconnect()
       window.clearTimeout(timer.current)
     }
   }, [play, effects, loop, stopAt])

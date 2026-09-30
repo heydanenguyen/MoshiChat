@@ -378,22 +378,26 @@ function installMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-/** The system-drawn backdrop behind the window: acrylic for Liquid Glass on Windows, nothing otherwise. */
-function backdropFor(settings: Settings): 'acrylic' | 'none' | undefined {
-  if (isMac) return undefined
-  return settings.style === 'liquid' ? 'acrylic' : 'none'
+/**
+ * No system-drawn backdrop on Windows, for any style. Liquid Glass used an acrylic backdrop behind a
+ * see-through page, but Chromium never cleared the transparent areas between frames: old text, sheets and a
+ * white band from before a resize stayed on screen, and backdrop-filter had to be switched off. The glass is
+ * now drawn by the page itself over the app's own backdrop (see the Liquid Glass rules in app.css).
+ */
+function backdropFor(): 'none' | undefined {
+  return isMac ? undefined : 'none'
 }
 
-/** The window's own colour: transparent while a system backdrop is shown, otherwise the theme's base. */
-function windowColorFor(settings: Settings): string {
-  if (backdropFor(settings) === 'acrylic') return '#00000000'
+/** The window's own colour: the theme's base (the page paints over it straight away). */
+function windowColorFor(): string {
   return nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff'
 }
 
+/** Re-applied when the style changes (clears an acrylic backdrop a window from an older build still has). */
 function applyBackdrop(): void {
   if (isMac || !window || window.isDestroyed()) return
-  window.setBackgroundMaterial(backdropFor(storage.settings) ?? 'none')
-  window.setBackgroundColor(windowColorFor(storage.settings))
+  window.setBackgroundMaterial(backdropFor() ?? 'none')
+  window.setBackgroundColor(windowColorFor())
 }
 
 function createWindow(): void {
@@ -405,15 +409,13 @@ function createWindow(): void {
     show: false,
     title: 'Moshi',
     icon: appIcon(),
-    backgroundColor: windowColorFor(storage.settings),
+    backgroundColor: windowColorFor(),
     // A thin custom title bar on every platform; macOS keeps its native traffic lights inset into it.
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
     vibrancy: isMac ? 'sidebar' : undefined,
     visualEffectState: isMac ? 'active' : undefined,
-    // Windows 11: the Liquid Glass style shows the desktop through the window behind a blurred acrylic
-    // layer (the page keeps its own background translucent for it). Older Windows ignores this.
-    backgroundMaterial: backdropFor(storage.settings),
+    backgroundMaterial: backdropFor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -1112,7 +1114,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
   ipcMain.handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
-  ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => getWeather(!!force))
+  // No location lookup unless the person turned the weather on.
+  ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => (storage.settings.greetings && storage.settings.weather ? getWeather(!!force) : undefined))
   ipcMain.on(IPC.appSetBadge, (_e, count: unknown) => {
     // Dock badge on macOS (taskbar overlay on Windows); the renderer already leaves out muted chats.
     app.setBadgeCount(Math.max(0, Math.min(9999, Math.floor(Number(count) || 0))))

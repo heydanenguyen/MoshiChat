@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Conversation, Message } from '../src/shared/types'
-import { accountNames, archiveMark, foldName, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, isStrangerChat, looksLikeCode } from '../src/shared/inbox'
+import { accountNames, archiveMark, foldName, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, isStrangerChat, looksLikeCode, maskCode } from '../src/shared/inbox'
 import { flatten } from '../src/shared/sync-merge'
 
 const AT = 1_800_000_000_000
@@ -132,5 +132,12 @@ describe('message requests', () => {
     expect(looksLikeCode('Mã giảm giá 50000đ cho đơn đầu tiên')).toBe(false)
     expect(looksLikeCode('Pin sạc dự phòng 20000mAh giá sốc')).toBe(false)
     expect(looksLikeCode('Use code SALE 2026 at checkout')).toBe(false)
+  })
+
+  it('hides one-time codes in previews and leaves other numbers alone', () => {
+    expect(maskCode('Mã xác thực của bạn là 482913. Không chia sẻ mã này.')).toBe('Mã xác thực của bạn là ••••••. Không chia sẻ mã này.')
+    expect(maskCode('Your verification code is 55012')).toBe('Your verification code is •••••')
+    expect(maskCode('Gọi em số 0912345678 nhé')).toBe('Gọi em số 0912345678 nhé')
+    expect(maskCode('Mã giảm giá 50000đ cho đơn đầu tiên')).toBe('Mã giảm giá 50000đ cho đơn đầu tiên')
   })
 })

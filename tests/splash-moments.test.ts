@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { firstNameOf, pickSplashLine, splashLines } from '../src/renderer/src/greetings'
+import { firstNameOf, greetingFor, pickSplashLine, splashLines } from '../src/renderer/src/greetings'
 import { formatMomentDate, formatMonthLabel } from '../src/renderer/src/utils'
 
 describe('launch greetings', () => {
@@ -34,6 +34,14 @@ describe('launch greetings', () => {
     expect(firstNameOf([{ displayName: 'Nguyễn Thùy Linh' }])).toBe('Linh')
     expect(firstNameOf([{ displayName: 'Demo', demo: true }, { displayName: 'Alex Kim' }])).toBe('Alex')
     expect(firstNameOf([])).toBe('')
+  })
+
+  it('does not celebrate inbox zero before any account is connected', () => {
+    const texts = (hasAccounts: boolean): string[] =>
+      Array.from({ length: 60 }, (_, tick) => greetingFor({ language: 'en', name: '', unread: 0, hasAccounts, tick }).text)
+    expect(texts(false).some((text) => text.includes('Inbox zero'))).toBe(false)
+    expect(texts(false).some((text) => text.includes('Connect an account'))).toBe(true)
+    expect(texts(true).some((text) => text.includes('Inbox zero'))).toBe(true)
   })
 })
 

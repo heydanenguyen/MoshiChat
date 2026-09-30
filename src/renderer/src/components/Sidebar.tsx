@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BellOff, ChartNoAxesColumn, ChevronDown, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { SidebarSection } from '@shared/types'
 import { MemoryCard } from './Insights'
@@ -12,6 +12,7 @@ import { TagCreator } from './TagEditor'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { useScrollFade } from '../scrollFade'
 
 type MuteTarget = { kind: 'platforms'; id: Platform } | { kind: 'accounts'; id: string } | { kind: 'tags'; id: TagId }
 
@@ -24,6 +25,30 @@ interface Menu {
   confirmDelete?: boolean
 }
 
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      const media = window.matchMedia(query)
+      media.addEventListener('change', notify)
+      return () => media.removeEventListener('change', notify)
+    },
+    () => window.matchMedia(query).matches
+  )
+}
+
+/**
+ * The layout folds the sidebar to its rail by itself beside the details pane (below 1400px), while two chats
+ * are split, and on windows up to 1100px (same breakpoints as app.css). The rail then renders exactly like
+ * one folded by hand instead of a squeezed full sidebar.
+ */
+function useAutoRail(): boolean {
+  const detailsOpen = useStore((s) => s.detailsOpen && !!s.selectedId)
+  const split = useStore((s) => s.layout.panes.length > 1 && s.wide && !s.narrow)
+  const belowInline = useMediaQuery('(max-width: 1399px)')
+  const small = useMediaQuery('(max-width: 1100px)')
+  return split || small || (detailsOpen && belowInline)
+}
+
 export function Sidebar(): JSX.Element {
   const t = useT()
   const openTodos = useOpenTodos()
@@ -31,7 +56,10 @@ export function Sidebar(): JSX.Element {
   const setFilter = useStore((s) => s.setFilter)
   const accounts = useStore((s) => s.accounts)
   const openSheet = useStore((s) => s.openSheet)
-  const collapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const pinnedCollapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const autoRail = useAutoRail()
+  /** Rail layout, folded by hand or by the window: everything below renders from this. */
+  const collapsed = pinnedCollapsed || autoRail
   const folded = useStore((s) => s.settings.sidebarSections)
   const setSettings = useStore((s) => s.setSettings)
   const isFolded = (section: SidebarSection): boolean => !collapsed && !!folded?.[section]
@@ -61,6 +89,9 @@ export function Sidebar(): JSX.Element {
   const [menu, setMenu] = useState<Menu | undefined>()
   const [creator, setCreator] = useState<{ x: number; y: number } | undefined>()
   const addRef = useRef<HTMLButtonElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useScrollFade(scrollRef)
 
   // The tag creator floats next to the sidebar; outside clicks and Escape close it.
   useEffect(() => {
@@ -110,6 +141,8 @@ export function Sidebar(): JSX.Element {
     for (const tag of list) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
   }
 
+  /** Rail tooltips carry the count the hidden badge would show. */
+  const withCount = (label: string, count?: number): string => (count ? `${label} · ${count}` : label)
   const badge = (count?: number): JSX.Element | null => (count ? <span className="nav-badge">{count}</span> : null)
   const isMuted = (target: MuteTarget): boolean => (muted[target.kind] as string[]).includes(target.id)
   const contextFor = (target: MuteTarget, label: string) => (e: React.MouseEvent): void => {
@@ -131,18 +164,18 @@ export function Sidebar(): JSX.Element {
         </button>
       </div>
 
-      <div className="sidebar-scroll scroll">
+      <div className="sidebar-scroll scroll edge-fade" ref={scrollRef}>
         <div className="sidebar-section">
           {!collapsed && heading('inboxes', t('inboxes'), unread.total > 0 ? <span className="fold-count">{unread.total}</span> : undefined)}
           {!isFolded('inboxes') && (
           <>
-          <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} title={t('allInboxes')}>
+          <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} title={withCount(t('allInboxes'), unread.total)}>
             <span className="nav-item-icon tile accent">
               <Inbox size={14} strokeWidth={2.4} />
             </span>
             {!collapsed && <span className="nav-item-label">{t('allInboxes')}</span>}
             {!collapsed && badge(unread.total)}
-            {collapsed && unread.total > 0 && <span className="rail-dot" />}
+            {unread.total > 0 && <span className="rail-dot" />}
           </button>
           {platforms.map((platform) => {
             const target: MuteTarget = { kind: 'platforms', id: platform }
@@ -152,13 +185,13 @@ export function Sidebar(): JSX.Element {
                 className={`nav-item ${filter === platform ? 'active' : ''}`}
                 onClick={() => setFilter(platform)}
                 onContextMenu={contextFor(target, PLATFORMS[platform].name)}
-                title={PLATFORMS[platform].name}
+                title={withCount(PLATFORMS[platform].name, unread.byPlatform[platform])}
               >
                 <PlatformIcon platform={platform} size={26} className="nav-item-icon" />
                 {!collapsed && <span className="nav-item-label">{PLATFORMS[platform].name}</span>}
                 {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}
                 {!collapsed && badge(unread.byPlatform[platform])}
-                {collapsed && unread.byPlatform[platform] > 0 && <span className="rail-dot" />}
+                {unread.byPlatform[platform] > 0 && <span className="rail-dot" />}
               </button>
             )
           })}
@@ -168,7 +201,7 @@ export function Sidebar(): JSX.Element {
             </span>
             {!collapsed && <span className="nav-item-label">{t('todos')}</span>}
             {!collapsed && badge(openTodos)}
-            {collapsed && openTodos > 0 && <span className="rail-dot" />}
+            {openTodos > 0 && <span className="rail-dot" />}
           </button>
           <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
             <span className="nav-item-icon tile insights">
@@ -203,7 +236,7 @@ export function Sidebar(): JSX.Element {
                   size="sm"
                   iconOnly={collapsed}
                   flat={!active}
-                  count={collapsed ? undefined : (tagCounts[tag.id] ?? 0)}
+                  count={collapsed ? undefined : tagCounts[tag.id] || undefined}
                   dot={(unread.byTag[tag.id] ?? 0) > 0}
                   onClick={() => setFilter(active ? 'all' : `tag:${tag.id}`)}
                   onContextMenu={contextFor(target, tag.name[language])}
@@ -254,7 +287,7 @@ export function Sidebar(): JSX.Element {
                   )}
                   {!collapsed && isMuted(target) && <BellOff size={12} className="muted-mark" />}
                   {!collapsed && badge(unread.byAccount[account.id])}
-                  {collapsed && (unread.byAccount[account.id] ?? 0) > 0 && <span className="rail-dot" />}
+                  {(unread.byAccount[account.id] ?? 0) > 0 && <span className="rail-dot" />}
                 </button>
               )
             })}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeInsights, onThisDay, streakDays, type InsightRecord } from '../src/shared/insights'
+import { computeInsights, onThisDay, streakDays, vibeOf, type InsightRecord } from '../src/shared/insights'
 
 const DAY = 24 * 60 * 60 * 1000
 const now = new Date(2026, 8, 29, 15, 0).getTime()
@@ -46,6 +46,27 @@ describe('computeInsights', () => {
     expect(i.quiet.map((c) => c.title)).toEqual(['Bố'])
     expect(i.hours.reduce((a, b) => a + b, 0)).toBe(6)
     expect(i.hours[new Date(now - 2 * 3600e3).getHours()]).toBeGreaterThan(0)
+  })
+})
+
+describe('vibeOf', () => {
+  it('spots night owls, then who carries the chat', () => {
+    expect(vibeOf({ sent: 5, received: 5, total: 10, night: 5 })).toBe('night')
+    expect(vibeOf({ sent: 2, received: 2, total: 4, night: 4 })).toBe('even') // too few to call it
+    expect(vibeOf({ sent: 16, received: 10, total: 26, night: 0 })).toBe('you')
+    expect(vibeOf({ sent: 2, received: 24, total: 26, night: 1 })).toBe('them')
+    expect(vibeOf({ sent: 12, received: 10, total: 22, night: 2 })).toBe('even')
+    // If you text at night with everyone, nobody stands out as the night owl.
+    expect(vibeOf({ sent: 5, received: 5, total: 10, night: 9 }, 0.9)).toBe('even')
+    expect(vibeOf({ sent: 5, received: 5, total: 10, night: 9 }, 0.3)).toBe('night')
+  })
+
+  it('counts messages sent between 22:00 and 04:59 per person', () => {
+    const late = new Date(2026, 8, 28, 23, 30).getTime()
+    const early = new Date(2026, 8, 28, 3, 0).getTime()
+    const noon = new Date(2026, 8, 28, 12, 0).getTime()
+    const i = computeInsights([rec('owl', late), rec('owl', early), rec('owl', noon)], { owl: 'Owl' }, now, 30)
+    expect(i.top[0].night).toBe(2)
   })
 })
 

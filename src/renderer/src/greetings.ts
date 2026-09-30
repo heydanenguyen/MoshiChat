@@ -10,6 +10,8 @@ interface Context {
   name: string
   weather?: WeatherInfo
   unread: number
+  /** False before any account is connected: there is no inbox to celebrate yet. */
+  hasAccounts?: boolean
   tick: number
 }
 
@@ -84,7 +86,10 @@ export function greetingFor(ctx: Context): GreetingLine {
     { emoji: '🚀', text: vi ? `${hey}, hôm nay có gì hay không? Kể cho ai đó nghe đi` : `${hey}, anything exciting today? Tell someone` }
   )
 
-  if (ctx.unread > 0) {
+  if (ctx.hasAccounts === false) {
+    const to = name ? `, ${name}` : ''
+    lines.push({ emoji: '👋', text: vi ? `Kết nối một tài khoản để bắt đầu nhé${to}` : `Connect an account to get started${to}` })
+  } else if (ctx.unread > 0) {
     lines.push({ emoji: '💬', text: vi ? `${ctx.unread} tin đang chờ ${you}. Từng cái một thôi` : `${ctx.unread} messages are waiting for ${you}. One at a time` })
   } else {
     lines.push({ emoji: '🎉', text: vi ? `Hộp thư sạch bong. Đỉnh quá, ${you}!` : `Inbox zero. Nicely done, ${you}!` })

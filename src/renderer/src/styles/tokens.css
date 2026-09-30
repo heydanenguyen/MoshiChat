@@ -87,8 +87,9 @@
   --fill-tertiary: rgba(27, 29, 42, 0.08);
 
   --text-primary: #1b1d2a;
-  --text-secondary: rgba(27, 29, 42, 0.6);
-  --text-tertiary: rgba(27, 29, 42, 0.36);
+  --text-secondary: rgba(27, 29, 42, 0.72);
+  /* Secondary and tertiary text stay at or above 4.5:1 on the light glass (WCAG AA for 11-13px). */
+  --text-tertiary: rgba(27, 29, 42, 0.64);
   --text-quaternary: rgba(27, 29, 42, 0.2);
 
   --separator: rgba(27, 29, 42, 0.08);
@@ -144,7 +145,7 @@
 
   --text-primary: #f2f3fa;
   --text-secondary: rgba(242, 243, 250, 0.62);
-  --text-tertiary: rgba(242, 243, 250, 0.36);
+  --text-tertiary: rgba(242, 243, 250, 0.54);
   --text-quaternary: rgba(242, 243, 250, 0.2);
 
   --separator: rgba(255, 255, 255, 0.08);

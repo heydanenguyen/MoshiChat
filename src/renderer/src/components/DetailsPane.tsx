@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AtSign, Bell, BellOff, Cake, Clock, File, FileText, Image, Info, Link2, Mic, Pencil, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
@@ -9,6 +9,7 @@ import { isPinned, peopleIndex, personIn, useShownConversations, useStore, useT,
 import { candidatesFor } from '@shared/people'
 import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo, personLook } from '../utils'
 import { Avatar } from './Avatar'
+import { useScrollFade } from '../scrollFade'
 import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
 import { MomentsPreviewCard, MomentsTab } from './Moments'
@@ -34,6 +35,8 @@ export function DetailsPane(): JSX.Element | null {
   const tab = useStore((s) => s.detailsTab)
   const setTab = useStore((s) => s.setDetailsTab)
   const toggleDetails = useStore((s) => s.toggleDetails)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useScrollFade(bodyRef, conversation?.id)
   if (!conversation) return null
 
   return (
@@ -43,14 +46,24 @@ export function DetailsPane(): JSX.Element | null {
           <X size={16} strokeWidth={2.4} />
         </button>
       </div>
-      <div className="details-tabs">
+      {/* Icons for the tabs, and the open one also says its name (an icon alone left ✨ Moments a guess). */}
+      <div className="details-tabs" role="tablist">
         {TABS.map((item) => (
-          <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)} title={t(item.label)}>
+          <button
+            key={item.id}
+            role="tab"
+            aria-selected={tab === item.id}
+            aria-label={t(item.label)}
+            className={tab === item.id ? 'active' : ''}
+            onClick={() => setTab(item.id)}
+            title={t(item.label)}
+          >
             {item.icon}
+            {tab === item.id && <span className="details-tab-label">{t(item.id === 'media' ? 'tabMediaShort' : item.label)}</span>}
           </button>
         ))}
       </div>
-      <div className="details-body scroll">
+      <div className="details-body scroll edge-fade" ref={bodyRef}>
         {tab === 'info' && <InfoTab conversationId={conversation.id} />}
         {tab === 'moments' && <MomentsTab conversationId={conversation.id} />}
         {tab === 'search' && <SearchTab conversationId={conversation.id} />}
@@ -534,27 +547,34 @@ function PersonCard({ conversationId }: { conversationId: string }): JSX.Element
       </div>
     )
   }
-  if (!suggestions.length) return null
+  if (!suggestions.length || !conversation) return null
+  // A question with both faces side by side, the full name and why we think so, then a clear yes / no.
   return (
-    <div className="details-card person-card suggest">
-      <div className="details-card-title">{t('maybeSame')}</div>
+    <div className="details-card same-person" role="group" aria-label={t('maybeSame')}>
       {suggestions.map(({ conversation: other, reason }) => (
-        <div key={other.id} className="person-row">
-          <Avatar name={other.title} url={other.avatarUrl} size={30} platform={other.platform} />
-          <span className="person-row-text">
-            <strong>{other.title}</strong>
-            <span>
-              {PLATFORMS[other.platform].name} · {reason === 'phone' ? t('mergeReasonPhone') : t('mergeReasonName')}
+        <div key={other.id} className="same-person-item">
+          <div className="same-pair" aria-hidden>
+            <Avatar name={conversation.title} url={conversation.avatarUrl} size={40} platform={conversation.platform} />
+            <span className="same-pair-link">
+              <Link2 size={13} strokeWidth={2.6} />
             </span>
+            <Avatar name={other.title} url={other.avatarUrl} size={40} platform={other.platform} />
+          </div>
+          <div className="same-question">{t('samePersonOn', { app: PLATFORMS[other.platform].name })}</div>
+          <div className="same-who">{other.title}</div>
+          <span className="same-reason">
+            {reason === 'phone' ? <Phone size={11} strokeWidth={2.6} /> : <User size={11} strokeWidth={2.6} />}
+            {reason === 'phone' ? t('mergeReasonPhone') : t('mergeReasonName')}
           </span>
-          <span className="person-row-actions">
-            <button className="btn small ghost" onClick={() => void dismissMerge(conversationId, other.id)}>
+          <div className="same-actions">
+            <button className="btn secondary" onClick={() => void dismissMerge(conversationId, other.id)}>
               {t('notSamePerson')}
             </button>
-            <button className="btn small primary" onClick={() => void mergeChats([conversationId, other.id])}>
+            <button className="btn primary" onClick={() => void mergeChats([conversationId, other.id])}>
+              <Link2 size={14} strokeWidth={2.4} />
               {t('mergeAction')}
             </button>
-          </span>
+          </div>
         </div>
       ))}
     </div>
