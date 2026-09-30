@@ -1,26 +1,25 @@
-## Moshi 0.2.12
+## Moshi 0.2.13
 
 ### Mới
-- **Cả 12 sticker Mito đều chuyển động.** Thêm Tức giận, Ngủ, Tỏa sáng, Từ chối tình cảm, Lướt điện thoại, Khó hiểu, Nghĩ lại đi và Nhảy dây. Chào, Tỏa sáng và Tức giận cũng được làm mượt hơn.
-- **Thu hồi tin nhắn** trên Telegram, WhatsApp, Messenger, Zalo và Instagram: rê chuột vào tin mình gửi, bấm *Thu hồi* rồi xác nhận. Tin đã thu hồi (của mình, hoặc người kia thu hồi) hiện thành một dòng mờ "đã thu hồi", ở cả khung chat và danh sách chat.
-- **Bấm vào cảm xúc mình đã thả để gỡ nó đi**, khi lỡ thả nhầm. Zalo giờ cũng gỡ được.
-- **Tên nút khi rê chuột:** các nút cạnh tin nhắn hiện một dòng chữ nhỏ cho biết nút đó làm gì. Tắt được trong *Cài đặt › Chat › Nút cạnh tin nhắn*.
-
-### Cải thiện
-- Bôi chọn chữ trong chat rõ hơn: trên tin người khác, phần chọn mang màu bong bóng của bạn; trên tin bạn gửi thì ngược lại, nên luôn dễ nhìn.
-- Nút "…" ở danh sách chat chỉ mở khi bấm, không tự bật lên khi rê chuột qua.
+- **Lọc nhanh trên danh sách chat:** Tất cả, Chưa đọc, Cần trả lời, Nhóm và Nháp, mỗi mục kèm số đếm. "Cần trả lời" gom các chat mà người kia nhắn sau cùng trong 30 ngày qua.
+- **Đánh dấu chưa đọc** (⌘⇧U / Ctrl+Shift+U, hoặc chuột phải vào chat) để nhớ quay lại trả lời sau.
+- **Lưu trữ kiểu "xong việc"** (⌘E / Ctrl+E): chat biến khỏi hộp thư và tự quay lại khi người kia nhắn tiếp. Chat đã tắt thông báo thì nằm yên trong lưu trữ. Mở lưu trữ bằng ⌘; / Ctrl+; hoặc nút ở cuối danh sách. Lưu trữ nhầm thì bấm *Hoàn tác*.
+- **Nhóm chỉ báo khi được nhắc tên:** bật trong phần chi tiết nhóm. Moshi chỉ báo khi có người @tên bạn (có dấu hay không dấu đều nhận), @all, hoặc trả lời tin của bạn.
+- **Tin nhắn chờ:** tin từ người lạ trên Messenger, Instagram và Zalo được xếp riêng, không báo và không bị đánh dấu đã xem cho đến khi bạn *Chấp nhận* hoặc trả lời. Mã OTP/mã xác thực vẫn báo ngay.
+- **Gộp một người trên nhiều app:** chuột phải vào chat › *Gộp với…* để nhập các cuộc trò chuyện Zalo, Messenger, Instagram… của cùng một người thành một. Moshi gợi ý người trùng số điện thoại hoặc tên giống. Tin nhắn của mọi app hiện chung một dòng thời gian. Tin trả lời mặc định đi qua app mà người đó nhắn bạn gần nhất; bấm chip *Gửi qua* cạnh ô soạn để đổi. Tách ra lại được trong phần chi tiết.
+- Chat đã gộp dùng chung cho AI tóm tắt và gợi ý trả lời, tìm trong chat, ảnh và file đã chia sẻ, Thân thiết và nhảy tới tin cũ.
 
 ### Lưu ý
-- Mỗi nền tảng có giới hạn thời gian thu hồi riêng. Nếu nền tảng từ chối, tin nhắn hiện lại như cũ kèm thông báo.
-- Trên Instagram, tin người kia thu hồi chưa tự đổi thành "đã thu hồi".
+- Tin nhắn chờ trên Instagram, Messenger và Zalo cần kiểm tra thêm với tài khoản thật. Nếu thấy chat quen bị xếp nhầm vào Tin nhắn chờ, bấm *Chấp nhận* là xong.
+- Kết quả tìm kiếm toàn bộ vẫn hiện tên từng chat riêng lẻ, chưa hiện tên người đã gộp.
 
 ---
 
 ### English
-- All 12 Mito stickers are animated now: Angry, Sleepy, Shine, No thanks, Scrolling, Suspicious, Think again and Jump rope join the four from 0.2.11, and Hi, Shine and Angry move more smoothly.
-- Unsend your messages on Telegram, WhatsApp, Messenger, Zalo and Instagram (hover a message you sent, *Unsend*, confirm). Unsent messages, yours or theirs, show as a faint "unsent" line in the chat and the chat list.
-- Click a reaction you gave to take it back, Zalo included.
-- The buttons beside a message show a small label on hover; turn it off in Settings › Chat › Message actions.
-- Selected text in a chat stands out in your bubble colour on their messages, and the reverse on yours.
-- The "…" on a chat in the list opens only when clicked.
-- Each platform limits how long you can unsend; if it refuses, the message comes back with a note. Messages the other side unsends on Instagram are not yet shown as unsent.
+- Quick filters above the chat list: All, Unread, Needs reply, Groups and Drafts, with counts.
+- Mark a chat unread (⌘⇧U / Ctrl+Shift+U, or right-click) to come back to it later.
+- Archive as "done" (⌘E / Ctrl+E): the chat leaves the inbox and returns when they write again; muted chats stay archived. Open the archive with ⌘; / Ctrl+; and undo a mistaken archive from the toast.
+- Mentions-only groups: notify only for an @mention of you (with or without Vietnamese marks), @all, or a reply to you.
+- Message requests: chats from strangers on Messenger, Instagram and Zalo wait apart, silently and unread, until you accept or reply. One-time codes still notify.
+- One person across apps: right-click › *Merge with…* to join someone's Zalo, Messenger, Instagram… chats into one, with suggestions by phone number or similar name. One timeline for every app; replies go where they last wrote to you, or pick another app from the *Send via* chip. Unmerge from the details pane. AI, in-chat search, shared media, close friends and jumps all see every app.
+- Message requests still need checking against real Instagram, Messenger and Zalo accounts; accept any chat misplaced there. Global search hits still show each chat's own name.
