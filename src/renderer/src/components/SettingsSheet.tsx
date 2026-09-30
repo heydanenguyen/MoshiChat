@@ -422,7 +422,8 @@ const BUBBLE_ACTION_LABELS: Record<BubbleAction, TKey> = {
   translate: 'aiTranslate',
   speak: 'aiSpeak',
   todo: 'todoFromMessage',
-  save: 'saveAction'
+  save: 'saveAction',
+  unsend: 'unsend'
 }
 
 /** Where Download in the photo viewer saves, and whether it asks each time. */
@@ -491,6 +492,9 @@ function ChatPage(): JSX.Element {
             <Switch on={settings.bubbleActions?.[action] !== false} onChange={(on) => void setSettings({ bubbleActions: { ...settings.bubbleActions, [action]: on } })} />
           </Row>
         ))}
+        <Row title={t('actionLabels')} sub={t('actionLabelsHint')}>
+          <Switch on={settings.actionLabels !== false} onChange={(on) => void setSettings({ actionLabels: on })} />
+        </Row>
       </Group>
       <Group>
         <Row title={t('quickReplies')} sub={t('quickRepliesHint')} />

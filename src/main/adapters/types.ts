@@ -40,6 +40,8 @@ export interface PlatformAdapter {
   markRead(conversationId: string): Promise<void>
   setTyping?(conversationId: string): Promise<void>
   react?(conversationId: string, messageId: string, emoji: string): Promise<void>
+  /** Take one of my messages back for everyone. The adapter emits the message as unsent (see `unsentCopy`). */
+  unsend?(conversationId: string, messageId: string): Promise<void>
   /** Native forward within the same account. The manager falls back to re-sending text otherwise. */
   forward?(fromConversationId: string, messageId: string, toConversationId: string): Promise<Message>
   /** Search beyond what the manager has cached (server side or the adapter's own history). */
@@ -78,6 +80,9 @@ export const statsOf = (messages: Message[]): ConversationStats => {
   }
   return { firstMessageAt: first, lastMessageAt: last, messageCount: messages.length, approximate: true }
 }
+
+/** A message as it is once taken back: marked unsent, with its text, media and reactions gone. */
+export const unsentCopy = (message: Message): Message => ({ ...message, unsent: true, text: '', attachments: [], reactions: [], replyTo: undefined })
 
 export const conversationId = (accountId: string, externalId: string | number): string =>
   `${accountId}/${externalId}`

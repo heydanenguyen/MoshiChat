@@ -189,16 +189,13 @@ export function jumboEmojiCount(text: string): number {
   return allEmoji ? segments.length : 0
 }
 
-/** My reaction toggled: the same emoji again removes it, another one replaces it. */
-export function toggleReaction(reactions: Reaction[], emoji: string): Reaction[] {
-  const mine = reactions.find((r) => r.byMe)
-  let next = reactions.map((r) => (r.byMe ? { ...r, count: r.count - 1, byMe: false } : r)).filter((r) => r.count > 0)
-  if (mine?.emoji !== emoji) {
-    const existing = next.find((r) => r.emoji === emoji)
-    next = existing ? next.map((r) => (r === existing ? { ...r, count: r.count + 1, byMe: true } : r)) : [...next, { emoji, count: 1, byMe: true }]
-  }
-  return next
-}
+export { toggleReaction } from '@shared/reactions'
+
+/**
+ * Label for a button in the bar beside a message: read out by screen readers, and shown as a small tip on hover
+ * (CSS, `.bubble-actions.tips`) unless the user turned the tips off. Not `title`, which would show a second, slow tip.
+ */
+export const tip = (label: string): { 'aria-label': string; 'data-tip': string } => ({ 'aria-label': label, 'data-tip': label })
 
 /**
  * The face and name to show for someone in a chat. In a one-to-one chat the other person IS the chat, so the

@@ -3,7 +3,8 @@ import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
+import { toggleReaction, withoutMine } from '@shared/reactions'
 import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
@@ -70,7 +71,7 @@ export class ZaloAdapter implements PlatformAdapter {
       platform: 'zalo',
       displayName: 'Zalo',
       status: 'disconnected',
-      features: { reply: true, react: true, attachments: true }
+      features: { reply: true, react: true, attachments: true, unsend: true }
     }
   }
 
@@ -416,22 +417,37 @@ export class ZaloAdapter implements PlatformAdapter {
     const threadId = externalIdOf(id)
     const raw = this.rawMessage(threadId, messageId)
     if (!raw) throw new Error('Message not found')
-    const code = REACTION_CODES[emoji]
-    if (!code) throw new Error('Zalo does not support this reaction')
+    const message = (this.converted.get(id) ?? []).find((m) => m.id === messageId)
+    // The same emoji again takes my reaction off (Zalo's empty reaction removes mine).
+    const removing = message?.reactions.find((r) => r.byMe)?.emoji === emoji
+    const code = removing ? '' : REACTION_CODES[emoji]
+    if (code === undefined) throw new Error('Zalo does not support this reaction')
     await this.requireApi().addReaction(code as never, {
       data: { msgId: raw.msgId, cliMsgId: raw.cliMsgId },
       threadId,
       type: this.threadTypes.get(threadId) ?? 0
     })
-    const message = (this.converted.get(id) ?? []).find((m) => m.id === messageId)
     if (message) {
-      const existing = message.reactions.find((r) => r.emoji === emoji)
-      if (existing && !existing.byMe) {
-        existing.count += 1
-        existing.byMe = true
-      } else if (!existing) message.reactions.push({ emoji, count: 1, byMe: true })
+      message.reactions = toggleReaction(message.reactions, emoji)
       this.ctx.emit({ type: 'message:updated', message: { ...message } })
     }
+  }
+
+  async unsend(id: string, messageId: string): Promise<void> {
+    const threadId = externalIdOf(id)
+    const raw = this.rawMessage(threadId, messageId)
+    if (!raw) throw new Error('Message not found')
+    await this.requireApi().undo({ msgId: raw.msgId, cliMsgId: raw.cliMsgId }, threadId, this.threadTypes.get(threadId) ?? 0)
+    this.markUnsent(id, messageId)
+  }
+
+  /** A recalled message (by me, or by them) stays in the chat as "unsent". */
+  private markUnsent(id: string, messageId: string): void {
+    const list = this.converted.get(id)
+    const index = list?.findIndex((m) => m.id === messageId) ?? -1
+    if (!list || index < 0 || list[index].unsent) return
+    list[index] = unsentCopy(list[index])
+    this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
   }
 
   // ---- events -----------------------------------------------------------
@@ -494,17 +510,33 @@ export class ZaloAdapter implements PlatformAdapter {
     })
     api.listener.on('reaction', (reaction) => {
       const id = conversationId(this.account.id, reaction.threadId)
-      const emoji = REACTION_EMOJI[reaction.data.content.rIcon] ?? reaction.data.content.rIcon
+      const icon = reaction.data.content.rIcon
+      const emoji = REACTION_EMOJI[icon] ?? icon
       for (const target of reaction.data.content.rMsg) {
         const message = (this.converted.get(id) ?? []).find((m) => m.id === String(target.gMsgID))
         if (!message) continue
-        const existing = message.reactions.find((r) => r.emoji === emoji)
-        if (existing) {
-          existing.count += 1
-          existing.byMe = existing.byMe || reaction.isSelf
-        } else message.reactions.push({ emoji, count: 1, byMe: reaction.isSelf })
+        if (!icon) {
+          // A reaction taken off. Zalo does not say which one, so only mine (from another device) can be removed.
+          if (reaction.isSelf) {
+            message.reactions = withoutMine(message.reactions)
+            this.ctx.emit({ type: 'message:updated', message: { ...message } })
+          }
+          continue
+        }
+        if (reaction.isSelf) {
+          // Mine (from this app, already shown, or another device): one reaction of mine per message.
+          if (message.reactions.find((r) => r.byMe)?.emoji === emoji) continue
+          message.reactions = toggleReaction(message.reactions, emoji)
+        } else {
+          const existing = message.reactions.find((r) => r.emoji === emoji)
+          if (existing) existing.count += 1
+          else message.reactions.push({ emoji, count: 1, byMe: false })
+        }
         this.ctx.emit({ type: 'message:updated', message: { ...message } })
       }
+    })
+    api.listener.on('undo', (undo) => {
+      this.markUnsent(conversationId(this.account.id, undo.threadId), String(undo.data.content.globalMsgId))
     })
     api.listener.on('error', (err) => this.ctx.log('zalo listener error', err))
     api.listener.on('closed', (code, reason) => {

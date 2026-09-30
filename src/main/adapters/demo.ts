@@ -1,7 +1,7 @@
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Platform, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, isShared, matchesQuery } from './types'
+import { conversationId, isShared, matchesQuery, unsentCopy } from './types'
 
 /**
  * Sample-data adapter for the first-run experience. It behaves like a live
@@ -595,6 +595,14 @@ export class DemoAdapter implements PlatformAdapter {
     }
     message.reactions = reactions
     this.ctx.emit({ type: 'message:updated', message: { ...message } })
+  }
+
+  async unsend(id: string, messageId: string): Promise<void> {
+    const list = this.messages.get(id) ?? []
+    const index = list.findIndex((m) => m.id === messageId)
+    if (index < 0) throw new Error('Message not found')
+    list[index] = unsentCopy(list[index])
+    this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
   }
 
   private ambientMessage(): void {

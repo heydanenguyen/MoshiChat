@@ -3,7 +3,7 @@ import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel
 import type { Attachment, Message } from '@shared/types'
 import { textKey, useAi, voiceKey } from '../aiStore'
 import { useStore, useT } from '../store'
-import { formatBytes } from '../utils'
+import { formatBytes, tip } from '../utils'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
 
@@ -64,7 +64,7 @@ export function TranslateButton({ message }: { message: Message }): JSX.Element 
   const active = useAi((s) => !!s.results[`t:${textKey(message)}`]?.text && !s.results[`t:${textKey(message)}`]?.hidden)
   if (!message.text.trim()) return null
   return (
-    <button className={`icon-btn ${active ? 'active' : ''}`} title={active ? t('aiShowOriginal') : t('aiTranslate')} onClick={() => void translate(message)}>
+    <button className={`icon-btn ${active ? 'active' : ''}`} {...tip(active ? t('aiShowOriginal') : t('aiTranslate'))} onClick={() => void translate(message)}>
       <Languages size={15} strokeWidth={2} />
     </button>
   )
@@ -411,7 +411,7 @@ export function SpeakButton({ message, text }: { message: Message; text?: string
   const speaking = useAi((s) => s.speaking === textKey(message))
   if (!(text ?? message.text).trim()) return null
   return (
-    <button className={`icon-btn ${speaking ? 'active' : ''}`} title={speaking ? t('aiSpeakStop') : t('aiSpeak')} onClick={() => void speak(message, text)} aria-pressed={speaking}>
+    <button className={`icon-btn ${speaking ? 'active' : ''}`} {...tip(speaking ? t('aiSpeakStop') : t('aiSpeak'))} onClick={() => void speak(message, text)} aria-pressed={speaking}>
       <Volume2 size={15} strokeWidth={2} />
     </button>
   )

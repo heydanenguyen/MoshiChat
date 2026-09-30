@@ -18,8 +18,6 @@ interface TagMenuState {
   conversationId: string
   x: number
   y: number
-  /** Opened by resting on the "…" button: closes again when the pointer leaves it and the menu. */
-  hover?: boolean
 }
 
 export function ConversationList(): JSX.Element {
@@ -55,16 +53,13 @@ export function ConversationList(): JSX.Element {
   const [menu, setMenu] = useState<TagMenuState | undefined>()
   const hidden = useStore((s) => s.settings.hidden)
   const hideConversation = useStore((s) => s.hideConversation)
-  const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  /** The "…" button opens the same menu as a right-click, hanging under the button and kept inside the window. */
-  const openMenuAt = (el: HTMLElement, conversationId: string, hover = false): void => {
-    if (menuTimer.current) clearTimeout(menuTimer.current)
+  /**
+   * The "…" button opens the same menu as a right-click, hanging under the button and kept inside the window. Only
+   * a click opens it (resting the pointer on it does not); a second click closes it.
+   */
+  const openMenuAt = (el: HTMLElement, conversationId: string): void => {
     const r = el.getBoundingClientRect()
-    setMenu({ conversationId, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4, hover })
-  }
-  const closeHoverMenu = (): void => {
-    if (menuTimer.current) clearTimeout(menuTimer.current)
-    menuTimer.current = setTimeout(() => setMenu((m) => (m?.hover ? undefined : m)), 180)
+    setMenu((m) => (m?.conversationId === conversationId ? undefined : { conversationId, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4 }))
   }
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
@@ -221,12 +216,11 @@ export function ConversationList(): JSX.Element {
                 role="button"
                 tabIndex={-1}
                 title={t('moreActions')}
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation()
                   openMenuAt(e.currentTarget, c.id)
                 }}
-                onMouseEnter={(e) => openMenuAt(e.currentTarget, c.id, true)}
-                onMouseLeave={closeHoverMenu}
               >
                 <MoreHorizontal size={16} strokeWidth={2.4} />
               </span>
@@ -265,12 +259,6 @@ export function ConversationList(): JSX.Element {
             className="context-menu"
             style={{ left: menu.x, top: menu.y }}
             onMouseDown={(e) => e.stopPropagation()}
-            onMouseEnter={() => {
-              if (menuTimer.current) clearTimeout(menuTimer.current)
-            }}
-            onMouseLeave={() => {
-              if (menu.hover) closeHoverMenu()
-            }}
           >
             {canSplit && menu.conversationId !== selectedId && (
               <button

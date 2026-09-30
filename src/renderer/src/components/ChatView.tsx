@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, X } from 'lucide-react'
+import { BellOff, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { bubbleVarsOf, useStore, useT } from '../store'
-import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, withStickers, type MessageGroup } from '../utils'
+import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, tip, withStickers, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
@@ -427,7 +427,7 @@ function Group({
                       key={r.emoji}
                       className={`reaction-chip ${r.byMe ? 'mine' : ''}`}
                       onClick={() => features.react && void react(message.conversationId, message.id, r.emoji)}
-                      title={t('react')}
+                      title={r.byMe ? t('removeReaction') : t('react')}
                     >
                       {r.emoji}
                       {r.count > 1 && <span>{r.count}</span>}
@@ -558,6 +558,10 @@ function Bubble({
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
+  const unsend = useStore((s) => s.unsend)
+  const [confirmUnsend, setConfirmUnsend] = useState(false)
+  // Small labels on the bar's buttons (Settings > Chat > Message actions); on by default.
+  const tips = useStore((s) => s.settings.actionLabels !== false)
   // Which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
   const bubbleActions = useStore((s) => s.settings.bubbleActions)
   const wants = (action: BubbleAction): boolean => bubbleActions?.[action] !== false
@@ -635,14 +639,32 @@ function Bubble({
   const mine = message.reactions.find((r) => r.byMe)?.emoji
 
   useEffect(() => {
-    if (!picker) return
-    const close = (): void => setPicker(false)
+    if (!picker && !confirmUnsend) return
+    const close = (): void => {
+      setPicker(false)
+      setConfirmUnsend(false)
+    }
     window.addEventListener('mousedown', close)
     return () => window.removeEventListener('mousedown', close)
-  }, [picker])
+  }, [picker, confirmUnsend])
 
   const settled = message.status !== 'sending' && message.status !== 'failed'
-  const showActions = settled && BUBBLE_ACTIONS.some(wants)
+  const showActions = settled && !message.unsent && BUBBLE_ACTIONS.some(wants)
+
+  // Taken back: only a faint line where it was, like Messenger and Zalo show it.
+  if (message.unsent) {
+    return (
+      <div className="bubble-row" data-message-id={message.id}>
+        <div className="bubble-stack">
+          <div className={`bubble ${direction} ${position} unsent`}>
+            <Undo2 size={13} strokeWidth={2.2} aria-hidden />
+            {message.isOutgoing ? t('unsentMine') : t('unsentTheirs')}
+          </div>
+        </div>
+        <span className="bubble-time">{formatTime(message.sentAt, language)}</span>
+      </div>
+    )
+  }
 
   return (
     <div className={`bubble-row ${highlighted ? 'highlight' : ''}`} data-message-id={message.id}>
@@ -688,19 +710,19 @@ function Bubble({
         )}
       </div>
       {showActions && (
-        <div className={`bubble-actions ${picker || moreEmoji || todoOpen ? 'open' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`bubble-actions ${picker || moreEmoji || todoOpen || confirmUnsend ? 'open' : ''} ${tips ? 'tips' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
           {features.react && wants('react') && (
-            <button className="icon-btn" title={t('react')} onClick={() => setPicker((p) => !p)}>
+            <button className="icon-btn" {...tip(t('react'))} onClick={() => setPicker((p) => !p)}>
               <SmilePlus size={15} strokeWidth={2} />
             </button>
           )}
           {features.reply && wants('reply') && (
-            <button className="icon-btn" title={t('reply')} onClick={() => setReplyTo(message.conversationId, message)}>
+            <button className="icon-btn" {...tip(t('reply'))} onClick={() => setReplyTo(message.conversationId, message)}>
               <Reply size={15} strokeWidth={2} />
             </button>
           )}
           {wants('forward') && (
-            <button className="icon-btn" title={t('forward')} onClick={() => startForward(message)}>
+            <button className="icon-btn" {...tip(t('forward'))} onClick={() => startForward(message)}>
               <Forward size={15} strokeWidth={2} />
             </button>
           )}
@@ -708,9 +730,33 @@ function Bubble({
           {wants('speak') && <SpeakButton message={message} />}
           {wants('todo') && <TodoButton message={message} onOpenChange={setTodoOpen} />}
           {wants('save') && (
-            <button className={`icon-btn ${saved ? 'saved-on' : ''}`} title={saved ? t('unsaveAction') : t('saveAction')} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
+            <button className={`icon-btn ${saved ? 'saved-on' : ''}`} {...tip(saved ? t('unsaveAction') : t('saveAction'))} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
               <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
             </button>
+          )}
+          {message.isOutgoing && features.unsend && wants('unsend') && (
+            <button className={`icon-btn ${confirmUnsend ? 'active' : ''}`} {...tip(t('unsend'))} onClick={() => setConfirmUnsend((c) => !c)} aria-expanded={confirmUnsend}>
+              <Undo2 size={15} strokeWidth={2} />
+            </button>
+          )}
+          {confirmUnsend && (
+            <div className="unsend-confirm" role="dialog" aria-label={t('unsend')}>
+              <span>{t('unsendConfirm')}</span>
+              <div className="unsend-confirm-buttons">
+                <button className="btn ghost small" onClick={() => setConfirmUnsend(false)}>
+                  {t('cancel')}
+                </button>
+                <button
+                  className="btn danger small"
+                  onClick={() => {
+                    setConfirmUnsend(false)
+                    void unsend(message.conversationId, message.id)
+                  }}
+                >
+                  {t('unsend')}
+                </button>
+              </div>
+            </div>
           )}
           {picker && (
             <div className="emoji-picker reaction-bar">
@@ -718,6 +764,7 @@ function Bubble({
                 <button
                   key={emoji}
                   className={mine === emoji ? 'active' : ''}
+                  title={mine === emoji ? t('removeReaction') : undefined}
                   onClick={() => {
                     setPicker(false)
                     void react(message.conversationId, message.id, emoji)

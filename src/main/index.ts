@@ -903,6 +903,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.messagesForward, (_e, fromId: string, messageId: string, toId: string) => manager.forward(fromId, messageId, toId))
   ipcMain.handle(IPC.messagesLoadAttachment, (_e, id: string, messageId: string, attachmentId: string) => manager.loadAttachment(id, messageId, attachmentId))
   ipcMain.handle(IPC.messagesReact, (_e, id: string, messageId: string, emoji: string) => manager.react(id, messageId, emoji))
+  ipcMain.handle(IPC.messagesUnsend, (_e, id: string, messageId: string) => manager.unsend(id, messageId))
   ipcMain.handle(IPC.messagesSearch, (_e, query: string) => manager.search(query))
   ipcMain.handle(IPC.messagesTyping, (_e, id: string) => manager.setTyping(id))
   ipcMain.handle(IPC.authRespond, (_e, requestId: string, value: string) => manager.respondAuth(requestId, value))

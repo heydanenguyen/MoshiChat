@@ -5,7 +5,7 @@ import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
 
 export interface WhatsAppSecret {
   /** Folder name (under the adapter data dir) that holds the signal keys. */
@@ -15,6 +15,9 @@ export interface WhatsAppSecret {
 type Baileys = typeof import('@whiskeysockets/baileys')
 
 const HISTORY_LIMIT = 300
+/** proto.Message.ProtocolMessage.Type.REVOKE and WAMessageStubType.REVOKE (baileys is loaded lazily). */
+const REVOKE = 0
+const REVOKED_STUB = 1
 
 /**
  * WhatsApp through the multi-device web protocol (Baileys). Pair by scanning a
@@ -385,7 +388,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
             this.applyReaction(jid, raw.message.reactionMessage, !!raw.key.fromMe)
             continue
           }
-          if (raw.message?.protocolMessage) continue
+          const protocol = raw.message?.protocolMessage
+          if (protocol) {
+            // Deleted for everyone, by me (from another device) or by them.
+            if (protocol.type === REVOKE && protocol.key?.id) this.markUnsent(jid, protocol.key.id)
+            continue
+          }
           this.remember(jid, [raw])
           if (!this.chats.has(jid)) this.chats.set(jid, { id: jid, conversationTimestamp: Number(raw.messageTimestamp) } as Chat)
           const chat = this.chats.get(jid)!
@@ -403,6 +411,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
     sock.ev.on('messages.update', (updates) => {
       for (const { key, update } of updates) {
         const jid = key.remoteJid
+        if (jid && key.id && update.messageStubType === REVOKED_STUB) {
+          this.markUnsent(jid, key.id)
+          continue
+        }
         if (!jid || !key.id || update.status === undefined) continue
         const id = conversationId(this.account.id, jid)
         const raw = this.rawMessage(jid, key.id)
@@ -439,6 +451,26 @@ export class WhatsAppAdapter implements PlatformAdapter {
         this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: list })
       )
     }, 800)
+  }
+
+  async unsend(id: string, messageId: string): Promise<void> {
+    const jid = externalIdOf(id)
+    const raw = this.rawMessage(jid, messageId)
+    if (!raw) throw new Error('Message not found')
+    await this.requireSock().sendMessage(jid, { delete: raw.key })
+    this.markUnsent(jid, messageId)
+  }
+
+  /** A message deleted for everyone stays in the chat as "unsent". */
+  private markUnsent(jid: string, messageId: string): void {
+    const raw = this.rawMessage(jid, messageId)
+    if (raw) raw.messageStubType = REVOKED_STUB
+    const id = conversationId(this.account.id, jid)
+    const list = this.converted.get(id)
+    const index = list?.findIndex((m) => m.id === messageId) ?? -1
+    if (!list || index < 0 || list[index].unsent) return
+    list[index] = unsentCopy(list[index])
+    this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
   }
 
   private applyReaction(jid: string, reaction: proto.Message.IReactionMessage, byMe: boolean): void {
@@ -566,6 +598,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
         text: quoted?.conversation ?? quoted?.extendedTextMessage?.text ?? quoted?.imageMessage?.caption ?? (quoted?.imageMessage ? 'Photo' : '')
       }
     }
+    // Deleted for everyone (a revoke stub in the history).
+    if (raw.messageStubType === REVOKED_STUB) return unsentCopy(message)
     return message
   }
 

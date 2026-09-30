@@ -14,9 +14,11 @@ export interface AccountFeatures {
   attachments: boolean
   /** Recorded voice notes; defaults to `attachments` when absent. */
   voice?: boolean
+  /** Taking back (unsending) my own messages for everyone. */
+  unsend?: boolean
 }
 
-export const ALL_FEATURES: AccountFeatures = { reply: true, react: true, attachments: true }
+export const ALL_FEATURES: AccountFeatures = { reply: true, react: true, attachments: true, unsend: true }
 
 export interface Account {
   id: string
@@ -65,6 +67,7 @@ export type PreviewKind =
   | 'story_share'
   | 'call'
   | 'unavailable'
+  | 'unsent'
 
 export interface Conversation {
   id: string
@@ -90,8 +93,8 @@ export type AttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'sticker' | 
 export type StoryLabel = 'story_reply' | 'story_reaction' | 'story_mention' | 'story_share'
 
 /** The buttons in the bar that appears beside a hovered message, in order. */
-export type BubbleAction = 'react' | 'reply' | 'forward' | 'translate' | 'speak' | 'todo' | 'save'
-export const BUBBLE_ACTIONS: BubbleAction[] = ['react', 'reply', 'forward', 'translate', 'speak', 'todo', 'save']
+export type BubbleAction = 'react' | 'reply' | 'forward' | 'translate' | 'speak' | 'todo' | 'save' | 'unsend'
+export const BUBBLE_ACTIONS: BubbleAction[] = ['react', 'reply', 'forward', 'translate', 'speak', 'todo', 'save', 'unsend']
 
 export interface Attachment {
   id: string
@@ -157,6 +160,8 @@ export interface Message {
   isOutgoing: boolean
   status: MessageStatus
   edited?: boolean
+  /** Taken back (unsent) by its sender: shown as a faint "message unsent" line, its content gone. */
+  unsent?: boolean
   /** Rendered as a centered notice (calls, events, content only the official app can show). */
   system?: SystemNotice
 }
@@ -550,6 +555,8 @@ export interface Settings {
   suggestLanguage?: 'auto' | 'vi' | 'en'
   /** Buttons in the bar beside a hovered message; false hides one (all on by default). */
   bubbleActions?: Partial<Record<BubbleAction, boolean>>
+  /** A small label naming each of those buttons when the pointer rests on it. Default on. */
+  actionLabels?: boolean
   /** Where Download in the photo viewer saves; unset (or a folder that is gone) means the system Downloads folder. */
   downloadDir?: string
   /** Ask where to save each time instead of saving straight into that folder. Default off. */

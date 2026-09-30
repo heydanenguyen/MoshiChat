@@ -28,6 +28,7 @@ const VALUE_KEYS = [
   'muted',
   'quickReplies',
   'bubbleActions',
+  'actionLabels',
   'suggestLanguage',
   'aiSuggest',
   'effects',

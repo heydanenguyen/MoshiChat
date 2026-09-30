@@ -3,7 +3,7 @@ import { AlarmClock, CalendarClock, Check, ChevronDown, ChevronRight, ListTodo, 
 import type { Message } from '@shared/types'
 import { TODO_GROUPS, dueInfo, groupTodos, quickTimes, type Todo, type TodoGroup } from '@shared/todos'
 import { useStore, useT } from '../store'
-import { formatListTime, formatTime } from '../utils'
+import { formatListTime, formatTime, tip } from '../utils'
 import { Avatar } from './Avatar'
 import { LogoMark } from './Logo'
 import { SchedulePicker } from './ComposerExtras'
@@ -53,7 +53,7 @@ export function TodoButton({ message, onOpenChange }: { message: Message; onOpen
   }, [])
   return (
     <>
-      <button className={`icon-btn ${already || open ? 'active' : ''}`} title={t('todoFromMessage')} onClick={() => setOpen(!open)} aria-pressed={already}>
+      <button className={`icon-btn ${already || open ? 'active' : ''}`} {...tip(t('todoFromMessage'))} onClick={() => setOpen(!open)} aria-pressed={already}>
         <ListTodo size={15} strokeWidth={2} />
       </button>
       {open && (

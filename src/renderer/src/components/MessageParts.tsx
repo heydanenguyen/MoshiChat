@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CircleDashed, Clapperboard, EyeOff, File, FileText, Image, ImagePlay, Info, Link2, Mic, Phone, PhoneMissed, Play, Sticker, Video } from 'lucide-react'
+import { CircleDashed, Clapperboard, EyeOff, File, FileText, Image, ImagePlay, Info, Link2, Mic, Phone, PhoneMissed, Play, Sticker, Undo2, Video } from 'lucide-react'
 import type { Attachment, Message, Platform, PreviewKind } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
@@ -270,7 +270,8 @@ const PREVIEW: Record<PreviewKind, { icon: typeof Image; key: TKey }> = {
   story_mention: { icon: CircleDashed, key: 'previewStoryMention' },
   story_share: { icon: CircleDashed, key: 'previewStoryShare' },
   call: { icon: Phone, key: 'previewCall' },
-  unavailable: { icon: Info, key: 'previewUnavailable' }
+  unavailable: { icon: Info, key: 'previewUnavailable' },
+  unsent: { icon: Undo2, key: 'previewUnsent' }
 }
 
 /** "📷 Photo", "◌ Story reply: haha" — icon plus localized label, with the text when there is one. */

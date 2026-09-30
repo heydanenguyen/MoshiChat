@@ -321,6 +321,12 @@ export class AccountManager {
     await adapter.react(conversationId, messageId, emoji)
   }
 
+  async unsend(conversationId: string, messageId: string): Promise<void> {
+    const adapter = this.adapterFor(conversationId)
+    if (!adapter.unsend || !adapter.account.features.unsend) throw new Error('This platform does not let you unsend messages')
+    await adapter.unsend(conversationId, messageId)
+  }
+
   /** Local cache first, then every adapter's own search, merged and de-duplicated. */
   async search(query: string): Promise<SearchHit[]> {
     const needle = query.trim().toLowerCase()
@@ -670,6 +676,14 @@ export class AccountManager {
           for (const c of event.conversations) this.conversations.set(c.id, c)
         } else if (event.type === 'message:updated') {
           this.cache([event.message])
+          // An unsent last message: the chat list shows "message unsent" instead of what it said.
+          const conversation = this.conversations.get(event.message.conversationId)
+          if (event.message.unsent && conversation?.lastMessage?.id === event.message.id) {
+            conversation.lastMessage = previewOf(event.message)
+            this.emit(event)
+            this.emit({ type: 'conversation:upserted', conversation: { ...conversation } })
+            return
+          }
         } else if (event.type === 'message:reactions') {
           const cached = this.messages.get(event.conversationId)?.get(event.messageId)
           if (cached) cached.reactions = event.reactions

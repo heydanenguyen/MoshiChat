@@ -6,7 +6,7 @@ import { outgoingStickerGif } from '../media/sticker-gif'
 import { mapFcaAttachment, mapFcaEvent, type FcaAttachment } from './facebook-items'
 import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf } from './types'
+import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
 
 /** Cookies captured from the in-app facebook.com login window. */
 export interface WebCookie {
@@ -75,7 +75,7 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     private secret: FacebookPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'messenger', displayName: 'Facebook', status: 'disconnected', features: { reply: true, react: true, attachments: true } }
+    this.account = { id: initialId, platform: 'messenger', displayName: 'Facebook', status: 'disconnected', features: { reply: true, react: true, attachments: true, unsend: true } }
   }
 
   async connect(): Promise<void> {
@@ -224,6 +224,21 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     }
   }
 
+  async unsend(id: string, messageId: string): Promise<void> {
+    const api = this.requireApi() as unknown as { unsendMessage(messageID: string): Promise<unknown> }
+    await api.unsendMessage(messageId)
+    this.markUnsent(id, messageId)
+  }
+
+  /** A message taken back (by me, or by them) stays in the chat as "unsent". */
+  private markUnsent(id: string, messageId: string): void {
+    const list = this.history.get(id)
+    const index = list?.findIndex((m) => m.id === messageId) ?? -1
+    if (!list || index < 0 || list[index].unsent) return
+    list[index] = unsentCopy(list[index])
+    this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
+  }
+
   async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
     const thread = this.threads.get(externalIdOf(id))
     if (!thread) return undefined
@@ -329,6 +344,9 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
         }
         break
       }
+      case 'message_unsend':
+        if (event.messageID) this.markUnsent(id, event.messageID)
+        break
       case 'message_reaction': {
         const message = (this.history.get(id) ?? []).find((m) => m.id === event.messageID)
         if (!message) break

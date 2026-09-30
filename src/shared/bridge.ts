@@ -77,6 +77,8 @@ export interface MoshiBridge {
     send(conversationId: string, text: string, options?: SendOptions): Promise<Message>
     forward(fromConversationId: string, messageId: string, toConversationId: string): Promise<Message>
     react(conversationId: string, messageId: string, emoji: string): Promise<void>
+    /** Take one of my messages back for everyone (where the platform allows it). */
+    unsend(conversationId: string, messageId: string): Promise<void>
     search(query: string): Promise<SearchHit[]>
     /** Fetch the full media of an attachment on demand. Resolves to a data URL, or undefined when unavailable. */
     loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
@@ -221,6 +223,7 @@ export const IPC = {
   messagesSend: 'messages:send',
   messagesForward: 'messages:forward',
   messagesReact: 'messages:react',
+  messagesUnsend: 'messages:unsend',
   messagesSearch: 'messages:search',
   messagesLoadAttachment: 'messages:loadAttachment',
   messagesOpenAttachment: 'messages:openAttachment',

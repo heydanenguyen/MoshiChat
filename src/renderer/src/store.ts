@@ -146,6 +146,8 @@ interface State {
   send(conversationId: string, text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
   sendGif(conversationId: string, item: GifItem): Promise<void>
   react(conversationId: string, messageId: string, emoji: string): Promise<void>
+  /** Take one of my messages back for everyone (shown as unsent right away, restored if the platform refuses). */
+  unsend(conversationId: string, messageId: string): Promise<void>
   setReplyTo(conversationId: string, message?: Message): void
   startForward(message?: Message): void
   forward(toConversationId: string): Promise<void>
@@ -664,6 +666,22 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  async unsend(conversationId, messageId) {
+    const list = get().messages[conversationId]
+    const before = list?.find((m) => m.id === messageId)
+    if (list && before) {
+      const gone: Message = { ...before, unsent: true, text: '', attachments: [], reactions: [], replyTo: undefined }
+      set({ messages: { ...get().messages, [conversationId]: list.map((m) => (m.id === messageId ? gone : m)) } })
+    }
+    try {
+      await window.unison.messages.unsend(conversationId, messageId)
+    } catch (err) {
+      const current = get().messages[conversationId]
+      if (current && before) set({ messages: { ...get().messages, [conversationId]: current.map((m) => (m.id === messageId ? before : m)) } })
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
   rememberSticker(record) {
     stickerWrites = stickerWrites.then(async () => {
       const list = get().settings.sentStickers ?? []
@@ -1169,7 +1187,7 @@ export function bubbleVarsOf(id: string | undefined, customAccents?: CustomAccen
   const spec = bubbleSpecOf(id, customAccents)
   if (!spec) return undefined
   const v = accentVars(spec)
-  return { '--bubble-out': v['--bubble-out'], '--bubble-out-text': v['--bubble-out-text'], '--bubble-out-shadow': v['--bubble-out-shadow'] } as React.CSSProperties
+  return { '--bubble-out': v['--bubble-out'], '--bubble-out-solid': v['--bubble-out-solid'], '--bubble-out-text': v['--bubble-out-text'], '--bubble-out-shadow': v['--bubble-out-shadow'] } as React.CSSProperties
 }
 
 const decorated = new WeakSet<Conversation>()

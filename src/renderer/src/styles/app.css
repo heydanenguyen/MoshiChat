@@ -1106,6 +1106,31 @@ mark {
   box-shadow: var(--bubble-out-shadow, 0 8px 20px rgba(107, 125, 255, 0.28));
 }
 
+/* Selected text: on their bubbles it takes my bubble's colour, on mine the other way round (my bubble's text
+   colour behind the bubble colour), so a selection always stands out and never matches the bubble under it. */
+.bubble.in::selection,
+.bubble.in ::selection {
+  background: var(--bubble-out-solid);
+  color: var(--bubble-out-text);
+}
+.bubble.out::selection,
+.bubble.out ::selection {
+  background: var(--bubble-out-text);
+  color: var(--bubble-out-solid);
+}
+
+/* A message taken back: a faint outline where it was, no bubble fill. */
+.bubble.unsent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 140, 0.35);
+  font-style: italic;
+  user-select: none;
+}
+
 .bubble.in.first:not(.last),
 .bubble.in.middle {
   border-bottom-left-radius: 7px;
@@ -1169,6 +1194,65 @@ mark {
   width: 26px;
   height: 26px;
   color: var(--text-tertiary);
+}
+
+/* The small name of each button, shown when the pointer rests on it (Settings > Chat > Message actions). */
+.bubble-actions.tips [data-tip] {
+  position: relative;
+}
+.bubble-actions.tips [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  translate: -50% 3px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--tip-bg, rgba(22, 24, 38, 0.92));
+  color: var(--tip-text, #fff);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    translate 120ms ease;
+  z-index: 6;
+}
+.bubble-actions.tips [data-tip]:hover::after {
+  opacity: 1;
+  translate: -50% 0;
+  transition-delay: 250ms;
+}
+/* Not over an open reaction bar or confirm box. */
+.bubble-actions.open [data-tip]::after {
+  display: none;
+}
+
+/* "Unsend this message for everyone?" hanging from the bar like the reaction bar. */
+.unsend-confirm {
+  position: absolute;
+  bottom: 30px;
+  right: 0;
+  display: grid;
+  gap: 8px;
+  width: max-content;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  z-index: 5;
+  animation: sheet-in var(--duration-base) var(--ease-spring);
+}
+.unsend-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .emoji-picker {
@@ -3821,6 +3905,7 @@ kbd {
   --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%);
   --accent-soft: rgba(139, 92, 246, 0.14);
   --bubble-out: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%);
+  --bubble-out-solid: #8b5cf6;
 }
 :root[data-accent='rose'] {
   --accent: #f45d8a;
@@ -3829,6 +3914,7 @@ kbd {
   --accent-gradient: linear-gradient(135deg, #f45d8a 0%, #ff8a5b 100%);
   --accent-soft: rgba(244, 93, 138, 0.14);
   --bubble-out: linear-gradient(135deg, #f45d8a 0%, #ff8a5b 100%);
+  --bubble-out-solid: #f45d8a;
 }
 :root[data-accent='coral'] {
   --accent: #ff7a59;
@@ -3837,6 +3923,7 @@ kbd {
   --accent-gradient: linear-gradient(135deg, #ff7a59 0%, #ffb347 100%);
   --accent-soft: rgba(255, 122, 89, 0.14);
   --bubble-out: linear-gradient(135deg, #ff7a59 0%, #ffb347 100%);
+  --bubble-out-solid: #ff7a59;
 }
 :root[data-accent='mint'] {
   --accent: #22c1a3;
@@ -3845,6 +3932,7 @@ kbd {
   --accent-gradient: linear-gradient(135deg, #22c1a3 0%, #4fa3ff 100%);
   --accent-soft: rgba(34, 193, 163, 0.14);
   --bubble-out: linear-gradient(135deg, #22c1a3 0%, #4fa3ff 100%);
+  --bubble-out-solid: #22c1a3;
 }
 :root[data-accent='sun'] {
   --accent: #f0a020;
@@ -3853,6 +3941,7 @@ kbd {
   --accent-gradient: linear-gradient(135deg, #f7b733 0%, #fc4a1a 100%);
   --accent-soft: rgba(247, 183, 51, 0.16);
   --bubble-out: linear-gradient(135deg, #f7b733 0%, #fc4a1a 100%);
+  --bubble-out-solid: #f0a020;
 }
 
 /* flat accents: solid logo colours, no gradients */
@@ -10176,11 +10265,11 @@ button.moment-card:hover {
   right: calc(100% + 4px);
 }
 .msg-group-body {
-  max-width: min(72%, 640px, calc(100% - 210px));
+  max-width: min(72%, 640px, calc(100% - 238px));
 }
 @container chat (min-width: 621px) {
   .msg-group-body {
-    max-width: min(76%, 720px, calc(100% - 210px));
+    max-width: min(76%, 720px, calc(100% - 238px));
   }
 }
 /* Narrow panes have no room beside the bubble: the actions hover above its outer corner instead. */

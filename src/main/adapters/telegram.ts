@@ -6,7 +6,7 @@ import { LogLevel } from 'telegram/extensions/Logger'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewKindOf } from './types'
+import { conversationId, externalIdOf, matchesQuery, previewKindOf, unsentCopy } from './types'
 
 export interface TelegramSecret {
   apiId: number
@@ -397,8 +397,31 @@ export class TelegramAdapter implements PlatformAdapter {
     this.ctx.emit({ type: 'message:new', message })
   }
 
+  async unsend(id: string, messageId: string): Promise<void> {
+    await this.requireClient().deleteMessages(await this.entityFor(id), [Number(messageId)], { revoke: true })
+    this.markUnsent(id, [messageId])
+  }
+
+  /** Messages deleted for everyone (by me or the other side) stay in the chat as "unsent". */
+  private markUnsent(id: string, messageIds: string[]): void {
+    const list = this.recent.get(id)
+    if (!list) return
+    for (const messageId of messageIds) {
+      const index = list.findIndex((m) => m.id === messageId)
+      if (index < 0 || list[index].unsent) continue
+      list[index] = unsentCopy(list[index])
+      this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
+    }
+  }
+
   private onRawUpdate(update: Api.TypeUpdate): void {
-    if (update instanceof Api.UpdateReadHistoryOutbox) {
+    if (update instanceof Api.UpdateDeleteMessages) {
+      // Private chats and basic groups: the ids are unique across them, and the update does not name the chat.
+      const ids = update.messages.map(String)
+      for (const id of this.recent.keys()) if (!externalIdOf(id).startsWith('-100')) this.markUnsent(id, ids)
+    } else if (update instanceof Api.UpdateDeleteChannelMessages) {
+      this.markUnsent(conversationId(this.account.id, `-100${update.channelId}`), update.messages.map(String))
+    } else if (update instanceof Api.UpdateReadHistoryOutbox) {
       const peerId = peerToId(update.peer)
       if (!peerId) return
       const id = conversationId(this.account.id, peerId)
