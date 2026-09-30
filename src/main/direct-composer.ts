@@ -45,6 +45,29 @@ const MIME_BY_EXT: Record<string, string> = {
 
 type Logger = (...args: unknown[]) => void
 
+/**
+ * Which of my messages to take back, and how to recognise it on instagram.com (the page shows no item ids):
+ * by id when Instagram's own page data carries it, else by its exact text, else (media) only when it is the
+ * newest message of the chat. Anything less certain is refused rather than risk unsending the wrong message.
+ */
+export interface UnsendTarget {
+  /** Ids the page may hold for it: the direct_v2 item id and the newer Slide message id (mid.$…). */
+  ids: string[]
+  /** Its text, for text messages. */
+  text?: string
+  /** How many of my later messages carry exactly the same text (0: this is the newest with that text). */
+  sameTextAfter: number
+  /** Whether it is the newest message in the chat (from anyone). */
+  newest: boolean
+}
+
+/** Instagram's "More" button beside a hovered message, by its label, across common UI languages. */
+const MORE_LABEL = '^(more|more options|more actions|see more|xem thêm|thêm|khác|tùy chọn khác|más|más opciones|plus|plus d.options|mehr|weitere optionen|altro|mais|mais opções|ещё|еще|その他|더 보기|更多|เพิ่มเติม|lainnya|diğer)$'
+/** Its "Unsend" menu item and confirm button. "Delete" (for me only) is never matched. */
+const UNSEND_LABEL = '^(unsend|thu hồi|anular envío|anular el envío|annuler l.envoi|senden rückgängig machen|zurückziehen|annulla invio|cancelar envio|anular envio|отменить отправку|送信を取り消す|전송 취소|取消发送|取消傳送|撤回|ยกเลิกการส่ง|batalkan pengiriman|batal kirim|göndermeyi geri al)'
+/** What a row says once its message is gone. */
+const UNSENT_TEXT = 'unsent|thu hồi|anulaste|annulé|zurückgezogen|annullato|cancelou|отменил|取り消|취소|撤回|ยกเลิก|membatalkan|geri aldı'
+
 /** Shared helpers for the page scripts (a string so it is inlined into each executeJavaScript call). */
 const HELPERS = `
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,6 +75,187 @@ const HELPERS = `
   const fileInput = () => document.querySelector('input[type="file"]');
   const labels = ${JSON.stringify(SEND_LABELS)};
   const sendButton = () => [...document.querySelectorAll('div[role="button"], button')].find((b) => labels.includes((b.textContent || '').trim()) || labels.includes(b.getAttribute('aria-label') || ''));
+`
+
+/**
+ * Page scripts for unsend. Messages are the thread's rows; mine are the ones on the right. The chosen row is
+ * marked data-moshi-unsend so each step works on the same one, and every step that clicks returns the point to
+ * click so the main process can press it with a real pointer (the page's own events are the fallback).
+ */
+const UNSEND_HELPERS = `
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const MORE = new RegExp(${JSON.stringify(MORE_LABEL)}, 'i');
+  const UNSEND = new RegExp(${JSON.stringify(UNSEND_LABEL)}, 'i');
+  const UNSENT = new RegExp(${JSON.stringify(UNSENT_TEXT)}, 'i');
+  const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const center = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+  const thread = () => document.querySelector('[role="grid"]') || document.querySelector('main') || document.body;
+  const rows = () => [...thread().querySelectorAll('[role="row"]')].filter((r) => visible(r) && !r.querySelector('[role="row"]'));
+  // Mine sit on the right: the row's content (not the row itself, which spans the width) leans right.
+  const contentBox = (row) => {
+    let left = Infinity, right = -Infinity;
+    for (const el of row.querySelectorAll('div[dir="auto"], span[dir="auto"], img, video, [role="img"]')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      left = Math.min(left, r.left); right = Math.max(right, r.right);
+    }
+    return left === Infinity ? null : { left, right };
+  };
+  const mine = (row) => {
+    const box = contentBox(row), r = row.getBoundingClientRect();
+    return !!box && box.left - r.left > r.right - box.right;
+  };
+  const hasMedia = (row) => [...row.querySelectorAll('img, video')].some((m) => { const r = m.getBoundingClientRect(); return r.width >= 60 && r.height >= 60; });
+  const hasText = (row, text) => [...row.querySelectorAll('div[dir="auto"], span[dir="auto"]')].some((el) => norm(el.textContent) === text);
+  // React keeps each message's data on its components; look for the item's ids between the row and its parts.
+  const fiberOf = (el) => { const k = Object.keys(el).find((k) => k.startsWith('__reactFiber$')); return k ? el[k] : null; };
+  const holds = (value, ids, depth, seen) => {
+    if (value == null || depth > 4) return false;
+    if (typeof value === 'string') return ids.includes(value);
+    if (typeof value !== 'object' || seen.has(value) || value.$$typeof || value instanceof Node) return false;
+    seen.add(value);
+    let n = 0;
+    for (const key in value) {
+      if (++n > 80) break;
+      try { if (holds(value[key], ids, depth + 1, seen)) return true; } catch {}
+    }
+    return false;
+  };
+  const rowHolds = (row, ids, all) => {
+    const seen = new Set();
+    const checked = new Set();
+    const others = all.filter((r) => r !== row);
+    const up = (fiber, stop) => {
+      for (let i = 0; fiber && i < 40; i++, fiber = fiber.return) {
+        if (fiber === stop || checked.has(fiber)) return false;
+        checked.add(fiber);
+        const node = fiber.stateNode;
+        // Past the row into something that also holds other messages: that is the list, not this message.
+        if (node instanceof Element && node !== row && node.contains(row) && others.some((o) => node.contains(o))) return false;
+        if (holds(fiber.memoizedProps, ids, 0, seen)) return true;
+      }
+      return false;
+    };
+    const own = fiberOf(row);
+    if (up(own, null)) return true;
+    for (const el of [...row.querySelectorAll('*')].slice(0, 300)) if (up(fiberOf(el), own)) return true;
+    return false;
+  };
+  const mark = (row, how) => {
+    document.querySelectorAll('[data-moshi-unsend]').forEach((el) => el.removeAttribute('data-moshi-unsend'));
+    row.setAttribute('data-moshi-unsend', how);
+    row.scrollIntoView({ block: 'center' });
+    const box = contentBox(row) || row.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    window.__moshiHow = how;
+    window.__moshiText = norm(row.textContent);
+    return { state: 'OK', how, x: Math.max(r.left + 4, (box.left + box.right) / 2), y: r.top + r.height / 2 };
+  };
+  // What identifies the chosen row once Instagram re-renders it: how many rows still match.
+  const matches = (target, how) => {
+    const all = rows();
+    if (how === 'id') return all.filter((r) => rowHolds(r, target.ids.filter((id) => id && id.length >= 10), all)).length;
+    if (how === 'text') return all.filter((r) => mine(r) && hasText(r, norm(target.text))).length;
+    return all.filter((r) => mine(r) && !UNSENT.test(norm(r.textContent))).length;
+  };
+  const find = (target) => {
+    window.__moshiTarget = target;
+    const all = rows();
+    if (!all.length) return { state: 'NOT_FOUND' };
+    const ids = target.ids.filter((id) => id && id.length >= 10);
+    if (ids.length) {
+      const byId = all.filter((r) => rowHolds(r, ids, all));
+      if (byId.length === 1) { window.__moshiBefore = 1; return mark(byId[0], 'id'); }
+    }
+    const text = norm(target.text);
+    if (text) {
+      const same = all.filter((r) => mine(r) && hasText(r, text));
+      if (same.length <= target.sameTextAfter) return { state: 'NOT_FOUND' };
+      window.__moshiBefore = same.length;
+      return mark(same[same.length - 1 - target.sameTextAfter], 'text');
+    }
+    // A photo, sticker or video: only when it is the newest message of the chat, and the page's newest is mine and media.
+    if (!target.newest) return { state: 'UNSURE' };
+    const last = all.filter((r) => contentBox(r)).at(-1);
+    if (!last || !mine(last) || !hasMedia(last)) return { state: 'NOT_FOUND' };
+    window.__moshiBefore = matches(target, 'newest');
+    return mark(last, 'newest');
+  };
+  const target = () => document.querySelector('[data-moshi-unsend]');
+  const poke = (el) => {
+    const { x, y } = center(el);
+    for (const type of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove'])
+      el.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, { bubbles: !type.endsWith('enter'), clientX: x, clientY: y }));
+  };
+  const press = (el) => {
+    if (!el) return;
+    const { x, y } = center(el);
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup'])
+      el.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
+    el.click();
+  };
+  const labelled = (scope) => [...scope.querySelectorAll('svg[aria-label], [role="button"][aria-label], button[aria-label]')]
+    .filter((el) => MORE.test(norm(el.getAttribute('aria-label'))) && visible(el));
+  // The More button of the chosen row: inside it, or floating level with it (Instagram may portal the toolbar).
+  const moreButton = async () => {
+    for (let i = 0; i < 20; i++) {
+      const row = target();
+      if (!row) return { state: 'LOST' };
+      const r = row.getBoundingClientRect();
+      const inside = labelled(row);
+      const level = inside.length ? inside : labelled(document).filter((el) => { const c = center(el); return c.y >= r.top - 4 && c.y <= r.bottom + 4 && !el.closest('[role="row"]:not([data-moshi-unsend])'); });
+      if (level.length) {
+        const button = level[0].closest('[role="button"], button') || level[0];
+        button.setAttribute('data-moshi-more', '1');
+        return { state: 'OK', ...center(button) };
+      }
+      const box = row.querySelector('div[dir="auto"], img, video') || row;
+      poke(box);
+      await wait(150);
+    }
+    return { state: 'NO_MORE' };
+  };
+  const menus = () => [...document.querySelectorAll('[role="menu"], [role="dialog"], [role="listbox"]')].filter(visible);
+  const unsendItem = () => {
+    for (const menu of menus()) {
+      const items = [...menu.querySelectorAll('[role="menuitem"], [role="button"], button, [role="option"]')].filter(visible);
+      const hit = items.find((el) => UNSEND.test(norm(el.textContent)) || UNSEND.test(norm(el.getAttribute('aria-label'))));
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const menuItem = async () => {
+    for (let i = 0; i < 15; i++) {
+      const hit = unsendItem();
+      if (hit) { window.__moshiItem = hit; return { state: 'OK', ...center(hit) }; }
+      if (menus().length && i >= 6) return { state: 'NO_UNSEND' };
+      await wait(150);
+    }
+    return { state: 'NO_MENU' };
+  };
+  // After the pointer pressed Unsend in the menu: press Instagram's confirm button (a new Unsend button, never the
+  // menu item again), or the menu item itself if the pointer's press did nothing; then wait for the message to go.
+  const confirmAndWait = async () => {
+    const before = window.__moshiBefore;
+    const how = window.__moshiHow;
+    const t = window.__moshiTarget;
+    const item = window.__moshiItem;
+    const pressed = new Set([item]);
+    for (let i = 0; i < 60; i++) {
+      await wait(150);
+      const dialog = [...document.querySelectorAll('[role="dialog"]')].filter(visible).at(-1);
+      const button = dialog && [...dialog.querySelectorAll('[role="button"], button')].filter(visible).find((el) => UNSEND.test(norm(el.textContent)));
+      if (button && !pressed.has(button)) { pressed.add(button); press(button); continue; }
+      if (i === 6 && item && item.isConnected && visible(item)) press(item);
+      // Gone from the page, or turned into an "unsent" line (not merely a message that says so itself).
+      const row = target();
+      const now = row ? norm(row.textContent) : '';
+      if (row && now !== window.__moshiText && UNSENT.test(now)) return { state: 'OK' };
+      if (how && t && matches(t, how) < before) return { state: 'OK' };
+    }
+    return { state: pressed.size > 1 ? 'NOT_GONE' : 'NO_CONFIRM' };
+  };
 `
 
 /**
@@ -77,6 +281,13 @@ export class DirectComposer {
   /** Serialised so two sends never type into the same box at once. `threadUrls`: addresses to try, best first. */
   send(threadUrls: string | string[], text: string): Promise<void> {
     const run = this.queue.then(() => this.sendNow(threadUrls, text))
+    this.queue = run.catch(() => undefined)
+    return run
+  }
+
+  /** Take one of my messages back through the message's own More → Unsend menu, as a person does. */
+  unsend(threadUrls: string | string[], target: UnsendTarget): Promise<void> {
+    const run = this.queue.then(() => this.unsendNow(threadUrls, target))
     this.queue = run.catch(() => undefined)
     return run
   }
@@ -333,6 +544,70 @@ export class DirectComposer {
     return outcome === 'OK'
   }
 
+  private async unsendNow(threadUrls: string | string[], target: UnsendTarget): Promise<void> {
+    const win = await this.open(threadUrls)
+    const run = (body: string): Promise<{ state: string; x?: number; y?: number; how?: string }> =>
+      win.webContents.executeJavaScript(`(async () => { ${UNSEND_HELPERS} ${body} })()`, true)
+    try {
+      // 1. Find the message and mark it. The thread may still be filling in, so give it a few tries.
+      let found = await run(`return find(${JSON.stringify(target)});`)
+      for (let i = 0; i < 8 && found.state === 'NOT_FOUND'; i++) {
+        await sleep(400)
+        found = await run(`return find(${JSON.stringify(target)});`)
+      }
+      if (found.state !== 'OK') {
+        this.log(`[instagram composer] unsend: message not recognised (${found.state}):`, await this.describe(win))
+        throw new Error('Could not find this message on Instagram to unsend it. You can unsend it in the Instagram app')
+      }
+      this.log(`[instagram composer] unsend: message found by ${found.how}`)
+
+      // 2. Hover it (a real pointer move, then the page's own events) until its More button shows, and press it.
+      this.pointAt(win, found.x!, found.y!)
+      const more = await run(`return await moreButton();`)
+      if (more.state !== 'OK') {
+        this.log('[instagram composer] unsend: no More button:', await this.describe(win))
+        throw new Error('Could not open Instagram’s menu for this message')
+      }
+      this.clickAt(win, more.x!, more.y!)
+
+      // 3. Unsend in the menu (not offered: too old, or not a message Instagram lets you take back).
+      let item = await run(`return await menuItem();`)
+      if (item.state === 'NO_MENU') {
+        await run(`press(document.querySelector('[data-moshi-more]')); return { state: 'OK' };`)
+        item = await run(`return await menuItem();`)
+      }
+      if (item.state !== 'OK') {
+        await run(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return { state: 'OK' };`)
+        if (item.state === 'NO_UNSEND') throw new Error('Instagram does not offer Unsend for this message')
+        this.log('[instagram composer] unsend: menu did not open:', await this.describe(win))
+        throw new Error('Could not open Instagram’s menu for this message')
+      }
+      this.clickAt(win, item.x!, item.y!)
+
+      // 4. Confirm (when Instagram asks), then wait for the message to go.
+      const outcome = await run(`return await confirmAndWait();`)
+      if (outcome.state !== 'OK') {
+        this.log(`[instagram composer] unsend not confirmed (${outcome.state}):`, await this.describe(win))
+        throw new Error('Instagram did not confirm the unsend. Check the conversation')
+      }
+    } finally {
+      await run(`document.querySelectorAll('[data-moshi-unsend], [data-moshi-more]').forEach((el) => { el.removeAttribute('data-moshi-unsend'); el.removeAttribute('data-moshi-more'); }); return { state: 'OK' };`).catch(() => undefined)
+      this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
+    }
+  }
+
+  /** A real pointer move over the page (what makes CSS :hover and Instagram's hover toolbar appear). */
+  private pointAt(win: BrowserWindow, x: number, y: number): void {
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(x), y: Math.round(y) })
+  }
+
+  private clickAt(win: BrowserWindow, x: number, y: number): void {
+    const at = { x: Math.round(x), y: Math.round(y) }
+    win.webContents.sendInputEvent({ type: 'mouseMove', ...at })
+    win.webContents.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 })
+    win.webContents.sendInputEvent({ type: 'mouseUp', ...at, button: 'left', clickCount: 1 })
+  }
+
   /** A short account of what the hidden page looks like, for the log when something is not found. */
   private async describe(win: BrowserWindow): Promise<string> {
     try {
@@ -422,3 +697,5 @@ export class DirectComposer {
     this.window = undefined
   }
 }
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

@@ -3,7 +3,7 @@ import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promi
 import { join } from 'path'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, isShared, matchesQuery } from './types'
+import { conversationId, externalIdOf, isShared, matchesQuery, unsentCopy } from './types'
 import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
 import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
 import type { WebCookie } from './facebook-personal'
@@ -103,6 +103,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private threads = new Map<string, IgThread>()
   /** Placeholder items ("update to the latest version") resolved through the web client's GraphQL. */
   private slideResolved = new Map<string, MappedItem>()
+  /** item_id → the newer Slide message id (mid.$…), which instagram.com's own page data is keyed by. */
+  private slideIds = new Map<string, string>()
   private slideCache = new Map<string, { at: number; nodes: Map<string, SlideNode> }>()
   private v2Ids = new Map<string, string>()
   private slideFailures = 0
@@ -146,7 +148,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     private secret: InstagramPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true } }
+    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true, unsend: true } }
   }
 
   async connect(): Promise<void> {
@@ -478,11 +480,31 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       .catch(() => undefined)
   }
 
-  /*
-   * No unsend: instagram.com does not serve the direct_v2 write endpoints (the delete call comes back as a 404
-   * page), and the legacy REST writes get web sessions logged out. It would have to go through the hidden
-   * composer window, like sending.
+  /**
+   * Unsend through instagram.com itself (the message's More → Unsend), like sending: the site does not serve the
+   * direct_v2 delete call (a 404 page), and legacy REST writes get web sessions logged out. The composer only
+   * presses Unsend on a message it can recognise for certain, and refuses otherwise.
    */
+  async unsend(id: string, messageId: string): Promise<void> {
+    const threadId = await this.resolveThread(id)
+    if (!threadId) throw new Error('Conversation not found')
+    const list = this.history.get(id) ?? []
+    const index = list.findIndex((m) => m.id === messageId)
+    const message = list[index]
+    if (!message) throw new Error('This message is no longer in the chat. You can unsend it in the Instagram app')
+    const live = (m: Message): boolean => !m.unsent && !m.system
+    const later = list.slice(index + 1).filter(live)
+    const text = message.text.trim()
+    await this.composer.unsend(this.threadUrls(threadId), {
+      ids: [message.id, this.slideIds.get(message.id) ?? ''].filter((x) => x && !x.startsWith('local-')),
+      text: text || undefined,
+      sameTextAfter: text ? later.filter((m) => m.isOutgoing && m.text.trim() === text).length : 0,
+      newest: later.length === 0
+    })
+    list[index] = unsentCopy(message)
+    this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
+    this.saveThreadCache()
+  }
 
   async getPeerProfile(id: string): Promise<PeerProfile | undefined> {
     const thread = this.threads.get(this.threadIdFor(id) ?? '')
@@ -1059,6 +1081,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const isOutgoing = String(item.user_id) === this.mePk
     const sender = this.users.get(String(item.user_id))
     const mapped = this.mapped(item)
+    if (item.message_id) this.slideIds.set(item.item_id, item.message_id)
     const message: Message = {
       id: item.item_id,
       conversationId: id,
