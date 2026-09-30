@@ -8,9 +8,9 @@ import { isStickerId } from '../src/shared/stickers'
 const dir = join(__dirname, '../resources/stickers/mito')
 
 describe('Mito sticker pack', () => {
-  it('has twelve stickers, seven of them animated, with unique plain ids', () => {
+  it('has twelve stickers, all animated, with unique plain ids', () => {
     expect(MITO_STICKERS).toHaveLength(12)
-    expect(MITO_STICKERS.filter((s) => s.loop)).toHaveLength(7)
+    expect(MITO_STICKERS.filter((s) => s.loop)).toHaveLength(12)
     expect(new Set(MITO_STICKERS.map((s) => s.id)).size).toBe(12)
     for (const s of MITO_STICKERS) expect(s.id).toMatch(/^[a-z]+$/)
   })
@@ -25,7 +25,7 @@ describe('Mito sticker pack', () => {
     for (const s of MITO_STICKERS) expect(isStickerId(`mito:${s.id}`)).toBe(false)
   })
 
-  it('ships a 384 px transparent still, a copy on white, and the animation for the moving ones', async () => {
+  it('ships a 384 px transparent still, a copy on white, and the animation', async () => {
     for (const s of MITO_STICKERS) {
       const still = await sharp(join(dir, `${s.id}.png`)).metadata()
       expect([still.width, still.height, still.hasAlpha]).toEqual([384, 384, true])

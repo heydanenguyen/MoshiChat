@@ -2,7 +2,7 @@
 //
 //   node design/mito/build-pack.mjs [ids…]   (all stickers when none are named)
 //
-// Still stickers: stills/<id>.png (the drawing cut from its sheet, any size, transparent).
+// Still stickers: stills/<id>.png (the drawing cut from its sheet, any size, transparent), if any.
 // Animated stickers: frames/<id>/NNN.png (one loop at 25 fps, rendered from animation.html with export-frames.mjs;
 // the frames are not kept in git, render them again before rebuilding).
 // Output, in resources/stickers/mito/: <id>.png (384 px, transparent, white sticker outline), <id>-white.png (the same
@@ -105,7 +105,8 @@ async function writeStill(id, rgba) {
   await raw(rgba).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toFile(join(out, `${id}-white.png`))
 }
 
-for (const file of readdirSync(join(here, 'stills')).filter((f) => f.endsWith('.png'))) {
+const stillsDir = join(here, 'stills')
+for (const file of existsSync(stillsDir) ? readdirSync(stillsDir).filter((f) => f.endsWith('.png')) : []) {
   const id = file.replace(/\.png$/, '')
   if (!wanted(id)) continue
   await writeStill(id, outline(await fit(join(here, 'stills', file), 'trim')))

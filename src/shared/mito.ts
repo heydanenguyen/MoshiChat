@@ -19,11 +19,11 @@ export const MITO_STICKERS: readonly MitoSticker[] = [
   { id: 'gian', name: { vi: 'Tức giận', en: 'Angry' }, loop: 2200 },
   { id: 'ngu', name: { vi: 'Ngủ', en: 'Sleepy' }, loop: 3600 },
   { id: 'toasang', name: { vi: 'Tỏa sáng', en: 'Shine' }, loop: 2400 },
-  { id: 'tuchoi', name: { vi: 'Từ chối tình cảm', en: 'No thanks' } },
-  { id: 'dienthoai', name: { vi: 'Lướt điện thoại', en: 'Scrolling' } },
-  { id: 'khohieu', name: { vi: 'Khó hiểu', en: 'Suspicious' } },
-  { id: 'nghilai', name: { vi: 'Nghĩ lại đi', en: 'Think again' } },
-  { id: 'nhayday', name: { vi: 'Nhảy dây', en: 'Jump rope' } }
+  { id: 'tuchoi', name: { vi: 'Từ chối tình cảm', en: 'No thanks' }, loop: 2400 },
+  { id: 'dienthoai', name: { vi: 'Lướt điện thoại', en: 'Scrolling' }, loop: 3200 },
+  { id: 'khohieu', name: { vi: 'Khó hiểu', en: 'Suspicious' }, loop: 2800 },
+  { id: 'nghilai', name: { vi: 'Nghĩ lại đi', en: 'Think again' }, loop: 2400 },
+  { id: 'nhayday', name: { vi: 'Nhảy dây', en: 'Jump rope' }, loop: 2400 }
 ]
 
 export type MitoId = `mito:${string}`

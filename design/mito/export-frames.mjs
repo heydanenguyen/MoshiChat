@@ -3,7 +3,7 @@
 // (and what it holds), NNN-back.png and NNN-front.png the effects behind and in front of it (confetti, stars, z's,
 // motion lines), which get no sticker edge.
 //
-//   node design/mito/export-frames.mjs [chao tim coc quay gian ngu toasang]
+//   node design/mito/export-frames.mjs [chao tim coc quay gian ngu toasang tuchoi dienthoai khohieu nghilai nhayday]
 //
 // Needs Playwright and its Chromium, which the app itself does not use (npm i --no-save playwright && npx playwright
 // install chromium), or CHROMIUM=/path/to/chromium. Each loop is started at the pose
@@ -24,7 +24,12 @@ const STICKERS = {
   quay: { loop: 3.2, start: 0 },
   gian: { loop: 2.2, start: 0 },
   ngu: { loop: 3.6, start: 0 },
-  toasang: { loop: 2.4, start: 0, page: 'sang' }
+  toasang: { loop: 2.4, start: 0, page: 'sang' },
+  tuchoi: { loop: 2.4, start: 0 },
+  dienthoai: { loop: 3.2, start: 0 },
+  khohieu: { loop: 2.8, start: 0 },
+  nghilai: { loop: 2.4, start: 0 },
+  nhayday: { loop: 2.4, start: 0 }
 }
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(STICKERS)
 
