@@ -495,11 +495,18 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     const live = (m: Message): boolean => !m.unsent && !m.system
     const later = list.slice(index + 1).filter(live)
     const text = message.text.trim()
+    // My run of photo/sticker/video messages that ends the chat, counted in pictures (the page shows each one).
+    let trailingMedia = 0
+    for (const m of list.slice(0, index + 1).filter(live).reverse()) {
+      if (!m.isOutgoing || m.text.trim() || !m.attachments.length) break
+      trailingMedia += m.attachments.length
+    }
     await this.composer.unsend(this.threadUrls(threadId), {
       ids: [message.id, this.slideIds.get(message.id) ?? ''].filter((x) => x && !x.startsWith('local-')),
       text: text || undefined,
       sameTextAfter: text ? later.filter((m) => m.isOutgoing && m.text.trim() === text).length : 0,
-      newest: later.length === 0
+      newest: later.length === 0,
+      trailingMedia
     })
     list[index] = unsentCopy(message)
     this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
