@@ -191,7 +191,7 @@
     <section class="stage" aria-label="Sticker Nhảy dây">
       <div class="stage-head"><h2>Nhảy dây</h2><span class="label">vòng lặp 2,4 giây</span></div>
       <div class="stage-img"><div class="stick" data-sticker="nhayday" role="img" aria-label="Mèo Bơ nhảy dây, dây quay qua đầu xuống dưới chân"></div></div>
-      <p class="note">Hai cú nhảy mỗi vòng, dây quay đều 30 khung hình một vòng. Dây quay thật: qua đầu, xuống trước mặt, luồn dưới chân lúc mèo bật lên, rồi vòng ra sau; dây nằm trong viền sticker như hình vẽ nên không bị viền trắng cắt ngang. Chạm đất thì hơi nén lại, bật lên thì duỗi ra; bóng dưới chân co lại khi mèo lên cao, đuôi trễ theo cú nhảy, sao lấp lánh.</p>
+      <p class="note">Nhảy liên tục ba cú mỗi vòng: chạm đất là nảy lên ngay (nén lại khi chạm, duỗi ra khi bật), bay một đường cong mượt. Dây quay đều và nhanh, 20 khung hình một vòng, có vệt mờ theo sau nên đọc ra cú vút chứ không giật: qua đầu, xuống trước mặt, luồn dưới chân lúc mèo bật lên, rồi vòng ra sau; dây nằm trong viền sticker như hình vẽ. Tay hơi trĩu xuống mỗi lần chạm đất, đuôi trễ theo cú nhảy, bóng co lại khi mèo lên cao, sao lấp lánh.</p>
     </section>
   </div>
 
@@ -821,10 +821,12 @@
   }
   /**
    * Lifts a white paw off the drawing so it can move over what is behind it without dragging it along: the paw is
-   * its white pixels inside `pts` plus everything within `grow` px of them (its black outline). Returns the paw as
-   * its own picture, and the drawing with the paw's place filled by `fill(x, y, alpha there)` (true: fur, false: empty).
+   * its white pixels inside `pts` plus everything within `grow` px of them (its black outline), each taken with the
+   * coverage `own(x, y, distance to the white)` (0 to 1), so an outline that merges into fur can be cut along a
+   * smooth line. Returns the paw as its own picture, and the drawing with the paw's place filled by
+   * `fill(x, y, alpha there)` (1 or true: fur, 0 or false: empty, between: the soft edge of the fur).
    */
-  function liftPart(img, pts, grow, fill) {
+  function liftPart(img, pts, grow, fill, own = () => 1) {
     const mk = () => { const c = document.createElement('canvas'); c.width = c.height = SIZE; return c }
     const src = mk(), g = src.getContext('2d')
     g.drawImage(img, 0, 0)
@@ -840,15 +842,18 @@
     const part = mk(), pg = part.getContext('2d'), pd = pg.createImageData(SIZE, SIZE), p = pd.data
     const r2 = grow * grow
     for (let y = Math.max(0, y0 - grow); y <= Math.min(SIZE - 1, y1 + grow); y++) for (let x = Math.max(0, x0 - grow); x <= Math.min(SIZE - 1, x1 + grow); x++) {
-      let near = false
-      for (let dy = -grow; dy <= grow && !near; dy++) for (let dx = -grow; dx <= grow; dx++) {
-        const u = x + dx, v = y + dy
-        if (dx * dx + dy * dy <= r2 && u >= 0 && v >= 0 && u < SIZE && v < SIZE && seed[v * SIZE + u]) { near = true; break }
+      let near = r2 + 1
+      for (let dy = -grow; dy <= grow; dy++) for (let dx = -grow; dx <= grow; dx++) {
+        const u = x + dx, v = y + dy, e = dx * dx + dy * dy
+        if (e < near && u >= 0 && v >= 0 && u < SIZE && v < SIZE && seed[v * SIZE + u]) near = e
       }
-      if (!near) continue
+      const cover = near > r2 ? 0 : own(x, y, Math.sqrt(near))
+      if (cover <= 0) continue
       const i = 4 * (y * SIZE + x)
-      for (let k = 0; k < 4; k++) p[i + k] = a[i + k]
-      if (fill(x, y, a[i + 3])) { a[i] = a[i + 1] = a[i + 2] = 2; a[i + 3] = 255 } else a[i + 3] = 0
+      for (let k = 0; k < 3; k++) p[i + k] = a[i + k]
+      p[i + 3] = Math.round(a[i + 3] * Math.min(1, cover))
+      const f = Math.min(1, +fill(x, y, a[i + 3]))
+      if (f > 0) { a[i] = a[i + 1] = a[i + 2] = 2; a[i + 3] = Math.round(255 * f) } else a[i + 3] = 0
     }
     pg.putImageData(pd, 0, 0)
     g.putImageData(d, 0, 0)
@@ -888,8 +893,9 @@
     }
     const PALM = [[325, 372], [335, 362], [350, 365], [362, 378], [364, 322], [372, 308], [392, 299], [405, 302], [415, 299], [430, 303],
       [438, 315], [448, 322], [460, 332], [464, 400], [456, 425], [436, 441], [405, 443], [380, 438], [355, 425], [335, 405], [322, 385]]
-    // Behind the palm: fur left of the body's edge, which runs from the head (416, 300) down to the arm (447, 440).
-    const behind = (x, y) => x < 416 + ((y - 300) * 31) / 140 + 1
+    // Behind the palm: fur left of the body's edge, which runs from the head (416, 300) down to the arm (447, 440),
+    // and never beyond the drawing's own outline (it overlaps the palm's edge by a couple of px, so no seam shows).
+    const behind = (x, y, alpha) => (alpha / 255) * clamp(416 + ((y - 300) * 31) / 140 + 2.5 - x)
     // Around the heart and the paw holding it, a little outside the outline so the outline moves whole.
     const HEART = region([[205, 563], [157, 519], [146, 514], [114, 509], [89, 482], [92, 449], [104, 438], [102, 401], [122, 379], [162, 371], [205, 400], [248, 371], [292, 379], [311, 417], [305, 466], [269, 517]], 16)
     const TAIL = gapSide([[350, 526, 460], [358, 509, 460], [366, 500, 460], [374, 493, 459], [382, 488, 459], [390, 483, 458], [398, 479, 457],
@@ -1110,26 +1116,32 @@
     }
     // Where a point of the hand is drawn at time t.
     const handAt = (x, y, t) => {
-      const [u, v] = rotAround(x, y, WRIST[0], WRIST[1], 0.1 * tap(t))
+      const [u, v] = rotAround(x, y, WRIST[0], WRIST[1], 0.13 * tap(t))
       return [u, 578 - (578 - v) * breath(t)]
     }
-    // Behind the hand: fur where the drawing is not empty, except above the temple, where the head ends.
-    const behindHand = (x, y, alpha) => alpha > 128 && (y > 232 || x < 500)
+    // Behind the hand: the head, whose edge runs on under the fingers as it does above them, and below that the arm.
+    // Right of the head's edge there is nothing, so a lifted hand comes off the temple and never leaves its shape.
+    const HEAD_EDGE = alongY([[200, 485], [206, 489], [225, 495], [250, 500], [280, 502], [300, 501]])
+    const behindHand = (x, y, alpha) => (alpha > 60 ? (y > 300 ? 1 : clamp(HEAD_EDGE(y) + 2.5 - x)) : 0)
+    // The hand takes its outline as drawn where it borders the open side, and against the head (where the two
+    // outlines are one black) a smooth 6 px band around its white, so it comes away with a clean edge. The two
+    // overlap by a couple of px along the head's edge, so no seam shows while the hand rests.
+    const handOwns = (x, y, d) => (x >= HEAD_EDGE(y) - 2 && y >= 222 && y <= 312 ? 1 : clamp(6.3 - d))
     let lifted = null
     const LINES = [[521, 164, 533, 190], [539, 177, 564, 200], [550, 208, 577, 218]]
     return {
       view: VIEW, loop: LOOP, warp,
       skinKey: () => 'still',
       skin(ctx, imgs) {
-        lifted ||= liftPart(imgs.ngl, HAND, 10, behindHand)
+        lifted ||= liftPart(imgs.ngl, HAND, 10, behindHand, handOwns)
         ctx.clearRect(0, 0, SIZE, SIZE); ctx.drawImage(lifted.rest, 0, 0)
       },
       over(ctx, t, imgs) {
-        lifted ||= liftPart(imgs.ngl, HAND, 10, behindHand)
+        lifted ||= liftPart(imgs.ngl, HAND, 10, behindHand, handOwns)
         const b = breath(t)
         ctx.save()
         ctx.translate(0, 578 * (1 - b)); ctx.scale(1, b)
-        ctx.translate(WRIST[0], WRIST[1]); ctx.rotate(0.1 * tap(t)); ctx.translate(-WRIST[0], -WRIST[1])
+        ctx.translate(WRIST[0], WRIST[1]); ctx.rotate(0.13 * tap(t)); ctx.translate(-WRIST[0], -WRIST[1])
         ctx.drawImage(lifted.part, 0, 0)
         ctx.restore()
       },
@@ -1155,38 +1167,42 @@
   /* ================================================================== Nhảy dây (skipping rope) */
   const NHAYDAY = (() => {
     const VIEW = { x: 48, y: -12, w: 600, h: 590 }, LOOP = 2.4
-    // Two skips a loop (30 frames a turn of the rope, so it reads as a smooth turn and not a flicker). The rope turns
-    // once a skip: over the head (the drawing), down in front, under the feet while the cat is up, and back up
-    // behind. It is drawn inside the sticker's edge, just behind or in front of the cat, as in the drawing. On the ground the cat squashes a little as it lands and stretches as it
-    // springs; its shadow shrinks as it rises; the tail lags behind the jump.
-    const H = 55, FEET = 550, UP = 0.18, DOWN = 0.82
+    // Three skips a loop, one straight after the other: a quick bounce off the ground (squash on touching, stretch on
+    // leaving) and a smooth arc through the air, the rope turning once a skip at an even speed, 20 frames a turn,
+    // with a faint trail so it reads as a swish rather than a flicker. The rope goes over the head (the drawing),
+    // down in front, under the feet while the cat is up, and back up behind; it is drawn inside the sticker's edge,
+    // just behind or in front of the cat, as in the drawing. The hands give a little on each landing, the tail lags
+    // behind the jump, the shadow shrinks as the cat rises.
+    const H = 40, FEET = 550, A = 0.07, JUMPS = 3
     const ROPE = [[170, 318], [159.8, 290], [156.9, 265.2], [156.9, 239.6], [157.9, 212.5], [162.9, 184.9], [170.5, 156.1], [182.4, 127.4], [198.1, 98.6],
       [219.6, 72.8], [246, 50.9], [276.3, 33.5], [309.7, 21.6], [345, 15.8], [381, 16.6], [416.4, 23.4], [449.9, 36.9], [479.6, 56.8], [504, 82.7],
       [520, 115], [526.9, 150.4], [526, 185.5], [520.1, 217.5], [513.6, 244.8], [509.8, 268.3], [508.8, 290], [512, 322]]
     const E0 = ROPE[0], E1 = ROPE[ROPE.length - 1], CX = E1[0] - E0[0], CY = E1[1] - E0[1], CL = CX * CX + CY * CY
     // Each point of the rope as: where along the line between the hands, and how far off that line.
     const REST = ROPE.map(([x, y]) => { const s = ((x - E0[0]) * CX + (y - E0[1]) * CY) / CL; return [s, x - E0[0] - s * CX, y - E0[1] - s * CY] })
-    const phase = (t) => wrap(2 * t)
-    const height = (p) => { if (p <= UP || p >= DOWN) return 0; const u = (p - UP) / (DOWN - UP); return 4 * H * u * (1 - u) }
-    // + squashed, − stretched, anchored at the feet; zero at the drawing (p = 0).
-    const squash = (p) => {
-      const d = p > 0.5 ? p - 1 : p
-      if (d <= -UP || d >= UP) return 0
-      return d < 0 ? 0.06 * Math.sin((Math.PI * (d + UP)) / UP) : 0.05 * Math.sin((2 * Math.PI * d) / UP)
-    }
+    const phase = (t) => wrap(JUMPS * t)
+    // Height above the ground: in the air from A to 1 − A (an arc), on the ground around p = 0.
+    const height = (p) => { const u = (p - A) / (1 - 2 * A); return u <= 0 || u >= 1 ? 0 : 4 * H * u * (1 - u) }
+    // On the ground: + squashed as it lands, easing back to the drawing as it springs off; anchored at the feet.
+    const squash = (p) => { const d = p > 0.5 ? p - 1 : p; return Math.abs(d) >= A ? 0 : 0.05 * Math.cos((Math.PI * d) / (2 * A)) ** 2 }
+    // The hands (with the rope's ends) dip a little as it lands.
+    const HANDS = [[190, 365], [497, 368]]
+    const handW = (x, y) => Math.max(...HANDS.map(([hx, hy]) => smooth(62, 38, Math.hypot(x - hx, y - hy))))
     // The tail: inside its outline (just clear of the handle above it), stiffening towards where it leaves the body.
     const TAIL = region([[420, 403], [436, 418], [457, 430], [478, 441], [500, 438], [511, 428], [515, 413], [520, 395], [535, 377], [556, 369], [574, 373], [588, 392], [590, 419], [580, 446], [559, 468], [532, 483], [500, 494], [468, 494], [441, 483], [420, 473]], 8)
     const tailW = (x, y) => TAIL(x, y) * smooth(424, 478, x)
     function warp(x, y, t) {
       const p = phase(t), h = height(p), c = squash(p)
       const wT = tailW(x, y)
-      if (wT > 0) [x, y] = rotAround(x, y, 430, 468, 0.075 * Math.sin(2 * Math.PI * p) * wT)
+      if (wT > 0) [x, y] = rotAround(x, y, 430, 468, 0.07 * Math.sin(2 * Math.PI * p) * wT)
+      const wH = handW(x, y)
+      if (wH > 0) y += 90 * c * wH
       y = FEET - (FEET - y) * (1 - c)
       x = 345 + (x - 345) * (1 + 0.5 * c)
       return [x, y - h]
     }
-    function rope(ctx, t) {
-      const th = 2 * Math.PI * phase(t)
+    // The rope at turn angle th (0: overhead as drawn); a trail copy is only its purple core, faint.
+    function rope(ctx, t, th, trail = 0) {
       // How far the rope stands off the line between the hands: all of it overhead, a little less under the feet.
       const k = Math.cos(th) * (0.925 + 0.075 * Math.cos(th))
       const a = warp(E0[0], E0[1], t), b = warp(E1[0], E1[1], t)
@@ -1196,15 +1212,23 @@
       ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1])
       for (let i = 1; i < pts.length - 1; i++) ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2)
       ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1])
-      ctx.strokeStyle = '#0b0b0d'; ctx.lineWidth = 18.5; ctx.stroke()
-      ctx.strokeStyle = '#a477cd'; ctx.lineWidth = 7.5; ctx.stroke()
+      if (trail) { ctx.globalAlpha = trail; ctx.strokeStyle = '#a477cd'; ctx.lineWidth = 9; ctx.stroke() } else {
+        ctx.strokeStyle = '#0b0b0d'; ctx.lineWidth = 18.5; ctx.stroke()
+        ctx.strokeStyle = '#a477cd'; ctx.lineWidth = 7.5; ctx.stroke()
+      }
       ctx.restore()
     }
-    const inFront = (t) => Math.sin(2 * Math.PI * phase(t)) > 1e-6
+    // The rope and its trail, each drawn on the side of the cat it is on (in front while it comes down).
+    const TRAIL = [[0.34, 0.16], [0.17, 0.32]]
+    function ropes(ctx, t, front) {
+      const th = 2 * Math.PI * phase(t)
+      for (const [back, alpha] of TRAIL) if (Math.sin(th - back) > 1e-6 === front) rope(ctx, t, th - back, alpha)
+      if (Math.sin(th) > 1e-6 === front) rope(ctx, t, th)
+    }
     const STARS = [[572, 221, 595, 247], [535, 253, 576, 298], [102, 281, 133, 315]]
     const MARKS = [[219, 453, 236, 490], [206, 475, 227, 504], [425, 507, 445, 545]]
     // The bounce marks by the feet show on landing and fade as it springs off.
-    const marks = (p) => { const d = p > 0.5 ? p - 1 : p; return smooth(-0.16, -0.08, d) * smooth(0.12, 0.02, d) }
+    const marks = (p) => { const d = p > 0.5 ? p - 1 : p; return smooth(-0.1, -0.03, d) * smooth(0.12, 0.04, d) }
     return {
       view: VIEW, loop: LOOP, warp,
       skinKey: () => 'still',
@@ -1218,8 +1242,8 @@
         ctx.drawImage(imgs.jumpShadow, 236, 568, 216, 42, 236, 568, 216, 42)
         ctx.restore()
       },
-      under(ctx, t) { if (!inFront(t)) rope(ctx, t) },
-      over(ctx, t) { if (inFront(t)) rope(ctx, t) },
+      under(ctx, t) { ropes(ctx, t, false) },
+      over(ctx, t) { ropes(ctx, t, true) },
       front(ctx, t, imgs) {
         shimmer(ctx, imgs.jumpStars, STARS, t, 2)
         const m = marks(phase(t))
