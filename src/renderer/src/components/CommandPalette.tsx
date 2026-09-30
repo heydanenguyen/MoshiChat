@@ -7,6 +7,7 @@ import { Avatar } from './Avatar'
 export function CommandPalette(): JSX.Element {
   const t = useT()
   const conversations = useStore((s) => s.conversations)
+  const hidden = useStore((s) => s.settings.hidden)
   const select = useStore((s) => s.select)
   const closeSheet = useStore((s) => s.closeSheet)
   const showBadge = useShowPlatformBadge()
@@ -18,11 +19,13 @@ export function CommandPalette(): JSX.Element {
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // Hidden chats (Strangers) stay out of sight here too; archived ones are still found.
     return Object.values(conversations)
+      .filter((c) => !hidden?.[c.id])
       .filter((c) => !q || c.title.toLowerCase().includes(q) || c.participants.some((p) => p.handle?.toLowerCase().includes(q)))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 12)
-  }, [conversations, query])
+  }, [conversations, hidden, query])
 
   useEffect(() => setIndex(0), [query])
 

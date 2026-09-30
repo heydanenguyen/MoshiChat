@@ -327,6 +327,13 @@ export class AccountManager {
     await adapter.unsend(conversationId, messageId)
   }
 
+  /** Ids of your own messages in a chat, as far as they are cached (to recognise a reply to one of them). */
+  ownMessageIds(conversationId: string): Set<string> {
+    const ids = new Set<string>()
+    for (const m of this.messages.get(conversationId)?.values() ?? []) if (m.isOutgoing) ids.add(m.id)
+    return ids
+  }
+
   /** Local cache first, then every adapter's own search, merged and de-duplicated. */
   async search(query: string): Promise<SearchHit[]> {
     const needle = query.trim().toLowerCase()

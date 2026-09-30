@@ -138,16 +138,23 @@ export function QuickFilterEmpty({ filter }: { filter: Exclude<QuickFilter, 'all
   const t = useT()
   const setQuickFilter = useStore((s) => s.setQuickFilter)
   const copy = EMPTY[filter]
+  return <ListEmpty glyph={copy.glyph} title={t(copy.title)} hint={t(copy.hint)} action={{ label: t('quickShowAll'), run: () => setQuickFilter('all') }} />
+}
+
+/** A friendly empty list: a glyph, a line of good news or guidance, and optionally a way out. */
+export function ListEmpty({ glyph, title, hint, action }: { glyph: string; title: string; hint: string; action?: { label: string; run(): void } }): JSX.Element {
   return (
     <div className="quick-empty" role="status">
       <span className="quick-empty-glyph" aria-hidden>
-        {copy.glyph}
+        {glyph}
       </span>
-      <strong>{t(copy.title)}</strong>
-      <p>{t(copy.hint)}</p>
-      <button type="button" className="quick-empty-reset" onClick={() => setQuickFilter('all')}>
-        {t('quickShowAll')}
-      </button>
+      <strong>{title}</strong>
+      <p>{hint}</p>
+      {action && (
+        <button type="button" className="quick-empty-reset" onClick={action.run}>
+          {action.label}
+        </button>
+      )}
     </div>
   )
 }

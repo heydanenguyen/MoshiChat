@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
-import { useStore, useUnreadCounts } from './store'
+import { isArchivedNow, useStore, useUnreadCounts } from './store'
 import { translate } from './i18n'
 import { isMac } from './utils'
 import { Sidebar } from './components/Sidebar'
@@ -35,6 +35,30 @@ function zoomBy(direction: 1 | -1 | 0): void {
   if (zoom === (settings.zoom ?? 1)) return
   void setSettings({ zoom })
   showToast(`${translate(settings.language, 'zoom')} ${Math.round(zoom * 100)}%`)
+}
+
+/**
+ * Inbox keys, all with ⌘/Ctrl so they never fire while typing (single letters would, mid-word in Telex/VNI):
+ * ⌘E archive the open chat, ⌘⇧U unread/read, ⌘; inbox/archive.
+ */
+function inboxKey(e: KeyboardEvent): 'archive' | 'toggle-unread' | 'show-archive' | undefined {
+  const key = e.key.toLowerCase()
+  if (key === 'e' && !e.shiftKey) return 'archive'
+  if (key === 'u' && e.shiftKey) return 'toggle-unread'
+  if (e.key === ';' && !e.shiftKey) return 'show-archive'
+  return undefined
+}
+
+/** From the keyboard or the macOS menu; never behind a sheet, the photo viewer or the forward picker. */
+function runInboxCommand(command: 'archive' | 'toggle-unread' | 'show-archive'): void {
+  const state = useStore.getState()
+  if (state.sheet.kind !== 'none' || state.lightbox || state.forwarding) return
+  if (command === 'show-archive') return state.setShowArchive(!state.showArchive)
+  const id = state.selectedId
+  if (!id) return
+  if (command === 'toggle-unread') void state.toggleUnread(id)
+  else if (isArchivedNow(state, id)) void state.unarchive(id)
+  else void state.archive(id)
 }
 
 export default function App(): JSX.Element {
@@ -161,6 +185,11 @@ export default function App(): JSX.Element {
         case 'toggle-split':
           useStore.getState().toggleSplit()
           break
+        case 'archive':
+        case 'toggle-unread':
+        case 'show-archive':
+          runInboxCommand(event.command)
+          break
         case 'close': {
           // ⌘W: the photo viewer, then an open sheet, then the window itself (hidden on macOS).
           const state = useStore.getState()
@@ -251,6 +280,9 @@ export default function App(): JSX.Element {
       } else if (mod && e.key === '\\') {
         e.preventDefault()
         useStore.getState().toggleSplit()
+      } else if (mod && !e.altKey && !e.isComposing && sheet.kind === 'none' && inboxKey(e)) {
+        e.preventDefault()
+        runInboxCommand(inboxKey(e)!)
       } else if (mod && (e.key === '1' || e.key === '2') && useStore.getState().layout.panes.length > 1) {
         e.preventDefault()
         useStore.getState().activatePane(e.key === '1' ? 0 : 1, true)
@@ -298,9 +330,21 @@ export default function App(): JSX.Element {
             {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
 
             {toast && (
-              <div className={`toast ${toast.kind}`}>
+              <div key={toast.id} className={`toast ${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
                 {toast.kind === 'error' && <AlertCircle size={16} />}
                 {toast.text}
+                {toast.action && (
+                  <button
+                    type="button"
+                    className="toast-action"
+                    onClick={() => {
+                      toast.action?.run()
+                      useStore.setState({ toast: undefined })
+                    }}
+                  >
+                    {toast.action.label}
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { BellOff, CheckCheck, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
-import { PLATFORMS, isMutedBy, type Platform } from '@shared/types'
+import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, SquarePen, X } from 'lucide-react'
+import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useStore, useT, useTagDefs } from '../store'
 import { formatBadge, isUnread } from '../quickFilter'
-import { formatListTime, modKey } from '../utils'
+import { formatListTime, modKey, shortcutLabel } from '../utils'
 import { openIds } from '../panes'
 import { popoverShift } from '../popover'
 
@@ -15,7 +15,8 @@ import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
-import { QuickFilterEmpty, QuickFilters } from './QuickFilters'
+import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
+import { isArchived, isChatMuted } from '@shared/inbox'
 
 interface TagMenuState {
   conversationId: string
@@ -25,7 +26,14 @@ interface TagMenuState {
 
 export function ConversationList(): JSX.Element {
   const t = useT()
-  const { conversations, counts } = useChatList()
+  const { conversations, counts, archivedCount } = useChatList()
+  const showArchive = useStore((s) => s.showArchive)
+  const setShowArchive = useStore((s) => s.setShowArchive)
+  const archived = useStore((s) => s.settings.archived)
+  const archive = useStore((s) => s.archive)
+  const unarchive = useStore((s) => s.unarchive)
+  const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
+  const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
   const allConversations = useStore((s) => s.conversations)
   const quickFilter = useStore((s) => s.quickFilter)
   const markedUnread = useStore((s) => s.settings.markedUnread)
@@ -72,11 +80,12 @@ export function ConversationList(): JSX.Element {
   }
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
-  // A chip with nothing in it; a sidebar filter with no chats at all keeps the usual "no conversations" note.
-  const quickEmpty = !searching && quickFilter !== 'all' && counts.all > 0 && conversations.length === 0
+  const mutedChat = (c: Conversation): boolean => isChatMuted({ muted, tags }, c)
+  const archivedChat = (c: Conversation): boolean => isArchived(c, archived?.[c.id], mutedChat(c))
   // From the store, not the list: a chat can leave the filtered list while its menu is open (untagging it).
   const menuConversation = menu ? allConversations[menu.conversationId] : undefined
   const menuUnread = !!menuConversation && isUnread(menuConversation, markedUnread)
+  const menuArchived = !!menuConversation && archivedChat(menuConversation)
 
   useEffect(() => {
     if (!menu) return
@@ -117,17 +126,51 @@ export function ConversationList(): JSX.Element {
     return h.conversation.platform === filter
   })
 
+  // Why the list is empty, if it is: nothing found, an empty archive, a chip with nothing in it (the inbox has
+  // chats), everything archived, or no chats at all (the usual "no conversations" note).
+  const empty =
+    conversations.length > 0 ? undefined
+    : searching ? (visibleHits.length === 0 ? 'no-results' : undefined)
+    : showArchive ? 'archive'
+    : counts.all > 0 && quickFilter !== 'all' ? 'chip'
+    : archivedCount > 0 ? 'inbox-zero'
+    : 'no-chats'
+
   const ringFor = (id: string): string | undefined => {
     return (tags[id] ?? []).map((tag) => tagById[tag]).find(Boolean)?.color
   }
 
   return (
     <section className="list-col">
-      <header className="list-header drag">
-        <h1 className="list-title">{title}</h1>
-        <button className="icon-btn no-drag" title={`${t('newChat')} (Ctrl N)`} onClick={() => openSheet({ kind: 'new-chat' })}>
-          <SquarePen size={18} strokeWidth={2} />
-        </button>
+      <header className={`list-header drag ${showArchive ? 'in-archive' : ''}`}>
+        {showArchive ? (
+          <div className="list-title-row">
+            <button className="icon-btn no-drag list-back" onClick={() => setShowArchive(false)} title={`${t('archiveBack')} (${shortcutLabel(';')})`} aria-label={t('archiveBack')}>
+              <ChevronLeft size={20} strokeWidth={2.2} />
+            </button>
+            <h1 className="list-title">{t('archiveTitle')}</h1>
+          </div>
+        ) : (
+          <h1 className="list-title">{title}</h1>
+        )}
+        <div className="list-header-actions no-drag">
+          {!showArchive && archivedCount > 0 && (
+            <button
+              className="icon-btn archive-btn"
+              onClick={() => setShowArchive(true)}
+              title={`${t('archiveShow')} (${shortcutLabel(';')})`}
+              aria-label={`${t('archiveShow')}, ${archivedCount}`}
+            >
+              <Archive size={17} strokeWidth={2} />
+              <span className="archive-btn-count" aria-hidden>
+                {formatBadge(archivedCount)}
+              </span>
+            </button>
+          )}
+          <button className="icon-btn" title={`${t('newChat')} (${shortcutLabel('N')})`} onClick={() => openSheet({ kind: 'new-chat' })}>
+            <SquarePen size={18} strokeWidth={2} />
+          </button>
+        </div>
       </header>
 
       <div className="search-field">
@@ -140,7 +183,7 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
-      {!searching && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
+      {!searching && !showArchive && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
 
       {Object.values(accounts)
         .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
@@ -155,8 +198,12 @@ export function ConversationList(): JSX.Element {
           />
         ))}
       <div className="conv-list scroll">
-        {quickEmpty && <QuickFilterEmpty filter={quickFilter} />}
-        {!quickEmpty && conversations.length === 0 && (!searching || visibleHits.length === 0) && (
+        {empty === 'chip' && quickFilter !== 'all' && <QuickFilterEmpty filter={quickFilter} />}
+        {empty === 'archive' && <ListEmpty glyph="🗂️" title={t('archiveEmpty')} hint={t('archiveEmptyHint', { key: shortcutLabel('E') })} />}
+        {empty === 'inbox-zero' && (
+          <ListEmpty glyph="🌤️" title={t('inboxZero')} hint={t('inboxZeroHint')} action={{ label: t('archiveShow'), run: () => setShowArchive(true) }} />
+        )}
+        {(empty === 'no-results' || empty === 'no-chats') && (
           <div className="conv-empty">
             <strong>{searching ? t('noResults') : t('noConversations')}</strong>
             {!searching && !hasAccounts && t('noConversationsHint')}
@@ -235,7 +282,12 @@ export function ConversationList(): JSX.Element {
                   </span>
                   <span className="conv-meta">
                     {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
-                    {(c.muted || isMutedBy({ muted, tags }, c)) && <BellOff size={12} strokeWidth={2.2} />}
+                    {mutedChat(c) ? (
+                      <BellOff size={12} strokeWidth={2.2} />
+                    ) : (
+                      mentionsOnly?.[c.id] && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />
+                    )}
+                    {searching && archivedChat(c) && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
                     {c.unreadCount > 0 ? (
                       <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
                     ) : (
@@ -304,6 +356,20 @@ export function ConversationList(): JSX.Element {
               >
                 {menuUnread ? <CheckCheck size={15} /> : <CircleDot size={15} />}
                 <span>{menuUnread ? t('markRead') : t('markUnread')}</span>
+                <span className="context-menu-shortcut">{shortcutLabel('U', true)}</span>
+              </button>
+            )}
+            {menuConversation && (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  void (menuArchived ? unarchive : archive)(menuConversation.id)
+                  setMenu(undefined)
+                }}
+              >
+                {menuArchived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                <span>{menuArchived ? t('unarchive') : t('archive')}</span>
+                <span className="context-menu-shortcut">{shortcutLabel('E')}</span>
               </button>
             )}
             {canSplit && menu.conversationId !== selectedId && (
@@ -345,6 +411,21 @@ export function ConversationList(): JSX.Element {
               <BellOff size={15} />
               <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
             </button>
+            {menuConversation?.isGroup && (
+              <button
+                className={`context-menu-item ${mentionsOnly?.[menuConversation.id] ? 'active' : ''}`}
+                role="menuitemcheckbox"
+                aria-checked={!!mentionsOnly?.[menuConversation.id]}
+                onClick={() => {
+                  void toggleMentionsOnly(menuConversation.id)
+                  setMenu(undefined)
+                }}
+              >
+                <AtSign size={15} />
+                <span>{t('mentionsOnly')}</span>
+                {mentionsOnly?.[menuConversation.id] && <span className="context-menu-check">✓</span>}
+              </button>
+            )}
             <button
               className="context-menu-item"
               onClick={() => {

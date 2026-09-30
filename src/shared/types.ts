@@ -539,6 +539,10 @@ export interface Settings {
   hidden?: Record<string, number>
   /** Chats marked unread in Moshi ("come back to this"): conversation id -> when. Cleared when the chat is opened or marked read. */
   markedUnread?: Record<string, number>
+  /** Chats archived as done: conversation id -> when. They return to the inbox when the other side writes again (unless muted). */
+  archived?: Record<string, number>
+  /** Group chats that only notify when a message @mentions you or replies to you. */
+  mentionsOnly?: Record<string, boolean>
   /** To-dos (from messages or typed), with optional reminders; the main process marks reminders shown. */
   todos?: Todo[]
   /** Text size across the app (bigger for high-resolution screens). */
@@ -649,7 +653,18 @@ export function isMutedBy(settings: Pick<Settings, 'muted' | 'tags'>, conversati
 }
 
 /** What the native menu bar (macOS) asks the renderer to do. */
-export type AppCommand = 'settings' | 'new-chat' | 'command-palette' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'toggle-split' | 'close'
+export type AppCommand =
+  | 'settings'
+  | 'new-chat'
+  | 'command-palette'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'zoom-reset'
+  | 'toggle-split'
+  | 'close'
+  | 'archive'
+  | 'toggle-unread'
+  | 'show-archive'
 
 /** In-app updates (GitHub Releases). `manual`: this build cannot replace itself (unsigned macOS), so offer the download page. */
 export type UpdateState =

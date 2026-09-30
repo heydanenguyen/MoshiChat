@@ -9,6 +9,7 @@ import { isStickerId } from '@shared/stickers'
 import { isMitoId, mitoSticker } from '@shared/mito'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
+import { accountNames, isForMe } from '@shared/inbox'
 import { Storage } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
@@ -141,6 +142,10 @@ function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): void {
   const conversation = manager.listConversations().find((c) => c.id === event.message.conversationId)
   if (conversation?.muted) return
   if (conversation && isMutedBy(storage.settings, conversation)) return
+  if (conversation && storage.settings.mentionsOnly?.[conversation.id]) {
+    const account = storage.accounts.find((a) => a.id === conversation.accountId)
+    if (!isForMe(event.message, accountNames(account), manager.ownMessageIds(conversation.id))) return
+  }
   const nickname = storage.settings.contactOverrides?.[event.message.conversationId]?.nickname?.trim()
   const title = conversation?.isGroup ? `${event.message.senderName} in ${nickname || conversation.title}` : nickname || event.message.senderName
   const notification = new Notification({
@@ -198,7 +203,7 @@ async function stickerFile(id: string): Promise<OutgoingAttachment> {
 }
 
 /**
- * Drop per-chat settings (tags, pins, hidden and marked-unread chats, nicknames, saved messages, mutes) that belong to accounts
+ * Drop per-chat settings (tags, pins, hidden, marked-unread, archived and mentions-only chats, nicknames, saved messages, mutes) that belong to accounts
  * which no longer exist, so counts and lists never include chats that are gone.
  */
 async function pruneOrphanedSettings(): Promise<void> {
@@ -217,8 +222,10 @@ async function pruneOrphanedSettings(): Promise<void> {
   if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
   const hidden = keep(settings.hidden)
   if (hidden && Object.keys(hidden).length !== Object.keys(settings.hidden ?? {}).length) patch.hidden = hidden
-  const markedUnread = keep(settings.markedUnread)
-  if (markedUnread && Object.keys(markedUnread).length !== Object.keys(settings.markedUnread ?? {}).length) patch.markedUnread = markedUnread
+  for (const key of ['markedUnread', 'archived', 'mentionsOnly'] as const) {
+    const kept = keep<number | boolean>(settings[key])
+    if (kept && Object.keys(kept).length !== Object.keys(settings[key] ?? {}).length) Object.assign(patch, { [key]: kept })
+  }
   const overrides = keep(settings.contactOverrides)
   if (overrides && Object.keys(overrides).length !== Object.keys(settings.contactOverrides ?? {}).length) patch.contactOverrides = overrides
   const saved = settings.savedMessages?.filter((m) => owned(m.conversationId))
@@ -287,6 +294,10 @@ function installMenu(): void {
       submenu: [
         { label: vi ? 'Tin nhắn mới' : 'New Message', accelerator: 'Cmd+N', click: command('new-chat') },
         { label: vi ? 'Nhảy tới hội thoại…' : 'Jump to Conversation…', accelerator: 'Cmd+K', click: command('command-palette') },
+        { type: 'separator' },
+        { label: vi ? 'Lưu trữ hội thoại' : 'Archive Conversation', accelerator: 'Cmd+E', click: command('archive') },
+        { label: vi ? 'Đánh dấu chưa đọc / đã đọc' : 'Mark as Unread / Read', accelerator: 'Cmd+Shift+U', click: command('toggle-unread') },
+        { label: vi ? 'Xem lưu trữ' : 'Show Archive', accelerator: 'Cmd+;', click: command('show-archive') },
         { type: 'separator' },
         // ⌘W closes what is on top first (a photo, a sheet), then hides the window.
         { label: vi ? 'Đóng' : 'Close', accelerator: 'Cmd+W', click: command('close') }

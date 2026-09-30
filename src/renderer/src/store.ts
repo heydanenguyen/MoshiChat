@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { CustomSticker } from '@shared/bridge'
 import type { SettingsPage } from './components/SettingsSheet'
@@ -35,7 +35,8 @@ import { previewKindOf } from '@shared/preview'
 import { abstractIdUrl } from './components/AbstractAvatar'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
-import { applyQuickFilter, countQuickFilters, type QuickFilter, type QuickFilterContext } from './quickFilter'
+import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
+import { accountNames, archiveMark, hasReturned, isArchived, isChatMuted, isForMe } from '@shared/inbox'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
@@ -59,6 +60,8 @@ export interface Toast {
   id: number
   text: string
   kind: 'error' | 'info'
+  /** A button on the toast, e.g. Undo. */
+  action?: { label: string; run(): void }
 }
 
 export interface Lightbox {
@@ -102,6 +105,8 @@ interface State {
   filter: Filter
   /** The chip above the chat list (Unread, Needs reply...), applied on top of `filter`. */
   quickFilter: QuickFilter
+  /** The list shows archived chats instead of the inbox. */
+  showArchive: boolean
   search: string
   searchHits: SearchHit[]
   authPrompts: AuthPrompt[]
@@ -134,6 +139,7 @@ interface State {
   setWide(wide: boolean): void
   setFilter(filter: Filter): void
   setQuickFilter(quickFilter: QuickFilter): void
+  setShowArchive(showArchive: boolean): void
   setSearch(search: string): void
   openHit(hit: SearchHit): void
   /** Scroll to a message in the open thread, loading older pages until it appears. */
@@ -190,6 +196,16 @@ interface State {
   markUnread(conversationId: string): Promise<void>
   /** Clear new messages and the unread flag without opening the chat. */
   markRead(conversationId: string): Promise<void>
+  /** Mark read if unread, unread if read. */
+  toggleUnread(conversationId: string): Promise<void>
+  /**
+   * Done with a chat: archive it (read, out of the inbox until they write again), with Undo. If it is the open
+   * chat, the next one in the list opens, so a run of chats can be cleared one key at a time.
+   */
+  archive(conversationId: string): Promise<void>
+  unarchive(conversationId: string): Promise<void>
+  /** Group chats: notify only for messages that @mention you or reply to you. */
+  toggleMentionsOnly(conversationId: string): Promise<void>
   /** Move a chat to Strangers: out of the list and muted until it is unhidden in Settings. */
   hideConversation(conversationId: string): Promise<void>
   unhideConversation(conversationId: string): Promise<void>
@@ -213,7 +229,7 @@ interface State {
   addDemo(): Promise<void>
   toggleDetails(tab?: DetailsTab): void
   notifyTyping(conversationId: string): void
-  showToast(text: string, kind?: Toast['kind']): void
+  showToast(text: string, kind?: Toast['kind'], action?: Toast['action']): void
   t(key: TKey, params?: Record<string, string | number>): string
 }
 
@@ -291,6 +307,11 @@ function onScreen(conversationId: string): boolean {
   return openIds(useStore.getState().layout).includes(conversationId)
 }
 
+/** Your messages in a chat, as far as they are loaded (so a reply to one of them is recognised exactly). */
+function ownIds(conversationId: string): Set<string> {
+  return new Set((useStore.getState().messages[conversationId] ?? []).filter((m) => m.isOutgoing).map((m) => m.id))
+}
+
 /** A new incoming message plays the chosen sound, unless the chat is muted; softer in an open chat. */
 function maybePlaySound(message: Message): void {
   const { settings, conversations } = useStore.getState()
@@ -298,6 +319,7 @@ function maybePlaySound(message: Message): void {
   if (sound === 'off' || message.isOutgoing || message.system || Date.now() - message.sentAt > 60_000) return
   const conversation = conversations[message.conversationId]
   if (!conversation || conversation.muted || settings.muted.conversations.includes(conversation.id) || isMutedBy(settings, conversation)) return
+  if (settings.mentionsOnly?.[conversation.id] && !isForMe(message, accountNames(useStore.getState().accounts[conversation.accountId]), ownIds(conversation.id))) return
   const watching = document.hasFocus() && onScreen(message.conversationId)
   playSound(sound, (settings.soundVolume ?? 0.7) * (watching ? 0.45 : 1))
 }
@@ -331,6 +353,7 @@ export const useStore = create<State>((set, get) => ({
   highlightIds: {},
   filter: 'all',
   quickFilter: 'all',
+  showArchive: false,
   search: '',
   searchHits: [],
   authPrompts: [],
@@ -510,6 +533,10 @@ export const useStore = create<State>((set, get) => ({
 
   setQuickFilter(quickFilter) {
     set({ quickFilter })
+  },
+
+  setShowArchive(showArchive) {
+    set({ showArchive })
   },
 
   setFilter(filter) {
@@ -991,8 +1018,58 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async markUnread(conversationId) {
-    await updateMarkedUnread((record) => {
+    await updateRecord('markedUnread', (record) => {
       record[conversationId] = Date.now()
+      return true
+    })
+  },
+
+  async toggleUnread(conversationId) {
+    const conversation = get().conversations[conversationId]
+    if (!conversation) return
+    await (isUnread(conversation, get().settings.markedUnread) ? get().markRead(conversationId) : get().markUnread(conversationId))
+  },
+
+  async archive(conversationId) {
+    const { conversations, selectedId, layout, settings } = get()
+    const conversation = conversations[conversationId]
+    if (!conversation) return
+    const wasOpen = conversationId === selectedId
+    const wasUnread = isUnread(conversation, settings.markedUnread)
+    if (wasOpen) {
+      // Open the next chat down the list (or the one above at the bottom), skipping chats already on screen.
+      const open = new Set(openIds(layout))
+      const at = listedIds.indexOf(conversationId)
+      const next = at < 0 ? undefined : [...listedIds.slice(at + 1), ...listedIds.slice(0, at).reverse()].find((id) => !open.has(id))
+      if (next) get().select(next)
+      else if (layout.panes.length > 1) get().closePane(layout.active)
+      else get().select(undefined)
+    }
+    await updateRecord('archived', (record) => {
+      record[conversationId] = archiveMark(conversation)
+      return true
+    })
+    await get().markRead(conversationId)
+    get().showToast(translate(settings.language, 'archivedToast', { name: conversation.title }), 'info', {
+      label: translate(settings.language, 'undoAction'),
+      run: () => {
+        // Back as it was: in the inbox, and open again, or still unread to you if it was (the platform keeps
+        // its "seen", which cannot be taken back).
+        void get().unarchive(conversationId)
+        if (wasOpen) get().select(conversationId)
+        else if (wasUnread) void get().markUnread(conversationId)
+      }
+    })
+  },
+
+  async unarchive(conversationId) {
+    await updateRecord('archived', (record) => delete record[conversationId])
+  },
+
+  async toggleMentionsOnly(conversationId) {
+    await updateRecord('mentionsOnly', (record) => {
+      if (record[conversationId]) delete record[conversationId]
+      else record[conversationId] = true
       return true
     })
   },
@@ -1150,12 +1227,13 @@ export const useStore = create<State>((set, get) => ({
     void window.unison.messages.typing(conversationId).catch(() => undefined)
   },
 
-  showToast(text, kind = 'info') {
+  showToast(text, kind = 'info', action) {
     const id = ++toastCounter
-    set({ toast: { id, text, kind } })
+    set({ toast: { id, text, kind, action } })
+    // A toast with a button stays a little longer, so there is time to reach it.
     setTimeout(() => {
       if (get().toast?.id === id) set({ toast: undefined })
-    }, 4000)
+    }, action ? 6000 : 4000)
   },
 
   t(key, params) {
@@ -1163,27 +1241,30 @@ export const useStore = create<State>((set, get) => ({
   }
 }))
 
-let markedWrites = Promise.resolve()
+/** Per-chat records changed from the list, often several in a row (a key held down, a split opening two chats). */
+type ChatRecords = Required<Pick<Settings, 'markedUnread' | 'archived' | 'mentionsOnly'>>
+
+let recordWrites = Promise.resolve()
 
 /**
- * Change the chats marked unread, one change at a time: each reads the record the previous one wrote, so two
- * chats cleared together (a split opening both) cannot put each other back.
+ * Change a per-chat record one change at a time: each reads what the previous one wrote, so quick changes in a
+ * row (or two chats cleared together) cannot undo each other. `change` edits the copy and says if it changed.
  */
-function updateMarkedUnread(change: (record: Record<string, number>) => boolean): Promise<void> {
-  markedWrites = markedWrites
+function updateRecord<K extends keyof ChatRecords>(key: K, change: (record: ChatRecords[K]) => boolean): Promise<void> {
+  recordWrites = recordWrites
     .then(async () => {
       const { settings, setSettings } = useStore.getState()
-      const markedUnread = { ...(settings.markedUnread ?? {}) }
-      if (change(markedUnread)) await setSettings({ markedUnread })
+      const record = { ...(settings[key] ?? {}) } as ChatRecords[K]
+      if (change(record)) await setSettings({ [key]: record })
     })
     .catch(() => undefined)
-  return markedWrites
+  return recordWrites
 }
 
 /** Opening a chat, or marking it read, answers "come back to this". */
 function clearMarkedUnread(ids: string[]): Promise<void> {
   if (!ids.length) return Promise.resolve()
-  return updateMarkedUnread((record) => {
+  return updateRecord('markedUnread', (record) => {
     const before = Object.keys(record).length
     for (const id of ids) delete record[id]
     return Object.keys(record).length !== before
@@ -1285,49 +1366,91 @@ useStore.subscribe((state, prev) => {
   if (changed) useStore.setState({ conversations: next })
 })
 
-export interface ChatList {
-  /** What the list shows: sidebar filter, then search or the quick filter, pinned first then most recent. */
-  conversations: Conversation[]
-  /** How many chats each quick filter holds within the sidebar filter. */
-  counts: Record<QuickFilter, number>
+/** Whether a chat sits in the archive right now (archived, and not brought back by a new message). */
+export function isArchivedNow(state: Pick<State, 'settings' | 'conversations'>, conversationId: string): boolean {
+  const conversation = state.conversations[conversationId]
+  return !!conversation && isArchived(conversation, state.settings.archived?.[conversationId], isChatMuted(state.settings, conversation))
 }
 
+// A chat that came back from the archive drops its mark, so muting it later does not quietly send it back.
+useStore.subscribe((state, prev) => {
+  const marks = state.settings.archived
+  if (!marks || (state.conversations === prev.conversations && marks === prev.settings.archived)) return
+  const back = Object.keys(marks).filter((id) => {
+    const c = state.conversations[id]
+    return c && !isChatMuted(state.settings, c) && hasReturned(c, marks[id])
+  })
+  if (!back.length) return
+  void updateRecord('archived', (record) => {
+    const stale = back.filter((id) => id in record)
+    for (const id of stale) delete record[id]
+    return stale.length > 0
+  })
+})
+
+export interface ChatList {
+  /** What the list shows: sidebar filter, then search, the archive or the quick filter; pinned first then most recent. */
+  conversations: Conversation[]
+  /** How many inbox chats each quick filter holds within the sidebar filter. */
+  counts: Record<QuickFilter, number>
+  /** Archived chats within the sidebar filter. */
+  archivedCount: number
+}
+
+/** Rows the list shows right now, top to bottom (what "archive and open the next one" walks). */
+let listedIds: string[] = []
 /**
- * The chat list. While searching, the quick filter steps aside so a search never misses a chat because a chip
- * was left on.
+ * Rows last listed under a chip, and which chip (with the sidebar filter): a chat only stays put under the chip
+ * it was listed under. Searching or visiting the archive leaves this alone, so coming back finds it as it was.
+ */
+let chipListed: { key: string; ids: ReadonlySet<string> } = { key: '', ids: new Set() }
+
+/**
+ * The chat list. Archived chats wait in their own view; a search looks everywhere (inbox and archive) and past
+ * the quick filter, so it never misses a chat because a chip was left on.
  */
 export function useChatList(): ChatList {
   const conversations = useStore((s) => s.conversations)
   const filter = useStore((s) => s.filter)
   const quickFilter = useStore((s) => s.quickFilter)
+  const showArchive = useStore((s) => s.showArchive)
   const search = useStore((s) => s.search)
   const tags = useStore((s) => s.settings.tags)
   const pins = useStore((s) => s.settings.pins)
   const hidden = useStore((s) => s.settings.hidden)
   const muted = useStore((s) => s.settings.muted)
   const markedUnread = useStore((s) => s.settings.markedUnread)
+  const archived = useStore((s) => s.settings.archived)
   const drafts = useStore((s) => s.drafts)
   const layout = useStore((s) => s.layout)
+  const searching = search.trim().length > 0
   const scoped = useMemo(() => computeVisible(conversations, filter, search, tags, pins, hidden), [conversations, filter, search, tags, pins, hidden])
   // `now` is read again whenever the chats change, which is often enough for a 30-day window.
   const ctx = useMemo<QuickFilterContext>(
-    () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => !!c.muted || isMutedBy({ muted, tags }, c) }),
+    () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => isChatMuted({ muted, tags }, c) }),
     [drafts, markedUnread, muted, tags, conversations]
   )
-  const counts = useMemo(() => countQuickFilters(search.trim() ? [] : scoped, ctx), [scoped, ctx, search])
-  // Rows listed under the current chip (and sidebar filter) last time, so an open chat that stops matching can
-  // stay put, while one that never matched does not appear under a chip it has nothing to do with.
-  const listed = useRef<{ key: string; ids: ReadonlySet<string> }>({ key: '', ids: new Set() })
+  const [inbox, archive] = useMemo(() => {
+    const inbox: Conversation[] = []
+    const archive: Conversation[] = []
+    for (const c of scoped) (isArchived(c, archived?.[c.id], ctx.isMuted(c)) ? archive : inbox).push(c)
+    return [inbox, archive]
+  }, [scoped, archived, ctx])
+  const counts = useMemo(() => countQuickFilters(searching ? [] : inbox, ctx), [inbox, ctx, searching])
   const shown = useMemo(() => {
-    if (search.trim()) return scoped
+    if (searching) return scoped
+    if (showArchive) return archive
+    // An open chat that stops matching the chip stays put, but only if it was already listed under it: one that
+    // never matched does not appear under a chip it has nothing to do with.
     const key = `${filter}|${quickFilter}`
-    const before = listed.current.key === key ? listed.current.ids : new Set<string>()
+    const before = chipListed.key === key ? chipListed.ids : new Set<string>()
     const keep = new Set(openIds(layout).filter((id) => before.has(id)))
-    const list = applyQuickFilter(scoped, quickFilter, ctx, keep)
-    listed.current = { key, ids: new Set(list.map((c) => c.id)) }
+    const list = applyQuickFilter(inbox, quickFilter, ctx, keep)
+    chipListed = { key, ids: new Set(list.map((c) => c.id)) }
     return list
-  }, [scoped, search, filter, quickFilter, ctx, layout])
-  return { conversations: shown, counts }
+  }, [searching, scoped, showArchive, archive, inbox, filter, quickFilter, ctx, layout])
+  listedIds = shown.map((c) => c.id)
+  return { conversations: shown, counts, archivedCount: archive.length }
 }
 
 /** Pinned in Moshi, or on the platform when Moshi has no say. */
@@ -1391,10 +1514,17 @@ export function useUnreadCounts(): UnreadCounts {
   const tags = useStore((s) => s.settings.tags)
   const muted = useStore((s) => s.settings.muted)
   const markedUnread = useStore((s) => s.settings.markedUnread)
-  return useMemo(() => computeUnread(conversations, tags, muted, markedUnread), [conversations, tags, muted, markedUnread])
+  const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
+  return useMemo(() => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly), [conversations, tags, muted, markedUnread, mentionsOnly])
 }
 
-function computeUnread(conversations: Record<string, Conversation>, tags: Record<string, TagId[]>, muted?: MuteRules, markedUnread?: Record<string, number>): UnreadCounts {
+function computeUnread(
+  conversations: Record<string, Conversation>,
+  tags: Record<string, TagId[]>,
+  muted?: MuteRules,
+  markedUnread?: Record<string, number>,
+  mentionsOnly?: Record<string, boolean>
+): UnreadCounts {
   const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
   const byAccount: Record<string, number> = {}
   const byTag: Record<string, number> = {}
@@ -1402,7 +1532,8 @@ function computeUnread(conversations: Record<string, Conversation>, tags: Record
   for (const c of Object.values(conversations)) {
     // A chat marked unread by hand counts as one, like a single new message.
     const unread = c.unreadCount || (markedUnread?.[c.id] ? 1 : 0)
-    if (!unread || c.muted) continue
+    // Muted and mentions-only chats keep their own count in the list but stay out of the badges.
+    if (!unread || c.muted || mentionsOnly?.[c.id]) continue
     if (muted && isMutedBy({ muted, tags }, c)) continue
     total += unread
     byPlatform[c.platform] += unread

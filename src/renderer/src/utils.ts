@@ -174,6 +174,11 @@ export function sectionize(messages: Message[]): DaySection[] {
 export const isMac = typeof window !== 'undefined' && (window.unison?.app.platform ?? 'win32') === 'darwin'
 export const modKey = isMac ? '⌘' : 'Ctrl'
 
+/** How a ⌘/Ctrl shortcut reads on this computer: ⌘⇧U on a Mac, Ctrl+Shift+U elsewhere. */
+export function shortcutLabel(key: string, shift = false): string {
+  return isMac ? `⌘${shift ? '⇧' : ''}${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`
+}
+
 const EMOJI_GRAPHEME = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\u{200D}\u{FE0F}\u{20E3}#*0-9])+$/u
 
 /**

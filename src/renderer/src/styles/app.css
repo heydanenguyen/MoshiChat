@@ -523,6 +523,51 @@ a {
   margin: 0;
 }
 
+.list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Archive view: a back chevron tucked against the title. */
+.list-header.in-archive {
+  padding-left: var(--space-2);
+}
+.list-title-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.list-title-row .list-title {
+  animation: list-title-in var(--duration-base) var(--ease-out) both;
+}
+@keyframes list-title-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+/* The way into the archive, with how many chats wait there. */
+.icon-btn.archive-btn {
+  width: auto;
+  min-width: 32px;
+  padding: 0 7px;
+  gap: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+.archive-btn-count {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.archive-btn:hover .archive-btn-count {
+  color: var(--text-secondary);
+}
+
 .icon-btn {
   width: 32px;
   height: 32px;
@@ -773,7 +818,8 @@ a {
 @media (prefers-reduced-motion: reduce) {
   .quick-chip,
   .quick-chip.enters,
-  .quick-empty {
+  .quick-empty,
+  .list-title-row .list-title {
     animation: none;
     transition: none;
   }
@@ -3692,6 +3738,25 @@ mark {
   color: var(--danger);
 }
 
+/* Undo and friends: a quiet accent button at the end of the toast. */
+.toast-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin: -4px -8px -4px 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  font-weight: 700;
+  transition: background var(--duration-fast) ease;
+}
+.toast-action:hover {
+  background: var(--accent-soft);
+}
+.toast-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -5988,6 +6053,21 @@ kbd {
   background: var(--glass-strong);
   box-shadow: var(--shadow-sm);
 }
+.mentions-only-card {
+  padding: 0;
+}
+.mentions-only-card .settings-row {
+  align-items: flex-start;
+}
+.mentions-only-icon {
+  margin-top: 2px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.mentions-only-card .switch {
+  margin-top: 2px;
+}
+
 .details-card.plain {
   padding: 0;
   background: none;

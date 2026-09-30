@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bell, BellOff, Cake, Clock, File, Pencil, FileText, Image, Info, Link2, Mic, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
+import { AtSign, Bell, BellOff, Cake, Clock, File, FileText, Image, Info, Link2, Mic, Pencil, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
@@ -92,6 +92,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const custom = useStore((s) => s.settings.contactOverrides?.[conversationId])
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
+  const mentionsOnly = useStore((s) => !!s.settings.mentionsOnly?.[conversationId])
+  const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
   const allTags = useStore((s) => s.settings.tags)
   const language = useStore((s) => s.settings.language)
   const openLightbox = useStore((s) => s.openLightbox)
@@ -172,6 +174,26 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         </button>
       </div>
       {mutedByRule && <div className="field-hint centered details-hint">{t('mutedByRule')}</div>}
+      {conversation.isGroup && !mutedHere && !mutedByRule && (
+        <div className="details-card mentions-only-card">
+          <div className="settings-row">
+            <AtSign size={16} strokeWidth={2.2} className="mentions-only-icon" aria-hidden />
+            <div className="settings-row-text">
+              <div className="settings-row-title" id={`mentions-only-${conversationId}`}>
+                {t('mentionsOnly')}
+              </div>
+              <div className="settings-row-sub">{t('mentionsOnlyHint')}</div>
+            </div>
+            <button
+              className={`switch ${mentionsOnly ? 'on' : ''}`}
+              role="switch"
+              aria-checked={mentionsOnly}
+              aria-labelledby={`mentions-only-${conversationId}`}
+              onClick={() => void toggleMentionsOnly(conversationId)}
+            />
+          </div>
+        </div>
+      )}
 
       <MomentsPreviewCard conversationId={conversationId} />
 
