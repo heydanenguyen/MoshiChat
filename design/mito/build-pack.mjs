@@ -1,6 +1,6 @@
 // Builds the Mito sticker pack (Mèo Bơ, the black cat) for the app from the design sources in this folder.
 //
-//   node design/mito/build-pack.mjs
+//   node design/mito/build-pack.mjs [ids…]   (all stickers when none are named)
 //
 // Still stickers: stills/<id>.png (the drawing cut from its sheet, any size, transparent).
 // Animated stickers: frames/<id>/NNN.png (one loop at 25 fps, rendered from animation.html with export-frames.mjs;
@@ -13,6 +13,8 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
+const only = process.argv.slice(2)
+const wanted = (id) => !only.length || only.includes(id)
 const out = join(here, '../../resources/stickers/mito')
 mkdirSync(out, { recursive: true })
 
@@ -96,12 +98,13 @@ async function writeStill(id, rgba) {
 
 for (const file of readdirSync(join(here, 'stills')).filter((f) => f.endsWith('.png'))) {
   const id = file.replace(/\.png$/, '')
+  if (!wanted(id)) continue
   await writeStill(id, outline(await fit(join(here, 'stills', file), 'trim')))
   console.log('still', id)
 }
 
 const framesDir = join(here, 'frames')
-for (const id of existsSync(framesDir) ? readdirSync(framesDir) : []) {
+for (const id of existsSync(framesDir) ? readdirSync(framesDir).filter(wanted) : []) {
   const files = readdirSync(join(framesDir, id)).filter((f) => f.endsWith('.png')).sort()
   // Every frame gets the same framing, so nothing jumps: the box around everything that shows in any frame of the loop.
   let box = null

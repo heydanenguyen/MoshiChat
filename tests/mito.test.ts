@@ -8,9 +8,9 @@ import { isStickerId } from '../src/shared/stickers'
 const dir = join(__dirname, '../resources/stickers/mito')
 
 describe('Mito sticker pack', () => {
-  it('has twelve stickers, four of them animated, with unique plain ids', () => {
+  it('has twelve stickers, seven of them animated, with unique plain ids', () => {
     expect(MITO_STICKERS).toHaveLength(12)
-    expect(MITO_STICKERS.filter((s) => s.loop)).toHaveLength(4)
+    expect(MITO_STICKERS.filter((s) => s.loop)).toHaveLength(7)
     expect(new Set(MITO_STICKERS.map((s) => s.id)).size).toBe(12)
     for (const s of MITO_STICKERS) expect(s.id).toMatch(/^[a-z]+$/)
   })

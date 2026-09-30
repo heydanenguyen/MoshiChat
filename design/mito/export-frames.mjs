@@ -1,7 +1,7 @@
 // Renders the animated Mito stickers from animation.html into frames/<id>/NNN.png: one loop at 25 fps, transparent,
 // 344 × 338 px, without the sticker edge (build-pack.mjs adds it).
 //
-//   node design/mito/export-frames.mjs [chao tim coc quay]
+//   node design/mito/export-frames.mjs [chao tim coc quay gian ngu toasang]
 //
 // Needs Playwright and its Chromium, which the app itself does not use (npm i --no-save playwright && npx playwright
 // install chromium), or CHROMIUM=/path/to/chromium. Each loop is started at the pose
@@ -14,7 +14,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const FPS = 25
 const W = 344
-const STICKERS = { chao: { loop: 2.4, start: 0.1 }, tim: { loop: 2.8, start: 0 }, coc: { loop: 4, start: 0 }, quay: { loop: 3.2, start: 0 } }
+// Sticker id → its loop in seconds, where the loop starts (the drawing's pose), and its name in animation.html.
+const STICKERS = {
+  chao: { loop: 2.4, start: 0.1 },
+  tim: { loop: 2.8, start: 0 },
+  coc: { loop: 4, start: 0 },
+  quay: { loop: 3.2, start: 0 },
+  gian: { loop: 2.2, start: 0 },
+  ngu: { loop: 3.6, start: 0 },
+  toasang: { loop: 2.4, start: 0, page: 'sang' }
+}
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(STICKERS)
 
 const browser = await chromium.launch({
@@ -22,7 +31,7 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
 })
 for (const name of names) {
-  const { loop, start } = STICKERS[name]
+  const { loop, start, page: pageName = name } = STICKERS[name]
   const out = join(here, 'frames', name)
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
@@ -38,7 +47,7 @@ for (const name of names) {
     for (const e of [host, ...host.querySelectorAll('*')]) e.style.visibility = 'visible'
     host.querySelector('.art').style.filter = 'none'
     host.scrollIntoView()
-  }, { name, W })
+  }, { name: pageName, W })
   const n = Math.round(loop * FPS)
   for (let i = 0; i < n; i++) {
     await page.evaluate((u) => window.__seekEach(u), (i / n + start) % 1)
