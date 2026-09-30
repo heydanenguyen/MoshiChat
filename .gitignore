@@ -6,3 +6,6 @@ dist
 *.tsbuildinfo
 # Mito sticker frames: rendered from design/mito/animation.html, only needed to rebuild the pack
 design/mito/frames
+# Python cache from skill scripts in .claude/skills
+__pycache__/
+*.pyc
