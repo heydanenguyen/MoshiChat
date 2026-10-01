@@ -594,7 +594,8 @@ function createWindow(): void {
     backgroundMaterial: backdropFor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // The preload only uses electron's ipcRenderer, contextBridge and webUtils, all available sandboxed.
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: true,
@@ -648,8 +649,17 @@ function createWindow(): void {
   window.on('unmaximize', sendState)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    // Only web, mail and phone links leave the app; file: or ms-*: links from a message never reach the system.
+    const safe = externalUrl(url)
+    if (safe) void shell.openExternal(safe)
     return { action: 'deny' }
+  })
+  // The window only ever shows Moshi itself: a dropped link or a stray navigation must not load another page that
+  // would then hold the full window.unison bridge.
+  const contents = window.webContents
+  contents.on('will-navigate', (event, url) => {
+    const own = contents.getURL()
+    if (!own || new URL(url).origin !== new URL(own).origin) event.preventDefault()
   })
 
   if (!app.isPackaged && process.env.MOSHI_UI_SCRIPT) installUiScript(window)
@@ -732,6 +742,7 @@ function registerMediaProxy(): void {
 }
 
 import { IMAGE_HOSTS } from '@shared/media'
+import { externalUrl, fileInside, isPrivateHost } from './safety'
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
@@ -857,6 +868,11 @@ const MEDIA_EXT: Record<string, string> = {
   'video/webm': 'webm'
 }
 
+/** Folders whose files the renderer may have read back (its own data, and the temporary files Moshi makes). */
+function ownFolders(): string[] {
+  return [app.getPath('userData'), app.getPath('temp')]
+}
+
 /** The bytes behind a photo or video shown in the app (a platform CDN, a local file, a data URL). */
 async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> {
   if (url.startsWith('data:')) {
@@ -867,8 +883,12 @@ async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> 
   }
   let target = new URL(url)
   if (target.protocol === 'unison-img:') target = new URL(target.searchParams.get('u') ?? '')
-  if (target.protocol === 'file:') return { data: await readFile(target), type: '' }
+  if (target.protocol === 'file:') {
+    if (!fileInside(target, ownFolders())) throw new Error('This file cannot be opened from here')
+    return { data: await readFile(target), type: '' }
+  }
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('This file cannot be saved')
+  if (isPrivateHost(target.hostname)) throw new Error('This address cannot be downloaded from')
   const host = target.hostname
   const instagram = /instagram|cdninstagram/.test(host) || target.searchParams.has('_nc_cat')
   const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(host)
@@ -925,7 +945,7 @@ async function shareCard(card: ShareCardData): Promise<{ path?: string }> {
     frame: false,
     useContentSize: true,
     backgroundColor: '#0b0720',
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false, contextIsolation: true, nodeIntegration: false, offscreen: true }
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, nodeIntegration: false, offscreen: true }
   })
   try {
     const drawn = new Promise<void>((resolve) => {
@@ -1045,7 +1065,7 @@ async function openAttachment(conversationId: string, messageId: string, attachm
   if (!url || url.startsWith('data:') === false && !/^https?:/.test(url)) url = await manager.loadAttachment(conversationId, messageId, attachmentId)
   if (!url) throw new Error('Attachment is not available')
   if (/^https?:/.test(url)) {
-    await shell.openExternal(url)
+    await shell.openExternal(externalUrl(url) ?? 'about:blank')
     return
   }
   const match = /^data:([^;]+);base64,(.*)$/s.exec(url)
@@ -1371,7 +1391,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
   ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
   ipcMain.handle(IPC.scheduledReschedule, (_e, id: string, sendAt: number) => scheduler.reschedule(id, sendAt))
-  ipcMain.handle(IPC.appOpenExternal, (_e, url: string) => shell.openExternal(url))
+  ipcMain.handle(IPC.appOpenExternal, (_e, url: unknown) => {
+    const safe = externalUrl(url)
+    if (!safe) throw new Error('This link cannot be opened')
+    return shell.openExternal(safe)
+  })
   ipcMain.handle(IPC.appPickFiles, () => pickFiles())
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
   ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())

@@ -1,6 +1,7 @@
 import { app, session, utilityProcess, type UtilityProcess } from 'electron'
 import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
+import { fileInside } from '../safety'
 import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import { openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
@@ -295,7 +296,11 @@ export async function readMedia(url: string): Promise<Uint8Array> {
     return meta.endsWith(';base64') ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body))
   }
   const target = new URL(url)
-  if (target.protocol === 'file:') return readFile(target)
+  if (target.protocol === 'file:') {
+    // Local voice notes are ones Moshi recorded or downloaded, inside its own folders; nothing else is read.
+    if (!fileInside(target, [app.getPath('userData'), app.getPath('temp')])) throw new Error('This file cannot be read from here')
+    return readFile(target)
+  }
   if (target.protocol !== 'https:' || !MEDIA_HOSTS.test(target.hostname)) throw new Error('This media host is not allowed')
   const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
   const ses = /fbcdn|cdninstagram|instagram|facebook|fbsbx/.test(target.hostname)
