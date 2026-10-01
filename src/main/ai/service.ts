@@ -2,7 +2,7 @@ import { app, session, utilityProcess, type UtilityProcess } from 'electron'
 import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
 import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
-import { parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
+import { openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
 /** The worker goes away after this long without work, giving its memory back. */
 const IDLE_MS = 10 * 60 * 1000
@@ -241,6 +241,12 @@ export class AiService {
   /** Three short ways to answer the newest message. Not cached: the chat moves on. */
   async suggest(lines: ChatLine[]): Promise<string[]> {
     const text = await askChat(this, suggestMessages(lines, this.language(), this.suggestLanguage()), 60)
+    return parseSuggestions(text)
+  }
+
+  /** Three ways to pick a quiet chat back up. Not cached either. */
+  async opener(lines: ChatLine[], silentDays: number, note?: string): Promise<string[]> {
+    const text = await askChat(this, openerMessages(lines, this.language(), silentDays, this.suggestLanguage(), note), 70)
     return parseSuggestions(text)
   }
 

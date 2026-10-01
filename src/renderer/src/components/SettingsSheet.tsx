@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
+import { PrivacySettings } from './PrivacySettings'
 import type { BubbleAction, Language, SyncStatus, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
@@ -167,6 +168,9 @@ function GeneralPage(): JSX.Element {
             <Switch on={!!settings.weather} onChange={(weather) => void setSettings({ weather })} />
           </Row>
         )}
+      </Group>
+      <Group label={t('privacySection')}>
+        <PrivacySettings Row={Row} Switch={Switch} />
       </Group>
       <Group label={t('updateSection')}>
         <UpdateSettings />
@@ -488,6 +492,19 @@ function ChatPage(): JSX.Element {
         </Row>
         <Row title={t('effects')} sub={t('effectsHint')}>
           <Switch on={settings.effects !== false} onChange={(on) => void setSettings({ effects: on })} />
+        </Row>
+      </Group>
+      <Group label={t('insights')}>
+        <Row title={t('closeFriendsSetting')} sub={t('closeFriendsSettingHint')}>
+          <Switch on={settings.closeFriends !== false} onChange={(on) => void setSettings({ closeFriends: on })} />
+        </Row>
+        {settings.closeFriends !== false && (
+          <Row title={t('reconnectSetting')} sub={t('reconnectSettingHint')}>
+            <Switch on={settings.reconnectNudge !== false} onChange={(on) => void setSettings({ reconnectNudge: on })} />
+          </Row>
+        )}
+        <Row title={t('birthdaySetting')} sub={t('birthdaySettingHint')}>
+          <Switch on={settings.birthdayReminders !== false} onChange={(on) => void setSettings({ birthdayReminders: on })} />
         </Row>
       </Group>
       <Group label={t('bubbleActionsTitle')}>

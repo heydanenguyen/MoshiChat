@@ -79,6 +79,36 @@ export function isBirthdayToday(birthday: string | undefined, now = new Date()):
   return Number(m[1]) === now.getMonth() + 1 && Number(m[2]) === now.getDate()
 }
 
+/** Month and day of a YYYY-MM-DD or --MM-DD birthday, and its year when known. */
+export function parseBirthday(birthday: string | undefined): { month: number; day: number; year?: number } | undefined {
+  const m = /^(\d{4}|-)-(\d{2})-(\d{2})$/.exec(birthday ?? '')
+  if (!m) return undefined
+  const month = Number(m[2])
+  const day = Number(m[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
+  return { month, day, year: m[1] === '-' ? undefined : Number(m[1]) }
+}
+
+/** Whole days until the next birthday: 0 on the day, 1 the day before. 29 February falls on 1 March in other years. */
+export function daysUntilBirthday(birthday: string | undefined, now = new Date()): number | undefined {
+  const b = parseBirthday(birthday)
+  if (!b) return undefined
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let next = new Date(now.getFullYear(), b.month - 1, b.day)
+  if (next < today) next = new Date(now.getFullYear() + 1, b.month - 1, b.day)
+  return Math.round((next.getTime() - today.getTime()) / 86_400_000)
+}
+
+/** The age someone turns on their next birthday, when the year is known. */
+export function turningAge(birthday: string | undefined, now = new Date()): number | undefined {
+  const b = parseBirthday(birthday)
+  const days = daysUntilBirthday(birthday, now)
+  if (!b?.year || days === undefined) return undefined
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days)
+  const age = next.getFullYear() - b.year
+  return age > 0 && age < 130 ? age : undefined
+}
+
 /** Chat wallpapers: presets drawn in CSS (see app.css `[data-wallpaper]`), or an uploaded photo (data URL). */
 export const WALLPAPERS = ['peach', 'mint', 'lilac', 'sunset', 'night', 'dots', 'hearts', 'bubbles', 'buddies'] as const
 export type WallpaperPreset = (typeof WALLPAPERS)[number]

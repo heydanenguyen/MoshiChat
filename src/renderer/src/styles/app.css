@@ -10725,37 +10725,23 @@ button.moment-card:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
-.memory-card {
+/* Sidebar nudge: one close friend gone quiet. Face first, a short line of why, then the way back in. */
+.reconnect-card {
   margin: 4px 4px 8px;
-  padding: 10px 10px 10px 12px;
+  padding: 10px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, #ff7ac0 14%, transparent));
+  background: var(--accent-soft-2);
   border: 1px solid var(--accent-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   animation: fade-in var(--duration-base) ease;
 }
-.memory-head {
+.reconnect-main {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.memory-ago {
-  margin-left: auto;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-secondary);
-}
-.memory-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  margin-top: 8px;
   padding: 0;
   border: 0;
   background: none;
@@ -10764,30 +10750,118 @@ button.moment-card:hover {
   color: inherit;
   cursor: pointer;
 }
-.memory-text {
+.reconnect-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
-.memory-who {
+.reconnect-kicker {
   font-size: var(--text-xs);
   font-weight: 700;
+  color: var(--accent);
 }
-.memory-snippet {
+.reconnect-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reconnect-meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.reconnect-actions {
+  display: flex;
+  gap: 6px;
+}
+.reconnect-actions .btn {
+  white-space: nowrap;
+}
+.reconnect-actions .btn.primary {
+  flex: 1;
+  min-width: 0;
+}
+.reconnect-actions .btn.ghost {
+  color: var(--text-secondary);
+}
+.reconnect-rail {
+  position: relative;
+}
+.reconnect-rail .nav-item-icon {
+  color: var(--accent);
+}
+/* Close friends: the quiet ones, and a real anniversary when there is one. */
+.cf-reconnect {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cf-reconnect li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+}
+.cf-reconnect li:hover {
+  background: var(--bg-hover);
+}
+.cf-reconnect-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cf-reconnect-meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.cf-memory {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 22px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft-2);
+  border: 1px solid var(--accent-soft);
+  text-align: left;
+  transition: background var(--duration-fast) ease;
+}
+.cf-memory:hover {
+  background: var(--accent-soft);
+}
+.cf-memory-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cf-memory-ago {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--accent);
+}
+.cf-memory-snippet {
   font-size: var(--text-sm);
-  line-height: 1.35;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.memory-when {
+.cf-memory-snippet svg {
+  vertical-align: -2px;
+}
+.cf-memory-when {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-}
-.memory-rail .nav-item-icon {
-  color: var(--accent);
 }
 .insights-sheet {
   width: min(620px, calc(100vw - 32px));
@@ -12607,4 +12681,427 @@ button.moment-card:hover {
   font-size: 28px;
   font-weight: 700;
   opacity: 0.7;
+}
+
+/* ================================================================== snooze & follow-ups */
+/* The picker: two tabs, a line saying what will happen, times people say with the exact time beside them. */
+.later-picker {
+  width: 300px;
+  padding: 8px;
+}
+.later-tabs {
+  display: flex;
+  width: 100%;
+}
+.later-tabs button {
+  flex: 1;
+  padding: 0 8px;
+}
+.later-hint {
+  margin: 8px 6px 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.later-item {
+  min-height: 34px;
+}
+.later-item:focus-visible {
+  outline: none;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+}
+.later-item:hover .later-when,
+.later-item:focus-visible .later-when {
+  color: inherit;
+  opacity: 0.9;
+}
+.later-icon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  color: var(--accent);
+}
+.later-item:hover .later-icon,
+.later-item:focus-visible .later-icon {
+  color: inherit;
+}
+.later-when {
+  font-variant-numeric: tabular-nums;
+}
+.later-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 8px 34px;
+}
+.later-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border, var(--fill-tertiary));
+  background: var(--fill-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  color-scheme: light dark;
+}
+.later-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.later-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.later-error {
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+.later-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--fill-tertiary);
+}
+.later-clear .later-icon {
+  color: var(--danger);
+}
+/* In the list: where a chat stands. Text and an icon, never colour alone. */
+.later-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.later-chip.snoozed {
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+}
+.later-chip.back {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.later-chip.due {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.conv-follow-mark {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+/* ================================================================== notes & birthdays */
+.note-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-state {
+  margin-left: auto;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-tertiary);
+}
+.note-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--fill-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+}
+.note-input::placeholder {
+  color: var(--text-tertiary);
+}
+.note-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.reconnect-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -2px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--fill-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.reconnect-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.reconnect-note span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.reconnect-card.birthday {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, #ff8fb1 16%, transparent));
+}
+.birthday-row {
+  gap: 6px;
+}
+.birthday-row select {
+  min-width: 0;
+  padding: 0 6px 0 10px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.birthday-row select:first-child {
+  flex: 0 0 62px;
+}
+.birthday-row select:nth-child(2) {
+  flex: 1;
+}
+.birthday-year {
+  width: 68px;
+  flex: 0 0 68px;
+}
+.birthday-year[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.field-hint.error {
+  color: var(--danger);
+}
+
+/* ================================================================== passcode lock */
+/* Opaque, above everything (the splash included): nothing of the chats shows through. */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(60% 50% at 50% 35%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+    var(--bg-window);
+  animation: fade-in var(--duration-base) ease;
+}
+/* The window can still be dragged by its top edge. */
+.lock-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 44px;
+  -webkit-app-region: drag;
+}
+.lock-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(300px, calc(100vw - 32px));
+  text-align: center;
+}
+.lock-logo {
+  margin-bottom: 14px;
+}
+.lock-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.lock-sub {
+  min-height: 1.4em;
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.lock-dots {
+  display: flex;
+  gap: 14px;
+  margin: 22px 0 26px;
+}
+.lock-dots span {
+  width: 13px;
+  height: 13px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--text-tertiary);
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-spring);
+}
+.lock-dots span.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.08);
+}
+.lock-dots.shake {
+  animation: lock-shake 0.42s ease;
+}
+.lock-dots.wrong span {
+  border-color: var(--danger);
+}
+@keyframes lock-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-9px);
+  }
+  40%,
+  80% {
+    transform: translateX(9px);
+  }
+}
+/* Off screen but focusable: the keyboard types into it, the dots show it. */
+.lock-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.lock-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 14px 22px;
+}
+.lock-key {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  transition:
+    background var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-spring);
+}
+.lock-key:hover {
+  background: var(--bg-elevated);
+}
+.lock-key:active {
+  transform: scale(0.94);
+  background: var(--accent-soft);
+}
+.lock-key:focus-visible,
+.lock-forgot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lock-key.del {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+.lock-key:disabled {
+  opacity: 0.4;
+}
+.lock-forgot {
+  margin-top: 22px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+.lock-reset {
+  margin-top: 18px;
+}
+.lock-reset-title {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.lock-reset-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+.btn.danger-solid {
+  background: var(--danger);
+  color: #fff;
+}
+.btn.danger-solid:hover {
+  filter: brightness(1.06);
+}
+/* Settings */
+.passcode-form {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.passcode-form .settings-row-sub {
+  margin: 0;
+}
+.passcode-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.passcode-field {
+  flex: 1 1 140px;
+}
+.passcode-input {
+  width: 100%;
+  letter-spacing: 0.3em;
+  color: var(--text-primary);
+}
+.passcode-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.settings-select {
+  height: 32px;
+  padding: 0 8px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.btn-kbd {
+  margin-left: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lock-dots.shake {
+    animation: none;
+  }
+}
+
+.lock-sub.error {
+  color: var(--danger);
 }

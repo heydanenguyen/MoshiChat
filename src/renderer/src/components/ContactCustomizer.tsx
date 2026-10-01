@@ -3,6 +3,7 @@ import { Cake, Image as ImageIcon, ImagePlus, Palette, RotateCcw, Shuffle, X } f
 import { abstractChoices, abstractId, abstractIdUrl, parseAbstractId } from './AbstractAvatar'
 import type { Conversation } from '@shared/types'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
+import { parseBirthday } from '@shared/extras'
 import { customAvatarUrl, useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { LogoMark } from './Logo'
@@ -43,7 +44,14 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   const showToast = useStore((s) => s.showToast)
   const [nickname, setNickname] = useState(override?.nickname ?? '')
   const [avatar, setAvatar] = useState<string | undefined>(override?.avatar)
-  const [birthday, setBirthday] = useState(override?.birthday && /^\d{4}-/.test(override.birthday) ? override.birthday : '')
+  // Day and month are enough for a reminder; the year is optional (a stored --MM-DD keeps working).
+  const stored = parseBirthday(override?.birthday)
+  const [bDay, setBDay] = useState(stored ? String(stored.day) : '')
+  const [bMonth, setBMonth] = useState(stored ? String(stored.month) : '')
+  const [bYear, setBYear] = useState(stored?.year ? String(stored.year) : '')
+  const pad = (n: string): string => n.padStart(2, '0')
+  const yearOk = !bYear || (/^\d{4}$/.test(bYear) && Number(bYear) >= 1900 && Number(bYear) <= new Date().getFullYear())
+  const birthday = bDay && bMonth && yearOk ? `${bYear ? bYear : '-'}-${pad(bMonth)}-${pad(bDay)}` : ''
   const [busy, setBusy] = useState(false)
   // Abstract characters: the name's own one first, then a fresh spread each time "another set" is pressed.
   const [round, setRound] = useState(0)
@@ -72,7 +80,8 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   }
 
   const reset = async (): Promise<void> => {
-    await setContactOverride(conversation.id, undefined)
+    // Looks go back to the platform's; your notes about them stay.
+    await setContactOverride(conversation.id, override?.note ? { note: override.note, noteAt: override.noteAt } : undefined)
     onClose()
   }
 
@@ -173,15 +182,48 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
         <span className="field-label">
           <Cake size={13} strokeWidth={2.2} /> {t('birthday')}
         </span>
-        <span className="field-row">
-          <input className="field-input" type="date" value={birthday} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthday(e.target.value)} />
-          {birthday && (
-            <button className="icon-btn" onClick={() => setBirthday('')} title={t('clear')}>
+        <span className="field-row birthday-row">
+          <select className="field-input" value={bDay} onChange={(e) => setBDay(e.target.value)} aria-label={t('birthdayDay')}>
+            <option value="">{t('birthdayDay')}</option>
+            {Array.from({ length: 31 }, (_, i) => (
+              <option key={i} value={String(i + 1)}>
+                {i + 1}
+              </option>
+            ))}
+          </select>
+          <select className="field-input" value={bMonth} onChange={(e) => setBMonth(e.target.value)} aria-label={t('birthdayMonth')}>
+            <option value="">{t('birthdayMonth')}</option>
+            {Array.from({ length: 12 }, (_, i) => (
+              <option key={i} value={String(i + 1)}>
+                {t('birthdayMonthN', { n: String(i + 1) })}
+              </option>
+            ))}
+          </select>
+          <input
+            className="field-input birthday-year"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder={t('birthdayYearOptional')}
+            aria-label={t('birthdayYearOptional')}
+            aria-invalid={!yearOk}
+            value={bYear}
+            onChange={(e) => setBYear(e.target.value.replace(/\D/g, ''))}
+          />
+          {(bDay || bMonth || bYear) && (
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setBDay('')
+                setBMonth('')
+                setBYear('')
+              }}
+              title={t('clear')}
+            >
               <X size={14} strokeWidth={2.4} />
             </button>
           )}
         </span>
-        <span className="field-hint">{t('birthdayHint')}</span>
+        <span className={`field-hint ${yearOk ? '' : 'error'}`}>{yearOk ? t('birthdayHint') : t('birthdayYearInvalid')}</span>
       </label>
 
       <div className="field customizer-looks">

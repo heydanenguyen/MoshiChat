@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, No
 import { join, basename } from 'path'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
-import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, MessagePreview, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
@@ -19,6 +19,10 @@ import { getWeather } from './weather'
 import { gifFile, searchGifs } from './gifs'
 import { Scheduler } from './scheduler'
 import { Reminders } from './reminders'
+import { Later, type LaterDue } from './later'
+import { Birthdays, type BirthdayDue } from './birthdays'
+import { AppLock } from './lock'
+import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, listStickers, pickStickerSource, removeSticker } from './stickers'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind, SpeakLang } from '@shared/ai'
@@ -87,10 +91,16 @@ const log = (...args: unknown[]): void => {
 
 const emit = (event: BridgeEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
-  if (event.type === 'message:new' && !event.message.isOutgoing) void notify(event)
+  if (event.type === 'message:new') {
+    // Snoozes and follow-ups are kept under the chat the list shows (a merged person's first chat).
+    later?.onMessage(shownPerson(event.message.conversationId)?.anchor ?? event.message.conversationId, event.message)
+    if (!event.message.isOutgoing) void notify(event)
+  }
 }
 
 const manager = new AccountManager(storage, emit, log)
+
+const appLock = new AppLock(storage, emit, log)
 
 const ai = new AiService(
   () => storage.settings.voiceModel ?? 'turbo',
@@ -115,6 +125,9 @@ const reminders = new Reminders(
   },
   log
 )
+// Declared before anything can emit (emit reads it); created once the helpers it needs exist (see below).
+let later: Later | undefined
+
 const scheduler = new Scheduler(
   storage,
   manager,
@@ -161,6 +174,104 @@ function shownPerson(conversationId: string): { anchor: string; name?: string; r
   return { anchor: members[0], name: person.name?.trim() || undefined, request: members.every((id) => known.get(id)?.request) || undefined }
 }
 
+/** macOS lets you answer a notification in place; elsewhere a click opens the chat. */
+const canReplyInline = process.platform === 'darwin'
+
+/**
+ * Notifications that can still be answered. macOS delivers a reply or a button press only to a notification
+ * object that is still alive, so the newest few are kept (and dropped once dismissed).
+ */
+const liveNotifications = new Set<Notification>()
+function keepAlive(n: Notification): void {
+  liveNotifications.add(n)
+  if (liveNotifications.size > 40) liveNotifications.delete(liveNotifications.values().next().value as Notification)
+  n.on('close', () => liveNotifications.delete(n))
+}
+
+function focusChat(conversationId: string): void {
+  window?.show()
+  window?.focus()
+  window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId })
+}
+
+/** Send what was typed into a notification, as if from the composer; a failure gets its own notification. */
+async function replyFromNotification(conversationId: string, text: string): Promise<void> {
+  const body = text.trim()
+  if (!body) return
+  try {
+    const message = await manager.sendMessage(conversationId, body)
+    emit({ type: 'message:new', message })
+    // Answering is reading (the read-receipt setting still decides whether the platform hears of it).
+    void manager.markRead(conversationId).catch(() => undefined)
+  } catch (err) {
+    const vi = storage.settings.language === 'vi'
+    const n = new Notification({
+      title: vi ? 'Chưa gửi được tin trả lời' : "Your reply wasn't sent",
+      body: `${body.slice(0, 80)} · ${(err as Error).message ?? ''}`.slice(0, 160),
+      silent: false
+    })
+    n.on('click', () => focusChat(conversationId))
+    keepAlive(n)
+    n.show()
+    log('[notify] reply failed', (err as Error).message)
+  }
+}
+
+/** The newest message of each chat behind a shown chat id: a merged person's chats, or just the one. */
+function latestOf(conversationId: string): Array<{ conversationId: string; message: MessagePreview }> {
+  const people = storage.settings.people
+  const personId = memberIndex(people).get(conversationId)
+  const ids = (personId && people?.[personId]?.members) || [conversationId]
+  const known = new Map(manager.listConversations().map((c) => [c.id, c]))
+  return ids.flatMap((id) => {
+    const message = known.get(id)?.lastMessage
+    return message ? [{ conversationId: id, message }] : []
+  })
+}
+
+/** While Moshi is locked a notification says only that something came, never who or what (and cannot be answered). */
+function lockedNotification(): void {
+  const vi = storage.settings.language === 'vi'
+  const n = new Notification({ title: 'Moshi', body: vi ? 'Có tin mới. Mở Moshi để xem.' : 'Something new. Open Moshi to see it.', silent: storage.settings.sound !== 'off' })
+  n.on('click', () => {
+    window?.show()
+    window?.focus()
+  })
+  keepAlive(n)
+  n.show()
+}
+
+/** Snoozes back and follow-ups unanswered: one notification each (three at most), answerable in place on macOS. */
+function notifyLater(due: LaterDue[]): void {
+  if (!storage.settings.notifications || !Notification.isSupported()) return
+  if (appLock.isLocked()) return lockedNotification()
+  const vi = storage.settings.language === 'vi'
+  const known = new Map(manager.listConversations().map((c) => [c.id, c]))
+  const shown = due.slice(0, 3)
+  for (const item of shown) {
+    const chat = known.get(item.conversationId)
+    const name =
+      shownPerson(item.conversationId)?.name || storage.settings.contactOverrides?.[item.conversationId]?.nickname?.trim() || chat?.title || (vi ? 'Một cuộc trò chuyện' : 'A conversation')
+    const newest = latestOf(item.conversationId).sort((a, b) => b.message.sentAt - a.message.sentAt)[0]
+    const preview = newest ? `${newest.message.isOutgoing ? (vi ? 'Bạn: ' : 'You: ') : ''}${newest.message.text || (vi ? 'Tệp đính kèm' : 'An attachment')}` : ''
+    const more = due.length > shown.length && item === shown[shown.length - 1] ? `  (+${due.length - shown.length})` : ''
+    const snooze = item.kind === 'snooze'
+    const n = new Notification({
+      title: snooze ? (vi ? `Đến giờ xem lại: ${name}` : `Back from snooze: ${name}`) : vi ? `${name} chưa trả lời` : `${name} hasn't replied`,
+      body: `${preview.slice(0, 140)}${more}`,
+      silent: false,
+      ...(canReplyInline ? { hasReply: true, replyPlaceholder: snooze ? (vi ? 'Trả lời…' : 'Reply…') : vi ? 'Nhắn tiếp…' : 'Follow up…' } : {})
+    })
+    n.on('click', () => focusChat(item.conversationId))
+    n.on('reply', (_e, reply: string) => {
+      void replyFromNotification(newest?.conversationId ?? item.conversationId, reply)
+      void later?.seen(item.conversationId)
+    })
+    keepAlive(n)
+    n.show()
+  }
+}
+
 async function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): Promise<void> {
   if (!storage.settings.notifications || !Notification.isSupported()) return
   if (window?.isFocused()) return
@@ -180,19 +291,52 @@ async function notify(event: Extract<BridgeEvent, { type: 'message:new' }>): Pro
   }
   const nickname = person?.name || storage.settings.contactOverrides?.[conversation?.id ?? event.message.conversationId]?.nickname?.trim()
   const title = conversation?.isGroup ? `${event.message.senderName} in ${nickname || conversation.title}` : nickname || event.message.senderName
+  if (appLock.isLocked()) return lockedNotification()
+  const vi = storage.settings.language === 'vi'
+  // A message request is never answered from a notification: replying accepts it, which deserves a look first.
+  const replyable = canReplyInline && !(conversation && isPendingRequest(conversation, storage.settings.acceptedRequests))
   const notification = new Notification({
     title,
-    body: event.message.text || 'Sent an attachment',
+    body: event.message.text || (vi ? 'Đã gửi một tệp đính kèm' : 'Sent an attachment'),
     // Moshi plays its own sound for new messages (renderer/src/sounds.ts) unless it is turned off.
-    silent: storage.settings.sound !== 'off'
+    silent: storage.settings.sound !== 'off',
+    ...(replyable ? { hasReply: true, replyPlaceholder: vi ? 'Trả lời…' : 'Reply…', actions: [{ type: 'button' as const, text: vi ? 'Đánh dấu đã đọc' : 'Mark as read' }] } : {})
   })
-  notification.on('click', () => {
-    window?.show()
-    window?.focus()
-    window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId: event.message.conversationId })
-  })
+  notification.on('click', () => focusChat(event.message.conversationId))
+  notification.on('reply', (_e, reply: string) => void replyFromNotification(event.message.conversationId, reply))
+  notification.on('action', () => void manager.markRead(event.message.conversationId).catch(() => undefined))
+  keepAlive(notification)
   notification.show()
 }
+
+later = new Later(storage, emit, notifyLater, (id) => latestOf(id).map((l) => l.message), log)
+
+/** Today's birthdays: one notification each (three at most), with a box to send your wishes from on macOS. */
+function notifyBirthdays(due: BirthdayDue[]): void {
+  if (!Notification.isSupported()) return
+  if (appLock.isLocked()) return lockedNotification()
+  const vi = storage.settings.language === 'vi'
+  const known = new Map(manager.listConversations().map((c) => [c.id, c]))
+  for (const item of due.slice(0, 3)) {
+    const override = storage.settings.contactOverrides?.[item.conversationId]
+    const full = shownPerson(item.conversationId)?.name || override?.nickname?.trim() || known.get(item.conversationId)?.title || ''
+    const name = givenName(full) || full
+    // Your own note is the best reminder of what to say ("just moved to Đà Nẵng").
+    const note = override?.note?.trim().split('\n')[0]
+    const n = new Notification({
+      title: vi ? `Hôm nay sinh nhật ${name} 🎂` : `It's ${name}'s birthday today 🎂`,
+      body: (note ? `📝 ${note}` : vi ? 'Gửi một lời chúc nhé?' : 'Send them a few words?').slice(0, 160),
+      silent: false,
+      ...(canReplyInline ? { hasReply: true, replyPlaceholder: vi ? 'Gửi lời chúc…' : 'Send your wishes…' } : {})
+    })
+    n.on('click', () => focusChat(item.conversationId))
+    n.on('reply', (_e, reply: string) => void replyFromNotification(item.conversationId, reply))
+    keepAlive(n)
+    n.show()
+  }
+}
+
+const birthdays = new Birthdays(storage, emit, () => manager.listConversations(), notifyBirthdays, log)
 
 function applyTheme(theme: Settings['theme']): void {
   nativeTheme.themeSource = theme
@@ -330,6 +474,8 @@ function installMenu(): void {
         { label: vi ? 'Nhảy tới hội thoại…' : 'Jump to Conversation…', accelerator: 'Cmd+K', click: command('command-palette') },
         { type: 'separator' },
         { label: vi ? 'Lưu trữ hội thoại' : 'Archive Conversation', accelerator: 'Cmd+E', click: command('archive') },
+        { label: vi ? 'Hoãn hội thoại…' : 'Snooze Conversation…', accelerator: 'Cmd+Shift+H', click: command('snooze') },
+        { label: vi ? 'Khoá Moshi' : 'Lock Moshi', accelerator: 'Cmd+Ctrl+L', click: () => appLock.lock() },
         { label: vi ? 'Đánh dấu chưa đọc / đã đọc' : 'Mark as Unread / Read', accelerator: 'Cmd+Shift+U', click: command('toggle-unread') },
         { label: vi ? 'Xem lưu trữ' : 'Show Archive', accelerator: 'Cmd+;', click: command('show-archive') },
         { type: 'separator' },
@@ -453,6 +599,12 @@ function createWindow(): void {
     } else w.hide()
   })
   window.on('closed', () => (window = undefined))
+  // Kept out of screen sharing and screenshots when asked; and hidden long enough counts as away for the lock.
+  window.setContentProtection(!!storage.settings.hideFromScreenShare)
+  window.on('hide', () => appLock.windowHidden(true))
+  window.on('minimize', () => appLock.windowHidden(true))
+  window.on('show', () => appLock.windowHidden(false))
+  window.on('restore', () => appLock.windowHidden(false))
   window.webContents.on('before-input-event', (event, input) => {
     if (!editorKeys || input.type !== 'keyDown' || !(isMac ? input.meta : input.control)) return
     const key = input.key.toLowerCase()
@@ -1056,6 +1208,9 @@ function registerIpc(): void {
       .map((l) => ({ who: String((l as ChatLine).who ?? '').slice(0, 60), text: String((l as ChatLine).text ?? '').slice(0, 500), at: Number((l as ChatLine).at) || 0, mine: !!(l as ChatLine).mine }))
   ipcMain.handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
   ipcMain.handle(IPC.aiSuggest, (_e, lines: unknown) => ai.suggest(cleanLines(lines)))
+  ipcMain.handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown) =>
+    ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined)
+  )
   ipcMain.handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
     const day = new Date().toISOString().slice(0, 10)
     const vi = storage.settings.language === 'vi'
@@ -1114,6 +1269,23 @@ function registerIpc(): void {
     await sync.syncNow()
     return sync.status()
   })
+  ipcMain.handle(IPC.lockState, () => appLock.state())
+  ipcMain.handle(IPC.lockUnlock, (_e, code: unknown) => appLock.unlock(code))
+  ipcMain.handle(IPC.lockNow, () => appLock.lock())
+  ipcMain.handle(IPC.lockEnable, (_e, code: unknown) => appLock.enable(code))
+  ipcMain.handle(IPC.lockChange, (_e, oldCode: unknown, code: unknown) => appLock.change(oldCode, code))
+  ipcMain.handle(IPC.lockDisable, (_e, code: unknown) => appLock.disable(code))
+  ipcMain.handle(IPC.lockAutoLock, (_e, minutes: unknown) => appLock.setAutoLock(Number(minutes) || 0))
+  ipcMain.handle(IPC.lockReset, () =>
+    appLock.reset(async () => {
+      for (const account of [...storage.accounts]) await manager.remove(account.id).catch((err) => log('[lock] sign out failed', (err as Error).message))
+    })
+  )
+  ipcMain.handle(IPC.laterSnooze, (_e, id: string, until: number) => later!.snooze(String(id), Number(until)))
+  ipcMain.handle(IPC.laterUnsnooze, (_e, id: string) => later!.unsnooze(String(id)))
+  ipcMain.handle(IPC.laterFollow, (_e, id: string, until: number) => later!.follow(String(id), Number(until)))
+  ipcMain.handle(IPC.laterUnfollow, (_e, id: string) => later!.unfollow(String(id)))
+  ipcMain.handle(IPC.laterSeen, (_e, id: string) => later!.seen(String(id)))
   ipcMain.handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
   ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
   ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
@@ -1210,10 +1382,18 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     if (isWindows) app.setAppUserModelId('com.danenguyen.moshi')
     await storage.load()
+    // Before any window exists: a locked Moshi must open locked.
+    await appLock.load()
+    appLock.start()
+    storage.onSettingsChanged((before, after) => {
+      if (!!before.hideFromScreenShare !== !!after.hideFromScreenShare) window?.setContentProtection(!!after.hideFromScreenShare)
+    })
     await pruneOrphanedSettings()
     await sync.start()
     void scheduler.start()
     reminders.start()
+    later.start()
+    birthdays.start()
     void pruneSafetyCopies()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
@@ -1236,6 +1416,9 @@ if (!gotLock) {
     quitting = true
     updater.stop()
     scheduler.stop()
+    later?.stop()
+    appLock.stop()
+    birthdays.stop()
     sync.stop()
     ai.stop()
     void manager.shutdown()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultQuickReplies, detectEffect, fillQuickReply, givenName, isBirthdayToday, isWallpaperPreset } from '../src/shared/extras'
+import { daysUntilBirthday, defaultQuickReplies, detectEffect, fillQuickReply, givenName, isBirthdayToday, isWallpaperPreset, parseBirthday, turningAge } from '../src/shared/extras'
 
 describe('message effects', () => {
   it('recognises wishes in Vietnamese (with or without accents) and English', () => {
@@ -52,5 +52,21 @@ describe('quick replies', () => {
   it('knows the wallpaper presets', () => {
     expect(isWallpaperPreset('hearts')).toBe(true)
     expect(isWallpaperPreset('data:image/png;base64,xx')).toBe(false)
+  })
+})
+
+describe('birthdays ahead', () => {
+  const now = new Date(2026, 9, 1, 15)
+  it('counts days to the next one, with or without the year', () => {
+    expect(daysUntilBirthday('1998-10-01', now)).toBe(0)
+    expect(daysUntilBirthday('--10-02', now)).toBe(1)
+    expect(daysUntilBirthday('1990-09-30', now)).toBe(364)
+    expect(daysUntilBirthday('nonsense', now)).toBeUndefined()
+    expect(parseBirthday('--07-04')).toEqual({ month: 7, day: 4, year: undefined })
+  })
+  it('says the age they turn only when the year is known', () => {
+    expect(turningAge('1998-10-02', now)).toBe(28)
+    expect(turningAge('1990-09-30', now)).toBe(37)
+    expect(turningAge('--10-02', now)).toBeUndefined()
   })
 })

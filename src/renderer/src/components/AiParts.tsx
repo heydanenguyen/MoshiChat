@@ -360,12 +360,15 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
   const t = useT()
   const state = useAi((s) => s.suggestions[conversationId])
   const suggest = useAi((s) => s.suggest)
+  const openerAgain = useAi((s) => s.opener)
   const clear = useAi((s) => s.clearSuggestions)
   const ready = useAi((s) => !!s.status?.chat.ready)
   const setComposerDraft = useStore((s) => s.setComposerDraft)
   // A merged person's newest message, whichever of its chats it came in.
   const last = useThread(conversationId).messages?.at(-1)
-  if (!last || last.isOutgoing || last.system) return null
+  const opener = state?.opener
+  if (opener && !state.busy && !state.items?.length) return null
+  if (!opener && (!last || last.isOutgoing || last.system)) return null
   if (!ready && !state?.busy && !state?.items?.length) return null
   if (!state?.items?.length && !state?.busy) {
     // Nothing yet: a quiet chip asks for suggestions (and the download, the first time).
@@ -397,7 +400,15 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
         </button>
       ))}
       {!state.busy && (
-        <button className="icon-btn small" onClick={() => void suggest(conversationId, true)} title={t('aiSuggestAgain')}>
+        <button
+          className="icon-btn small"
+          onClick={() => {
+            if (!opener) return void suggest(conversationId, true)
+            clear(conversationId)
+            void openerAgain(conversationId, state.silentDays ?? 0)
+          }}
+          title={t('aiSuggestAgain')}
+        >
           <RefreshCw size={12} strokeWidth={2.4} />
         </button>
       )}

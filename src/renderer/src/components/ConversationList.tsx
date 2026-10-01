@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useScrollFade } from '../scrollFade'
-import { Archive, ArchiveRestore, AtSign, BellOff, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, Link2, SquarePen, UserRoundPlus, X } from 'lucide-react'
+import { AlarmClock, AlarmClockOff, Archive, ArchiveRestore, AtSign, BellOff, BellRing, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, Link2, SquarePen, UserRoundPlus, X } from 'lucide-react'
 import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
 import { PlatformIcon } from './PlatformIcon'
@@ -19,6 +19,7 @@ import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
 import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
 import { isArchived, isChatMuted, isPendingRequest, maskCode } from '@shared/inbox'
+import { followState, formatLaterTime, isSnoozed, isWoken } from '@shared/later'
 
 interface TagMenuState {
   conversationId: string
@@ -28,13 +29,18 @@ interface TagMenuState {
 
 export function ConversationList(): JSX.Element {
   const t = useT()
-  const { conversations, counts, archivedCount, requestCount } = useChatList()
+  const { conversations, counts, archivedCount, requestCount, snoozedCount } = useChatList()
   const listView = useStore((s) => s.listView)
   const setListView = useStore((s) => s.setListView)
   const acceptedRequests = useStore((s) => s.settings.acceptedRequests)
   const archived = useStore((s) => s.settings.archived)
   const archive = useStore((s) => s.archive)
   const unarchive = useStore((s) => s.unarchive)
+  const snoozed = useStore((s) => s.settings.snoozed)
+  const followUps = useStore((s) => s.settings.followUps)
+  const unsnooze = useStore((s) => s.unsnooze)
+  const cancelFollowUp = useStore((s) => s.cancelFollowUp)
+  const openLaterPicker = useStore((s) => s.openLaterPicker)
   const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
   const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
   const allConversations = useShownConversations()
@@ -139,6 +145,7 @@ export function ConversationList(): JSX.Element {
     : searching ? (visibleHits.length === 0 ? 'no-results' : undefined)
     : listView === 'archive' ? 'archive'
     : listView === 'requests' ? 'requests'
+    : listView === 'snoozed' ? 'snoozed'
     : counts.all > 0 && quickFilter !== 'all' ? 'chip'
     : archivedCount > 0 ? 'inbox-zero'
     : requestCount > 0 ? undefined // only requests so far: the Requests row says it all
@@ -157,12 +164,20 @@ export function ConversationList(): JSX.Element {
             >
               <ChevronLeft size={20} strokeWidth={2.2} />
             </button>
-            <h1 className="list-title">{listView === 'archive' ? t('archiveTitle') : t('requestsTitle')}</h1>
+            <h1 className="list-title">{listView === 'archive' ? t('archiveTitle') : listView === 'snoozed' ? t('snoozedTitle') : t('requestsTitle')}</h1>
           </div>
         ) : (
           <h1 className="list-title">{title}</h1>
         )}
         <div className="list-header-actions no-drag">
+          {listView === 'inbox' && snoozedCount > 0 && (
+            <button className="icon-btn archive-btn" onClick={() => setListView('snoozed')} title={t('snoozedShow')} aria-label={`${t('snoozedShow')}, ${snoozedCount}`}>
+              <AlarmClock size={17} strokeWidth={2} />
+              <span className="archive-btn-count" aria-hidden>
+                {formatBadge(snoozedCount)}
+              </span>
+            </button>
+          )}
           {listView === 'inbox' && archivedCount > 0 && (
             <button
               className="icon-btn archive-btn"
@@ -223,6 +238,7 @@ export function ConversationList(): JSX.Element {
           </button>
         )}
         {empty === 'requests' && <ListEmpty glyph="📬" title={t('requestsEmpty')} hint={t('requestsEmptyHint')} />}
+        {empty === 'snoozed' && <ListEmpty glyph="⏰" title={t('snoozedEmpty')} hint={t('snoozedEmptyHint', { key: shortcutLabel('H', true) })} />}
         {empty === 'archive' && <ListEmpty glyph="🗂️" title={t('archiveEmpty')} hint={t('archiveEmptyHint', { key: shortcutLabel('E') })} />}
         {empty === 'inbox-zero' && (
           <ListEmpty glyph="🌤️" title={t('inboxZero')} hint={t('inboxZeroHint')} action={{ label: t('archiveShow'), run: () => setListView('archive') }} />
@@ -242,6 +258,9 @@ export function ConversationList(): JSX.Element {
           const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
           const pinned = isPinned(c, pins)
           const unread = isUnread(c, markedUnread)
+          const now = Date.now()
+          const snoozeEntry = snoozed?.[c.id]
+          const follow = followState(followUps?.[c.id], now)
           // A merged person: the badge shows the app of the newest message, the title lists every app.
           const memberChats = c.members?.map((id) => rawConversations[id]).filter((m): m is Conversation => !!m)
           const merged = !!memberChats && memberChats.length > 1
@@ -313,6 +332,22 @@ export function ConversationList(): JSX.Element {
                   </span>
                 </span>
                 <span className="conv-bottom">
+                  {isSnoozed(snoozeEntry, now) ? (
+                    <span className="later-chip snoozed" title={t('laterSnoozedUntil', { time: formatLaterTime(snoozeEntry!.until, language) })}>
+                      <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                      {formatLaterTime(snoozeEntry!.until, language)}
+                    </span>
+                  ) : isWoken(snoozeEntry, now) ? (
+                    <span className="later-chip back">
+                      <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                      {t('laterBack')}
+                    </span>
+                  ) : follow === 'due' ? (
+                    <span className="later-chip due">
+                      <BellRing size={11} strokeWidth={2.6} aria-hidden />
+                      {t('laterNoReply')}
+                    </span>
+                  ) : null}
                   <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
                     {!isTyping && drafts[c.id] && selectedId !== c.id ? (
                       <>
@@ -332,6 +367,16 @@ export function ConversationList(): JSX.Element {
                     )}
                   </span>
                   <span className="conv-meta">
+                    {follow === 'waiting' && (
+                      <span
+                        className="conv-follow-mark"
+                        role="img"
+                        title={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
+                        aria-label={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
+                      >
+                        <BellRing size={12} strokeWidth={2.2} />
+                      </span>
+                    )}
                     {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
                     {mutedChat(c) ? (
                       <BellOff size={12} strokeWidth={2.2} />
@@ -423,6 +468,57 @@ export function ConversationList(): JSX.Element {
                 <span className="context-menu-shortcut">{shortcutLabel('E')}</span>
               </button>
             )}
+            {menuConversation &&
+              (isSnoozed(snoozed?.[menuConversation.id]) ? (
+                <button
+                  className="context-menu-item"
+                  onClick={() => {
+                    void unsnooze(menuConversation.id)
+                    setMenu(undefined)
+                  }}
+                >
+                  <AlarmClockOff size={15} />
+                  <span>{t('unsnoozeAction')}</span>
+                  <span className="context-menu-shortcut">{formatLaterTime(snoozed![menuConversation.id].until, language)}</span>
+                </button>
+              ) : (
+                <button
+                  className="context-menu-item"
+                  onClick={() => {
+                    openLaterPicker({ conversationId: menuConversation.id, mode: 'snooze', x: menu.x, y: menu.y })
+                    setMenu(undefined)
+                  }}
+                >
+                  <AlarmClock size={15} />
+                  <span>{t('snoozeAction')}</span>
+                  <span className="context-menu-shortcut">{shortcutLabel('H', true)}</span>
+                </button>
+              ))}
+            {menuConversation &&
+              (followState(followUps?.[menuConversation.id]) === 'waiting' ? (
+                <button
+                  className="context-menu-item"
+                  onClick={() => {
+                    void cancelFollowUp(menuConversation.id)
+                    setMenu(undefined)
+                  }}
+                >
+                  <BellRing size={15} />
+                  <span>{t('unfollowAction')}</span>
+                  <span className="context-menu-shortcut">{formatLaterTime(followUps![menuConversation.id].until, language)}</span>
+                </button>
+              ) : (
+                <button
+                  className="context-menu-item"
+                  onClick={() => {
+                    openLaterPicker({ conversationId: menuConversation.id, mode: 'follow', x: menu.x, y: menu.y })
+                    setMenu(undefined)
+                  }}
+                >
+                  <BellRing size={15} />
+                  <span>{t('followAction')}</span>
+                </button>
+              ))}
             {canSplit && menu.conversationId !== selectedId && (
               <button
                 className="context-menu-item"

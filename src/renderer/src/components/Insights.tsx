@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChartNoAxesColumn, Crown, Flame, Moon, Share2, Sparkles, X } from 'lucide-react'
-import { computeInsights, onThisDay, vibeOf, type ContactInsight, type InsightRecord, type Insights, type Memory, type ShareCardData, type Vibe } from '@shared/insights'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Cake, ChartNoAxesColumn, Crown, Flame, Image as ImageIcon, MessageCircleHeart, NotebookPen, Moon, Share2, Sparkles, X } from 'lucide-react'
+import { computeInsights, onThisDay, reconnectCandidates, vibeOf, type ContactInsight, type InsightRecord, type Insights, type Memory, type Reconnect, type ShareCardData, type Vibe } from '@shared/insights'
 import { LOGOS } from '@shared/logos'
 import { useStore, useT, anchorFor, useShownConversations } from '../store'
+import { useAi } from '../aiStore'
+import { daysUntilBirthday, fillQuickReply, givenName, turningAge } from '@shared/extras'
 import { formatListTime } from '../utils'
 import type { TKey } from '../i18n'
 import { BuddyLoader } from './BuddyLoader'
@@ -17,12 +19,66 @@ interface InsightsState {
   load(force?: boolean): Promise<void>
   /** Fill the last 30 days of every active chat, refreshing the numbers as chats complete. */
   backfill(): Promise<void>
+  /** Quiet friends set aside: chat id to when they may be suggested again. */
+  snoozed: Record<string, number>
+  snooze(conversationId: string): void
+  /** Birthday cards set aside: chat id to the day ("2026-10-01") it was dismissed for. */
+  birthdayDismissed: Record<string, string>
+  dismissBirthday(conversationId: string): void
+}
+
+const BIRTHDAY_KEY = 'moshi.birthday.dismissed'
+const dayKey = (d = new Date()): string => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+
+function readBirthdayDismissed(): Record<string, string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BIRTHDAY_KEY) ?? '{}') as Record<string, string>
+    // Only today's count: a birthday set aside as tomorrow's comes back on the day itself.
+    return Object.fromEntries(Object.entries(raw).filter(([, day]) => day === dayKey()))
+  } catch {
+    return {}
+  }
+}
+
+const SNOOZE_KEY = 'moshi.reconnect.snoozed'
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000
+
+function readSnoozed(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? '{}') as Record<string, number>
+    return Object.fromEntries(Object.entries(raw).filter(([, until]) => typeof until === 'number' && until > Date.now()))
+  } catch {
+    return {}
+  }
 }
 
 let listening = false
 
 /** The message records behind the insights, fetched once per session (or when asked again). */
 export const useInsights = create<InsightsState>((set, get) => ({
+  snoozed: readSnoozed(),
+  birthdayDismissed: readBirthdayDismissed(),
+
+  dismissBirthday(conversationId) {
+    const birthdayDismissed = { ...get().birthdayDismissed, [conversationId]: dayKey() }
+    set({ birthdayDismissed })
+    try {
+      localStorage.setItem(BIRTHDAY_KEY, JSON.stringify(birthdayDismissed))
+    } catch {
+      /* private mode */
+    }
+  },
+
+  snooze(conversationId) {
+    const snoozed = { ...get().snoozed, [conversationId]: Date.now() + SNOOZE_MS }
+    set({ snoozed })
+    try {
+      localStorage.setItem(SNOOZE_KEY, JSON.stringify(snoozed))
+    } catch {
+      /* private mode */
+    }
+  },
+
   async load(force) {
     if (!force && get().loadedAt && Date.now() - get().loadedAt! < 10 * 60_000) return
     try {
@@ -57,83 +113,267 @@ export const useInsights = create<InsightsState>((set, get) => ({
   }
 }))
 
-const MEMORY_KEY = 'moshi.memory.dismissed'
-const todayKey = (): string => new Date().toDateString()
+/**
+ * The records as people: one person across apps counts as one friend, their chats' messages adding up
+ * under the person. Plus what the insight functions need to know about those people.
+ */
+function usePeopleRecords(): { records?: InsightRecord[]; titles: Record<string, string>; groups: Set<string>; lastActivity: Record<string, number> } {
+  const conversations = useShownConversations()
+  const rawConversations = useStore((s) => s.conversations)
+  const people = useStore((s) => s.settings.people)
+  const records = useInsights((s) => s.records)
+  return useMemo(() => {
+    const shown = Object.values(conversations)
+    return {
+      records: records && people ? records.map((r) => ({ ...r, conversationId: anchorFor({ settings: { people }, conversations: rawConversations }, r.conversationId) })) : records,
+      titles: Object.fromEntries(shown.map((c) => [c.id, c.title])),
+      groups: new Set(shown.filter((c) => c.isGroup).map((c) => c.id)),
+      lastActivity: Object.fromEntries(shown.map((c) => [c.id, c.updatedAt]))
+    }
+  }, [records, conversations, rawConversations, people])
+}
 
-/** Sidebar card: one message from this day in an earlier year (or month, or last week). */
-export function MemoryCard({ collapsed }: { collapsed: boolean }): JSX.Element | null {
+/** Close friends who have gone quiet, strongest first (snoozed ones left out). */
+function useReconnect(): Reconnect[] {
+  const { records, titles, groups, lastActivity } = usePeopleRecords()
+  const snoozed = useInsights((s) => s.snoozed)
+  return useMemo(() => (records ? reconnectCandidates(records, titles, { groups, lastActivity, snoozed }) : []), [records, titles, groups, lastActivity, snoozed])
+}
+
+/** "12 ngày im lặng · thường 2 ngày một lần": how long, against how often you usually talk. */
+function reconnectMeta(r: Reconnect, t: ReturnType<typeof useT>): string {
+  const usual = r.usualDays <= 1 ? t('reconnectUsualDaily') : t('reconnectUsual', { n: String(r.usualDays) })
+  return `${t('reconnectSilent', { n: String(r.silentDays) })} · ${usual}`
+}
+
+/** Open the chat and, when the chat model is here, offer three ways to pick it back up. */
+function useOpenReconnect(): (r: Reconnect) => void {
+  const select = useStore((s) => s.select)
+  const opener = useAi((s) => s.opener)
+  return (r) => {
+    select(r.conversationId)
+    void opener(r.conversationId, r.silentDays)
+  }
+}
+
+export interface BirthdaySoon {
+  conversationId: string
+  title: string
+  /** 0: today, 1: tomorrow. */
+  days: number
+  age?: number
+}
+
+/**
+ * Birthdays today and tomorrow among one-to-one chats: what you set on the contact, else what a platform said.
+ * Today's drops off once you have written to them today, and either drops off when dismissed for the day.
+ */
+function useBirthdaysSoon(): BirthdaySoon[] {
+  const conversations = useShownConversations()
+  const overrides = useStore((s) => s.settings.contactOverrides)
+  const known = useStore((s) => s.settings.knownBirthdays)
+  const hidden = useStore((s) => s.settings.hidden)
+  const enabled = useStore((s) => s.settings.birthdayReminders !== false)
+  const profiles = useStore((s) => s.profiles)
+  const dismissed = useInsights((s) => s.birthdayDismissed)
+  return useMemo(() => {
+    if (!enabled) return []
+    const now = new Date()
+    const today = dayKey(now)
+    const out: BirthdaySoon[] = []
+    for (const c of Object.values(conversations)) {
+      if (c.isGroup || hidden?.[c.id] || dismissed[c.id] === today) continue
+      const birthday = overrides?.[c.id]?.birthday ?? known?.[c.id] ?? profiles[c.id]?.birthday
+      const days = daysUntilBirthday(birthday, now)
+      if (days === undefined || days > 1) continue
+      const last = c.lastMessage
+      if (days === 0 && last?.isOutgoing && dayKey(new Date(last.sentAt)) === today) continue
+      out.push({ conversationId: c.id, title: c.title, days, age: turningAge(birthday, now) })
+    }
+    return out.sort((a, b) => a.days - b.days || a.title.localeCompare(b.title))
+  }, [conversations, overrides, known, hidden, enabled, profiles, dismissed])
+}
+
+/** The first line of your note about someone, if you wrote one. */
+function useNoteLine(conversationId: string | undefined): string | undefined {
+  const note = useStore((s) => (conversationId ? s.settings.contactOverrides?.[conversationId]?.note : undefined))
+  return note?.trim().split('\n')[0] || undefined
+}
+
+/**
+ * Sidebar nudge about one person, only when there is someone: a birthday today, then one tomorrow, then a close
+ * friend gone quiet against your usual rhythm with them. Your note about them comes along as a reminder of what
+ * to say. "Later" sets a quiet friend aside for a week, a birthday for the day.
+ */
+export function ReconnectCard({ collapsed }: { collapsed: boolean }): JSX.Element | null {
+  const t = useT()
+  const conversations = useShownConversations()
+  const reconnectOn = useStore((s) => s.settings.closeFriends !== false && s.settings.reconnectNudge !== false)
+  const select = useStore((s) => s.select)
+  const setComposerDraft = useStore((s) => s.setComposerDraft)
+  const load = useInsights((s) => s.load)
+  const snooze = useInsights((s) => s.snooze)
+  const dismissBirthday = useInsights((s) => s.dismissBirthday)
+  const openReconnect = useOpenReconnect()
+  useEffect(() => {
+    if (reconnectOn) void load()
+  }, [load, reconnectOn])
+  const birthday = useBirthdaysSoon()[0]
+  const quiet = useReconnect()[0]
+  const friend = reconnectOn ? quiet : undefined
+  const id = birthday?.conversationId ?? friend?.conversationId
+  const note = useNoteLine(id)
+  if (!birthday && !friend) return null
+  const conversation = conversations[id!]
+  const title = birthday?.title ?? friend!.title
+
+  let kicker: string
+  let meta: string
+  let primary: { label: string; icon: JSX.Element; run(): void }
+  let later: () => void
+  if (birthday) {
+    kicker = birthday.days === 0 ? t('birthdayKickerToday') : t('birthdayKickerTomorrow')
+    meta = birthday.age ? t('birthdayTurns', { n: String(birthday.age) }) : birthday.days === 0 ? t('birthdayMetaToday') : t('birthdayMetaTomorrow')
+    primary =
+      birthday.days === 0
+        ? {
+            label: t('birthdayWishAction'),
+            icon: <Cake size={14} strokeWidth={2.4} />,
+            run: () => {
+              select(birthday.conversationId)
+              setComposerDraft(birthday.conversationId, fillQuickReply(t('birthdayWishText'), givenName(birthday.title) || birthday.title))
+            }
+          }
+        : { label: t('birthdayOpenAction'), icon: <MessageCircleHeart size={14} strokeWidth={2.4} />, run: () => select(birthday.conversationId) }
+    later = () => dismissBirthday(birthday.conversationId)
+  } else {
+    kicker = t('reconnectKicker')
+    meta = reconnectMeta(friend!, t)
+    primary = { label: t('reconnectSay'), icon: <MessageCircleHeart size={14} strokeWidth={2.4} />, run: () => openReconnect(friend!) }
+    later = () => snooze(friend!.conversationId)
+  }
+
+  if (collapsed) {
+    return (
+      <button className="nav-item subtle reconnect-rail" onClick={primary.run} title={`${kicker}: ${title} · ${meta}`}>
+        <span className="nav-item-icon">{birthday ? <Cake size={16} strokeWidth={2.2} /> : <MessageCircleHeart size={16} strokeWidth={2.2} />}</span>
+        <span className="rail-dot" />
+      </button>
+    )
+  }
+  return (
+    <div className={`reconnect-card ${birthday ? 'birthday' : ''}`} role="note">
+      <button className="reconnect-main" onClick={primary.run} title={primary.label}>
+        <Avatar name={title} url={conversation?.avatarUrl} size={36} platform={conversation?.platform} />
+        <span className="reconnect-text">
+          <span className="reconnect-kicker">{kicker}</span>
+          <span className="reconnect-name">{title}</span>
+          <span className="reconnect-meta">{meta}</span>
+        </span>
+      </button>
+      {note && (
+        <p className="reconnect-note" title={note}>
+          <NotebookPen size={12} strokeWidth={2.4} aria-label={t('noteTitle')} />
+          <span>{note}</span>
+        </p>
+      )}
+      <div className="reconnect-actions">
+        <button className="btn small primary" onClick={primary.run}>
+          {primary.icon}
+          {primary.label}
+        </button>
+        <button className="btn small ghost" onClick={later} title={birthday ? t('birthdayLaterHint') : t('reconnectLaterHint')}>
+          {t('reconnectLater')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** In Close friends: everyone who has gone quiet (up to five), each with a way back in. */
+function ReconnectList({ onClose }: { onClose(): void }): JSX.Element | null {
+  const t = useT()
+  const conversations = useShownConversations()
+  const snooze = useInsights((s) => s.snooze)
+  const openReconnect = useOpenReconnect()
+  const list = useReconnect().slice(0, 5)
+  if (!list.length) return null
+  return (
+    <>
+      <h3 className="cf-title">{t('cfReconnect')}</h3>
+      <ul className="cf-reconnect">
+        {list.map((r) => {
+          const conversation = conversations[r.conversationId]
+          return (
+            <li key={r.conversationId}>
+              <Avatar name={r.title} url={conversation?.avatarUrl} size={40} platform={conversation?.platform} />
+              <span className="cf-reconnect-body">
+                <span className="cf-person-name">{r.title}</span>
+                <span className="cf-reconnect-meta">{reconnectMeta(r, t)}</span>
+              </span>
+              <button
+                className="btn small primary"
+                onClick={() => {
+                  onClose()
+                  openReconnect(r)
+                }}
+              >
+                {t('reconnectSay')}
+              </button>
+              <button className="icon-btn small" onClick={() => snooze(r.conversationId)} title={t('reconnectLaterHint')}>
+                <X size={14} strokeWidth={2.4} />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </>
+  )
+}
+
+/** In Close friends, and only on a real anniversary: a message from this date in an earlier year. */
+function MemoryRow({ onClose }: { onClose(): void }): JSX.Element | null {
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const conversations = useStore((s) => s.conversations)
   const select = useStore((s) => s.select)
   const jumpTo = useStore((s) => s.jumpTo)
   const records = useInsights((s) => s.records)
-  const load = useInsights((s) => s.load)
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(MEMORY_KEY) === todayKey()
-    } catch {
-      return false
-    }
-  })
-  useEffect(() => {
-    void load()
-  }, [load])
   const memory: Memory | undefined = useMemo(() => (records ? onThisDay(records) : undefined), [records])
-  if (dismissed || !memory) return null
-  const conversation = conversations[memory.record.conversationId]
-  const ago =
-    'years' in memory.ago
-      ? memory.ago.years === 1
-        ? t('memoryYearAgo')
-        : t('memoryYearsAgo', { n: String(memory.ago.years) })
-      : 'months' in memory.ago
-        ? memory.ago.months === 1
-          ? t('memoryMonthAgo')
-          : t('memoryMonthsAgo', { n: String(memory.ago.months) })
-        : t('memoryWeekAgo')
+  if (!memory) return null
+  const { record } = memory
+  const conversation = conversations[record.conversationId]
+  const who = record.isOutgoing ? t('you') : record.senderName
   const open = (): void => {
-    select(memory.record.conversationId)
-    setTimeout(() => void jumpTo(memory.record.id, { from: memory.record.conversationId }), 400)
-  }
-  const dismiss = (): void => {
-    setDismissed(true)
-    try {
-      localStorage.setItem(MEMORY_KEY, todayKey())
-    } catch {
-      /* private mode */
-    }
-  }
-  if (collapsed) {
-    return (
-      <button className="nav-item subtle memory-rail" onClick={open} title={`${t('memoryTitle')} · ${ago}`}>
-        <span className="nav-item-icon">
-          <Sparkles size={16} strokeWidth={2.2} />
-        </span>
-      </button>
-    )
+    onClose()
+    select(record.conversationId)
+    setTimeout(() => void jumpTo(record.id, { from: record.conversationId }), 400)
   }
   return (
-    <div className="memory-card" role="note">
-      <div className="memory-head">
-        <Sparkles size={13} strokeWidth={2.4} />
-        <span>{t('memoryTitle')}</span>
-        <span className="memory-ago">{ago}</span>
-        <button className="update-card-close" onClick={dismiss} title={t('close')}>
-          <X size={12} strokeWidth={2.6} />
-        </button>
-      </div>
-      <button className="memory-body" onClick={open} title={t('memoryOpen')}>
-        {conversation && <Avatar name={conversation.title} url={conversation.avatarUrl} size={28} />}
-        <span className="memory-text">
-          <span className="memory-who">{memory.record.isOutgoing ? t('you') : memory.record.senderName}</span>
-          <span className="memory-snippet">{memory.record.text.trim() || (memory.record.hasPhoto ? t('memoryPhoto') : '…')}</span>
-          <span className="memory-when">
-            {conversation?.title} · {formatListTime(memory.record.sentAt, language)}
+    <>
+      <h3 className="cf-title">{t('memoryTitle')}</h3>
+      <button className="cf-memory" onClick={open} title={t('memoryOpen')}>
+        {/* In a group the face is whoever wrote it, not the group's picture. */}
+        {conversation?.isGroup ? <Avatar name={who} size={40} /> : <Avatar name={conversation?.title ?? who} url={conversation?.avatarUrl} size={40} />}
+        <span className="cf-memory-body">
+          <span className="cf-memory-ago">{memory.years === 1 ? t('memoryYearAgo') : t('memoryYearsAgo', { n: String(memory.years) })}</span>
+          <span className="cf-memory-snippet">
+            <b>{who}:</b>{' '}
+            {record.text.trim() ||
+              (record.hasPhoto ? (
+                <>
+                  <ImageIcon size={13} strokeWidth={2.4} /> {t('memoryPhoto')}
+                </>
+              ) : (
+                '…'
+              ))}
+          </span>
+          <span className="cf-memory-when">
+            {conversation?.title} · {formatListTime(record.sentAt, language)}
           </span>
         </span>
       </button>
-    </div>
+    </>
   )
 }
 
@@ -353,11 +593,8 @@ export function InsightsSheet(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const logo = useStore((s) => s.settings.logo ?? 'buddies')
   const conversations = useShownConversations()
-  const rawConversations = useStore((s) => s.conversations)
-  const people = useStore((s) => s.settings.people)
   const closeSheet = useStore((s) => s.closeSheet)
   const select = useStore((s) => s.select)
-  const records = useInsights((s) => s.records)
   const load = useInsights((s) => s.load)
   const backfill = useInsights((s) => s.backfill)
   const progress = useInsights((s) => s.progress)
@@ -368,14 +605,11 @@ export function InsightsSheet(): JSX.Element {
   useEffect(() => {
     void load(true).then(() => backfill())
   }, [load, backfill])
-  const insights = useMemo(() => {
-    if (!records) return undefined
-    // One person across apps counts as one friend: their chats' messages (and days) add up under the person.
-    const byPerson = people ? records.map((r) => ({ ...r, conversationId: anchorFor({ settings: { people }, conversations: rawConversations }, r.conversationId) })) : records
-    const titles = Object.fromEntries(Object.values(conversations).map((c) => [c.id, c.title]))
-    const groups = new Set(Object.values(conversations).filter((c) => c.isGroup).map((c) => c.id))
-    return computeInsights(byPerson, titles, Date.now(), period === 'month' ? 30 : 365, groups)
-  }, [records, conversations, rawConversations, people, period])
+  const byPerson = usePeopleRecords()
+  const insights = useMemo(
+    () => (byPerson.records ? computeInsights(byPerson.records, byPerson.titles, Date.now(), period === 'month' ? 30 : 365, byPerson.groups) : undefined),
+    [byPerson, period]
+  )
   const openChat = (id: string): void => {
     closeSheet()
     select(id)
@@ -503,6 +737,8 @@ export function InsightsSheet(): JSX.Element {
                   </ol>
                 </>
               )}
+              <ReconnectList onClose={closeSheet} />
+              <MemoryRow onClose={closeSheet} />
               <div className="insight-foot">
                 <ChartNoAxesColumn size={12} strokeWidth={2.4} /> {period === 'month' ? t('insightsNoteMonth') : t('insightsNoteYear')}
               </div>

@@ -76,6 +76,37 @@ export function suggestMessages(lines: ChatLine[], language: string, replyLangua
   ]
 }
 
+/**
+ * Three ways to pick a chat back up with a friend after `silentDays` of quiet, written as "Me" from the
+ * older lines (how you address each other, what you last talked about). Parsed like suggestions.
+ */
+export function openerMessages(lines: ChatLine[], language: string, silentDays: number, replyLanguage: 'auto' | 'vi' | 'en' = 'auto', note?: string): ChatMessage[] {
+  const vi = language === 'vi'
+  const langRule = vi
+    ? replyLanguage === 'vi'
+      ? 'Viết bằng tiếng Việt.'
+      : replyLanguage === 'en'
+        ? 'Viết bằng tiếng Anh.'
+        : 'Viết đúng ngôn ngữ của đoạn chat.'
+    : replyLanguage === 'vi'
+      ? 'Write in Vietnamese.'
+      : replyLanguage === 'en'
+        ? 'Write in English.'
+        : 'Write in the language of the chat.'
+  const system = vi
+    ? `Bạn giúp người dùng ("Tôi") nhắn lại cho một người thân đã lâu không nói chuyện. Đọc đoạn chat cũ để biết hai người xưng hô thế nào và lần trước nói chuyện gì. Viết đúng 3 tin nhắn mở lời ngắn (dưới 15 từ), như chính "Tôi" đang nhắn: tự nhiên, ấm áp, không sến, xưng hô giống "Tôi" đã dùng. Ba câu khác nhau về ý: một câu hỏi thăm dạo này thế nào, một câu nhắc lại chuyện gần nhất trong đoạn chat, một câu rủ gặp hoặc đùa nhẹ. ${langRule} Mỗi câu một dòng, không đánh số, không giải thích, không dấu ngoặc kép, không emoji.\nVí dụ:\nDạo này sao rồi, lâu quá không nghe tin\nVụ chuyển nhà xong xuôi chưa?\nCuối tuần cà phê không, lâu rồi chưa gặp`
+    : `You help the user ("Me") write to a close friend they have not talked to in a while. Read the older chat to see how they address each other and what they last talked about. Write exactly 3 short openers (under 15 words), as "Me" would: natural, warm, not cheesy. Make them differ: one asks how they have been, one picks up the last thing from the chat, one suggests meeting up or jokes lightly. ${langRule} One per line, no numbering, no explanation, no quotes, no emoji.\nExample:\nHey, how have you been? It has been ages\nDid the move go okay in the end?\nCoffee this weekend? Long overdue`
+  const gap = vi ? `(Lần cuối nói chuyện: ${silentDays} ngày trước)` : `(Last talked: ${silentDays} days ago)`
+  const recent = lines.slice(-12)
+  // Your own note about them ("just moved to Đà Nẵng") is often the best thing to pick up on.
+  const clean = note?.replace(/\s+/g, ' ').trim().slice(0, 300)
+  const noteLine = clean ? `\n${vi ? 'Ghi chú của Tôi về người này' : 'My note about them'}: ${clean}` : ''
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: `${recent.length ? `${transcript(recent, language)}\n\n` : ''}${gap}${noteLine}` }
+  ]
+}
+
 const strip = (line: string): string =>
   line
     .replace(/^\s*(?:[-–•*]|\d+[.)]|[a-c][.)])\s*/i, '')

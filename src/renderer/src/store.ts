@@ -25,7 +25,8 @@ import type {
   SavedMessage,
   GifItem,
   Reaction,
-  SentSticker
+  SentSticker,
+  LockState
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
@@ -38,11 +39,13 @@ import { toggleReaction } from './utils'
 import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
 import { mergeConversation, mergeTimeline, memberIndex, pairKey, pickSendVia as chooseSendVia, type Person } from '@shared/people'
 import { accountNames, archiveMark, hasReturned, isArchived, isChatMuted, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
+import { followState, formatLaterTime, isSnoozed, isWoken, type LaterKind } from '@shared/later'
+import { parseBirthday } from '@shared/extras'
 import { activate, activeId, closePane, openBeside, openIn, openIds, prune, pushRecent, restoreLayout, single, suggestBeside, toggleSplit, type PaneIndex, type PaneLayout } from './panes'
 
 export type Filter = 'all' | Platform | `account:${string}` | `tag:${string}`
 
-export type ListView = 'inbox' | 'archive' | 'requests'
+export type ListView = 'inbox' | 'archive' | 'requests' | 'snoozed'
 
 export type LegalDoc = 'notice' | 'license' | 'terms' | 'privacy' | 'credits'
 
@@ -59,6 +62,16 @@ export type Sheet =
   | { kind: 'merge'; conversationId: string }
 
 export type DetailsTab = 'info' | 'moments' | 'search' | 'media' | 'links' | 'files'
+
+export interface LaterPickerState {
+  conversationId: string
+  mode: LaterKind
+  /** Where to open (the picker keeps itself on screen); centred when missing. */
+  x?: number
+  y?: number
+  /** 'end': x is the picker's right edge (under a button at the right of a header). */
+  align?: 'start' | 'end'
+}
 
 export interface Toast {
   id: number
@@ -211,6 +224,18 @@ interface State {
    */
   archive(conversationId: string): Promise<void>
   unarchive(conversationId: string): Promise<void>
+  /** Out of the inbox until `until` (or until they write); opens the next chat like archiving does. */
+  snooze(conversationId: string, until: number): Promise<void>
+  unsnooze(conversationId: string): Promise<void>
+  /** Remind me at `until` if they have not written back by then. */
+  followUp(conversationId: string, until: number): Promise<void>
+  cancelFollowUp(conversationId: string): Promise<void>
+  /** The passcode lock, as the main process reports it (undefined until known). */
+  lock?: LockState
+  /** The time picker for snoozing or a follow-up, opened at a point on screen. */
+  laterPicker?: LaterPickerState
+  openLaterPicker(picker: LaterPickerState): void
+  closeLaterPicker(): void
   /** Group chats: notify only for messages that @mention you or reply to you. */
   toggleMentionsOnly(conversationId: string): Promise<void>
   /** Move a message request into the inbox (and accept it on the platform where that is a step). */
@@ -398,14 +423,17 @@ export const useStore = create<State>((set, get) => ({
 
   async init() {
     const bridge = window.unison
-    const [settings, accounts, conversations] = await Promise.all([
+    const [settings, accounts, conversations, lock] = await Promise.all([
       bridge.settings.get(),
       bridge.accounts.list(),
-      bridge.conversations.list()
+      bridge.conversations.list(),
+      // Known before anything is drawn, so a locked Moshi never flashes its chats.
+      bridge.lock.state().catch(() => undefined)
     ])
     const conversationMap = Object.fromEntries(conversations.map((c) => [c.id, c]))
     set({
       ready: true,
+      lock,
       settings: { ...DEFAULT_SETTINGS, ...settings },
       accounts: Object.fromEntries(accounts.map((a) => [a.id, a])),
       conversations: conversationMap
@@ -481,6 +509,9 @@ export const useStore = create<State>((set, get) => ({
         }
         case 'settings:updated':
           set({ settings: { ...DEFAULT_SETTINGS, ...event.settings } })
+          break
+        case 'lock:state':
+          set({ lock: event.state, ...(event.state.locked ? { laterPicker: undefined } : {}) })
           break
         case 'typing': {
           const { conversationId, peerName, isTyping } = event.typing
@@ -990,6 +1021,10 @@ export const useStore = create<State>((set, get) => ({
     if (override?.wallpaper) clean.wallpaper = override.wallpaper
     if (override?.translateTo) clean.translateTo = override.translateTo
     if (override?.translateAuto && override.translateTo) clean.translateAuto = true
+    if (override?.note?.trim()) {
+      clean.note = override.note.slice(0, 4000)
+      clean.noteAt = override.noteAt ?? Date.now()
+    }
     if (Object.keys(clean).length) overrides[conversationId] = clean
     else delete overrides[conversationId]
     await get().setSettings({ contactOverrides: overrides })
@@ -1073,21 +1108,13 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async archive(conversationId) {
-    const { selectedId, layout, settings } = get()
+    const { selectedId, settings } = get()
     // As the list shows it: a merged person's newest message decides when it comes back.
     const conversation = shownConversation(get(), conversationId)
     if (!conversation) return
     const wasOpen = conversationId === selectedId
     const wasUnread = isUnread(conversation, settings.markedUnread)
-    if (wasOpen) {
-      // Open the next chat down the list (or the one above at the bottom), skipping chats already on screen.
-      const open = new Set(openIds(layout))
-      const at = listedIds.indexOf(conversationId)
-      const next = at < 0 ? undefined : [...listedIds.slice(at + 1), ...listedIds.slice(0, at).reverse()].find((id) => !open.has(id))
-      if (next) get().select(next)
-      else if (layout.panes.length > 1) get().closePane(layout.active)
-      else get().select(undefined)
-    }
+    if (wasOpen) openNextAfter(conversationId)
     await updateRecord('archived', (record) => {
       record[conversationId] = archiveMark(conversation)
       return true
@@ -1107,6 +1134,63 @@ export const useStore = create<State>((set, get) => ({
 
   async unarchive(conversationId) {
     await updateRecord('archived', (record) => delete record[conversationId])
+  },
+
+  async snooze(conversationId, until) {
+    const { selectedId, settings } = get()
+    const conversation = shownConversation(get(), conversationId)
+    if (!conversation) return
+    const wasOpen = conversationId === selectedId
+    const before = settings.snoozed?.[conversationId]
+    if (wasOpen) openNextAfter(conversationId)
+    try {
+      get().applySettings(await window.unison.later.snooze(conversationId, until))
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+      return
+    }
+    const lang = settings.language
+    get().showToast(translate(lang, 'snoozedToast', { name: conversation.title, time: formatLaterTime(until, lang) }), 'info', {
+      label: translate(lang, 'undoAction'),
+      run: () => {
+        // Back as it was: the earlier snooze if there was one, else in the inbox; and open again if it was.
+        void (before ? window.unison.later.snooze(conversationId, before.until) : window.unison.later.unsnooze(conversationId)).then((next) => get().applySettings(next))
+        if (wasOpen) get().select(conversationId)
+      }
+    })
+  },
+
+  async unsnooze(conversationId) {
+    get().applySettings(await window.unison.later.unsnooze(conversationId))
+  },
+
+  async followUp(conversationId, until) {
+    const conversation = shownConversation(get(), conversationId)
+    if (!conversation) return
+    const before = get().settings.followUps?.[conversationId]
+    try {
+      get().applySettings(await window.unison.later.follow(conversationId, until))
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+      return
+    }
+    const lang = get().settings.language
+    get().showToast(translate(lang, 'followToast', { name: conversation.title, time: formatLaterTime(until, lang) }), 'info', {
+      label: translate(lang, 'undoAction'),
+      run: () => void (before ? window.unison.later.follow(conversationId, before.until) : window.unison.later.unfollow(conversationId)).then((next) => get().applySettings(next))
+    })
+  },
+
+  async cancelFollowUp(conversationId) {
+    get().applySettings(await window.unison.later.unfollow(conversationId))
+  },
+
+  openLaterPicker(laterPicker) {
+    set({ laterPicker })
+  },
+
+  closeLaterPicker() {
+    set({ laterPicker: undefined })
   },
 
   async acceptRequest(conversationId) {
@@ -1256,6 +1340,11 @@ export const useStore = create<State>((set, get) => ({
     try {
       const profile = await window.unison.conversations.profile(conversationId)
       set({ profiles: { ...get().profiles, [conversationId]: profile ?? null } })
+      // Remember a birthday the platform shared, so it can be remembered on the day without opening the chat.
+      const known = get().settings.knownBirthdays
+      if (profile?.birthday && parseBirthday(profile.birthday) && known?.[conversationId] !== profile.birthday) {
+        void get().setSettings({ knownBirthdays: { ...known, [conversationId]: profile.birthday } })
+      }
     } catch {
       set({ profiles: { ...get().profiles, [conversationId]: null } })
     }
@@ -1607,6 +1696,14 @@ function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): voi
   // Only a chat you actually open answers its unread mark: not one that stays active while the layout changes
   // around it (hiding another chat, closing the other pane).
   void clearMarkedUnread(openIds(layout).filter((id) => !shownBefore.has(id) || (id === nextActive && id !== previousActive)))
+  // Opening a chat that came back from a snooze, or whose follow-up fired, settles it.
+  if (nextActive && nextActive !== previousActive) {
+    const now = Date.now()
+    const { snoozed, followUps } = state.settings
+    if (isWoken(snoozed?.[nextActive], now) || followState(followUps?.[nextActive], now) === 'due') {
+      void window.unison.later.seen(nextActive).then((settings) => useStore.getState().applySettings(settings))
+    }
+  }
   for (const id of openIds(layout)) {
     if (shownBefore.has(id) && id !== nextActive) continue
     // A merged person: read and load each of its chats.
@@ -1714,10 +1811,23 @@ export interface ChatList {
   archivedCount: number
   /** Message requests waiting within the sidebar filter. */
   requestCount: number
+  /** Snoozed chats within the sidebar filter. */
+  snoozedCount: number
 }
 
 /** Rows the list shows right now, top to bottom (what "archive and open the next one" walks). */
 let listedIds: string[] = []
+
+/** Leaving a chat (archived, snoozed): open the next one down the list, or the one above at the bottom. */
+function openNextAfter(conversationId: string): void {
+  const { layout } = useStore.getState()
+  const open = new Set(openIds(layout))
+  const at = listedIds.indexOf(conversationId)
+  const next = at < 0 ? undefined : [...listedIds.slice(at + 1), ...listedIds.slice(0, at).reverse()].find((id) => !open.has(id))
+  if (next) useStore.getState().select(next)
+  else if (layout.panes.length > 1) useStore.getState().closePane(layout.active)
+  else useStore.getState().select(undefined)
+}
 /**
  * Rows last listed under a chip, and which chip (with the sidebar filter): a chat only stays put under the chip
  * it was listed under. Searching or visiting the archive leaves this alone, so coming back finds it as it was.
@@ -1741,6 +1851,8 @@ export function useChatList(): ChatList {
   const markedUnread = useStore((s) => s.settings.markedUnread)
   const archived = useStore((s) => s.settings.archived)
   const accepted = useStore((s) => s.settings.acceptedRequests)
+  const snoozed = useStore((s) => s.settings.snoozed)
+  const followUps = useStore((s) => s.settings.followUps)
   const drafts = useStore((s) => s.drafts)
   const layout = useStore((s) => s.layout)
   const searching = search.trim().length > 0
@@ -1750,22 +1862,34 @@ export function useChatList(): ChatList {
     () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => isChatMuted({ muted, tags }, c) }),
     [drafts, markedUnread, muted, tags, conversations]
   )
-  const [inbox, archive, requests] = useMemo(() => {
+  const [inbox, archive, requests, later] = useMemo(() => {
     const inbox: Conversation[] = []
     const archive: Conversation[] = []
     const requests: Conversation[] = []
+    const later: Conversation[] = []
+    const back: Conversation[] = []
     for (const c of scoped) {
       if (isPendingRequest(c, accepted)) requests.push(c)
+      else if (isSnoozed(snoozed?.[c.id], ctx.now)) later.push(c)
+      // Back from a snooze or waiting on a reply: at the top of the inbox (under pins), even if it was archived.
+      else if (isWoken(snoozed?.[c.id], ctx.now) || followState(followUps?.[c.id], ctx.now) === 'due') back.push(c)
       else if (isArchived(c, archived?.[c.id], ctx.isMuted(c))) archive.push(c)
       else inbox.push(c)
     }
-    return [inbox, archive, requests]
-  }, [scoped, archived, accepted, ctx])
+    const pinnedCount = inbox.findIndex((c) => !isPinned(c, pins))
+    const at = pinnedCount < 0 ? inbox.length : pinnedCount
+    inbox.splice(at, 0, ...back.filter((c) => !isPinned(c, pins)))
+    inbox.unshift(...back.filter((c) => isPinned(c, pins)))
+    // Soonest back first.
+    later.sort((a, b) => (snoozed?.[a.id]?.until ?? 0) - (snoozed?.[b.id]?.until ?? 0))
+    return [inbox, archive, requests, later]
+  }, [scoped, archived, accepted, ctx, snoozed, followUps, pins])
   const counts = useMemo(() => countQuickFilters(searching ? [] : inbox, ctx), [inbox, ctx, searching])
   const shown = useMemo(() => {
     if (searching) return scoped
     if (listView === 'archive') return archive
     if (listView === 'requests') return requests
+    if (listView === 'snoozed') return later
     // An open chat that stops matching the chip stays put, but only if it was already listed under it: one that
     // never matched does not appear under a chip it has nothing to do with.
     const key = `${filter}|${quickFilter}`
@@ -1774,9 +1898,9 @@ export function useChatList(): ChatList {
     const list = applyQuickFilter(inbox, quickFilter, ctx, keep)
     chipListed = { key, ids: new Set(list.map((c) => c.id)) }
     return list
-  }, [searching, scoped, listView, archive, requests, inbox, filter, quickFilter, ctx, layout])
+  }, [searching, scoped, listView, archive, requests, later, inbox, filter, quickFilter, ctx, layout])
   listedIds = shown.map((c) => c.id)
-  return { conversations: shown, counts, archivedCount: archive.length, requestCount: requests.length }
+  return { conversations: shown, counts, archivedCount: archive.length, requestCount: requests.length, snoozedCount: later.length }
 }
 
 /** Pinned in Moshi, or on the platform when Moshi has no say. */

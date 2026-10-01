@@ -32,6 +32,9 @@ const VALUE_KEYS = [
   'suggestLanguage',
   'aiSuggest',
   'effects',
+  'closeFriends',
+  'birthdayReminders',
+  'reconnectNudge',
   'acceptedUnofficial',
   'gif'
 ] as const satisfies ReadonlyArray<keyof Settings>

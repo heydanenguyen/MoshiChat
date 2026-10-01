@@ -22,6 +22,8 @@ import { BackupSheet } from './components/BackupSheet'
 import { LegalSheet } from './components/LegalSheet'
 import { TodoSheet } from './components/TodoSheet'
 import { InsightsSheet } from './components/Insights'
+import { LaterPicker } from './components/LaterPicker'
+import { LockScreen } from './components/LockScreen'
 import { MergeSheet } from './components/MergeSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
@@ -42,21 +44,30 @@ function zoomBy(direction: 1 | -1 | 0): void {
  * Inbox keys, all with ⌘/Ctrl so they never fire while typing (single letters would, mid-word in Telex/VNI):
  * ⌘E archive the open chat, ⌘⇧U unread/read, ⌘; inbox/archive.
  */
-function inboxKey(e: KeyboardEvent): 'archive' | 'toggle-unread' | 'show-archive' | undefined {
+type InboxCommand = 'archive' | 'toggle-unread' | 'show-archive' | 'snooze'
+
+function inboxKey(e: KeyboardEvent): InboxCommand | undefined {
   const key = e.key.toLowerCase()
   if (key === 'e' && !e.shiftKey) return 'archive'
+  if (key === 'h' && e.shiftKey) return 'snooze'
   if (key === 'u' && e.shiftKey) return 'toggle-unread'
   if (e.key === ';' && !e.shiftKey) return 'show-archive'
   return undefined
 }
 
 /** From the keyboard or the macOS menu; never behind a sheet, the photo viewer or the forward picker. */
-function runInboxCommand(command: 'archive' | 'toggle-unread' | 'show-archive'): void {
+function runInboxCommand(command: InboxCommand): void {
   const state = useStore.getState()
   if (state.sheet.kind !== 'none' || state.lightbox || state.forwarding) return
   if (command === 'show-archive') return state.setListView(state.listView === 'archive' ? 'inbox' : 'archive')
   const id = state.selectedId
   if (!id) return
+  if (command === 'snooze') {
+    // Under the open chat's own snooze button when it is on screen, else in the middle of the window.
+    const anchor = document.querySelector<HTMLElement>('.chat-pane.active [data-later-anchor]')?.getBoundingClientRect()
+    if (state.laterPicker) return state.closeLaterPicker()
+    return state.openLaterPicker(anchor ? { conversationId: id, mode: 'snooze', x: anchor.right, y: anchor.bottom + 6, align: 'end' } : { conversationId: id, mode: 'snooze' })
+  }
   if (command === 'toggle-unread') void state.toggleUnread(id)
   else if (isArchivedNow(state, id)) void state.unarchive(id)
   else void state.archive(id)
@@ -80,6 +91,8 @@ export default function App(): JSX.Element {
   const forwarding = useStore((s) => s.forwarding)
   const lightbox = useStore((s) => s.lightbox)
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const locked = useStore((s) => !!s.lock?.locked)
+  const closeFriends = useStore((s) => s.settings.closeFriends !== false)
   const mesh = useStore((s) => s.settings.mesh)
   const darkBase = useStore((s) => s.settings.darkBase)
   const style = useStore((s) => s.settings.style)
@@ -197,7 +210,8 @@ export default function App(): JSX.Element {
   useEffect(() => {
     return window.unison.onEvent((event) => {
       if (event.type !== 'app:command') return
-      const { openSheet, sheet } = useStore.getState()
+      const { openSheet, sheet, lock } = useStore.getState()
+      if (lock?.locked) return
       switch (event.command) {
         case 'settings':
           openSheet({ kind: 'settings' })
@@ -223,6 +237,7 @@ export default function App(): JSX.Element {
         case 'archive':
         case 'toggle-unread':
         case 'show-archive':
+        case 'snooze':
           runInboxCommand(event.command)
           break
         case 'close': {
@@ -302,6 +317,8 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // Nothing behind the lock screen answers the keyboard.
+      if (useStore.getState().lock?.locked) return
       const mod = isMac ? e.metaKey : e.ctrlKey
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault()
@@ -329,10 +346,18 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [sheet.kind, openSheet, closeSheet])
 
+  // Locked: everything behind the lock screen is out of reach (no focus, no clicks, not read aloud), and any open
+  // sheet closes so it is not waiting there afterwards.
+  useEffect(() => {
+    for (const el of document.querySelectorAll('.shell > :not(.lock-screen):not(.splash)')) el.toggleAttribute('inert', locked)
+    if (locked) useStore.getState().closeSheet()
+  }, [locked, ready])
+
   // One tree for both phases so the launch screen stays mounted while the app appears beneath it.
   return (
     <div className="shell">
       {splash && <Splash ready={ready} onDone={hideSplash} />}
+      {ready && locked && <LockScreen />}
       {ready && (
         <>
           <TitleBar />
@@ -358,9 +383,10 @@ export default function App(): JSX.Element {
             {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
             {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
             {sheet.kind === 'todos' && <TodoSheet />}
-            {sheet.kind === 'insights' && <InsightsSheet />}
+            {sheet.kind === 'insights' && closeFriends && <InsightsSheet />}
             {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
             <AiSetupSheet />
+            <LaterPicker />
             {forwarding && <ForwardSheet message={forwarding} />}
             {lightbox && <Lightbox {...lightbox} />}
             {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}

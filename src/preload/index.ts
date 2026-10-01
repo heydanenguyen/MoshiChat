@@ -53,7 +53,8 @@ const bridge: MoshiBridge = {
     translateTo: (text, target) => ipcRenderer.invoke(IPC.aiTranslateTo, text, target),
     cached: () => ipcRenderer.invoke(IPC.aiCached),
     summarize: (key, lines) => ipcRenderer.invoke(IPC.aiSummarize, key, lines),
-    suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines)
+    suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines),
+    opener: (lines, silentDays, note) => ipcRenderer.invoke(IPC.aiOpener, lines, silentDays, note)
   },
   insights: {
     backfill: (days) => ipcRenderer.invoke(IPC.insightsBackfill, days),
@@ -79,6 +80,23 @@ const bridge: MoshiBridge = {
     choose: () => ipcRenderer.invoke(IPC.syncChoose),
     disable: () => ipcRenderer.invoke(IPC.syncDisable),
     now: () => ipcRenderer.invoke(IPC.syncNow)
+  },
+  lock: {
+    state: () => ipcRenderer.invoke(IPC.lockState),
+    unlock: (code) => ipcRenderer.invoke(IPC.lockUnlock, code),
+    lockNow: () => ipcRenderer.invoke(IPC.lockNow),
+    enable: (code) => ipcRenderer.invoke(IPC.lockEnable, code),
+    change: (oldCode, code) => ipcRenderer.invoke(IPC.lockChange, oldCode, code),
+    disable: (code) => ipcRenderer.invoke(IPC.lockDisable, code),
+    setAutoLock: (minutes) => ipcRenderer.invoke(IPC.lockAutoLock, minutes),
+    reset: () => ipcRenderer.invoke(IPC.lockReset)
+  },
+  later: {
+    snooze: (id, until) => ipcRenderer.invoke(IPC.laterSnooze, id, until),
+    unsnooze: (id) => ipcRenderer.invoke(IPC.laterUnsnooze, id),
+    follow: (id, until) => ipcRenderer.invoke(IPC.laterFollow, id, until),
+    unfollow: (id) => ipcRenderer.invoke(IPC.laterUnfollow, id),
+    seen: (id) => ipcRenderer.invoke(IPC.laterSeen, id)
   },
   scheduled: {
     add: (input) => ipcRenderer.invoke(IPC.scheduledAdd, input),

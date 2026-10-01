@@ -4,6 +4,7 @@ import type { Message, SharedKind, TagId } from '@shared/types'
 import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { ContactCustomizer } from './ContactCustomizer'
+import { NoteCard } from './NoteCard'
 import { TagChip } from './Tag'
 import { isPinned, peopleIndex, personIn, useShownConversations, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { candidatesFor } from '@shared/people'
@@ -212,6 +213,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       )}
 
       <PersonCard conversationId={conversationId} />
+
+      <NoteCard conversationId={conversationId} />
 
       <MomentsPreviewCard conversationId={conversationId} />
 

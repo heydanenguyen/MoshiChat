@@ -29,6 +29,9 @@ export interface SuggestState {
   busy?: boolean
   /** The message the suggestions answer. */
   forId?: string
+  /** Openers to pick a quiet chat back up (shown whoever wrote last, until the chat moves on). */
+  opener?: boolean
+  silentDays?: number
 }
 
 interface AiState {
@@ -61,6 +64,8 @@ interface AiState {
   dismissSummary(conversationId: string): void
   /** `manual`: the user asked (offers the download when the model is missing). */
   suggest(conversationId: string, manual?: boolean): Promise<void>
+  /** Openers for a chat that has been quiet for `silentDays`; only when the chat model is already here. */
+  opener(conversationId: string, silentDays: number): Promise<void>
   /** The draft in another language (offers the translation model download first); undefined when it could not be done. */
   translateText(text: string, target: string): Promise<{ text: string; from: string } | undefined>
   clearSuggestions(conversationId: string): void
@@ -182,8 +187,11 @@ export const useAi = create<AiState>((set, get) => {
         // A merged person's newest message may be in any of its chats.
         const last = threadOf(s, id).messages?.at(-1)
         if (!last || (id === prev.selectedId && last === threadOf(prev, id).messages?.at(-1))) return
+        const current = get().suggestions[id]
+        // Openers stay while the chat loads; anything new in it (your own message too) replaces them.
+        if (current?.opener && (current.forId === undefined || current.forId === last.id)) return
         if (last.isOutgoing) {
-          if (get().suggestions[id]?.items?.length) get().clearSuggestions(id)
+          if (current?.items?.length) get().clearSuggestions(id)
           return
         }
         if (suggestTimer) clearTimeout(suggestTimer)
@@ -353,6 +361,26 @@ export const useAi = create<AiState>((set, get) => {
           set({ suggestions: { ...get().suggestions, [conversationId]: { forId: last.id } } })
         }
       })
+    },
+
+    async opener(conversationId, silentDays) {
+      const status = get().status ?? (await window.unison.ai.status())
+      if (!get().status) set({ status })
+      // Never a download from a nudge: without the model the chat simply opens.
+      if (!status.chat.ready || get().suggestions[conversationId]?.busy) return
+      set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, opener: true, silentDays } } })
+      // The chat was just opened: give its messages a moment to arrive.
+      for (let i = 0; i < 20 && !threadMessages(conversationId).length; i++) await new Promise((r) => setTimeout(r, 150))
+      const forId = threadMessages(conversationId).at(-1)?.id
+      set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, opener: true, silentDays, forId } } })
+      try {
+        const note = useStore.getState().settings.contactOverrides?.[conversationId]?.note
+        const items = await window.unison.ai.opener(linesFor(conversationId, 12), silentDays, note)
+        if (threadMessages(conversationId).at(-1)?.id !== forId) return get().clearSuggestions(conversationId)
+        set({ suggestions: { ...get().suggestions, [conversationId]: items.length ? { items, forId, opener: true, silentDays } : {} } })
+      } catch {
+        get().clearSuggestions(conversationId)
+      }
     },
 
     async translateText(text, target) {

@@ -2,6 +2,7 @@ import type { Person } from './people'
 import type { AiProgress, ChatModel, VoiceModel } from './ai'
 import type { Todo } from './todos'
 import type { LogoId } from './logos'
+import type { LaterEntry } from './later'
 /** Domain model shared between main, preload and renderer. */
 
 export type Platform = 'messenger' | 'instagram' | 'telegram' | 'zalo' | 'whatsapp'
@@ -571,6 +572,23 @@ export interface Settings {
   quickReplies?: QuickReply[]
   /** Messages to send later; only the main process edits this list. */
   scheduled?: ScheduledMessage[]
+  /** Chats snoozed out of the inbox until a time, by shown chat id; only the main process edits this. */
+  snoozed?: Record<string, LaterEntry>
+  /** "Remind me if they have not written back by then", by shown chat id; only the main process edits this. */
+  followUps?: Record<string, LaterEntry>
+  /** Birthdays the platforms told this computer (YYYY-MM-DD or --MM-DD), by shown chat id, for reminders. */
+  knownBirthdays?: Record<string, string>
+  /** Birthday reminders: a notification on the morning of the day and a card in the sidebar. Default on. */
+  birthdayReminders?: boolean
+  /** The year each birthday was last announced in, so it is announced once; only the main process edits this. */
+  birthdaysNotified?: Record<string, number>
+  /**
+   * Passcode lock, when on: how many digits the code has and after how many idle minutes Moshi locks itself
+   * (0: only on launch and by hand). The code itself is kept by the main process, never here. Per computer.
+   */
+  appLock?: { length: number; autoLock: number }
+  /** Moshi's window shows up black in screen sharing, recordings and screenshots. Per computer. */
+  hideFromScreenShare?: boolean
   /** On-device voice-to-text model: most accurate (turbo) or light (small). */
   voiceModel?: VoiceModel
   /** Size of the on-device chat model (summaries, reply suggestions). */
@@ -595,6 +613,10 @@ export interface Settings {
   sendSound?: boolean
   /** Word effects (birthday confetti, hearts...). Default on. */
   effects?: boolean
+  /** Close friends: the sidebar item and sheet, the quiet-friend card, and the 30-day history fill behind them. Default on. */
+  closeFriends?: boolean
+  /** The sidebar card when a close friend has gone quiet. Default on. */
+  reconnectNudge?: boolean
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
   gif?: { provider: GifProvider; key: string }
 }
@@ -641,6 +663,9 @@ export interface ContactOverride {
   translateTo?: string
   /** Translate every message to this chat on send. */
   translateAuto?: boolean
+  /** Your own notes about this person: what they told you, what you promised, what they like. */
+  note?: string
+  noteAt?: number
 }
 
 export type SidebarSection = 'inboxes' | 'tags' | 'accounts'
@@ -683,6 +708,7 @@ export type AppCommand =
   | 'archive'
   | 'toggle-unread'
   | 'show-archive'
+  | 'snooze'
 
 /** In-app updates (GitHub Releases). `manual`: this build cannot replace itself (unsigned macOS), so offer the download page. */
 export type UpdateState =
@@ -695,8 +721,17 @@ export type UpdateState =
   | { phase: 'error'; message: string; url: string; version?: string }
 
 /** Events pushed from main to the renderer. */
+/** Whether Moshi is locked; `retryIn` (ms) while too many wrong codes make it wait. */
+export interface LockState {
+  enabled: boolean
+  locked: boolean
+  length?: number
+  retryIn?: number
+}
+
 export type BridgeEvent =
   | { type: 'app:command'; command: AppCommand }
+  | { type: 'lock:state'; state: LockState }
   /** ⌘-shortcuts caught before the menu while the photo editor is open (undo, redo, copy, save, send, close). */
   | { type: 'editor:key'; key: string; shift: boolean }
   | { type: 'update:state'; state: UpdateState }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeInsights, onThisDay, streakDays, vibeOf, type InsightRecord } from '../src/shared/insights'
+import { computeInsights, onThisDay, reconnectCandidates, streakDays, vibeOf, type InsightRecord } from '../src/shared/insights'
 
 const DAY = 24 * 60 * 60 * 1000
 const now = new Date(2026, 8, 29, 15, 0).getTime()
@@ -92,16 +92,48 @@ describe('closeness ranking', () => {
 })
 
 describe('onThisDay', () => {
-  it('prefers the same date a year ago, then the same day last month, then last week', () => {
+  it('only remembers this date in an earlier year, photos first', () => {
     const yearAgo = new Date(2025, 8, 29, 12).getTime()
     const monthAgo = new Date(2026, 7, 29, 12).getTime()
     const weekAgo = now - 7 * DAY
     const both = [rec('a', yearAgo, { text: 'a short one' }), rec('a', yearAgo, { hasPhoto: true, text: '' }), rec('b', monthAgo), rec('c', weekAgo)]
     const y = onThisDay(both, now)
-    expect(y?.ago).toEqual({ years: 1 })
+    expect(y?.years).toBe(1)
     expect(y?.record.hasPhoto).toBe(true)
-    expect(onThisDay([rec('b', monthAgo), rec('c', weekAgo)], now)?.ago).toEqual({ months: 1 })
-    expect(onThisDay([rec('c', weekAgo)], now)?.ago).toEqual({ weeks: 1 })
-    expect(onThisDay([rec('d', now - DAY)], now)).toBeUndefined()
+    // A month or a week ago is not a memory.
+    expect(onThisDay([rec('b', monthAgo), rec('c', weekAgo)], now)).toBeUndefined()
+    expect(onThisDay([rec('d', new Date(2023, 8, 29, 9).getTime())], now)?.years).toBe(3)
+  })
+})
+
+describe('reconnectCandidates', () => {
+  // Talked both ways every other day from `start` days ago until `until` days ago.
+  const friend = (id: string, start: number, until: number, step = 2): InsightRecord[] => {
+    const list: InsightRecord[] = []
+    for (let d = start; d >= until; d -= step) list.push(rec(id, now - d * DAY), rec(id, now - d * DAY - 3600_000, { isOutgoing: true }))
+    return list
+  }
+
+  it('finds close friends silent for three times their usual gap, at least a week', () => {
+    const records = [
+      ...friend('quiet', 40, 10), // every 2 days, silent 10 days: 10 >= max(7, 6)
+      ...friend('recent', 40, 3), // still talking
+      ...friend('slow', 52, 20, 8) // every 8 days, silent 20 days: under 24
+    ]
+    const found = reconnectCandidates(records, { quiet: 'Quiet' }, { now })
+    expect(found.map((r) => r.conversationId)).toEqual(['quiet'])
+    expect(found[0]).toMatchObject({ title: 'Quiet', silentDays: 10, usualDays: 2 })
+  })
+
+  it('needs a real two-way friendship, and skips groups, snoozed chats and newer chat activity', () => {
+    const oneWay = [0, 2, 4, 6, 8].map((d) => rec('oneway', now - (20 + d) * DAY, { isOutgoing: true }))
+    const records = [...oneWay, ...friend('group', 40, 12), ...friend('snoozed', 40, 12), ...friend('phone', 40, 12), ...friend('ok', 40, 12)]
+    const found = reconnectCandidates(records, {}, {
+      now,
+      groups: new Set(['group']),
+      snoozed: { snoozed: now + DAY },
+      lastActivity: { phone: now - DAY }
+    })
+    expect(found.map((r) => r.conversationId)).toEqual(['ok'])
   })
 })

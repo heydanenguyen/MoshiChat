@@ -15,6 +15,7 @@ import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
 import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
+import { LaterButton } from './LaterPicker'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
 import { MitoArt, StickerArt } from './StickerPicker'
@@ -293,6 +294,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
               <Columns2 size={18} strokeWidth={2} />
             </button>
           )}
+          <LaterButton conversationId={conversation.id} />
           <SummaryButton conversationId={conversation.id} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
             <Info size={18} strokeWidth={2} />

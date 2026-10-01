@@ -33,6 +33,7 @@ import type {
   GifItem,
   GifPage,
   GifProvider,
+  LockState,
   UpdateState
 } from './types'
 
@@ -111,6 +112,8 @@ export interface MoshiBridge {
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
     /** Three short replies to the newest line. */
     suggest(lines: ChatLine[]): Promise<string[]>
+    /** Three openers for a chat that has been quiet for `silentDays`. */
+    opener(lines: ChatLine[], silentDays: number, note?: string): Promise<string[]>
   }
   insights: {
     /** Walk the last `days` days of every active chat into the insight store (progress arrives as insights:progress events). */
@@ -147,6 +150,27 @@ export interface MoshiBridge {
     choose(): Promise<SyncStatus | null>
     disable(): Promise<SyncStatus>
     now(): Promise<SyncStatus>
+  }
+  /** The passcode lock. Codes are checked in the main process; the window only ever learns locked or not. */
+  lock: {
+    state(): Promise<LockState>
+    unlock(code: string): Promise<LockState & { ok: boolean }>
+    lockNow(): Promise<LockState>
+    enable(code: string): Promise<LockState>
+    change(oldCode: string, code: string): Promise<LockState>
+    disable(code: string): Promise<LockState>
+    setAutoLock(minutes: number): Promise<void>
+    /** Forgot the code: sign out of every account here and remove the lock. */
+    reset(): Promise<LockState>
+  }
+  /** Snoozes and follow-ups; each call resolves with the settings after the change. */
+  later: {
+    snooze(conversationId: string, until: number): Promise<Settings>
+    unsnooze(conversationId: string): Promise<Settings>
+    follow(conversationId: string, until: number): Promise<Settings>
+    unfollow(conversationId: string): Promise<Settings>
+    /** The chat was opened: a woken snooze or a due follow-up has done its job. */
+    seen(conversationId: string): Promise<Settings>
   }
   scheduled: {
     add(input: { conversationId: string; text: string; sendAt: number; replyToId?: string }): Promise<Settings>
@@ -248,6 +272,7 @@ export const IPC = {
   aiCached: 'ai:cached',
   aiSummarize: 'ai:summarize',
   aiSuggest: 'ai:suggest',
+  aiOpener: 'ai:opener',
   aiSpeak: 'ai:speak',
   backupCreate: 'backup:create',
   backupPick: 'backup:pick',
@@ -258,6 +283,19 @@ export const IPC = {
   syncDisable: 'sync:disable',
   syncNow: 'sync:now',
   scheduledAdd: 'scheduled:add',
+  lockState: 'lock:state',
+  lockUnlock: 'lock:unlock',
+  lockNow: 'lock:now',
+  lockEnable: 'lock:enable',
+  lockChange: 'lock:change',
+  lockDisable: 'lock:disable',
+  lockAutoLock: 'lock:autoLock',
+  lockReset: 'lock:reset',
+  laterSnooze: 'later:snooze',
+  laterUnsnooze: 'later:unsnooze',
+  laterFollow: 'later:follow',
+  laterUnfollow: 'later:unfollow',
+  laterSeen: 'later:seen',
   scheduledCancel: 'scheduled:cancel',
   scheduledSendNow: 'scheduled:sendNow',
   scheduledReschedule: 'scheduled:reschedule',

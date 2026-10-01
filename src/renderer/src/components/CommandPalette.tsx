@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlarmClock,
+  Lock,
+  BellRing,
   Archive,
   ArchiveRestore,
   Bell,
@@ -29,7 +32,7 @@ import { PLATFORMS, type Conversation } from '@shared/types'
 import { foldName, maskCode } from '@shared/inbox'
 import { isArchivedNow, isPinned, useShowPlatformBadge, useShownConversations, useStore, useT } from '../store'
 import { isUnread } from '../quickFilter'
-import { shortcutLabel } from '../utils'
+import { isMac, shortcutLabel } from '../utils'
 import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
 
@@ -178,6 +181,8 @@ function useCommands(): Command[] {
       add('chat-search', 'commandSearchChat', 'search find tim kiem', <Search {...ICON} />, details('search'))
       if (archived) add('chat-unarchive', 'unarchive', 'inbox restore archive', <ArchiveRestore {...ICON} />, () => void state.unarchive(id), shortcutLabel('E'))
       else add('chat-archive', 'archive', 'archive luu tru', <Archive {...ICON} />, () => void state.archive(id), shortcutLabel('E'))
+      add('chat-snooze', 'snoozeAction', 'snooze later remind hoan nhac sau', <AlarmClock {...ICON} />, () => state.openLaterPicker({ conversationId: id, mode: 'snooze' }), shortcutLabel('H', true))
+      add('chat-follow', 'followAction', 'follow up remind reply nhac tra loi', <BellRing {...ICON} />, () => state.openLaterPicker({ conversationId: id, mode: 'follow' }))
       if (unread) add('chat-read', 'markRead', 'read da doc', <MailOpen {...ICON} />, () => void state.markRead(id), shortcutLabel('U', true))
       else add('chat-unread', 'markUnread', 'unread chua doc', <Mail {...ICON} />, () => void state.markUnread(id), shortcutLabel('U', true))
       add(pinned ? 'chat-unpin' : 'chat-pin', pinned ? 'unpin' : 'pin', 'pin ghim', pinned ? <PinOff {...ICON} /> : <Pin {...ICON} />, () => void state.togglePin(id))
@@ -193,7 +198,8 @@ function useCommands(): Command[] {
     if (wide) add('split', 'splitView', 'split two panes chia doi', <Columns2 {...ICON} />, () => state.toggleSplit(), shortcutLabel('\\'))
     add('sidebar', settings.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar', 'sidebar thanh ben', settings.sidebarCollapsed ? <PanelLeftOpen {...ICON} /> : <PanelLeftClose {...ICON} />, () => void state.toggleSidebar())
     add('todos', 'todos', 'todo tasks reminders viec can lam', <ListTodo {...ICON} />, () => state.openSheet({ kind: 'todos' }))
-    add('insights', 'insights', 'close friends insights than thiet', <Users {...ICON} />, () => state.openSheet({ kind: 'insights' }))
+    if (settings.closeFriends !== false) add('insights', 'insights', 'close friends insights than thiet', <Users {...ICON} />, () => state.openSheet({ kind: 'insights' }))
+    if (state.lock?.enabled) add('lock', 'lockNow', 'lock passcode khoa ma bao mat', <Lock {...ICON} />, () => void window.unison.lock.lockNow(), isMac ? '⌃⌘L' : undefined)
     add('add-account', 'addAccount', 'account connect login them tai khoan', <Plus {...ICON} />, () => state.openSheet({ kind: 'add-account' }))
     add('appearance', 'appearance', 'appearance theme colour color accent giao dien mau', <Palette {...ICON} />, () => state.openSheet({ kind: 'settings', page: 'appearance' }))
     add('backup', 'backupCreate', 'backup export sao luu', <DatabaseBackup {...ICON} />, () => state.openSheet({ kind: 'backup', mode: 'create' }))

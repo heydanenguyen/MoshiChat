@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_LINES, parseSuggestions, parseSummary, suggestMessages, summaryMessages, transcript } from '../src/shared/ai-prompts'
+import { MAX_LINES, openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, transcript } from '../src/shared/ai-prompts'
 
 const at = new Date(2026, 8, 29, 9, 41).getTime()
 const lines = [
@@ -32,6 +32,19 @@ describe('prompts', () => {
     expect(en[1].content).toMatch(/Message to answer: Lan:/)
     expect(suggestMessages(lines, 'en', 'vi')[0].content).toMatch(/Write in Vietnamese/)
     expect(suggestMessages(lines, 'vi', 'en')[0].content).toMatch(/Viết bằng tiếng Anh/)
+  })
+})
+
+describe('openerMessages', () => {
+  it('asks for three openers in the chat language, with the old lines and how long it has been', () => {
+    const [system, user] = openerMessages(lines, 'vi', 12)
+    expect(system.content).toContain('3 tin nhắn mở lời')
+    expect(system.content).toContain('ngôn ngữ của đoạn chat')
+    expect(user.content).toContain('Lan: Phòng 2, mang laptop')
+    expect(user.content).toContain('12 ngày trước')
+    expect(openerMessages([], 'en', 9, 'en')[1].content).toBe('(Last talked: 9 days ago)')
+    expect(openerMessages([], 'en', 9, 'en')[0].content).toContain('Write in English.')
+    expect(openerMessages(lines, 'vi', 12, 'auto', 'Mới chuyển\n vào Đà Nẵng')[1].content).toContain('Ghi chú của Tôi về người này: Mới chuyển vào Đà Nẵng')
   })
 })
 

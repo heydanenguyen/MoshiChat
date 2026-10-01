@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BellOff, ChartNoAxesColumn, ChevronDown, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { SidebarSection } from '@shared/types'
-import { MemoryCard } from './Insights'
+import { ReconnectCard } from './Insights'
 import { useOpenTodos } from './TodoSheet'
 import { UpdateCard } from './UpdateCard'
 import type { Platform, TagId } from '@shared/types'
@@ -57,6 +57,7 @@ export function Sidebar(): JSX.Element {
   const accounts = useStore((s) => s.accounts)
   const openSheet = useStore((s) => s.openSheet)
   const pinnedCollapsed = useStore((s) => s.settings.sidebarCollapsed)
+  const closeFriends = useStore((s) => s.settings.closeFriends !== false)
   const autoRail = useAutoRail()
   /** Rail layout, folded by hand or by the window: everything below renders from this. */
   const collapsed = pinnedCollapsed || autoRail
@@ -203,16 +204,18 @@ export function Sidebar(): JSX.Element {
             {!collapsed && badge(openTodos)}
             {openTodos > 0 && <span className="rail-dot" />}
           </button>
-          <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
-            <span className="nav-item-icon tile insights">
-              <ChartNoAxesColumn size={16} strokeWidth={2.2} />
-            </span>
-            {!collapsed && <span className="nav-item-label">{t('insights')}</span>}
-          </button>
+          {closeFriends && (
+            <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
+              <span className="nav-item-icon tile insights">
+                <ChartNoAxesColumn size={16} strokeWidth={2.2} />
+              </span>
+              {!collapsed && <span className="nav-item-label">{t('insights')}</span>}
+            </button>
+          )}
           </>
           )}
         </div>
-        <MemoryCard collapsed={collapsed} />
+        <ReconnectCard collapsed={collapsed} />
 
         <div className="sidebar-section">
           {!collapsed &&

@@ -203,46 +203,90 @@ export interface ShareCardData {
   streak?: { name: string; days: number }
 }
 
-export type MemoryAgo = { years: number } | { months: number } | { weeks: number }
-
 export interface Memory {
   record: InsightRecord
-  ago: MemoryAgo
+  years: number
 }
 
 const sameMonthDay = (a: Date, b: Date): boolean => a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
 /**
- * A message worth remembering from this date in earlier years, else this day of the month in earlier
- * months, else last week. Photos and longer texts win; the pick is stable for the whole day.
+ * A message worth remembering from this date in an earlier year. Only real years: a month ago is not a
+ * memory, and a card that falls back to it just fills space. Photos and longer texts win; the pick is
+ * stable for the whole day.
  */
 export function onThisDay(records: InsightRecord[], now = Date.now()): Memory | undefined {
   const today = new Date(now)
   const worth = (r: InsightRecord): number => (r.hasPhoto ? 1000 : 0) + Math.min(r.text.length, 120)
-  const pick = (list: InsightRecord[]): InsightRecord | undefined => {
-    if (!list.length) return undefined
-    // Photos first; among equals, a stable choice for the whole day.
-    const pool = list.some((r) => r.hasPhoto) ? list.filter((r) => r.hasPhoto) : [...list].sort((a, b) => worth(b) - worth(a)).slice(0, 5)
-    const seed = today.getFullYear() * 400 + today.getMonth() * 32 + today.getDate()
-    return pool[seed % pool.length]
-  }
-  const usable = records.filter((r) => r.sentAt < now - 6 * DAY && (r.text.trim().length > 8 || r.hasPhoto))
-  const years = usable.filter((r) => {
+  const years = records.filter((r) => {
     const d = new Date(r.sentAt)
-    return d.getFullYear() < today.getFullYear() && sameMonthDay(d, today)
+    return d.getFullYear() < today.getFullYear() && sameMonthDay(d, today) && (r.text.trim().length > 8 || r.hasPhoto)
   })
-  const y = pick(years)
-  if (y) return { record: y, ago: { years: today.getFullYear() - new Date(y.sentAt).getFullYear() } }
-  const months = usable.filter((r) => {
-    const d = new Date(r.sentAt)
-    return d.getDate() === today.getDate() && (d.getFullYear() < today.getFullYear() || d.getMonth() < today.getMonth())
-  })
-  const m = pick(months)
-  if (m) {
-    const d = new Date(m.sentAt)
-    return { record: m, ago: { months: (today.getFullYear() - d.getFullYear()) * 12 + today.getMonth() - d.getMonth() } }
+  if (!years.length) return undefined
+  // Photos first; among equals, a stable choice for the whole day.
+  const pool = years.some((r) => r.hasPhoto) ? years.filter((r) => r.hasPhoto) : [...years].sort((a, b) => worth(b) - worth(a)).slice(0, 5)
+  const seed = today.getFullYear() * 400 + today.getMonth() * 32 + today.getDate()
+  const record = pool[seed % pool.length]
+  return { record, years: today.getFullYear() - new Date(record.sentAt).getFullYear() }
+}
+
+export interface Reconnect {
+  conversationId: string
+  title: string
+  /** Whole days since the last message either way. */
+  silentDays: number
+  /** Your usual gap, in days, between days you talked before the silence. */
+  usualDays: number
+  lastAt: number
+  bothDays: number
+}
+
+const startOfDay = (t: number): number => {
+  const d = new Date(t)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
+/**
+ * Close friends gone quiet: in the window, at least 4 days you talked and 3 of them both ways, and now
+ * silent for three times your usual gap with them (a week at least). Stronger friendships and longer
+ * silences, against habit, come first. `lastActivity` is the chat list's own last update, which can be
+ * newer than the records (a message handled on the phone); `snoozed` maps chats to when they may return.
+ */
+export function reconnectCandidates(
+  records: InsightRecord[],
+  titles: Record<string, string>,
+  opts: { now?: number; days?: number; groups?: ReadonlySet<string>; lastActivity?: Record<string, number>; snoozed?: Record<string, number> } = {}
+): Reconnect[] {
+  const now = opts.now ?? Date.now()
+  const from = now - (opts.days ?? 60) * DAY
+  const per = new Map<string, { out: Set<number>; inc: Set<number>; lastAt: number }>()
+  for (const r of records) {
+    if (r.sentAt < from || r.sentAt > now || opts.groups?.has(r.conversationId)) continue
+    const e = per.get(r.conversationId) ?? { out: new Set<number>(), inc: new Set<number>(), lastAt: 0 }
+    ;(r.isOutgoing ? e.out : e.inc).add(startOfDay(r.sentAt))
+    e.lastAt = Math.max(e.lastAt, r.sentAt)
+    per.set(r.conversationId, e)
   }
-  const week = usable.filter((r) => Math.abs(now - 7 * DAY - r.sentAt) < DAY / 2)
-  const w = pick(week)
-  return w ? { record: w, ago: { weeks: 1 } } : undefined
+  const out: Array<Reconnect & { score: number }> = []
+  for (const [conversationId, e] of per) {
+    if ((opts.snoozed?.[conversationId] ?? 0) > now) continue
+    const days = [...new Set([...e.out, ...e.inc])].sort((a, b) => a - b)
+    const bothDays = [...e.out].filter((d) => e.inc.has(d)).length
+    if (days.length < 4 || bothDays < 3) continue
+    const lastAt = Math.max(e.lastAt, opts.lastActivity?.[conversationId] ?? 0)
+    const silentDays = Math.floor((now - lastAt) / DAY)
+    const usualDays = Math.max(1, Math.round((days[days.length - 1] - days[0]) / DAY / (days.length - 1)))
+    const threshold = Math.max(7, usualDays * 3)
+    if (silentDays < threshold) continue
+    out.push({
+      conversationId,
+      title: titles[conversationId] ?? conversationId,
+      silentDays,
+      usualDays,
+      lastAt,
+      bothDays,
+      score: (bothDays * 4 + days.length * 2) * Math.min(2, silentDays / threshold)
+    })
+  }
+  return out.sort((a, b) => b.score - a.score).map(({ score: _score, ...r }) => r)
 }
