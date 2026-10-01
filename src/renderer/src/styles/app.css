@@ -9731,6 +9731,8 @@ button.moment-card:hover {
   .composer-box:not(.recording) {
     flex-wrap: wrap;
     align-items: center;
+    /* the clip sits as close to the emoji button as the tools sit to each other */
+    column-gap: 2px;
     padding: 6px 6px 6px 10px;
     border-radius: 20px;
   }
@@ -9740,8 +9742,9 @@ button.moment-card:hover {
     padding: 6px 2px 4px;
     min-height: 30px;
   }
+  /* back from the tiny-chat display:none as the icon button it is (grid keeps the clip centred, like its neighbours) */
   .composer-box:not(.recording) .composer-attach {
-    display: inline-flex;
+    display: grid;
     order: 1;
     margin-bottom: 0;
   }
