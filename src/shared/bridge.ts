@@ -218,6 +218,8 @@ export interface MoshiBridge {
     sticker(id: string): Promise<OutgoingAttachment>
     /** GIF search (trending when the query is empty); rejects with GIF_KEY when no valid key is set. */
     gifSearch(query: string, page: number): Promise<GifPage>
+    /** GIPHY sticker search (trending when empty); rejects with GIF_KEY when there is no GIPHY key. Pick one with sticker('giphy:<id>'). */
+    stickerSearch(query: string, page: number): Promise<GifPage>
     /** Download a picked GIF as a ready-to-send file. */
     gif(item: GifItem): Promise<OutgoingAttachment>
     /** The GIF library whose key is built into this release, or null when users must bring their own. */
@@ -324,6 +326,7 @@ export const IPC = {
   stickersAdd: 'stickers:add',
   stickersRemove: 'stickers:remove',
   appGifSearch: 'app:gifSearch',
+  appStickerSearch: 'app:stickerSearch',
   appGif: 'app:gif',
   appGifDefault: 'app:gifDefault',
   appWeather: 'app:weather',

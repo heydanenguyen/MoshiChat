@@ -7722,6 +7722,35 @@ button.moment-card:hover {
   color: var(--text-tertiary);
 }
 
+/* GIPHY stickers inside the sticker sheet: search and chips on top, see-through stickers in a 4-column grid */
+.sticker-sheet .giphy-top {
+  padding-top: 8px;
+}
+.sticker-sheet .gif-setup {
+  padding: 14px 18px 12px;
+}
+.gif-mood:has(svg):not(.icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.giphy-grid {
+  min-height: 0;
+  overflow-y: auto;
+}
+.giphy-cell {
+  padding: 4px;
+}
+.giphy-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.giphy-wide {
+  grid-column: 1 / -1;
+}
+
 /* first run: paste a key */
 .gif-setup {
   flex: 1;

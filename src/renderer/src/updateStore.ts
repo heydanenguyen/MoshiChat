@@ -72,8 +72,9 @@ export const useUpdate = create<UpdateStore>((set, get) => ({
 export function useUpdateCardVisible(): boolean {
   return useUpdate((s) => {
     const { state, dismissed } = s
-    if (state.phase === 'downloading' || state.phase === 'ready') return true
-    if (state.phase === 'available') return dismissed !== state.version
+    // A download Moshi started by itself stays out of sight until it is ready to restart.
+    if (state.phase === 'downloading') return !state.background
+    if (state.phase === 'available' || state.phase === 'ready') return dismissed !== state.version
     return false
   })
 }

@@ -201,6 +201,11 @@ export interface OutgoingAttachment {
   sticker?: string
   /** An animated GIF from the GIF picker (alternates carry an MP4 copy). */
   gif?: boolean
+  /**
+   * A sticker that is also on GIPHY: Instagram gets it as a real sticker, picked in its own GIPHY tray by these
+   * searches (best first), instead of as a flattened photo.
+   */
+  giphy?: { id: string; queries: string[] }
   width?: number
   height?: number
 }
@@ -272,6 +277,8 @@ export interface GifItem {
   /** The GIF that gets sent. */
   gif: GifMedia
   mp4?: GifMedia
+  /** A GIPHY sticker (see-through) rather than a GIF. */
+  sticker?: boolean
 }
 
 export interface GifPage {
@@ -628,6 +635,10 @@ export interface Settings {
   reconnectNudge?: boolean
   /** GIF search: the user's own KLIPY or GIPHY key (Tenor's public API closed in 2026). */
   gif?: { provider: GifProvider; key: string }
+  /** Download new versions in the background and offer a restart once ready (default on). Off: ask before downloading. */
+  autoUpdate?: boolean
+  /** A GIPHY key for GIPHY stickers, when the GIF key above is KLIPY's (a GIPHY GIF key serves both). */
+  giphyKey?: string
 }
 
 /** Sync between computers through a shared folder (see shared/sync-merge). */
@@ -724,7 +735,8 @@ export type UpdateState =
   | { phase: 'idle' }
   | { phase: 'checking' }
   | { phase: 'available'; version: string; notes?: string; manual?: boolean; url: string }
-  | { phase: 'downloading'; version: string; percent: number }
+  /** `background`: fetched on its own (automatic updates), so no card shows until it is ready. */
+  | { phase: 'downloading'; version: string; percent: number; background?: boolean }
   | { phase: 'ready'; version: string }
   | { phase: 'none'; version: string }
   | { phase: 'error'; message: string; url: string; version?: string }

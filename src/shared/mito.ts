@@ -28,6 +28,27 @@ export const MITO_STICKERS: readonly MitoSticker[] = [
 
 export type MitoId = `mito:${string}`
 
+/**
+ * Mito stickers that are also on GIPHY (the GIFs from design/mito/export-giphy.mjs, uploaded to Moshi's channel):
+ * Instagram gets these as real, moving stickers picked from its own tray, found by searching "mito <name>" (their tags).
+ * Until GIPHY approves the channel they are not searchable, so the tray misses them and the still on white goes instead.
+ */
+export const MITO_GIPHY: Partial<Record<MitoId, string>> = {
+  // giphy.com/channel/danenguyenco/mito-cat, each tagged 'mito <english name>'
+  'mito:chao': 'KZtYrGLD2sODXDozgm',
+  'mito:tim': 'pi0qEm8LBDZfsoVRyD',
+  'mito:coc': 'EkqKxaI34vWBEtlhrb',
+  'mito:quay': 'lgPmGKYhqOlAT8xH5N',
+  'mito:gian': 'DCsyARP2o9QPlDiDh1',
+  'mito:ngu': 'R4tSEA7giogzyKYlLN',
+  'mito:toasang': 'jEL5Y0dxR2R6UmdvMY',
+  'mito:tuchoi': 'rxp39KPnYHG0VognVH',
+  'mito:dienthoai': 'm9QHeNAw0BCzKbEVHV',
+  'mito:khohieu': 'KYenMNZPJ4jttGuqMI',
+  'mito:nghilai': 'vk4YaVkXyhCV4rsgZM',
+  'mito:nhayday': 'nogGNM5EvnePoPavNW'
+}
+
 /** Whitelist check; the id becomes a file name in the main process, so nothing else may pass. */
 export function isMitoId(value: unknown): value is MitoId {
   return typeof value === 'string' && value.startsWith('mito:') && MITO_STICKERS.some((s) => `mito:${s.id}` === value)

@@ -1,5 +1,5 @@
 import { ArrowDownToLine, RefreshCw, Sparkles, X } from 'lucide-react'
-import { useT } from '../store'
+import { useStore, useT } from '../store'
 import { useUpdate, useUpdateCardVisible } from '../updateStore'
 import { BuddyLoader } from './BuddyLoader'
 
@@ -68,6 +68,7 @@ export function UpdateCard({ collapsed }: { collapsed: boolean }): JSX.Element |
 /** Settings: current version, a manual check, and the same actions as the card. */
 export function UpdateSettings(): JSX.Element {
   const t = useT()
+  const automatic = useStore((s) => s.settings.autoUpdate !== false)
   const state = useUpdate((s) => s.state)
   const version = useUpdate((s) => s.version)
   const check = useUpdate((s) => s.check)
@@ -85,7 +86,7 @@ export function UpdateSettings(): JSX.Element {
       sub = state.manual ? t('updateManualHint') : t('updateAvailableTitle', { version: state.version })
       break
     case 'downloading':
-      sub = t('updateDownloading', { percent: String(state.percent) })
+      sub = t(state.background ? 'updateDownloadingQuiet' : 'updateDownloading', { percent: String(state.percent), version: state.version })
       break
     case 'ready':
       sub = t('updateReadyHint')
@@ -97,7 +98,7 @@ export function UpdateSettings(): JSX.Element {
       sub = t('updateError', { message: state.message.slice(0, 120) })
       break
     default:
-      sub = t('updateAutoHint')
+      sub = t(automatic ? 'updateAutoHint' : 'updateAskHint')
   }
 
   return (

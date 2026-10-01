@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ app: { getPath: () => '' } }))
 
-const { fromGiphy, fromKlipy } = await import('../src/main/gifs')
+const { fromGiphy, fromGiphyStickers, fromKlipy } = await import('../src/main/gifs')
 const { imageSize } = await import('../src/main/media/image-size')
 
 describe('GIF providers', () => {
@@ -84,5 +84,29 @@ describe('image header sizes (Zalo uploads)', () => {
     expect(imageSize(webp)).toEqual({ width: 800, height: 600 })
 
     expect(imageSize(Buffer.from('hello world, not an image'))).toBeUndefined()
+  })
+
+  it('maps GIPHY stickers to a small preview and a moderate GIF to send', () => {
+    const { items } = fromGiphyStickers({
+      data: [
+        {
+          id: 'stk1',
+          title: 'Happy Cat Sticker by Mito',
+          images: {
+            fixed_width: { url: 'https://media.giphy.com/fw.gif', webp: 'https://media.giphy.com/fw.webp', width: '200', height: '200' },
+            downsized: { url: 'https://media.giphy.com/d.gif', width: '480', height: '480', size: '1500000' },
+            original: { url: 'https://media.giphy.com/o.gif', width: '480', height: '480', size: '6000000' }
+          }
+        },
+        { id: 'small', images: { fixed_height: { url: 'https://media.giphy.com/fh.gif', width: '200', height: '200' } } },
+        { id: 'none', images: {} }
+      ]
+    })
+    expect(items.map((i) => i.id)).toEqual(['giphy:stk1', 'giphy:small'])
+    expect(items[0]).toMatchObject({ sticker: true, provider: 'giphy', title: 'Happy Cat Sticker by Mito' })
+    expect(items[0].preview.url).toBe('https://media.giphy.com/fw.webp')
+    expect(items[0].gif).toMatchObject({ url: 'https://media.giphy.com/d.gif', size: 1500000 })
+    expect(items[1].gif.url).toBe('https://media.giphy.com/fh.gif')
+    expect(items[0].mp4).toBeUndefined()
   })
 })

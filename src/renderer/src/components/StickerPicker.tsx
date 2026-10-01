@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clock, ImagePlus, Trash2, UserRound } from 'lucide-react'
+import { Clock, ImagePlus, Sparkles, Trash2, UserRound } from 'lucide-react'
 import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
 import { STICKER_EXPRESSIONS, STICKER_VIEWBOX, isStickerId, stickerInner, type StickerId } from '@shared/stickers'
 import { stickerMotionCss } from '@shared/sticker-motion'
@@ -11,6 +11,7 @@ import { AI_MODELS } from '@shared/ai'
 const AI_MODELS_CUTOUT_MB = AI_MODELS.cutout.megabytes
 import { useKeepInside } from '../popover'
 import { LogoMark } from './Logo'
+import { GiphyStickers } from './GiphyStickers'
 
 const RECENT_KEY = 'unison.recentStickers'
 const MITO_NAME = 'Mito'
@@ -212,7 +213,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const [recent, setRecent] = useState<PackSticker[]>(loadRecent)
-  const [tab, setTab] = useState<'recent' | 'mine' | 'mito' | LogoId>(() => (loadRecent().length ? 'recent' : 'mito'))
+  const [tab, setTab] = useState<'recent' | 'mine' | 'mito' | 'giphy' | LogoId>(() => (loadRecent().length ? 'recent' : 'mito'))
   const mine = useStore((s) => s.customStickers)
   const loadStickers = useStore((s) => s.loadStickers)
   const addSticker = useStore((s) => s.addSticker)
@@ -244,7 +245,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
   const items: PackSticker[] =
     tab === 'recent'
       ? recent
-      : tab === 'mine'
+      : tab === 'mine' || tab === 'giphy'
         ? []
         : tab === 'mito'
           ? MITO_STICKERS.map((m) => `mito:${m.id}` as MitoId)
@@ -257,8 +258,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
       setAdding(false)
     }
   }
-  const nameOf = (id: PackSticker): string =>
-    isMitoId(id) ? mitoSticker(id).name[language] : (STICKER_EXPRESSIONS.find((e) => id.endsWith(`-${e.id}`))?.name[language] ?? '')
+  const nameOf = (id: PackSticker): string => (isMitoId(id) ? mitoSticker(id).name[language] : (STICKER_EXPRESSIONS.find((e) => id.endsWith(`-${e.id}`))?.name[language] ?? ''))
 
   const pick = (id: PackSticker): void => {
     const next = [id, ...recent.filter((r) => r !== id)]
@@ -281,13 +281,19 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
         <button role="tab" aria-selected={tab === 'mito'} className={tab === 'mito' ? 'active' : ''} onClick={() => setTab('mito')} title={MITO_NAME}>
           <img className="sticker-tab-pic" src={mitoUrl('mito:chao', 'still')} alt="" draggable={false} />
         </button>
+        <button role="tab" aria-selected={tab === 'giphy'} className={tab === 'giphy' ? 'active' : ''} onClick={() => setTab('giphy')} title={t('giphyStickers')}>
+          <Sparkles size={16} strokeWidth={2.2} />
+        </button>
         {LOGO_ORDER.map((id) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)} title={LOGOS[id].name[language]}>
             <LogoMark logo={id} size={24} title="" />
           </button>
         ))}
       </div>
-      <div className="sticker-title">{tab === 'recent' ? t('recent') : tab === 'mine' ? t('stickerMine') : tab === 'mito' ? MITO_NAME : LOGOS[tab].name[language]}</div>
+      {tab === 'giphy' && <GiphyStickers onPick={onPick} />}
+      {tab !== 'giphy' && (
+        <div className="sticker-title">{tab === 'recent' ? t('recent') : tab === 'mine' ? t('stickerMine') : tab === 'mito' ? MITO_NAME : LOGOS[tab].name[language]}</div>
+      )}
       {tab === 'mine' && (
         <div className="sticker-mine-bar">
           <button className="btn small" onClick={() => void add()} disabled={adding}>
@@ -301,24 +307,26 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
         </div>
       )}
       {tab === 'mine' && mine.length === 0 && <div className="sticker-empty">{t('stickerEmpty')}</div>}
-      <div className="sticker-grid scroll">
-        {tab === 'mine' &&
-          mine.map((s) => (
-            <span key={s.id} className="sticker-cell mine">
-              <button className="sticker-cell-img" onClick={() => onPick(`custom:${s.id}`)} title={s.name} aria-label={s.name}>
-                <img src={s.url} alt={s.name} draggable={false} />
-              </button>
-              <button className="sticker-remove" onClick={() => void removeSticker(s.id)} title={t('stickerRemove')}>
-                <Trash2 size={11} strokeWidth={2.6} />
-              </button>
-            </span>
+      {tab !== 'giphy' && (
+        <div className="sticker-grid scroll">
+          {tab === 'mine' &&
+            mine.map((s) => (
+              <span key={s.id} className="sticker-cell mine">
+                <button className="sticker-cell-img" onClick={() => onPick(`custom:${s.id}`)} title={s.name} aria-label={s.name}>
+                  <img src={s.url} alt={s.name} draggable={false} />
+                </button>
+                <button className="sticker-remove" onClick={() => void removeSticker(s.id)} title={t('stickerRemove')}>
+                  <Trash2 size={11} strokeWidth={2.6} />
+                </button>
+              </span>
+            ))}
+          {items.map((id) => (
+            <button key={id} className="sticker-cell" onClick={() => pick(id)} title={nameOf(id)} aria-label={nameOf(id)}>
+              {isMitoId(id) ? <MitoArt id={id} size={68} play="hover" /> : <StickerArt id={id} size={68} play="hover" />}
+            </button>
           ))}
-        {items.map((id) => (
-          <button key={id} className="sticker-cell" onClick={() => pick(id)} title={nameOf(id)} aria-label={nameOf(id)}>
-            {isMitoId(id) ? <MitoArt id={id} size={68} play="hover" /> : <StickerArt id={id} size={68} play="hover" />}
-          </button>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

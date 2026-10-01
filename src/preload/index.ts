@@ -135,6 +135,7 @@ const bridge: MoshiBridge = {
     setEditorKeys: (on) => ipcRenderer.send(IPC.appEditorKeys, on),
     sticker: (id) => ipcRenderer.invoke(IPC.appSticker, id),
     gifSearch: (query, page) => ipcRenderer.invoke(IPC.appGifSearch, query, page),
+    stickerSearch: (query, page) => ipcRenderer.invoke(IPC.appStickerSearch, query, page),
     gif: (item) => ipcRenderer.invoke(IPC.appGif, item),
     gifDefault: () => ipcRenderer.invoke(IPC.appGifDefault),
     weather: (force) => ipcRenderer.invoke(IPC.appWeather, force),

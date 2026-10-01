@@ -386,6 +386,21 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       if (!peer?.username) throw new Error('Unknown Instagram recipient')
       url = [`new:${peer.username}`, `https://ig.me/m/${peer.username}`]
     }
+    const sentAt = Date.now()
+    // A sticker that is on GIPHY goes the way Instagram's app sends one: picked from its GIF and sticker tray, so it
+    // arrives as a real sticker (moving, see-through). If the tray cannot find it, a Moshi sticker still goes as the
+    // still on white; a GIPHY sticker has nothing better to fall back to, so that error is shown.
+    const [only, ...more] = options.attachments ?? []
+    let viaTray = false
+    if (only?.giphy && !more.length) {
+      try {
+        await this.composer.sendSticker(url, only.giphy)
+        viaTray = true
+      } catch (err) {
+        if (only.sticker?.startsWith('giphy:') || err instanceof SessionExpiredError) throw err
+        this.ctx.log('instagram sticker tray failed, sending the still', (err as Error).message)
+      }
+    }
     const files = (options.attachments ?? []).map((file) => {
       // Voice notes are recorded as Opus and AAC together; Instagram plays AAC (.m4a) natively.
       const aac = file.alternates?.find((alt) => alt.mime === 'audio/mp4')
@@ -399,8 +414,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
       return chosen.path
     })
-    const sentAt = Date.now()
-    await this.composer.sendFiles(url, files)
+    if (!viaTray) await this.composer.sendFiles(url, files)
     if (!threadId) {
       for (let attempt = 0; attempt < 6 && !threadId; attempt++) {
         await sleep(1500)

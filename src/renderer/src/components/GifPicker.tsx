@@ -10,7 +10,7 @@ const RECENT_KEY = 'unison.recentGifs'
 const KEY_PAGES: Record<GifProvider, string> = { klipy: 'https://partner.klipy.com', giphy: 'https://developers.giphy.com/dashboard/' }
 const PROVIDER_NAMES: Record<GifProvider, string> = { klipy: 'KLIPY', giphy: 'GIPHY' }
 /** Mood shortcuts: labels in the app language, searches in English (the libraries are tagged in English). */
-const MOODS: Array<{ q: string; vi: string; en: string }> = [
+export const MOODS: Array<{ q: string; vi: string; en: string }> = [
   { q: 'lol', vi: 'Haha', en: 'LOL' },
   { q: 'love', vi: 'Yêu', en: 'Love' },
   { q: 'hug', vi: 'Ôm', en: 'Hug' },

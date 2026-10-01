@@ -47,3 +47,13 @@ describe('Mito sticker pack', () => {
     expect(mitoUrl('mito:chao', 'animated', 3)).toBe('unison-img://sticker/mito/chao.webp?play=3')
   })
 })
+
+describe('Mito on GIPHY', () => {
+  it('maps only real Mito stickers to well-formed GIPHY ids, each used once', async () => {
+    const { MITO_GIPHY, isMitoId } = await import('../src/shared/mito')
+    const ids = Object.values(MITO_GIPHY)
+    for (const key of Object.keys(MITO_GIPHY)) expect(isMitoId(key)).toBe(true)
+    for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9]{10,}$/)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})

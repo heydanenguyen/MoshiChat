@@ -10,7 +10,8 @@ const CHECK_EVERY_MS = 4 * 3600_000
 
 /**
  * In-app updates from GitHub Releases (electron-builder's app-update.yml names the repository).
- * Nothing downloads without a click. On macOS an app can only replace itself when it carries a
+ * With automatic updates on (the default) a new version downloads in the background and the person is only asked
+ * to restart; it also installs by itself the next time Moshi quits. Off, nothing downloads without a click. On macOS an app can only replace itself when it carries a
  * Developer ID signature; an unsigned build still learns about new versions and opens the
  * download page instead.
  */
@@ -20,10 +21,13 @@ export class Updater {
   private manual = false
   private latest = ''
   private started = false
+  /** The current download was started by Moshi itself, not by a click. */
+  private background = false
 
   constructor(
     private readonly emit: (state: UpdateState) => void,
-    private readonly log: (...args: unknown[]) => void
+    private readonly log: (...args: unknown[]) => void,
+    private readonly automatic: () => boolean = () => true
   ) {}
 
   async start(): Promise<void> {
@@ -43,17 +47,30 @@ export class Updater {
     autoUpdater.on('checking-for-update', () => this.set({ phase: 'checking' }))
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       this.latest = info.version
+      // Straight to a quiet download, so no card flashes up only to vanish again.
+      if (!this.manual && this.automatic()) return void this.fetch(true)
       this.set({ phase: 'available', version: info.version, notes: notesOf(info), manual: this.manual, url: RELEASES_URL })
     })
     autoUpdater.on('update-not-available', (info: UpdateInfo) => this.set(this.quiet ? { phase: 'idle' } : { phase: 'none', version: info.version }))
-    autoUpdater.on('download-progress', (p: { percent: number }) => this.set({ phase: 'downloading', version: this.latest, percent: Math.round(p.percent) }))
-    autoUpdater.on('update-downloaded', (info: UpdateInfo) => this.set({ phase: 'ready', version: info.version }))
+    autoUpdater.on('download-progress', (p: { percent: number }) =>
+      this.set({ phase: 'downloading', version: this.latest, percent: Math.round(p.percent), background: this.background || undefined })
+    )
+    autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      this.background = false
+      this.set({ phase: 'ready', version: info.version })
+    })
     autoUpdater.on('error', (err: Error) => {
       const message = err?.message ?? String(err)
       // A signature problem on macOS means the app cannot replace itself: fall back to the download page.
       if (/code signature|codesign|not signed|signature/i.test(message) && this.latest) {
         this.manual = true
         this.set({ phase: 'available', version: this.latest, manual: true, url: RELEASES_URL })
+        return
+      }
+      // A background download that fails is offered as a normal update instead (the click retries it).
+      if (this.background) {
+        this.background = false
+        this.set({ phase: 'available', version: this.latest, manual: this.manual, url: RELEASES_URL })
         return
       }
       // Network problems on a background check stay quiet; the next check will try again.
@@ -95,13 +112,24 @@ export class Updater {
   }
 
   async download(): Promise<void> {
+    if (this.state.phase === 'downloading' && this.background) {
+      // Already on its way: from now on show it, since the person asked.
+      this.background = false
+      this.set({ ...this.state, background: undefined })
+      return
+    }
     if (this.state.phase !== 'available') return
     if (this.manual) {
       await shell.openExternal(RELEASES_URL)
       return
     }
-    this.quiet = false
-    this.set({ phase: 'downloading', version: this.latest, percent: 0 })
+    await this.fetch(false)
+  }
+
+  private async fetch(background: boolean): Promise<void> {
+    this.background = background
+    if (!background) this.quiet = false
+    this.set({ phase: 'downloading', version: this.latest, percent: 0, background: background || undefined })
     try {
       await autoUpdater.downloadUpdate()
     } catch (err) {

@@ -6,7 +6,7 @@ import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, M
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
-import { isMitoId, mitoSticker } from '@shared/mito'
+import { MITO_GIPHY, isMitoId, mitoSticker } from '@shared/mito'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
 import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
@@ -16,7 +16,8 @@ import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
-import { gifFile, searchGifs } from './gifs'
+import { gifFile, giphyStickerFile, searchGifs, searchStickers } from './gifs'
+import { isGiphyStickerId } from '@shared/giphy'
 import { Scheduler } from './scheduler'
 import { Reminders } from './reminders'
 import { Later, type LaterDue } from './later'
@@ -115,7 +116,11 @@ const ai = new AiService(
 
 const sync = new SyncService(storage, emit, log)
 
-const updater = new Updater((state) => emit({ type: 'update:state', state }), log)
+const updater = new Updater(
+  (state) => emit({ type: 'update:state', state }),
+  log,
+  () => storage.settings.autoUpdate !== false
+)
 
 const reminders = new Reminders(
   storage,
@@ -366,6 +371,7 @@ const stickerDir = (): string => (app.isPackaged ? join(process.resourcesPath, '
  */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
   if (id.startsWith('custom:')) return customStickerFile(id.slice(7))
+  if (isGiphyStickerId(id)) return giphyStickerFile(id.slice('giphy:'.length), giphyKey())
   const mito = isMitoId(id)
   if (!mito && !isStickerId(id)) throw new Error('Unknown sticker')
   const base = mito ? join(stickerDir(), 'mito', id.slice('mito:'.length)) : join(stickerDir(), id)
@@ -387,8 +393,18 @@ async function stickerFile(id: string): Promise<OutgoingAttachment> {
     size: data.length,
     sticker: id,
     preview: `data:image/png;base64,${data.toString('base64')}`,
-    alternates: alternates.length ? alternates : undefined
+    alternates: alternates.length ? alternates : undefined,
+    // A Mito sticker that is on GIPHY too reaches Instagram as a real, moving sticker.
+    giphy: mito && MITO_GIPHY[id] ? { id: MITO_GIPHY[id], queries: [`mito ${mitoSticker(id).name.en.toLowerCase()}`, 'moshi mito'] } : undefined
   }
+}
+
+/** The GIPHY key for stickers: a GIPHY GIF key, else the one set just for stickers, else one built into the release. */
+function giphyKey(): string {
+  const { gif, giphyKey: own } = storage.settings
+  if (gif?.provider === 'giphy' && gif.key) return gif.key
+  if (own) return own
+  return BUILT_IN_GIF.provider === 'giphy' ? BUILT_IN_GIF.key : ''
 }
 
 /**
@@ -1415,6 +1431,9 @@ function registerIpc(): void {
     const key = gif?.key || BUILT_IN_GIF.key
     return searchGifs(provider, key, String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)
   })
+  ipcMain.handle(IPC.appStickerSearch, (_e, query: string, page: number) =>
+    searchStickers(giphyKey(), String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), storage.settings.language)
+  )
   ipcMain.handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
   ipcMain.handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
   ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))

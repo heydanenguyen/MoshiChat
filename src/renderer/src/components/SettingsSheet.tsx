@@ -174,6 +174,9 @@ function GeneralPage(): JSX.Element {
       </Group>
       <Group label={t('updateSection')}>
         <UpdateSettings />
+        <Row title={t('updateAutomatic')} sub={t('updateAutomaticHint')}>
+          <Switch on={settings.autoUpdate !== false} onChange={(autoUpdate) => void setSettings({ autoUpdate })} />
+        </Row>
       </Group>
     </>
   )

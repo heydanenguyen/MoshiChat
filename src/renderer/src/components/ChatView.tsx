@@ -18,6 +18,8 @@ import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBl
 import { LaterButton } from './LaterPicker'
 import { ReactionGrid, ReactionPill } from './ReactionPill'
 import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
+import { giphyIdOf } from '@shared/giphy'
+import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
@@ -818,6 +820,12 @@ function Bubble({
       live = false
     }
   }, [unknownSticker, message.conversationId, message.id, message.sentAt, rememberSticker])
+  // A GIPHY sticker a friend sent (Instagram's tray is GIPHY): kept in the sticker picker to send back.
+  const receivedGiphy = sticker && !message.isOutgoing ? giphyIdOf(sticker.url) : undefined
+  const receivedUrl = receivedGiphy ? sticker?.url : undefined
+  useEffect(() => {
+    if (receivedGiphy && receivedUrl) rememberGiphySticker('received', { id: receivedGiphy, url: receivedUrl })
+  }, [receivedGiphy, receivedUrl])
   const story = attachments.find((a) => a.kind === 'story')
   const inline = attachments.filter((a) => a.kind !== 'story')
   const media = inline.find((a) => ((a.kind === 'image' || a.kind === 'video') && (a.url || a.thumbnailUrl)) || a.kind === 'post')

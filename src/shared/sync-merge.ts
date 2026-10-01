@@ -36,7 +36,8 @@ const VALUE_KEYS = [
   'birthdayReminders',
   'reconnectNudge',
   'acceptedUnofficial',
-  'gif'
+  'gif',
+  'giphyKey'
 ] as const satisfies ReadonlyArray<keyof Settings>
 
 /** Maps keyed by conversation id: one entry per chat. */

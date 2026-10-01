@@ -6,3 +6,4 @@ dist
 *.tsbuildinfo
 # Mito sticker frames: rendered from design/mito/animation.html, only needed to rebuild the pack
 design/mito/frames
+design/mito/giphy

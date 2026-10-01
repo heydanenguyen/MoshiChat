@@ -30,6 +30,11 @@ const SEND_LABELS = [
 /** Instagram's "Add Photo or Video" button, by its icon label, across common UI languages. */
 const MEDIA_LABEL = 'photo|video|image|media|gallery|ảnh|hình|foto|imagen|bild|图片|照片|写真|사진|рисун|фото'
 
+/** Instagram's "Choose a GIF or sticker" button, by its icon label, across common UI languages. */
+const TRAY_LABEL = 'gif|sticker|nhãn dán|autocollant|pegatina|aufkleber|adesivo|стикер|ステッカー|스티커|贴纸|貼圖'
+/** The tray's Stickers tab, when it has one (GIFs and stickers side by side). */
+const STICKER_TAB = '^(stickers?|nhãn dán|autocollants?|pegatinas?|aufkleber|adesivos?|стикеры|ステッカー|스티커|贴纸|貼圖)$'
+
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -84,6 +89,16 @@ export class DirectComposer {
   /** Photos, videos and audio through Instagram's own "Add Photo or Video" picker. */
   sendFiles(threadUrls: string | string[], paths: string[]): Promise<void> {
     const run = this.queue.then(() => this.sendFilesNow(threadUrls, paths))
+    this.queue = run.catch(() => undefined)
+    return run
+  }
+
+  /**
+   * A GIPHY sticker as a real Instagram sticker: open the thread's GIF and sticker tray, search it with each of
+   * `queries` (then the tray's own picks) until the sticker with this GIPHY id shows up, and tap it, which sends it.
+   */
+  sendSticker(threadUrls: string | string[], sticker: { id: string; queries: string[] }): Promise<void> {
+    const run = this.queue.then(() => this.sendStickerNow(threadUrls, sticker))
     this.queue = run.catch(() => undefined)
     return run
   }
@@ -277,6 +292,88 @@ export class DirectComposer {
     )) as string
     this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
     if (outcome === 'STUCK') throw new Error('Instagram is still uploading; check the conversation before sending again')
+  }
+
+  private async sendStickerNow(threadUrls: string | string[], sticker: { id: string; queries: string[] }): Promise<void> {
+    const win = await this.open(threadUrls)
+    const outcome = (await win.webContents.executeJavaScript(
+      `(async () => {
+        ${HELPERS}
+        const id = ${JSON.stringify(sticker.id)};
+        const queries = ${JSON.stringify([...sticker.queries, ''])};
+        let box = null;
+        for (let i = 0; i < 80 && !box; i++) { box = findBox(); if (!box) await wait(250); }
+        if (!box) return /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_TEXTBOX';
+        // Pictures already on the page (the conversation itself) are never what gets tapped.
+        const before = new Set(document.querySelectorAll('img, video'));
+        const inputsBefore = new Set(document.querySelectorAll('input'));
+        const row = box.getBoundingClientRect();
+        const near = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && Math.abs(r.top + r.height / 2 - (row.top + row.height / 2)) < 120; };
+        const trayLabel = new RegExp(${JSON.stringify(TRAY_LABEL)}, 'i');
+        const opener = [...document.querySelectorAll('svg[aria-label], [role="button"][aria-label], button[aria-label]')].filter((el) => trayLabel.test(el.getAttribute('aria-label') || '')).find(near);
+        if (!opener) return 'NO_TRAY_BUTTON';
+        (opener.closest('[role="button"], button') || opener).click();
+        let search = null;
+        for (let i = 0; i < 40 && !search; i++) {
+          search = [...document.querySelectorAll('input')].find((el) => !inputsBefore.has(el) && el.type !== 'file' && el.getBoundingClientRect().width > 0);
+          if (!search) await wait(200);
+        }
+        if (!search) return 'NO_TRAY';
+        const fresh = () => [...document.querySelectorAll('img, video')].filter((el) => !before.has(el));
+        const tab = [...document.querySelectorAll('[role="tab"], [role="button"], button')].find((el) => new RegExp(${JSON.stringify(STICKER_TAB)}, 'i').test((el.textContent || '').trim()) && el.getBoundingClientRect().width > 0);
+        if (tab) { tab.click(); await wait(500); }
+        const srcOf = (el) => [el.currentSrc, el.src, el.getAttribute('srcset'), el.poster, ...[...el.querySelectorAll('source')].map((s) => s.src || s.srcset)].filter(Boolean).join(' ');
+        const hit = () => fresh().find((el) => srcOf(el).includes('/' + id + '/'));
+        const setQuery = (q) => {
+          search.focus();
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, q);
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        const scroller = () => {
+          let el = fresh()[0];
+          while (el && el !== document.body) { if (el.scrollHeight > el.clientHeight + 20 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return el; el = el.parentElement; }
+          return null;
+        };
+        let found = null;
+        for (const q of queries) {
+          setQuery(q);
+          await wait(900);
+          for (let i = 0; i < 40 && !found; i++) {
+            found = hit();
+            if (found) break;
+            // Look further down the results now and then (they load as the tray scrolls).
+            if (i % 8 === 7) { const s = scroller(); if (s) s.scrollTop += s.clientHeight; }
+            await wait(200);
+          }
+          if (found) break;
+        }
+        if (!found) {
+          const seen = fresh().slice(0, 4).map((el) => { try { const u = new URL(srcOf(el).split(' ')[0]); return u.hostname + u.pathname.slice(0, 40); } catch { return '?'; } });
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          return 'NOT_FOUND ' + JSON.stringify({ shown: fresh().length, tab: !!tab, seen });
+        }
+        found.scrollIntoView({ block: 'center' });
+        (found.closest('[role="button"], button') || found).click();
+        // Tapping a sticker sends it and closes the tray.
+        for (let i = 0; i < 25; i++) { await wait(200); if (!search.isConnected || search.getBoundingClientRect().width === 0) return 'OK'; }
+        const button = sendButton();
+        if (button) { button.click(); await wait(800); return 'OK_SEND'; }
+        return 'TRAY_OPEN';
+      })()`,
+      true
+    )) as string
+    this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
+    this.log('[instagram composer] sticker', sticker.id, outcome)
+    if (outcome === 'OK' || outcome === 'OK_SEND' || outcome === 'TRAY_OPEN') return
+    if (outcome === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
+    this.log('[instagram composer] sticker tray:', await this.describe(win))
+    throw new Error(
+      outcome.startsWith('NOT_FOUND')
+        ? 'This sticker did not show up in Instagram’s sticker search'
+        : outcome === 'NO_TRAY_BUTTON' || outcome === 'NO_TRAY'
+          ? 'Could not open Instagram’s GIF and sticker tray'
+          : `Instagram sticker send failed (${outcome})`
+    )
   }
 
   /** Hand the files to Instagram's hidden <input type=file>, exactly as the OS file dialog would. */

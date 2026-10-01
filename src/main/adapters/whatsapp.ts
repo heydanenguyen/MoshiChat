@@ -182,6 +182,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
       else if (file.gif && file.alternates?.some((alt) => alt.mime === 'video/mp4')) {
         const mp4 = file.alternates.find((alt) => alt.mime === 'video/mp4')!
         sent = await sock.sendMessage(jid, { video: { url: mp4.path }, gifPlayback: true, caption }, misc)
+      } else if (file.sticker && file.mime === 'image/gif') {
+        // A moving sticker (GIPHY): WhatsApp takes no GIF photo, so its still on white.
+        sent = await sock.sendMessage(jid, { image: { url: file.alternates?.find((alt) => alt.role === 'opaque')?.path ?? file.path }, caption }, misc)
       } else if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
       else if (file.mime.startsWith('video/')) sent = await sock.sendMessage(jid, { video: { url: file.path }, caption }, misc)
       else sent = await sock.sendMessage(jid, { document: { url: file.path }, mimetype: file.mime, fileName: file.name, caption }, misc)
