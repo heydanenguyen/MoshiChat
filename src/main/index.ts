@@ -11,7 +11,7 @@ import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
 import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
 import { memberIndex } from '@shared/people'
-import { Storage } from './storage'
+import { Storage, secretsProtected } from './storage'
 import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
@@ -24,6 +24,7 @@ import { Later, type LaterDue } from './later'
 import { Birthdays, type BirthdayDue } from './birthdays'
 import { AppLock } from './lock'
 import { previewOf, prunePreviews } from './media/preview'
+import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
 import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource } from './stickers'
@@ -606,7 +607,11 @@ function createWindow(): void {
   })
 
   // Interface zoom from Settings (large/4K screens); re-applied after every load.
-  window.webContents.on('did-finish-load', () => window?.webContents.setZoomFactor(clampZoom(storage.settings.zoom)))
+  window.webContents.on('did-finish-load', () => {
+    window?.webContents.setZoomFactor(clampZoom(storage.settings.zoom))
+    // No keyring (some Linux desktops): sessions would be stored merely encoded, so say so rather than stay quiet.
+    if (storage.accounts.length && !secretsProtected()) setTimeout(() => emit({ type: 'app:notice', notice: 'insecure-secrets' }), 4000)
+  })
   window.once('ready-to-show', () => window?.show())
   // Safety net: never leave the user with an invisible window if the first paint stalls.
   setTimeout(() => {
@@ -719,7 +724,7 @@ function registerMediaProxy(): void {
   protocol.handle('unison-media', async (request) => {
     try {
       const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
-      if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
+      if (!proxyAllowed(target, IMAGE_HOSTS)) return new Response('blocked', { status: 403 })
       const zalo = /zdn\.vn|zadn\.vn|dlfl\.vn|zaloapp\.com/.test(target.hostname)
       const range = request.headers.get('range')
       const res = await session.defaultSession.fetch(target.toString(), {
@@ -742,7 +747,7 @@ function registerMediaProxy(): void {
 }
 
 import { IMAGE_HOSTS } from '@shared/media'
-import { externalUrl, fileInside, isPrivateHost } from './safety'
+import { externalUrl, fileInside, isPrivateHost, proxyAllowed } from './safety'
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
@@ -760,7 +765,7 @@ function registerImageProxy(): void {
     }
     try {
       const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
-      if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
+      if (!proxyAllowed(target, IMAGE_HOSTS)) return new Response('blocked', { status: 403 })
       const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
       const zalo = /zdn\.vn|zadn\.vn|dlfl\.vn|zaloapp\.com/.test(target.hostname)
       const ses = /fbcdn|cdninstagram|instagram/.test(target.hostname)
@@ -889,6 +894,8 @@ async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> 
   }
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('This file cannot be saved')
   if (isPrivateHost(target.hostname)) throw new Error('This address cannot be downloaded from')
+  // facebook.com and instagram.com are fetched signed in: only their static pictures, never a page or an action URL.
+  if (/(^|\.)(facebook|instagram)\.com$/i.test(target.hostname) && !proxyAllowed(target, IMAGE_HOSTS)) throw new Error('This address cannot be downloaded from')
   const host = target.hostname
   const instagram = /instagram|cdninstagram/.test(host) || target.searchParams.has('_nc_cat')
   const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(host)
@@ -1508,6 +1515,10 @@ if (!gotLock) {
     birthdays.start()
     void pruneSafetyCopies()
     void prunePreviews()
+    // Scratch files (converted GIFs and stickers, pasted and opened files, recordings) older than a week, now and daily.
+    const tidyTemp = (): void => void pruneTemp(app.getPath('temp'), 7 * 24 * 3600_000).then((n) => n && log('temp files removed:', n))
+    setTimeout(tidyTemp, 60_000).unref()
+    setInterval(tidyTemp, 24 * 3600_000).unref()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()

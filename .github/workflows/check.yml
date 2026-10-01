@@ -1,0 +1,31 @@
+# Typecheck, lint and tests on every push and pull request (the release build in build.yml only runs on tags, so a
+# broken test used to surface only when a release was being built).
+name: Check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      # The lockfile is written by npm 11; the runner ships npm 10, which resolves peers differently.
+      - run: npm install -g npm@11
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx eslint .
+      - run: npm test

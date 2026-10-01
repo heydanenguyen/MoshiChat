@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, memo, useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { isArchivedNow, useStore, useUnreadCounts } from './store'
 import { translate } from './i18n'
@@ -8,8 +8,6 @@ import { ConversationList } from './components/ConversationList'
 import { ChatView } from './components/ChatView'
 import { DetailsPane } from './components/DetailsPane'
 import { EmptyState } from './components/EmptyState'
-import { SettingsSheet } from './components/SettingsSheet'
-import { AddAccountSheet } from './components/AddAccountSheet'
 import { AuthPromptSheet } from './components/AuthPromptSheet'
 import { CommandPalette } from './components/CommandPalette'
 import { ForwardSheet } from './components/ForwardSheet'
@@ -17,19 +15,25 @@ import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, DARK_BASE_VAR_NAMES, accentVars, darkBaseVars } from '@shared/accent'
 import { darkBaseHex, stepZoom } from '@shared/types'
-import { NewChatSheet } from './components/NewChatSheet'
-import { BackupSheet } from './components/BackupSheet'
-import { LegalSheet } from './components/LegalSheet'
 import { TodoSheet } from './components/TodoSheet'
 import { InsightsSheet } from './components/Insights'
 import { LaterPicker } from './components/LaterPicker'
 import { LockScreen } from './components/LockScreen'
-import { MergeSheet } from './components/MergeSheet'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
 import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
+
+/*
+ * Sheets opened now and then load when first opened, so they are not part of what has to load at launch.
+ */
+const SettingsSheet = lazy(() => import('./components/SettingsSheet').then((m) => ({ default: m.SettingsSheet })))
+const AddAccountSheet = lazy(() => import('./components/AddAccountSheet').then((m) => ({ default: m.AddAccountSheet })))
+const NewChatSheet = lazy(() => import('./components/NewChatSheet').then((m) => ({ default: m.NewChatSheet })))
+const BackupSheet = lazy(() => import('./components/BackupSheet').then((m) => ({ default: m.BackupSheet })))
+const LegalSheet = lazy(() => import('./components/LegalSheet').then((m) => ({ default: m.LegalSheet })))
+const MergeSheet = lazy(() => import('./components/MergeSheet').then((m) => ({ default: m.MergeSheet })))
 
 /*
  * The panes subscribe to what they show themselves. Memoised (they take no props), they skip the App re-renders that
@@ -431,12 +435,14 @@ export default function App(): JSX.Element {
             {/* Mid-width windows float the details over the chat; the scrim closes them (see the responsive rules). */}
             {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => toggleDetails()} />}
 
-            {sheet.kind === 'settings' && <SettingsSheet initialPage={sheet.page} />}
-            {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
+            <Suspense fallback={null}>
+              {sheet.kind === 'settings' && <SettingsSheet initialPage={sheet.page} />}
+              {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
+              {sheet.kind === 'new-chat' && <NewChatSheet />}
+              {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
+              {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
+              </Suspense>
             {sheet.kind === 'command' && <CommandPalette />}
-            {sheet.kind === 'new-chat' && <NewChatSheet />}
-            {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
-            {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
             {sheet.kind === 'todos' && <TodoSheet />}
             {sheet.kind === 'insights' && closeFriends && <InsightsSheet />}
             {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}

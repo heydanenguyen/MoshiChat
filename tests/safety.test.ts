@@ -32,3 +32,22 @@ describe('what the renderer may ask for', () => {
     expect(fileInside(new URL('https://example.com/a.png'), [root])).toBe(false)
   })
 })
+
+describe('the image proxy', () => {
+  it('fetches platform CDNs, and only static pictures from the sites themselves', async () => {
+    const { proxyAllowed } = await import('../src/main/safety')
+    const { IMAGE_HOSTS } = await import('../src/shared/media')
+    const ok = (u: string): boolean => proxyAllowed(new URL(u), IMAGE_HOSTS)
+    expect(ok('https://scontent.xx.fbcdn.net/v/t39/abc.jpg?stp=x')).toBe(true)
+    expect(ok('https://scontent-hkg4-1.cdninstagram.com/v/t51/123_n.jpg')).toBe(true)
+    expect(ok('https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=1')).toBe(true)
+    expect(ok('https://www.facebook.com/images/emoji.php/v9/t51/1/16/1f600.png')).toBe(true)
+    expect(ok('https://static.xx.fbcdn.net/rsrc.php/v3/y4/r/abc.png')).toBe(true)
+    expect(ok('https://www.instagram.com/static/images/ico/favicon.png/abc.png')).toBe(true)
+    expect(ok('https://www.facebook.com/logout.php?h=abc')).toBe(false)
+    expect(ok('https://www.facebook.com/settings')).toBe(false)
+    expect(ok('https://www.instagram.com/accounts/edit/')).toBe(false)
+    expect(ok('http://scontent.xx.fbcdn.net/a.jpg')).toBe(false)
+    expect(ok('https://evil.example/a.png')).toBe(false)
+  })
+})

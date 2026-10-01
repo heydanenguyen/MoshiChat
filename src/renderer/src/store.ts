@@ -479,6 +479,9 @@ export const useStore = create<State>((set, get) => ({
     bridge.onEvent((event: BridgeEvent) => {
       const state = get()
       switch (event.type) {
+        case 'app:notice':
+          get().showToast(translate(get().settings.language, 'noticeInsecureSecrets'), 'error')
+          break
         case 'account:updated':
           set({ accounts: { ...state.accounts, [event.account.id]: event.account } })
           break

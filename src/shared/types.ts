@@ -769,6 +769,8 @@ export type BridgeEvent =
   | { type: 'auth:cleared'; requestId: string }
   | { type: 'focus-conversation'; conversationId: string; messageId?: string }
   | { type: 'window:state'; maximized: boolean }
+  /** Something about this computer the person should know (shown once per launch). */
+  | { type: 'app:notice'; notice: 'insecure-secrets' }
   | { type: 'settings:updated'; settings: Settings }
   | { type: 'ai:progress'; progress: AiProgress }
   /** The insights backfill walking recent history: done of total chats. */

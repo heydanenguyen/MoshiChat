@@ -151,6 +151,20 @@ export class Storage {
   }
 }
 
+/**
+ * Whether sign-in sessions are really protected on disk: the OS keychain (macOS), DPAPI (Windows) or a desktop keyring
+ * (Linux). Linux without a keyring falls back to a fixed key ('basic_text'), or to none at all, which is only encoding.
+ */
+export function secretsProtected(): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  if (process.platform !== 'linux') return true
+  try {
+    return safeStorage.getSelectedStorageBackend() !== 'basic_text'
+  } catch {
+    return false
+  }
+}
+
 function encrypt(value: unknown): string {
   const json = JSON.stringify(value)
   if (safeStorage.isEncryptionAvailable()) {

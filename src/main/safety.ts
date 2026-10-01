@@ -46,3 +46,14 @@ export function fileInside(fileUrl: URL, roots: string[]): boolean {
     return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
   })
 }
+
+/**
+ * Whether the image and media proxies may fetch a link with the platform's signed-in session. Platform CDNs are fine;
+ * the sites themselves (facebook.com, instagram.com) only for static pictures such as emoji and icons, so a link in a
+ * message can never make Moshi load a page or an action URL as you.
+ */
+export function proxyAllowed(target: URL, hosts: RegExp): boolean {
+  if (target.protocol !== 'https:' || !hosts.test(target.hostname)) return false
+  if (!/(^|\.)(facebook|instagram)\.com$/i.test(target.hostname)) return true
+  return /^\/(images|static|rsrc\.php|emoji\.php)\//i.test(target.pathname) || /\.(png|jpe?g|gif|webp|svg|ico)$/i.test(target.pathname)
+}

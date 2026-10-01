@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download, ExternalLink, PenLine, X } from 'lucide-react'
 import { useStore, useT, type Lightbox as LightboxState } from '../store'
-import { ImageEditor } from './ImageEditor'
+// The photo editor is big and opened rarely: it loads the first time someone edits a picture.
+const ImageEditor = lazy(() => import('./ImageEditor').then((m) => ({ default: m.ImageEditor })))
 import { mediaSrc, previewSrc } from '@shared/media'
 
 export function Lightbox({ url, name, video, poster, externalUrl, externalLabel, gallery, index = 0, conversationId }: LightboxState): JSX.Element {
@@ -53,7 +54,9 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
   if (editing && !item.video)
     return (
       <div className="lightbox editing">
-        <ImageEditor src={item.url} name={count > 1 ? undefined : name} conversationId={conversationId} onClose={() => setEditing(false)} onDone={() => openLightbox(undefined)} />
+        <Suspense fallback={null}>
+          <ImageEditor src={item.url} name={count > 1 ? undefined : name} conversationId={conversationId} onClose={() => setEditing(false)} onDone={() => openLightbox(undefined)} />
+        </Suspense>
       </div>
     )
 
