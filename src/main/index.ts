@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
-import { join, basename } from 'path'
+import { join, basename, resolve } from 'path'
+import { pathToFileURL } from 'url'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
 import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, MessagePreview, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
@@ -27,7 +28,7 @@ import { previewOf, prunePreviews } from './media/preview'
 import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
 import { givenName } from '@shared/extras'
-import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource } from './stickers'
+import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource, customStickerPath } from './stickers'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind, SpeakLang } from '@shared/ai'
 import type { ShareCardData } from '@shared/insights'
@@ -92,6 +93,10 @@ const log = (...args: unknown[]): void => {
   const text = args.map((a) => (typeof a === 'string' ? a : a instanceof Error ? a.message : JSON.stringify(a))).join(' ')
   logToFile(`${new Date().toISOString()} ${text}\n`)
 }
+
+// A library throwing from a callback (the messaging clients do, now and then) is logged, not left to crash the app.
+process.on('unhandledRejection', (reason) => log('unhandled rejection:', reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)))
+process.on('uncaughtException', (err) => log('uncaught exception:', err.stack ?? err.message))
 
 const emit = (event: BridgeEvent): void => {
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
@@ -753,6 +758,19 @@ function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
     // unison-img://sticker/mito/<id>.png|webp: the Mito pack's pictures, straight from the app's resources.
     const url = new URL(request.url)
+    // unison-img://custom-sticker/<file>: your own stickers, from the stickers folder (only names Moshi gives them).
+    if (url.hostname === 'custom-sticker') {
+      const path = customStickerPath(decodeURIComponent(url.pathname.slice(1)))
+      if (!path) return new Response('blocked', { status: 403 })
+      try {
+        const data = await readFile(path)
+        const ext = path.split('.').pop()!.toLowerCase()
+        const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'apng' ? 'image/apng' : `image/${ext}`
+        return new Response(new Uint8Array(data), { status: 200, headers: { 'content-type': type, 'cache-control': 'max-age=31536000', 'access-control-allow-origin': '*' } })
+      } catch {
+        return new Response('missing', { status: 404 })
+      }
+    }
     if (url.hostname === 'sticker') {
       const m = /^\/mito\/([a-z]+)\.(png|webp)$/.exec(url.pathname)
       if (!m || !isMitoId(`mito:${m[1]}`)) return new Response('blocked', { status: 403 })
@@ -817,6 +835,32 @@ function hardenSession(): void {
   })
 }
 
+/**
+ * Files the renderer may send or turn into stickers: ones the person picked in a dialog or dropped/pasted (the preload
+ * grants a dropped file's real path, which a page cannot fake), and Moshi's own (its data, temp files, bundled
+ * stickers). Anything else is refused, so a compromised page cannot attach an arbitrary file from this computer.
+ */
+const grantedFiles = new Set<string>()
+const fileKey = (path: string): string => {
+  const full = resolve(path)
+  return process.platform === 'win32' ? full.toLowerCase() : full
+}
+function grantFile(path: string): void {
+  if (path) grantedFiles.add(fileKey(path))
+}
+function fileAllowed(path: unknown): boolean {
+  if (typeof path !== 'string' || !path) return false
+  if (grantedFiles.has(fileKey(path))) return true
+  return fileInside(pathToFileURL(resolve(path)), [app.getPath('userData'), app.getPath('temp'), stickerDir()])
+}
+function requireFiles(options: SendOptions | undefined): void {
+  for (const a of options?.attachments ?? []) {
+    for (const path of [a.path, ...(a.alternates ?? []).map((alt) => alt.path)]) {
+      if (!fileAllowed(path)) throw new Error('This file cannot be sent from here')
+    }
+  }
+}
+
 async function pickFiles(): Promise<OutgoingAttachment[]> {
   if (!window) return []
   const result = await dialog.showOpenDialog(window, {
@@ -830,6 +874,7 @@ async function pickFiles(): Promise<OutgoingAttachment[]> {
   if (result.canceled) return []
   const files: OutgoingAttachment[] = []
   for (const path of result.filePaths) {
+    grantFile(path)
     const info = await stat(path)
     const mime = mimeOf(path)
     const preview = mime.startsWith('image/') && info.size < 60_000_000 ? imagePreview(await readFile(path), mime) : undefined
@@ -1241,13 +1286,29 @@ async function listPages(appId: string): Promise<PageOption[]> {
 }
 
 function registerIpc(): void {
-  ipcMain.handle(IPC.accountsList, () => manager.listAccounts())
-  ipcMain.handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
-  ipcMain.handle(IPC.accountsRemove, async (_e, id: string) => {
+  // Every channel answers only Moshi's own page (the main window and the share picture window). Login windows and
+  // the hidden Instagram pages have no preload, but a frame that is not the app must never reach these either.
+  const appPage = process.env.ELECTRON_RENDERER_URL ? new URL(process.env.ELECTRON_RENDERER_URL).origin : pathToFileURL(join(__dirname, '../renderer/index.html')).href
+  const fromApp = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => !!event.senderFrame?.url.startsWith(appPage)
+  type Handler = Parameters<typeof ipcMain.handle>[1]
+  type Listener = Parameters<typeof ipcMain.on>[1]
+  const handle = (channel: string, fn: Handler): void =>
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!fromApp(event)) throw new Error('Not allowed')
+      return fn(event, ...args)
+    })
+  const on = (channel: string, fn: Listener): void => {
+    ipcMain.on(channel, (event, ...args) => {
+      if (fromApp(event)) fn(event, ...args)
+    })
+  }
+  handle(IPC.accountsList, () => manager.listAccounts())
+  handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
+  handle(IPC.accountsRemove, async (_e, id: string) => {
     await manager.remove(id)
     await pruneOrphanedSettings()
   })
-  ipcMain.handle(IPC.accountsReconnect, async (_e, id: string) => {
+  handle(IPC.accountsReconnect, async (_e, id: string) => {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
     if (web && account && account.status !== 'connected') {
@@ -1256,32 +1317,38 @@ function registerIpc(): void {
     }
     await manager.reconnect(id)
   })
-  ipcMain.handle(IPC.accountsAddDemo, () => manager.addDemo())
-  ipcMain.handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => manager.addWebSession(platform, await captureWebSession(platform)))
-  ipcMain.handle(IPC.accountsListPages, (_e, appId: string) => listPages(appId))
-  ipcMain.handle(IPC.accountsAddPages, (_e, pages: PageOption[], includeInstagram: boolean) => manager.addPages(pages, includeInstagram))
-  ipcMain.handle(IPC.contactsList, (_e, query: string) => manager.contacts(query))
-  ipcMain.handle(IPC.contactsOpen, (_e, accountId: string, peerId: string) => manager.openConversation(accountId, peerId))
-  ipcMain.handle(IPC.conversationsList, () => manager.listConversations())
-  ipcMain.handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
-  ipcMain.handle(IPC.conversationsAcceptRequest, (_e, id: string) => manager.acceptRequest(id))
-  ipcMain.handle(IPC.conversationsProfile, (_e, id: string) => manager.profile(id))
-  ipcMain.handle(IPC.conversationsShared, (_e, id: string, kind: SharedKind) => manager.shared(id, kind))
-  ipcMain.handle(IPC.conversationsSearchIn, (_e, id: string, query: string) => manager.searchIn(id, query))
-  ipcMain.handle(IPC.conversationsStats, (_e, id: string) => manager.stats(id))
-  ipcMain.handle(IPC.messagesOpenAttachment, (_e, id: string, messageId: string, attachmentId: string) => openAttachment(id, messageId, attachmentId))
-  ipcMain.handle(IPC.messagesList, (_e, id: string, beforeId?: string) => manager.fetchMessages(id, beforeId))
-  ipcMain.handle(IPC.messagesSend, (_e, id: string, text: string, options?: SendOptions) => manager.sendMessage(id, text, options))
-  ipcMain.handle(IPC.messagesForward, (_e, fromId: string, messageId: string, toId: string) => manager.forward(fromId, messageId, toId))
-  ipcMain.handle(IPC.messagesLoadAttachment, (_e, id: string, messageId: string, attachmentId: string) => manager.loadAttachment(id, messageId, attachmentId))
-  ipcMain.handle(IPC.messagesReact, (_e, id: string, messageId: string, emoji: string) => manager.react(id, messageId, emoji))
-  ipcMain.handle(IPC.messagesUnsend, (_e, id: string, messageId: string) => manager.unsend(id, messageId))
-  ipcMain.handle(IPC.messagesSearch, (_e, query: string) => manager.search(query))
-  ipcMain.handle(IPC.messagesTyping, (_e, id: string) => manager.setTyping(id))
-  ipcMain.handle(IPC.authRespond, (_e, requestId: string, value: string) => manager.respondAuth(requestId, value))
-  ipcMain.handle(IPC.authCancel, (_e, requestId: string) => manager.cancelAuth(requestId))
-  ipcMain.handle(IPC.settingsGet, () => storage.settings)
-  ipcMain.handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
+  handle(IPC.accountsAddDemo, () => manager.addDemo())
+  handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => manager.addWebSession(platform, await captureWebSession(platform)))
+  handle(IPC.accountsListPages, (_e, appId: string) => listPages(appId))
+  handle(IPC.accountsAddPages, (_e, pages: PageOption[], includeInstagram: boolean) => manager.addPages(pages, includeInstagram))
+  handle(IPC.contactsList, (_e, query: string) => manager.contacts(query))
+  handle(IPC.contactsOpen, (_e, accountId: string, peerId: string) => manager.openConversation(accountId, peerId))
+  handle(IPC.conversationsList, () => manager.listConversations())
+  handle(IPC.conversationsMarkRead, (_e, id: string) => manager.markRead(id))
+  handle(IPC.conversationsAcceptRequest, (_e, id: string) => manager.acceptRequest(id))
+  handle(IPC.conversationsProfile, (_e, id: string) => manager.profile(id))
+  handle(IPC.conversationsShared, (_e, id: string, kind: SharedKind) => manager.shared(id, kind))
+  handle(IPC.conversationsSearchIn, (_e, id: string, query: string) => manager.searchIn(id, query))
+  handle(IPC.conversationsStats, (_e, id: string) => manager.stats(id))
+  handle(IPC.messagesOpenAttachment, (_e, id: string, messageId: string, attachmentId: string) => openAttachment(id, messageId, attachmentId))
+  handle(IPC.messagesList, (_e, id: string, beforeId?: string) => manager.fetchMessages(id, beforeId))
+  handle(IPC.messagesSend, (_e, id: string, text: string, options?: SendOptions) => {
+    requireFiles(options)
+    return manager.sendMessage(id, text, options)
+  })
+  on(IPC.appGrantFile, (_e, path: unknown) => {
+    if (typeof path === 'string') grantFile(path)
+  })
+  handle(IPC.messagesForward, (_e, fromId: string, messageId: string, toId: string) => manager.forward(fromId, messageId, toId))
+  handle(IPC.messagesLoadAttachment, (_e, id: string, messageId: string, attachmentId: string) => manager.loadAttachment(id, messageId, attachmentId))
+  handle(IPC.messagesReact, (_e, id: string, messageId: string, emoji: string) => manager.react(id, messageId, emoji))
+  handle(IPC.messagesUnsend, (_e, id: string, messageId: string) => manager.unsend(id, messageId))
+  handle(IPC.messagesSearch, (_e, query: string) => manager.search(query))
+  handle(IPC.messagesTyping, (_e, id: string) => manager.setTyping(id))
+  handle(IPC.authRespond, (_e, requestId: string, value: string) => manager.respondAuth(requestId, value))
+  handle(IPC.authCancel, (_e, requestId: string) => manager.cancelAuth(requestId))
+  handle(IPC.settingsGet, () => storage.settings)
+  handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
     if ('style' in patch) applyBackdrop()
@@ -1293,33 +1360,33 @@ function registerIpc(): void {
     }
     return settings
   })
-  ipcMain.handle(IPC.appVersion, () => app.getVersion())
-  ipcMain.handle(IPC.updateState, () => updater.current())
-  ipcMain.handle(IPC.updateCheck, () => updater.check(false))
-  ipcMain.handle(IPC.updateDownload, () => updater.download())
-  ipcMain.on(IPC.updateInstall, () => updater.install())
-  ipcMain.handle(IPC.aiStatus, () => ai.status())
-  ipcMain.handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
-  ipcMain.handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice'))
-  ipcMain.handle(IPC.aiSpeak, (_e, text: string, speakLang: SpeakLang) => ai.speak(String(text ?? '').slice(0, 1200), speakLang === 'en' ? 'en' : 'vi'))
-  ipcMain.handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
-  ipcMain.handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
+  handle(IPC.appVersion, () => app.getVersion())
+  handle(IPC.updateState, () => updater.current())
+  handle(IPC.updateCheck, () => updater.check(false))
+  handle(IPC.updateDownload, () => updater.download())
+  on(IPC.updateInstall, () => updater.install())
+  handle(IPC.aiStatus, () => ai.status())
+  handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
+  handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice'))
+  handle(IPC.aiSpeak, (_e, text: string, speakLang: SpeakLang) => ai.speak(String(text ?? '').slice(0, 1200), speakLang === 'en' ? 'en' : 'vi'))
+  handle(IPC.aiReadMedia, (_e, url: string) => readMedia(String(url)))
+  handle(IPC.aiTranscribe, (_e, key: string, pcm: Float32Array, language?: string) =>
     ai.transcribe(String(key), pcm, typeof language === 'string' && /^[a-z]{2}$/.test(language) ? language : undefined)
   )
-  ipcMain.handle(IPC.aiTranslate, (_e, key: string, text: string) => ai.translate(String(key), String(text ?? '').slice(0, 5000)))
-  ipcMain.handle(IPC.aiTranslateTo, (_e, text: string, target: string) => ai.translateTo(String(text ?? '').slice(0, 5000), /^[a-z]{2}$/.test(String(target)) ? String(target) : 'en'))
-  ipcMain.handle(IPC.aiCached, () => ai.cached())
+  handle(IPC.aiTranslate, (_e, key: string, text: string) => ai.translate(String(key), String(text ?? '').slice(0, 5000)))
+  handle(IPC.aiTranslateTo, (_e, text: string, target: string) => ai.translateTo(String(text ?? '').slice(0, 5000), /^[a-z]{2}$/.test(String(target)) ? String(target) : 'en'))
+  handle(IPC.aiCached, () => ai.cached())
   // Chat lines come from the renderer already trimmed; bound them again here.
   const cleanLines = (lines: unknown): ChatLine[] =>
     (Array.isArray(lines) ? lines : [])
       .slice(-80)
       .map((l) => ({ who: String((l as ChatLine).who ?? '').slice(0, 60), text: String((l as ChatLine).text ?? '').slice(0, 500), at: Number((l as ChatLine).at) || 0, mine: !!(l as ChatLine).mine }))
-  ipcMain.handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
-  ipcMain.handle(IPC.aiSuggest, (_e, lines: unknown) => ai.suggest(cleanLines(lines)))
-  ipcMain.handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown) =>
+  handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
+  handle(IPC.aiSuggest, (_e, lines: unknown) => ai.suggest(cleanLines(lines)))
+  handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown) =>
     ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined)
   )
-  ipcMain.handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
+  handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
     const day = new Date().toISOString().slice(0, 10)
     const vi = storage.settings.language === 'vi'
     // Development only: UNISON_BACKUP_SAVE_PATH skips the dialog (automated tests).
@@ -1334,7 +1401,7 @@ function registerIpc(): void {
     log('backup written:', result.bytes, 'bytes')
     return result
   })
-  ipcMain.handle(IPC.backupPick, async () => {
+  handle(IPC.backupPick, async () => {
     const vi = storage.settings.language === 'vi'
     const testPick = !app.isPackaged ? process.env.UNISON_BACKUP_OPEN_PATH : undefined
     const picked = testPick ? { canceled: false, filePaths: [testPick] } : await dialog.showOpenDialog(window!, {
@@ -1346,7 +1413,7 @@ function registerIpc(): void {
     if (picked.canceled || !picked.filePaths[0]) return null
     return inspectBackup(picked.filePaths[0])
   })
-  ipcMain.handle(IPC.backupRestore, async (_e, input: { path: string; password: string }) => {
+  handle(IPC.backupRestore, async (_e, input: { path: string; password: string }) => {
     const { safetyCopy } = await restoreBackup(storage, String(input.path), String(input.password ?? ''), async () => {
       scheduler.stop()
       await manager.shutdown()
@@ -1358,11 +1425,11 @@ function registerIpc(): void {
       app.exit(0)
     }, 600)
   })
-  ipcMain.handle(IPC.backupReveal, (_e, path: string) => {
+  handle(IPC.backupReveal, (_e, path: string) => {
     if (typeof path === 'string' && path.toLowerCase().endsWith(`.${BACKUP_EXTENSION}`)) shell.showItemInFolder(path)
   })
-  ipcMain.handle(IPC.syncStatus, () => sync.status())
-  ipcMain.handle(IPC.syncChoose, async () => {
+  handle(IPC.syncStatus, () => sync.status())
+  handle(IPC.syncChoose, async () => {
     const vi = storage.settings.language === 'vi'
     const options: Electron.OpenDialogOptions = {
       title: vi ? 'Chọn thư mục đồng bộ (OneDrive, Google Drive, Dropbox...)' : 'Choose a sync folder (OneDrive, Google Drive, Dropbox...)',
@@ -1372,86 +1439,94 @@ function registerIpc(): void {
     if (picked.canceled || !picked.filePaths[0]) return null
     return sync.enable(picked.filePaths[0])
   })
-  ipcMain.handle(IPC.syncDisable, () => sync.disable())
-  ipcMain.handle(IPC.syncNow, async () => {
+  handle(IPC.syncDisable, () => sync.disable())
+  handle(IPC.syncNow, async () => {
     await sync.syncNow()
     return sync.status()
   })
-  ipcMain.handle(IPC.lockState, () => appLock.state())
-  ipcMain.handle(IPC.lockUnlock, (_e, code: unknown) => appLock.unlock(code))
-  ipcMain.handle(IPC.lockNow, () => appLock.lock())
-  ipcMain.handle(IPC.lockEnable, (_e, code: unknown) => appLock.enable(code))
-  ipcMain.handle(IPC.lockChange, (_e, oldCode: unknown, code: unknown) => appLock.change(oldCode, code))
-  ipcMain.handle(IPC.lockDisable, (_e, code: unknown) => appLock.disable(code))
-  ipcMain.handle(IPC.lockAutoLock, (_e, minutes: unknown) => appLock.setAutoLock(Number(minutes) || 0))
-  ipcMain.handle(IPC.lockReset, () =>
+  handle(IPC.lockState, () => appLock.state())
+  handle(IPC.lockUnlock, (_e, code: unknown) => appLock.unlock(code))
+  handle(IPC.lockNow, () => appLock.lock())
+  handle(IPC.lockEnable, (_e, code: unknown) => appLock.enable(code))
+  handle(IPC.lockChange, (_e, oldCode: unknown, code: unknown) => appLock.change(oldCode, code))
+  handle(IPC.lockDisable, (_e, code: unknown) => appLock.disable(code))
+  handle(IPC.lockAutoLock, (_e, minutes: unknown) => appLock.setAutoLock(Number(minutes) || 0))
+  handle(IPC.lockReset, () =>
     appLock.reset(async () => {
       for (const account of [...storage.accounts]) await manager.remove(account.id).catch((err) => log('[lock] sign out failed', (err as Error).message))
     })
   )
-  ipcMain.handle(IPC.laterSnooze, (_e, id: string, until: number) => later!.snooze(String(id), Number(until)))
-  ipcMain.handle(IPC.laterUnsnooze, (_e, id: string) => later!.unsnooze(String(id)))
-  ipcMain.handle(IPC.laterFollow, (_e, id: string, until: number) => later!.follow(String(id), Number(until)))
-  ipcMain.handle(IPC.laterUnfollow, (_e, id: string) => later!.unfollow(String(id)))
-  ipcMain.handle(IPC.laterSeen, (_e, id: string) => later!.seen(String(id)))
-  ipcMain.handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
-  ipcMain.handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
-  ipcMain.handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
-  ipcMain.handle(IPC.scheduledReschedule, (_e, id: string, sendAt: number) => scheduler.reschedule(id, sendAt))
-  ipcMain.handle(IPC.appOpenExternal, (_e, url: unknown) => {
+  handle(IPC.laterSnooze, (_e, id: string, until: number) => later!.snooze(String(id), Number(until)))
+  handle(IPC.laterUnsnooze, (_e, id: string) => later!.unsnooze(String(id)))
+  handle(IPC.laterFollow, (_e, id: string, until: number) => later!.follow(String(id), Number(until)))
+  handle(IPC.laterUnfollow, (_e, id: string) => later!.unfollow(String(id)))
+  handle(IPC.laterSeen, (_e, id: string) => later!.seen(String(id)))
+  handle(IPC.scheduledAdd, (_e, input: { conversationId: string; text: string; sendAt: number; replyToId?: string }) => scheduler.add(input))
+  handle(IPC.scheduledCancel, (_e, id: string) => scheduler.cancel(id))
+  handle(IPC.scheduledSendNow, (_e, id: string) => scheduler.sendNow(id))
+  handle(IPC.scheduledReschedule, (_e, id: string, sendAt: number) => scheduler.reschedule(id, sendAt))
+  handle(IPC.appOpenExternal, (_e, url: unknown) => {
     const safe = externalUrl(url)
     if (!safe) throw new Error('This link cannot be opened')
     return shell.openExternal(safe)
   })
-  ipcMain.handle(IPC.appPickFiles, () => pickFiles())
-  ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
-  ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())
-  ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
-  ipcMain.handle(IPC.insightsShare, (_e, card: ShareCardData) => shareCard(card))
-  ipcMain.handle(IPC.insightsShareData, () => sharing?.card)
-  ipcMain.on(IPC.insightsShareReady, () => sharing?.ready())
-  ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
-  ipcMain.handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
+  handle(IPC.appPickFiles, () => pickFiles())
+  handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
+  handle(IPC.insightsRecords, () => manager.insightRecords())
+  handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
+  handle(IPC.insightsShare, (_e, card: ShareCardData) => shareCard(card))
+  handle(IPC.insightsShareData, () => sharing?.card)
+  on(IPC.insightsShareReady, () => sharing?.ready())
+  handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
+  handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
   // The photo editor draws on a canvas; remote images would taint it, so it gets the bytes as a data URL.
-  ipcMain.handle(IPC.appMediaData, async (_e, url: string) => {
+  handle(IPC.appMediaData, async (_e, url: string) => {
     const { data, type } = await mediaBytes(String(url ?? ''))
     if (data.length > 80 * 1024 * 1024) throw new Error('This image is too large to edit')
     const mime = type.startsWith('image/') ? type : 'image/png'
     return `data:${mime};base64,${data.toString('base64')}`
   })
-  ipcMain.on(IPC.appEditorKeys, (_e, on: unknown) => {
+  on(IPC.appEditorKeys, (_e, on: unknown) => {
     editorKeys = on === true
   })
-  ipcMain.handle(IPC.appCopyImage, async (_e, bytes: Uint8Array) => {
+  handle(IPC.appCopyImage, async (_e, bytes: Uint8Array) => {
     const image = nativeImage.createFromBuffer(Buffer.from(bytes))
     if (image.isEmpty()) throw new Error('Could not copy this image')
     // Electron 44's clipboard follows the W3C API: one item carrying the picture as a PNG blob.
     await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) })])
   })
-  ipcMain.handle(IPC.appDownloadFolder, async () => {
+  handle(IPC.appDownloadFolder, async () => {
     const path = await downloadDir()
     const home = app.getPath('home')
     return { path, label: path.startsWith(home) ? '~' + path.slice(home.length) : path, custom: path !== app.getPath('downloads') }
   })
-  ipcMain.handle(IPC.appPickDownloadFolder, async () => {
+  handle(IPC.appPickDownloadFolder, async () => {
     const options: Electron.OpenDialogOptions = { defaultPath: await downloadDir(), properties: ['openDirectory', 'createDirectory'] }
     const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
     return picked.canceled ? undefined : picked.filePaths[0]
   })
-  ipcMain.handle(IPC.appOpenDownloadFolder, async () => {
+  handle(IPC.appOpenDownloadFolder, async () => {
     await shell.openPath(await downloadDir())
   })
-  ipcMain.handle(IPC.stickersList, () => listStickers())
-  ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
-  ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean, name?: string) =>
-    addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined, typeof name === 'string' ? name : undefined)
-  )
-  ipcMain.handle(IPC.stickersFromFile, (_e, path: string) => describeSource(String(path)))
-  ipcMain.handle(IPC.stickersFromBytes, (_e, bytes: Uint8Array, mime: string) => sourceFromBytes(bytes, String(mime ?? '')))
-  ipcMain.handle(IPC.stickersSource, (_e, id: string) => stickerSource(String(id)))
-  ipcMain.handle(IPC.stickersRename, (_e, id: string, name: string) => renameSticker(String(id), String(name ?? '')))
-  ipcMain.handle(IPC.stickersRemove, (_e, id: string) => removeSticker(String(id)))
-  ipcMain.handle(IPC.appLegal, (_e, name: string) => {
+  handle(IPC.stickersList, () => listStickers())
+  handle(IPC.stickersPick, async () => {
+    const picked = await pickStickerSource(window)
+    if (picked) grantFile(picked.path)
+    return picked
+  })
+  handle(IPC.stickersAdd, (_e, path: string, cutout: boolean, name?: string) => {
+    if (!fileAllowed(path)) throw new Error('This file cannot be used here')
+    return addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined, typeof name === 'string' ? name : undefined)
+  })
+  handle(IPC.stickersFromFile, (_e, path: string) => {
+    if (!fileAllowed(path)) throw new Error('This file cannot be used here')
+    return describeSource(String(path))
+  })
+  handle(IPC.stickersFromBytes, (_e, bytes: Uint8Array, mime: string) => sourceFromBytes(bytes, String(mime ?? '')))
+  handle(IPC.stickersSource, (_e, id: string) => stickerSource(String(id)))
+  handle(IPC.stickersRename, (_e, id: string, name: string) => renameSticker(String(id), String(name ?? '')))
+  handle(IPC.stickersRemove, (_e, id: string) => removeSticker(String(id)))
+  handle(IPC.appLegal, (_e, name: string) => {
     const file = LEGAL_DOCS[name as keyof typeof LEGAL_DOCS]
     if (!file) throw new Error('Unknown document')
     const dir = app.isPackaged ? join(process.resourcesPath, 'legal') : join(__dirname, '../../resources/legal')
@@ -1459,26 +1534,26 @@ function registerIpc(): void {
     const path = name === 'license' && !app.isPackaged ? join(__dirname, '../../LICENSE') : join(dir, file)
     return readFile(path, 'utf8')
   })
-  ipcMain.handle(IPC.appGifSearch, (_e, query: string, page: number) => {
+  handle(IPC.appGifSearch, (_e, query: string, page: number) => {
     const { gif, language } = storage.settings
     // The user's own key wins; otherwise the key built into this release (if any).
     const provider = gif?.key ? gif.provider : BUILT_IN_GIF.provider
     const key = gif?.key || BUILT_IN_GIF.key
     return searchGifs(provider, key, String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), language)
   })
-  ipcMain.handle(IPC.appStickerSearch, (_e, query: string, page: number) =>
+  handle(IPC.appStickerSearch, (_e, query: string, page: number) =>
     searchStickers(giphyKey(), String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), storage.settings.language)
   )
-  ipcMain.handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
-  ipcMain.handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
-  ipcMain.handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
+  handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
+  handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
+  handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))
   // No location lookup unless the person turned the weather on.
-  ipcMain.handle(IPC.appWeather, (_e, force?: boolean) => (storage.settings.greetings && storage.settings.weather ? getWeather(!!force) : undefined))
-  ipcMain.on(IPC.appSetBadge, (_e, count: unknown) => {
+  handle(IPC.appWeather, (_e, force?: boolean) => (storage.settings.greetings && storage.settings.weather ? getWeather(!!force) : undefined))
+  on(IPC.appSetBadge, (_e, count: unknown) => {
     // Dock badge on macOS (taskbar overlay on Windows); the renderer already leaves out muted chats.
     app.setBadgeCount(Math.max(0, Math.min(9999, Math.floor(Number(count) || 0))))
   })
-  ipcMain.on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
+  on(IPC.appWindowAction, (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!window) return
     if (action === 'minimize') window.minimize()
     else if (action === 'maximize') window.isMaximized() ? window.unmaximize() : window.maximize()

@@ -347,6 +347,7 @@ export const IPC = {
   stickersFromBytes: 'stickers:fromBytes',
   stickersSource: 'stickers:source',
   stickersRename: 'stickers:rename',
+  appGrantFile: 'app:grantFile',
   appGifSearch: 'app:gifSearch',
   appStickerSearch: 'app:stickerSearch',
   appGif: 'app:gif',

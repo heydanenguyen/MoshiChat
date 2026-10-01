@@ -22,6 +22,8 @@ import { LockScreen } from './components/LockScreen'
 import { Splash, readSplashPrefs, writeSplashPrefs } from './components/Splash'
 import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
+import { PaneBoundary } from './components/PaneBoundary'
+import { cleanError } from './store'
 import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
 
@@ -203,6 +205,21 @@ export default function App(): JSX.Element {
       clearInterval(blink)
       clearInterval(glance)
     }
+  }, [])
+
+  // A failure nothing waited for (a click whose action failed in the background) used to vanish without a word: it is
+  // logged, and said once in a while as a small notice (never a burst of them).
+  useEffect(() => {
+    let last = 0
+    const onRejection = (e: PromiseRejectionEvent): void => {
+      const reason = e.reason as Error | undefined
+      console.error('unhandled rejection:', reason?.message ?? String(e.reason))
+      if (!reason?.message || reason.name === 'AbortError' || Date.now() - last < 5000) return
+      last = Date.now()
+      useStore.getState().showToast(cleanError(reason), 'error')
+    }
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => window.removeEventListener('unhandledrejection', onRejection)
   }, [])
 
   // Decorative animations rest while the window is in the background (see .window-idle in app.css).
@@ -428,10 +445,26 @@ export default function App(): JSX.Element {
               <span className="mesh-blob b4" />
               <span className="mesh-blob b5" />
             </div>
-            <SidebarPane />
-            <ConversationListPane />
-            {hasAccounts ? <ChatPane /> : <EmptyState kind="welcome" />}
-            {detailsOpen && selectedId ? <DetailsPanePane /> : <div />}
+            <PaneBoundary name="sidebar">
+              <SidebarPane />
+            </PaneBoundary>
+            <PaneBoundary name="list">
+              <ConversationListPane />
+            </PaneBoundary>
+            {hasAccounts ? (
+              <PaneBoundary name="chat">
+                <ChatPane />
+              </PaneBoundary>
+            ) : (
+              <EmptyState kind="welcome" />
+            )}
+            {detailsOpen && selectedId ? (
+              <PaneBoundary name="details">
+                <DetailsPanePane />
+              </PaneBoundary>
+            ) : (
+              <div />
+            )}
             {/* Mid-width windows float the details over the chat; the scrim closes them (see the responsive rules). */}
             {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => toggleDetails()} />}
 

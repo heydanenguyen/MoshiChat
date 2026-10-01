@@ -122,12 +122,12 @@ const bridge: MoshiBridge = {
     openExternal: (url) => ipcRenderer.invoke(IPC.appOpenExternal, url),
     legal: (name) => ipcRenderer.invoke(IPC.appLegal, name),
     pickFiles: () => ipcRenderer.invoke(IPC.appPickFiles),
-    describeFile: (file) => ({
-      path: webUtils.getPathForFile(file),
-      name: file.name,
-      mime: file.type || 'application/octet-stream',
-      size: file.size
-    }),
+    describeFile: (file) => {
+      // A real path only exists for a file the person dropped, pasted or picked; main may then send it.
+      const path = webUtils.getPathForFile(file)
+      if (path) ipcRenderer.send(IPC.appGrantFile, path)
+      return { path, name: file.name, mime: file.type || 'application/octet-stream', size: file.size }
+    },
     saveVoice: (bytes, durationSeconds, aac) => ipcRenderer.invoke(IPC.appSaveVoice, bytes, durationSeconds, aac),
     saveImage: (bytes, mime, name) => ipcRenderer.invoke(IPC.appSaveImage, bytes, mime, name),
     saveMedia: (url, name) => ipcRenderer.invoke(IPC.appSaveMedia, url, name),

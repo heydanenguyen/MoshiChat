@@ -298,7 +298,7 @@ let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-const cleanError = (err: unknown): string => {
+export const cleanError = (err: unknown): string => {
   const raw = (err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
   // Errors the main process raises with a code get a translated, friendlier text.
   const language = useStore.getState().settings.language

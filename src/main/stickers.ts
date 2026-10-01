@@ -53,15 +53,24 @@ async function writeIndex(list: CustomSticker[]): Promise<void> {
 
 const dataUrl = (mime: string, bytes: Buffer): string => `data:${mime};base64,${bytes.toString('base64')}`
 
-/** Every custom sticker with its image inline, newest first. */
+/**
+ * Where the renderer loads a custom sticker from: served from the stickers folder by the image protocol (index.ts).
+ * They used to travel inline as base64 data URLs, kept in the renderer for the whole session (an animated one up to
+ * about 8 MB of text each).
+ */
+const urlOf = (s: CustomSticker): string => `unison-img://custom-sticker/${encodeURIComponent(s.file)}?v=${s.createdAt}`
+
+/** A custom sticker's file inside the stickers folder, for the image protocol; undefined for anything else. */
+export function customStickerPath(file: string): string | undefined {
+  return /^[a-z0-9-]{6,40}\.(png|gif|webp|apng|jpe?g)$/i.test(file) ? join(dir(), file) : undefined
+}
+
+/** Every custom sticker with where to load its picture, newest first. */
 export async function listStickers(): Promise<Array<CustomSticker & { url: string }>> {
   const out: Array<CustomSticker & { url: string }> = []
   for (const s of await readIndex()) {
-    try {
-      out.push({ ...s, url: dataUrl(s.mime, await readFile(join(dir(), s.file))) })
-    } catch {
-      /* file gone: skip it */
-    }
+    // File gone: skip it.
+    if (await stat(join(dir(), s.file)).catch(() => undefined)) out.push({ ...s, url: urlOf(s) })
   }
   return out.sort((a, b) => b.createdAt - a.createdAt)
 }
@@ -163,7 +172,7 @@ export async function addSticker(path: string, cutout?: (png: Buffer) => Promise
   }
   const list = await readIndex()
   await writeIndex([sticker, ...list])
-  return { ...sticker, url: dataUrl(sticker.mime, await readFile(join(dir(), sticker.file))) }
+  return { ...sticker, url: urlOf(sticker) }
 }
 
 /** A pasted picture (a screenshot, an image copied from a page) saved where a dropped file would be, as a source. */
@@ -206,16 +215,16 @@ export async function customStickerFile(id: string): Promise<OutgoingAttachment>
   const sticker = (await readIndex()).find((s) => s.id === id)
   if (!sticker) throw new Error('Unknown sticker')
   const path = join(dir(), sticker.file)
-  const data = await readFile(path)
+  const size = (await stat(path)).size
   const opaque = join(dir(), `${id}-white.png`)
   const opaqueInfo = sticker.animated ? undefined : await stat(opaque).catch(() => undefined)
   return {
     path,
     name: sticker.file,
     mime: sticker.mime,
-    size: data.length,
+    size,
     sticker: `custom:${id}`,
-    preview: dataUrl(sticker.mime, data),
+    preview: urlOf(sticker),
     alternates: opaqueInfo ? [{ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' }] : undefined
   }
 }

@@ -7726,6 +7726,22 @@ button.moment-card:hover {
   color: var(--text-tertiary);
 }
 
+/* a pane that failed to draw (PaneBoundary): a quiet note and a retry, the rest of the window keeps working */
+.pane-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 /* ================================================================== "Mine" as a sticker album
    Dotted paper, stickers stuck on slightly askew that straighten and lift when pointed at, an add tile first,
    and the whole panel as a drop target for pictures. */
