@@ -532,6 +532,11 @@ function ChatPage(): JSX.Element {
           <GifKeyForm />
         </div>
       </Group>
+      <Group label={t('experimentalTitle')}>
+        <Row title={t('zaloPhotoStickers')} sub={t('zaloPhotoStickersHint')}>
+          <Switch on={settings.zaloPhotoStickers !== false} onChange={(on) => void setSettings({ zaloPhotoStickers: on })} />
+        </Row>
+      </Group>
     </>
   )
 }

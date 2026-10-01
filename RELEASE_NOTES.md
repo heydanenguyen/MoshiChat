@@ -1,31 +1,31 @@
-## Moshi 0.3.0 beta 4
+## Moshi 0.3.0 beta 5
 
 Bản thử nghiệm. Bản ổn định (0.2.14) sẽ **không** tự cập nhật lên bản này; ai đang dùng beta sẽ được mời cập nhật trong app.
 
-### Cảm xúc (reaction) trên Zalo
-- **Nhìn thấy được cảm xúc đã thả:** trước đây cảm xúc trên Zalo hay biến mất (sau khi đồng bộ thêm tin cũ, sau khi mở lại app) và cảm xúc thả từ trước không hiện. Giờ Moshi giữ đúng như Zalo: mỗi người một cảm xúc trên mỗi tin, tải cả cảm xúc cũ, và nhớ qua mỗi lần mở app.
-- **Thiết kế giống Zalo:** một viên nhỏ ở góc bong bóng với tối đa 3 biểu tượng và tổng số lượt; cảm xúc của bạn có viền màu nhấn. Bấm vào để xem ai thả gì và đổi hoặc gỡ cảm xúc của mình.
-- Thanh cảm xúc nhanh dùng đúng 6 biểu tượng của Zalo; nút "+" chỉ hiện những cảm xúc Zalo gửi được. Không còn hiện mã lạ như "/-rose".
+### Ảnh và video Zalo
+- **Ảnh hiện được:** ảnh gửi qua lại trên Zalo không còn là ô xám "Ảnh". Moshi tạo bản xem trước nhẹ (ảnh 35 MB chỉ còn vài chục KB) nên mở chat nhanh hơn; bấm **Tải về** vẫn lưu ảnh gốc.
+- **Video có trình phát:** video Zalo (kể cả video gửi dạng tệp) xem được ngay trong bong bóng và trong cửa sổ xem lớn, tua được; ô video trong lưới ảnh hiện khung hình đầu.
 
-### Bảng hoãn / nhắc
-- Thiết kế lại: tên người ở đầu bảng, mỗi mốc giờ có biểu tượng màu riêng, giờ ghi gọn không lặp chữ ("Sáng mai · 8:00").
-- "Chọn ngày giờ" giờ là dải 7 ngày và các giờ thường dùng, kèm dòng tóm tắt và nút xác nhận, thay cho ô ngày giờ thô.
-- Sửa: bảng không còn giật sang trái khi chuyển giữa "Hoãn" và "Nhắc nếu chưa trả lời"; mở bằng chuột không còn dòng nào trông như đã được chọn sẵn.
+### Sticker Zalo
+- **Gửi đi không còn nền trắng:** sticker gửi sang Zalo giờ đến tay người nhận trong suốt và chuyển động (dạng "sticker ảnh" của Zalo). Nếu Zalo không nhận, Moshi tự gửi lại kiểu cũ. Tắt được ở Cài đặt → Trò chuyện → Thử nghiệm.
+- **Nhận về đẹp như Zalo:** sticker của Zalo trong Moshi giờ trong suốt, chuyển động đúng nhịp như trên Zalo; sticker ảnh (sticker AI, sticker tạo từ ảnh) hiện như sticker, không còn khung ảnh nền trắng.
 
-### Bong bóng tin nhắn
-- Ở giao diện sáng, bong bóng nhận có viền rất mảnh để không chìm vào nền trắng; bong bóng gửi đi màu nhạt cũng vậy. Nền khung chat giữ nguyên.
+### Instagram
+- Cảm xúc người khác thả trên Instagram được cập nhật nhanh hơn khi Moshi đang mở.
 
 ### Lưu ý
-- Cảm xúc Zalo mới được thử với dữ liệu mẫu, chưa thử với tài khoản Zalo thật.
-- Vẫn chưa thử bằng tay: trả lời từ thông báo trên máy thật, tự khoá khi máy ngủ, và bản Windows.
+- Thả cảm xúc **từ Moshi** lên Instagram chưa làm được (Instagram chỉ cho app điện thoại làm việc này), nên nút này vẫn ẩn với Instagram.
+- Sticker gửi qua Instagram vẫn là ảnh tĩnh nền trắng: Instagram đổi mọi ảnh tải lên sang JPEG; sticker động trong suốt trên Instagram chỉ có qua GIPHY.
+- Cập nhật cảm xúc Instagram theo thời gian thực chưa được thử với tài khoản thật. Vẫn chưa thử bằng tay bản Windows.
 
 ---
 
 ### English
 **Beta.** The stable version (0.2.14) will **not** update to this one; beta users are offered the update in the app.
 
-- **Zalo reactions you can actually see:** they used to vanish (after older messages synced, after reopening Moshi) and earlier ones never showed. Moshi now keeps them the way Zalo does, one per person per message, loads past reactions and remembers them across launches.
-- **Zalo's look:** one small pill on the bubble corner with up to three icons and the total, yours ringed in the accent; click it to see who reacted with what and to change or take back yours. The quick bar uses Zalo's six, "+" only offers reactions Zalo can send, and raw codes like "/-rose" are gone.
-- **Snooze / reminder picker redesigned:** the person at the top, a coloured icon per time, compact times that do not repeat the row's name; "Pick a date and time" is now a strip of days and the usual hours with a summary and a confirm button. Fixed: it no longer jumps left when switching tabs, and opening it with the mouse no longer shows a row as pre-selected.
-- **Bubbles:** in the light theme incoming bubbles (and outgoing ones in a pale accent) get a very fine edge so they no longer melt into the white background; the chat background is unchanged.
-- Notes: Zalo reactions were tried with sample data, not a real Zalo account yet. Replying from real notifications, locking on sleep and the Windows build are still not hand-tested.
+- **Zalo photos show:** no more grey "Photo" boxes. Moshi makes a light preview (a 35 MB photo becomes a few dozen KB) so chats open faster; **Download** still saves the original.
+- **Zalo videos play:** in the bubble and the large viewer, with seeking, including videos sent as files; video tiles in a photo grid show their first frame.
+- **Stickers sent to Zalo arrive see-through and moving** (as Zalo "photo stickers") instead of on a white square; if Zalo refuses one, Moshi sends it the old way. Can be turned off in Settings → Chat → Experimental.
+- **Zalo stickers you receive** are see-through and move at Zalo's own pace; photo stickers (AI stickers, stickers made from a picture) show as stickers, not as photos on white.
+- **Instagram:** reactions others leave are picked up sooner while Moshi is open.
+- Notes: reacting **from Moshi** on Instagram is not possible yet (Instagram keeps it to its phone app), so the button stays hidden there. Stickers sent to Instagram are still still images on white: Instagram turns every upload into a JPEG, and moving see-through stickers there only come from GIPHY. Live Instagram reaction updates are not yet tried with a real account; the Windows build is still not hand-tested.

@@ -45,18 +45,23 @@ const MOTION_VIEWBOX = '-16 -30 100 100'
 export async function animatedStickerGif(id: StickerId, size = 216, fps = 25): Promise<string> {
   const out = join(await dir(), `anim-${id}-${size}-v${MOTION_VERSION}.gif`)
   if ((await stat(out).catch(() => undefined))?.size) return out
+  const frames = await animatedStickerFrames(id, size, fps)
+  await sharp(frames, { join: { animated: true } })
+    .gif({ delay: Array(frames.length).fill(Math.round(1000 / fps)), loop: 0, effort: 8, dither: 0 })
+    .toFile(out)
+  return out
+}
+
+/** The frames of a pack sticker's motion loop, as PNGs at `size` px square. */
+export async function animatedStickerFrames(id: StickerId, size: number, fps: number): Promise<Buffer[]> {
   const count = Math.max(2, Math.round(motionOf(id).duration * fps))
-  const frames = await Promise.all(
+  return Promise.all(
     Array.from({ length: count }, (_, i) =>
       sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${MOTION_VIEWBOX}">${stickerMarkup(id, stickerFrameAttrs(id, i / count))}</svg>`))
         .png()
         .toBuffer()
     )
   )
-  await sharp(frames, { join: { animated: true } })
-    .gif({ delay: Array(count).fill(Math.round(1000 / fps)), loop: 0, effort: 8, dither: 0 })
-    .toFile(out)
-  return out
 }
 
 /**

@@ -1,14 +1,16 @@
 import { readFile, writeFile } from 'fs/promises'
 import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
-import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
+import type { API, Credentials, Message as ZMessage, MessageContent, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
 import { tally, zaloCode, zaloEmoji } from '@shared/reactions'
 import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
+import { sendPhotoSticker } from './zalo-photo-sticker'
 import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
+import { VIDEO_FILE } from '@shared/media'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -59,7 +61,7 @@ export class ZaloAdapter implements PlatformAdapter {
   private groupHistoryGone = false
   private saveTimer?: NodeJS.Timeout
   /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
-  private stickerUrls = new Map<number, string>()
+  private stickerUrls = new Map<number, StickerPicture>()
   private stickerLookups = new Set<number>()
   /** Zalo ended this session (signed out elsewhere or the cookie stopped working); the next sign-in needs a fresh QR. */
   private sessionEnded = false
@@ -281,11 +283,11 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
-    const api = this.requireApi()
+    this.requireApi()
     const threadId = externalIdOf(id)
     const type = this.threadTypes.get(threadId) ?? 0
     const quoteRaw = options.replyToId ? this.rawMessage(threadId, options.replyToId) : undefined
-    const content = {
+    const content = async (): Promise<MessageContent> => ({
       msg: text,
       quote: quoteRaw
         ? {
@@ -300,9 +302,8 @@ export class ZaloAdapter implements PlatformAdapter {
           }
         : undefined,
       attachments: options.attachments?.length ? await Promise.all(options.attachments.map((a) => this.uploadPath(a))) : undefined
-    }
-    const result = await api.sendMessage(content, threadId, type)
-    const msgId = String(result.message?.msgId ?? result.attachment[0]?.msgId ?? Date.now())
+    })
+    const msgId = (await this.trySendPhotoSticker(threadId, text, options, !!quoteRaw)) ?? (await this.sendContent(content(), threadId, type))
     const message: Message = {
       id: msgId,
       conversationId: id,
@@ -325,6 +326,26 @@ export class ZaloAdapter implements PlatformAdapter {
     this.cacheConverted(id, [message])
     this.lastActivity.set(threadId, message.sentAt)
     return message
+  }
+
+  private async sendContent(content: Promise<MessageContent>, threadId: string, type: 0 | 1): Promise<string> {
+    const result = await this.requireApi().sendMessage(await content, threadId, type)
+    return String(result.message?.msgId ?? result.attachment[0]?.msgId ?? Date.now())
+  }
+
+  /**
+   * Unless switched off, a sticker sent on its own goes out as a Zalo photo sticker (no white square on
+   * the other side). Undefined when it does not apply or Zalo said no; the caller then sends it the usual way.
+   */
+  private async trySendPhotoSticker(threadId: string, text: string, options: SendOptions, quoting: boolean): Promise<string | undefined> {
+    const [sticker, ...rest] = options.attachments ?? []
+    if (this.ctx.settings?.().zaloPhotoStickers === false || !sticker?.sticker || rest.length || text.trim() || quoting) return undefined
+    try {
+      return await sendPhotoSticker(this.requireApi(), sticker, threadId, this.threadTypes.get(threadId) === 1, this.ctx.log)
+    } catch (err) {
+      this.ctx.log('zalo photo sticker failed, sending the gif', (err as Error).message)
+      return undefined
+    }
   }
 
   /** Stickers go out as a small transparent GIF (see stickerAsGif); everything else as the file itself. */
@@ -671,27 +692,35 @@ export class ZaloAdapter implements PlatformAdapter {
     return message
   }
 
-  /** The picture for a sticker message; undefined while it is still being looked up (the message is updated then). */
-  private stickerUrlFor(raw: TMessage): string | undefined {
+  /**
+   * The picture for a sticker message; undefined while it is still being looked up (the message is updated then).
+   * One remembered before sprite sheets were kept (no `frames`) is shown as it is and looked up again once.
+   */
+  private stickerUrlFor(raw: TMessage): StickerPicture | undefined {
     if (raw.msgType !== 'chat.sticker') return undefined
     const stickerId = stickerIdOf(raw)
     if (!stickerId) return undefined
     const known = this.stickerUrls.get(stickerId)
-    if (known) return known
+    if (known?.frames && known.v === STICKER_PICTURE_VERSION) return known
     if (this.api && !this.stickerLookups.has(stickerId)) {
       this.stickerLookups.add(stickerId)
       void this.lookupSticker(stickerId)
     }
-    return undefined
+    return known
   }
 
   private async lookupSticker(stickerId: number): Promise<void> {
     try {
       const [detail] = await this.requireApi().getStickersDetail(stickerId)
-      // The animated WebP when there is one, else the still picture (the sprite sheet is no use on its own).
-      const url = detail?.stickerWebpUrl || detail?.stickerUrl
-      if (!url) throw new Error('no picture')
-      this.stickerUrls.set(stickerId, url)
+      const still = detail?.stickerWebpUrl || detail?.stickerUrl
+      if (!still) throw new Error('no picture')
+      // A moving sticker comes as a sprite sheet (a strip of frames) played over its duration, as Zalo itself does.
+      const frames = Number(detail.totalFrames)
+      const picture: StickerPicture =
+        detail.stickerSpriteUrl && frames > 1
+          ? { url: detail.stickerSpriteUrl, frames, duration: loopSeconds(detail.duration, frames), v: STICKER_PICTURE_VERSION }
+          : { url: still, frames: 1, v: STICKER_PICTURE_VERSION }
+      this.stickerUrls.set(stickerId, picture)
       this.scheduleSave()
       // Every message with this sticker that is already on screen gets its picture.
       for (const [id, list] of this.converted) {
@@ -699,7 +728,7 @@ export class ZaloAdapter implements PlatformAdapter {
           if (raw.msgType !== 'chat.sticker' || stickerIdOf(raw) !== stickerId) continue
           const index = list.findIndex((m) => m.id === raw.msgId)
           if (index < 0) continue
-          list[index] = { ...list[index], attachments: attachmentsOf(raw, url) }
+          list[index] = { ...list[index], attachments: attachmentsOf(raw, picture) }
           this.ctx.emit({ type: 'message:updated', message: { ...list[index] } })
         }
       }
@@ -784,7 +813,8 @@ export class ZaloAdapter implements PlatformAdapter {
     try {
       const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as {
         threads?: Array<[string, 0 | 1, TMessage[]]>
-        stickers?: Array<[number, string]>
+        /** Sticker id -> picture (a bare URL in caches from before sprite sheets were kept). */
+        stickers?: Array<[number, string | StickerPicture]>
         sync?: Partial<Record<0 | 1, SyncCursor>>
         /** Chats with non-friends you opened yourself (never message requests). */
         started?: string[]
@@ -793,7 +823,7 @@ export class ZaloAdapter implements PlatformAdapter {
       }
       for (const [threadId, byMsg] of data.reactions ?? []) this.reacts.set(threadId, new Map(byMsg))
       for (const threadId of data.started ?? []) this.startedByMe.add(threadId)
-      for (const [stickerId, url] of data.stickers ?? []) this.stickerUrls.set(stickerId, url)
+      for (const [stickerId, picture] of data.stickers ?? []) this.stickerUrls.set(stickerId, typeof picture === 'string' ? { url: picture } : picture)
       this.syncCursors = { 0: data.sync?.[0] ?? {}, 1: data.sync?.[1] ?? {} }
       for (const [threadId, type, list] of data.threads ?? []) {
         this.threadTypes.set(threadId, type)
@@ -846,7 +876,8 @@ function textOf(raw: TMessage): string {
   if (typeof raw.content === 'string') return raw.content
   if (raw.content && typeof raw.content === 'object') {
     const c = raw.content as { title?: string; description?: string; text?: string }
-    if (raw.msgType === 'chat.photo' || raw.msgType === 'chat.video.msg' || raw.msgType === 'chat.sticker' || raw.msgType === 'chat.voice') return ''
+    // Media and files say what they are in their own card; their title is the file name, not words to show twice.
+    if (['chat.photo', 'chat.video.msg', 'chat.sticker', 'chat.voice', 'chat.gif', 'share.file', 'chat.file'].includes(raw.msgType)) return ''
     return c.text ?? c.title ?? ''
   }
   return ''
@@ -859,28 +890,72 @@ function stickerIdOf(raw: TMessage): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
-function attachmentsOf(raw: TMessage, stickerUrl?: string): Attachment[] {
+/** A Zalo sticker's picture: a still image, or a sprite sheet of `frames` frames over `duration` seconds. */
+interface StickerPicture {
+  url: string
+  /** Absent: remembered before sprite sheets were kept, so worth looking up again. */
+  frames?: number
+  duration?: number
+  /** Pictures from an older way of reading Zalo's answer (or none) are looked up again. */
+  v?: number
+}
+const STICKER_PICTURE_VERSION = 2
+
+/** Seconds one loop of a sprite sticker takes. Zalo's duration is per frame (milliseconds), 250 when it has none. */
+export function loopSeconds(duration: unknown, frames: number): number {
+  const perFrame = Number(duration) > 0 ? Number(duration) : 250
+  return (perFrame * frames) / 1000
+}
+
+/** A photo sticker (made from a picture, an AI sticker, one from Zalo's photo sticker search): drawn borderless. */
+function isPhotoSticker(raw: TMessage): boolean {
+  const ext = typeof raw.propertyExt === 'string' ? paramsOf(raw.propertyExt) : (raw.propertyExt as Record<string, unknown> | undefined)
+  return raw.msgType === 'chat.photo' && Number(ext?.type) === 3
+}
+
+function attachmentsOf(raw: TMessage, sticker?: StickerPicture): Attachment[] {
   if (typeof raw.content !== 'object' || !raw.content) return []
   const c = raw.content as { href?: string; thumb?: string; title?: string; description?: string; params?: string; type?: string }
   const id = `${raw.msgId}-a`
+  const p = paramsOf(c.params)
+  // Width and height let the bubble keep its place while the picture loads.
+  const box = Number(p.width) > 0 && Number(p.height) > 0 ? { width: Number(p.width), height: Number(p.height) } : {}
   switch (raw.msgType) {
-    case 'chat.photo':
-      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb }]
+    case 'chat.photo': {
+      // A photo sticker moves in its WebP; the photo itself is the still (and is all an older sticker has).
+      const webp = (p.webp as { url?: string } | undefined)?.url
+      if (isPhotoSticker(raw)) return [{ id, kind: 'sticker', name: '', url: webp || c.href, ...box }]
+      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb, ...box }]
+    }
     case 'chat.video.msg':
-      return [{ id, kind: 'video', url: c.href, thumbnailUrl: c.thumb }]
+      return [{ id, kind: 'video', url: c.href, thumbnailUrl: c.thumb, ...box, ...(Number(p.duration) > 0 ? { duration: Number(p.duration) / 1000 } : {}) }]
     case 'chat.voice':
       return [{ id, kind: 'audio', url: c.href, name: 'Voice message' }]
     case 'chat.sticker':
-      return [{ id, kind: 'sticker', name: '', url: stickerUrl }]
+      return [{ id, kind: 'sticker', name: '', url: sticker?.url, ...(sticker?.frames && sticker.frames > 1 ? { frames: sticker.frames, duration: sticker.duration } : {}) }]
     case 'chat.gif':
-      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb }]
+      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb, ...box }]
     case 'share.file':
-    case 'chat.file':
-      return [{ id, kind: 'file', url: c.href, name: c.title ?? 'File', size: sizeFrom(c.params) }]
+    case 'chat.file': {
+      const name = c.title ?? 'File'
+      // A video sent as a file (from a computer, or "send as file" on the phone) still gets a player.
+      if (VIDEO_FILE.test(name) || /^(mp4|m4v|mov|webm)$/i.test(String(p.fileExt ?? ''))) return [{ id, kind: 'video', url: c.href, thumbnailUrl: c.thumb || undefined, name, size: sizeFrom(c.params) }]
+      return [{ id, kind: 'file', url: c.href, name, size: sizeFrom(c.params) }]
+    }
     case 'chat.recommended':
       return [{ id, kind: 'link', url: c.href, name: c.title ?? c.href }]
     default:
       return c.href ? [{ id, kind: 'link', url: c.href, name: c.title ?? c.href }] : []
+  }
+}
+
+/** Zalo's attachment params (a JSON string), or nothing. */
+function paramsOf(params?: string): Record<string, unknown> {
+  if (!params || params[0] !== '{') return {}
+  try {
+    return JSON.parse(params) as Record<string, unknown>
+  } catch {
+    return {}
   }
 }
 

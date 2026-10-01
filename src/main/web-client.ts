@@ -120,6 +120,43 @@ export class WebClient {
     return parsed as T
   }
 
+  /**
+   * A form POST from the main process with this session's cookies, for an API host the page may not reach (the
+   * browser blocks it cross-origin). Sent as the website would: its user agent, origin, referer and CSRF token.
+   */
+  async postFrom(url: string, form: Record<string, string>, headers: Record<string, string> = {}): Promise<unknown> {
+    await this.open()
+    const ses = session.fromPartition(this.partition)
+    const cookies = await ses.cookies.get({ url: this.origin })
+    const csrf = cookies.find((c) => c.name === 'csrftoken')?.value ?? ''
+    const res = await ses.fetch(url, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: cookies.map((c) => `${c.name}=${c.value}`).join('; '),
+        'X-CSRFToken': csrf,
+        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'application/json',
+        Origin: this.origin,
+        Referer: `${this.origin}/`,
+        'User-Agent': this.window!.webContents.getUserAgent()
+      },
+      body: new URLSearchParams(form).toString()
+    })
+    const text = await res.text()
+    let parsed: { status?: string; message?: string } | undefined
+    try {
+      parsed = JSON.parse(text) as { status?: string; message?: string }
+    } catch {
+      throw new Error(`HTTP ${res.status}: unexpected response`)
+    }
+    if (parsed.message === 'login_required') throw new SessionExpiredError('logged_out')
+    if (parsed.message === 'checkpoint_required' || parsed.message === 'challenge_required') throw new SessionExpiredError('checkpoint')
+    if (!res.ok || parsed.status === 'fail') throw new Error(parsed.message || `HTTP ${res.status}`)
+    return parsed
+  }
+
   close(): void {
     if (this.window && !this.window.isDestroyed()) this.window.destroy()
     this.window = undefined

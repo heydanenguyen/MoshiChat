@@ -1,4 +1,4 @@
-import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, AuthPromptKind, BridgeEvent, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, Settings, SharedKind } from '@shared/types'
 
 /** Services the manager hands to every adapter. */
 export interface AdapterContext {
@@ -18,6 +18,8 @@ export interface AdapterContext {
   saveSecret(secret: unknown): Promise<void>
   /** Directory for adapter-private files (WhatsApp signal keys). Created on demand. */
   dataDir(): string
+  /** The user's settings as they are now (read-only), for adapters with switches of their own. */
+  settings?(): Readonly<Settings>
   log(...args: unknown[]): void
 }
 

@@ -95,13 +95,19 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
   private composer = new DirectComposer('persist:login-instagram', (...args) => this.ctx.log(...args))
   private realtime = new InstagramRealtime('persist:login-instagram', {
-    onActivity: () => this.onRealtimeActivity(),
+    onActivity: (kinds) => {
+      // A reaction does not move the thread in the inbox, so the poll would not notice it: look again at recent chats.
+      if (kinds.has('CreateReaction') || kinds.has('DeleteReaction')) this.reactionSweep = true
+      this.onRealtimeActivity()
+    },
     onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
     onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),
     log: (...args) => this.ctx.log(...args)
   })
   private activityTimer?: NodeJS.Timeout
   private pollAgain = false
+  /** A reaction came in over realtime: re-read reactions of the most recent chats on the next poll. */
+  private reactionSweep = false
   private typingTimers = new Map<string, NodeJS.Timeout>()
   private mePk = ''
   private threads = new Map<string, IgThread>()
@@ -491,6 +497,61 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       .catch(() => undefined)
   }
 
+  /**
+   * Not offered yet (features.react is off): the reaction call is app-only. www answers 404, the page may not reach
+   * i.instagram.com (CORS) and the main process gets net::ERR_FAILED there. Kept, with its logs, for the next try.
+   * React the way Instagram's apps do (one reaction per person: a new emoji replaces yours, the same one takes it
+   * back). Shown at once; the next refresh brings Instagram's own copy.
+   */
+  async react(id: string, messageId: string, emoji: string): Promise<void> {
+    const threadId = this.threadIdFor(id)
+    this.ctx.log('instagram reaction: sending', emoji, threadId ? 'to thread' : `no thread for ${id}`)
+    if (!threadId) throw new Error('Conversation not found')
+    const list = this.history.get(id)
+    const index = list?.findIndex((m) => m.id === messageId) ?? -1
+    const current = list && index >= 0 ? list[index] : undefined
+    const removing = !!current?.reactions.some((r) => r.byMe && r.emoji === emoji)
+    const token = String(BigInt(Date.now()) * 1000000n + BigInt(Math.floor(Math.random() * 1000000)))
+    // The broadcast call lives on Instagram's app API host: www answers 404 and the page may not call it (CORS),
+    // so it goes from the main process with the web session's cookies.
+    const answer = await this.web
+      .postFrom(
+        'https://i.instagram.com/api/v1/direct_v2/threads/broadcast/reaction/',
+        {
+          action: 'send_item',
+          thread_ids: `[${threadId}]`,
+          item_id: messageId,
+          node_type: 'item',
+          reaction_type: 'like',
+          reaction_status: removing ? 'deleted' : 'created',
+          emoji: removing ? '' : emoji,
+          client_context: token,
+          mutation_token: token,
+          offline_threading_id: token,
+          is_shh_mode: '0',
+          send_attribution: 'direct_thread',
+          original_message_client_context: ''
+        },
+        APP_HEADERS
+      )
+      .then((res) => res as { status?: string })
+      .catch((err: Error) => {
+        this.ctx.log('instagram reaction failed', err.message)
+        throw err
+      })
+    this.ctx.log('instagram reaction', removing ? 'removed' : emoji, JSON.stringify(answer).slice(0, 300))
+    if (answer?.status && answer.status !== 'ok') throw new Error('Instagram did not take the reaction')
+    if (!list || !current) return
+    let reactions = current.reactions.map((r) => (r.byMe ? { ...r, count: r.count - 1, byMe: false } : r)).filter((r) => r.count > 0)
+    if (!removing) {
+      const existing = reactions.find((r) => r.emoji === emoji)
+      reactions = existing ? reactions.map((r) => (r === existing ? { ...r, count: r.count + 1, byMe: true } : r)) : [...reactions, { emoji, count: 1, byMe: true }]
+    }
+    list[index] = { ...current, reactions }
+    this.ctx.emit({ type: 'message:reactions', conversationId: id, messageId, reactions })
+    this.saveThreadCache()
+  }
+
   /** Unsend: the same call Instagram's own apps make to take a message back for everyone. */
   async unsend(id: string, messageId: string): Promise<void> {
     const threadId = this.threadIdFor(id)
@@ -833,6 +894,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
       const activity = new Map([...this.threads].map(([k, t]) => [k, String(t.last_activity_at ?? '')]))
       const threads = await this.inbox()
+      const sweep = this.reactionSweep
+      this.reactionSweep = false
+      const refreshed = new Set<string>()
       for (const thread of threads) {
         const id = conversationId(this.account.id, thread.thread_id)
         const lastId = (thread.last_permanent_item ?? thread.items?.[0])?.item_id
@@ -842,6 +906,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
           if (moved && this.history.get(id)?.length) {
             const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=${PAGE_SIZE}`, { headers: APP_HEADERS })
             this.syncReactions(id, res.thread.items ?? [])
+            refreshed.add(thread.thread_id)
           }
           continue
         }
@@ -851,6 +916,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
         await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
         this.syncReactions(id, res.thread.items ?? [])
+        refreshed.add(thread.thread_id)
         const fresh = (res.thread.items ?? [])
           .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
           .map((item) => this.toMessage(item, id))
@@ -863,6 +929,17 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         }
         // Includes messages the user sent from another device; the app dedupes by id.
         for (const message of fresh) this.ctx.emit({ type: 'message:new', message })
+      }
+      if (sweep) {
+        // The three chats active last (the reaction is almost always in one of them), if they are on screen at all.
+        const recent = threads
+          .filter((t) => !refreshed.has(t.thread_id) && this.history.get(conversationId(this.account.id, t.thread_id))?.length)
+          .sort((a, b) => Number(b.last_activity_at ?? 0) - Number(a.last_activity_at ?? 0))
+          .slice(0, 3)
+        for (const thread of recent) {
+          const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=${PAGE_SIZE}`, { headers: APP_HEADERS })
+          this.syncReactions(conversationId(this.account.id, thread.thread_id), res.thread.items ?? [])
+        }
       }
       await this.refreshRequests().catch((err) => {
         if (err instanceof SessionExpiredError) throw err

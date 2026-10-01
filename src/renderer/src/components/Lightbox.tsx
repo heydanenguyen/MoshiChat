@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download, ExternalLink, PenLine, X } from 'lucide-react'
 import { useStore, useT, type Lightbox as LightboxState } from '../store'
 import { ImageEditor } from './ImageEditor'
+import { mediaSrc, previewSrc } from '@shared/media'
 
 export function Lightbox({ url, name, video, poster, externalUrl, externalLabel, gallery, index = 0, conversationId }: LightboxState): JSX.Element {
   const t = useT()
@@ -59,9 +60,19 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
   return (
     <div className="lightbox" onMouseDown={(e) => e.target === e.currentTarget && openLightbox(undefined)} role="dialog" aria-label={t('viewImage')}>
       {item.video ? (
-        <video key={item.url} className="lightbox-media" src={item.url} poster={item.poster} controls autoPlay playsInline />
+        <video key={item.url} className="lightbox-media" src={mediaSrc(item.url)} poster={item.poster} controls autoPlay playsInline />
       ) : (
-        <img key={item.url} className="lightbox-media" src={item.url} alt={name ?? ''} draggable={false} />
+        // A screen-sized copy to look at (Download below still saves the original).
+        <img
+          key={item.url}
+          className="lightbox-media"
+          src={previewSrc(item.url, 2560)}
+          alt={name ?? ''}
+          draggable={false}
+          onError={(e) => {
+            if (e.currentTarget.src !== item.url) e.currentTarget.src = item.url
+          }}
+        />
       )}
       {count > 1 && (
         <>

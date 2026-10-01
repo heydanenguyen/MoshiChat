@@ -22,6 +22,8 @@ import { Reminders } from './reminders'
 import { Later, type LaterDue } from './later'
 import { Birthdays, type BirthdayDue } from './birthdays'
 import { AppLock } from './lock'
+import { previewOf, prunePreviews } from './media/preview'
+import { imageTypeOf } from './media/image-type'
 import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, listStickers, pickStickerSource, removeSticker } from './stickers'
 import { AiService, readMedia } from './ai/service'
@@ -677,9 +679,43 @@ function installUiScript(win: BrowserWindow): void {
  * unison-img://img/?u=<https url> re-fetches a profile picture through the platform's own session.
  * Some Instagram/Facebook CDN links only load inside the signed-in site. Only image CDNs are allowed.
  */
-protocol.registerSchemesAsPrivileged([{ scheme: 'unison-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'unison-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+  { scheme: 'unison-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
+])
 
-const IMAGE_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|t\.me|whatsapp\.net)$/i
+/**
+ * unison-media://v/?u=<https url> plays a platform's video or voice file through Moshi. Zalo's file host answers a
+ * page's own referer with 403 (and labels downloads as attachments), so the player never got the video; here the
+ * request carries the platform's referer and passes range requests through, so seeking works.
+ */
+function registerMediaProxy(): void {
+  protocol.handle('unison-media', async (request) => {
+    try {
+      const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
+      if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
+      const zalo = /zdn\.vn|zadn\.vn|dlfl\.vn|zaloapp\.com/.test(target.hostname)
+      const range = request.headers.get('range')
+      const res = await session.defaultSession.fetch(target.toString(), {
+        headers: { Referer: zalo ? 'https://chat.zalo.me/' : 'https://www.facebook.com/', ...(range ? { Range: range } : {}) }
+      })
+      if (!res.ok) return new Response('unavailable', { status: res.status })
+      const headers = new Headers()
+      for (const name of ['content-length', 'content-range', 'accept-ranges']) {
+        const value = res.headers.get(name)
+        if (value) headers.set(name, value)
+      }
+      const type = res.headers.get('content-type') ?? ''
+      // A file served as a download (octet-stream) is still a video to the player.
+      headers.set('content-type', /^(video|audio)\//.test(type) ? type : /\.webm(\?|$)/i.test(target.pathname) ? 'video/webm' : 'video/mp4')
+      return new Response(res.body, { status: res.status, headers })
+    } catch {
+      return new Response('error', { status: 502 })
+    }
+  })
+}
+
+import { IMAGE_HOSTS } from '@shared/media'
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
@@ -699,16 +735,34 @@ function registerImageProxy(): void {
       const target = new URL(new URL(request.url).searchParams.get('u') ?? '')
       if (target.protocol !== 'https:' || !IMAGE_HOSTS.test(target.hostname)) return new Response('blocked', { status: 403 })
       const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
-      const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(target.hostname)
+      const zalo = /zdn\.vn|zadn\.vn|dlfl\.vn|zaloapp\.com/.test(target.hostname)
       const ses = /fbcdn|cdninstagram|instagram/.test(target.hostname)
         ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
         : /facebook|fbsbx/.test(target.hostname)
           ? session.fromPartition('persist:login-messenger')
           : session.defaultSession
-      const res = await ses.fetch(target.toString(), { headers: { Referer: zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
+      const get = (): Promise<Response> =>
+        ses.fetch(target.toString(), { headers: { Referer: zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
+      // ?w=960: a light copy sized for the bubble, made once and kept (see media/preview.ts).
+      const width = Number(url.searchParams.get('w'))
+      if (width > 0) {
+        const preview = await previewOf(target.toString(), width, async () => {
+          const res = await get()
+          const type = res.headers.get('content-type') ?? ''
+          return res.ok && type.startsWith('image/') ? { type, body: Buffer.from(await res.arrayBuffer()) } : undefined
+        })
+        if (!preview) return new Response('unavailable', { status: 404 })
+        return new Response(new Uint8Array(preview.body), { status: 200, headers: { 'content-type': preview.type, 'cache-control': 'max-age=604800' } })
+      }
+      const res = await get()
       const type = res.headers.get('content-type') ?? ''
-      if (!res.ok || !type.startsWith('image/')) return new Response('unavailable', { status: 404 })
-      return new Response(res.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'max-age=86400' } })
+      if (res.ok && type.startsWith('image/')) return new Response(res.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'max-age=86400' } })
+      // Zalo's file store serves everything as application/octet-stream (photo stickers live there): tell by the bytes.
+      if (!res.ok || !/octet-stream/.test(type)) return new Response('unavailable', { status: 404 })
+      const body = Buffer.from(await res.arrayBuffer())
+      const sniffed = imageTypeOf(body)
+      if (!sniffed) return new Response('unavailable', { status: 404 })
+      return new Response(new Uint8Array(body), { status: 200, headers: { 'content-type': sniffed, 'cache-control': 'max-age=86400' } })
     } catch {
       return new Response('error', { status: 502 })
     }
@@ -723,7 +777,7 @@ function hardenSession(): void {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: file: unison-img:",
-    "media-src 'self' data: https: file:",
+    "media-src 'self' data: https: file: unison-media:",
     "connect-src 'self'"
   ].join('; ')
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -1406,10 +1460,12 @@ if (!gotLock) {
     later.start()
     birthdays.start()
     void pruneSafetyCopies()
+    void prunePreviews()
     nativeTheme.themeSource = storage.settings.theme
     nativeTheme.on('updated', () => applyTheme(storage.settings.theme))
     hardenSession()
     registerImageProxy()
+    registerMediaProxy()
     registerIpc()
     installMenu()
     createWindow()

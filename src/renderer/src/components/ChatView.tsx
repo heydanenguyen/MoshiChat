@@ -17,6 +17,7 @@ import { useWallpaper } from './Wallpaper'
 import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { LaterButton } from './LaterPicker'
 import { ReactionGrid, ReactionPill } from './ReactionPill'
+import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
@@ -699,10 +700,26 @@ function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; c
     <div className={`album grid-${layout} ${className}`}>
       {shown.map((tile, i) => {
         const a = tile.attachment
-        const src = a.thumbnailUrl ?? a.url
+        const original = a.thumbnailUrl ?? a.url
+        const src = previewSrc(original, 640)
         return (
           <button key={tile.id} className="album-tile" data-message-id={tile.messageId} onClick={() => openLightbox({ ...gallery[i], gallery, index: i, conversationId })}>
-            <img src={src} alt="" draggable={false} loading="lazy" />
+            {a.kind === 'video' && !a.thumbnailUrl ? (
+              // A video with no poster from the platform: its own first frame (never the video file in an <img>).
+              <video src={`${mediaSrc(a.url)}#t=0.1`} preload="metadata" muted playsInline />
+            ) : (
+              <img
+                src={src}
+                alt=""
+                draggable={false}
+                loading="lazy"
+                decoding="async"
+                // The preview could not be made: the picture as it is.
+                onError={(e) => {
+                  if (original && e.currentTarget.src !== original) e.currentTarget.src = original
+                }}
+              />
+            )}
             {a.kind === 'video' && (
               <span className="album-play">
                 <Play size={16} fill="currentColor" />
@@ -876,8 +893,15 @@ function Bubble({
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
                   <MitoArt id={sticker.sticker} size={120} play="auto" />
                 </span>
+              ) : sticker.frames && sticker.frames > 1 && sticker.url ? (
+                <span
+                  className="attachment-sticker sprite"
+                  role="img"
+                  aria-label={sticker.name || t('sticker')}
+                  style={{ backgroundImage: `url("${imageSrc(sticker.url)}")`, '--frames': sticker.frames, '--loop': `${sticker.duration ?? sticker.frames * 0.25}s` } as CSSProperties}
+                />
               ) : (
-                <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={sticker.url} alt={sticker.name ?? t('sticker')} draggable={false} />
+                <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={imageSrc(sticker.url)} alt={sticker.name ?? t('sticker')} draggable={false} />
               ))}
             {!sticker && gridded && <MediaGrid conversationId={message.conversationId} tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
             {!sticker &&
@@ -1005,7 +1029,9 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
   const t = useT()
   // A photo the CDN refuses to serve straight to <img> is fetched again through the app's own
   // session with the platform's referer; if that fails too, a placeholder instead of a broken icon.
-  const [imageLoad, setImageLoad] = useState<'direct' | 'proxy' | 'failed'>('direct')
+  // A picture is tried as a light preview first (made once in the background), then as it is, then through the
+  // app's session; only after all three a placeholder.
+  const [imageLoad, setImageLoad] = useState<'preview' | 'direct' | 'proxy' | 'failed'>('preview')
   const openLightbox = useStore((s) => s.openLightbox)
   const loadAttachment = useStore((s) => s.loadAttachment)
   const openAttachment = useStore((s) => s.openAttachment)
@@ -1022,14 +1048,17 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
     case 'image': {
       if (attachment.expired) return <GoneMedia />
       const direct = attachment.url ?? attachment.thumbnailUrl
-      const src = imageLoad === 'proxy' && direct && /^https:/.test(direct) ? `unison-img://img/?u=${encodeURIComponent(direct)}` : direct
-      return src && imageLoad !== 'failed' ? (
+      const preview = previewSrc(direct, 960)
+      const stage = imageLoad === 'preview' && preview === direct ? 'direct' : imageLoad
+      const src = stage === 'preview' ? preview : stage === 'proxy' && direct && /^https:/.test(direct) ? `unison-img://img/?u=${encodeURIComponent(direct)}` : direct
+      return src && stage !== 'failed' ? (
         <img
           className="attachment-image"
           src={src}
           alt={t('photo')}
           draggable={false}
-          onError={() => setImageLoad((state) => (state === 'direct' && /^https:/.test(direct ?? '') ? 'proxy' : 'failed'))}
+          decoding="async"
+          onError={() => setImageLoad(stage === 'preview' ? 'direct' : stage === 'direct' && /^https:/.test(direct ?? '') ? 'proxy' : 'failed')}
           onClick={() => void viewImage()}
           style={attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined}
         />

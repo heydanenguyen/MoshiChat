@@ -116,8 +116,10 @@ export interface Attachment {
   size?: number
   width?: number
   height?: number
-  /** Seconds, for audio and video. */
+  /** Seconds, for audio and video; for a sprite-sheet sticker, one loop. */
   duration?: number
+  /** A sticker drawn from a sprite sheet: `url` is a strip of this many square frames, played in a loop (Zalo). */
+  frames?: number
   /** Voice notes: normalised amplitudes (0..1) as sent by the platform. */
   waveform?: number[]
   /** Link previews and shared posts: summary or caption. */
@@ -591,6 +593,11 @@ export interface Settings {
   appLock?: { length: number; autoLock: number }
   /** Moshi's window shows up black in screen sharing, recordings and screenshots. Per computer. */
   hideFromScreenShare?: boolean
+  /**
+   * Stickers to Zalo go out as Zalo "photo stickers" (a see-through, moving WebP, no white square), falling back to
+   * the GIF when Zalo will not take one. On unless set to false. Per computer.
+   */
+  zaloPhotoStickers?: boolean
   /** On-device voice-to-text model: most accurate (turbo) or light (small). */
   voiceModel?: VoiceModel
   /** Size of the on-device chat model (summaries, reply suggestions). */

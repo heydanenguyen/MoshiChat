@@ -765,6 +765,7 @@ export class AccountManager {
         mkdirSync(dir, { recursive: true })
         return dir
       },
+      settings: () => this.storage.settings,
       log: (...args) => this.log(`[${currentId()}]`, ...args)
     }
   }

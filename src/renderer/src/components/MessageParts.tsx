@@ -4,6 +4,7 @@ import type { Attachment, Message, Platform, PreviewKind } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
 import type { TKey } from '../i18n'
+import { mediaSrc, previewSrc } from '@shared/media'
 
 const formatClock = (seconds: number): string =>
   `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60)
@@ -178,7 +179,7 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
   if (attachment.gif && playable && !failed) {
     return (
       <button className="video-thumb gif" onClick={play} title="GIF">
-        <video className="attachment-image" src={attachment.url} poster={attachment.thumbnailUrl} autoPlay loop muted playsInline onError={() => setFailed(true)} />
+        <video className="attachment-image" src={mediaSrc(attachment.url)} poster={attachment.thumbnailUrl} autoPlay loop muted playsInline onError={() => setFailed(true)} />
         <span className="gif-badge">GIF</span>
       </button>
     )
@@ -186,7 +187,10 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
   return (
     <button className="video-thumb" onClick={play} title={t('video')}>
       {attachment.thumbnailUrl && !failed ? (
-        <img className="attachment-image" src={attachment.thumbnailUrl} alt={t('video')} draggable={false} onError={() => setFailed(true)} />
+        <img className="attachment-image" src={previewSrc(attachment.thumbnailUrl, 960)} alt={t('video')} draggable={false} onError={() => setFailed(true)} />
+      ) : playable && !failed ? (
+        // No poster from the platform (a video sent as a file): its own first frame stands in.
+        <video className="attachment-image" src={`${mediaSrc(attachment.url)}#t=0.1`} preload="metadata" muted playsInline onError={() => setFailed(true)} />
       ) : (
         <div className="attachment-image placeholder">{t('video')}</div>
       )}
