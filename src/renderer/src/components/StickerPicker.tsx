@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clock, Sparkles, UserRound } from 'lucide-react'
+import { Clock, Scissors, Sparkles } from 'lucide-react'
 import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
 import { STICKER_EXPRESSIONS, STICKER_VIEWBOX, isStickerId, stickerInner, type StickerId } from '@shared/stickers'
 import { stickerMotionCss } from '@shared/sticker-motion'
@@ -260,7 +260,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
           </button>
         )}
         <button role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')} title={t('stickerMine')}>
-          <UserRound size={16} strokeWidth={2.2} />
+          <Scissors size={16} strokeWidth={2.2} />
         </button>
         <button role="tab" aria-selected={tab === 'mito'} className={tab === 'mito' ? 'active' : ''} onClick={() => setTab('mito')} title={MITO_NAME}>
           <img className="sticker-tab-pic" src={mitoUrl('mito:chao', 'still')} alt="" draggable={false} />
