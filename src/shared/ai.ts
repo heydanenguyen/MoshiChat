@@ -35,9 +35,10 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
     vi: { repo: 'Xenova/mms-tts-vie', dtype: 'q8', megabytes: 40, files: ['model'] },
     en: { repo: 'Xenova/mms-tts-eng', dtype: 'q8', megabytes: 40, files: ['model'] }
   },
-  // Background removal for custom stickers: MODNet portrait matting (Apache-2.0). transformers.js 4.x lists
-  // 'modnet' for its background-removal pipeline; RMBG-1.4's model type is not accepted there any more.
-  cutout: { repo: 'Xenova/modnet', dtype: 'q8', megabytes: 7, files: ['model'] }
+  // Background removal for custom stickers: BiRefNet lite (MIT), general-purpose, so pets, objects and people all
+  // come out clean. MODNet (portrait matting) tore anything that was not a person. fp16 cuts exactly like fp32 at half
+  // the download; about 8 s a picture on a CPU.
+  cutout: { repo: 'onnx-community/BiRefNet_lite-ONNX', dtype: 'fp16', megabytes: 115, files: ['model'] }
 }
 
 export interface AiStatus {
