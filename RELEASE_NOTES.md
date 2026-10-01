@@ -1,28 +1,39 @@
-## Moshi 0.3.0 beta 1
+## Moshi 0.3.0 beta 2
 
-Bản thử nghiệm. Bản ổn định (0.2.14) sẽ **không** tự cập nhật lên bản này; muốn thử thì tải bộ cài bên dưới. Gặp lỗi gì cứ báo, bản 0.3.0 chính thức sẽ sửa.
+Bản thử nghiệm. Bản ổn định (0.2.14) sẽ **không** tự cập nhật lên bản này; ai đang dùng beta 1 sẽ được mời cập nhật trong app.
 
 ### Mới
-- **Chia sẻ Thân thiết thành ảnh story:** nút *Chia sẻ* trong Thân thiết tạo một ảnh dọc 1080 × 1920 (quỹ đạo bạn bè, tổng số tin, giờ vàng, chuỗi và bục vinh danh top 3). Ảnh được lưu vào thư mục tải về và sao chép sẵn, dán thẳng vào story Instagram, Facebook, Zalo là xong.
-- **Nền tảng mới: Electron 44 (Chromium 152).** Bản cũ (Electron 33) đã hết được vá bảo mật; bản này đóng các lỗ hổng của Electron và trình giải nén đi kèm, và Chromium bên trong (phần hiển thị nội dung người khác gửi tới) được cập nhật mới nhất.
-
-### Nhẹ máy hơn
-- Logo nháy mắt ở góc sidebar chỉ chuyển động đúng lúc nháy, không vẽ lại liên tục nữa. Khi đang dùng Moshi với Liquid Glass, mức dùng CPU giảm khoảng một nửa trong đo đạc của chúng tôi.
+- **Hoãn hội thoại:** chuột phải → *Hoãn…*, nút đồng hồ trên đầu khung chat hoặc **⌘⇧H**. Chọn *Tối nay*, *Sáng mai*, *Cuối tuần*, *Tuần sau* hay một giờ tuỳ ý. Hội thoại rời hộp thư, tới giờ (hoặc khi họ nhắn) thì quay lại đầu danh sách với nhãn *Đến hẹn*. Có nút *Hoàn tác* và mục *Đã hoãn* để xem lại.
+- **Nhắc nếu chưa trả lời:** đặt giờ, nếu tới lúc đó họ vẫn im lặng thì Moshi nhắc và đưa hội thoại lên đầu với nhãn *Chưa trả lời*. Họ trả lời trước là tự huỷ.
+- **Trả lời ngay trên thông báo (macOS):** gõ trả lời thẳng trong thông báo tin nhắn, hoãn, nhắc và sinh nhật; có nút *Đánh dấu đã đọc*. Tin nhắn chờ (người lạ) không trả lời từ thông báo được.
+- **Ghi chú về người:** thẻ *Ghi chú* trong trang chi tiết, tự lưu khi gõ. Moshi nhắc lại ghi chú đúng lúc cần: trên thẻ nhắc, trong thông báo sinh nhật và khi gợi ý câu mở lời.
+- **Nhắc sinh nhật:** thông báo lúc 9 giờ sáng đúng ngày, thẻ trên thanh bên từ hôm trước, nút *Chúc mừng* mở chat với lời chúc soạn sẵn. Ô ngày sinh giờ chỉ cần ngày và tháng, năm không bắt buộc.
+- **Thẻ "Lâu rồi chưa nhắn"** thay cho *Ngày này năm xưa* trên thanh bên: chỉ hiện khi một người thân im lặng lâu hơn hẳn nhịp thường ngày, có nút *Nhắn hỏi thăm* (kèm câu mở lời từ AI trên máy nếu đã tải model) và *Để sau*. *Ngày này năm xưa* chuyển vào Thân thiết và chỉ hiện khi có tin thật từ một năm trở lên.
+- **Khoá Moshi bằng mã** (Cài đặt → Chung → Bảo mật & riêng tư): mã 4–8 chữ số, tự khoá khi rời máy, khi màn hình khoá hoặc máy ngủ, khoá ngay bằng **⌃⌘L**. Lúc khoá, thông báo chỉ ghi "Có tin mới". Mã chỉ nằm trên máy này; quên mã thì cách duy nhất là đăng xuất mọi tài khoản.
+- **Ẩn Moshi khi chia sẻ màn hình:** cửa sổ hiện màu đen trong Zoom, Meet và ảnh chụp màn hình.
+- Công tắc mới trong Cài đặt để tắt Thân thiết, thẻ nhắc nhắn lại và nhắc sinh nhật.
 
 ### Sửa lỗi
-- Thân thiết không còn xếp *Saved Messages* (chat với chính mình) hay những chat chưa từng hồi âm vào danh sách người thân.
+- Sinh nhật nhập không kèm năm không còn bị xoá khi bấm Lưu trong *Tuỳ chỉnh*; *Đặt lại* không còn xoá ghi chú.
 
 ### Lưu ý
-- Đây là bản beta: trên Windows, app đã chạy với dữ liệu mẫu và các thành phần AI trên máy đã nạp được, nhưng đăng nhập tài khoản thật, sao lưu và AI với model thật chưa được thử lại trên nền tảng mới; macOS chưa được thử.
-- Thư viện Messenger cá nhân (ws3-fca) vẫn còn vài lỗ hổng trong các gói nó dùng; chưa có bản vá tương thích. Mức rủi ro thấp vì chúng chỉ xử lý dữ liệu trả về từ máy chủ Facebook.
+- Đã thử trên macOS với dữ liệu mẫu. Chưa thử bằng tay: trả lời từ thông báo trên máy thật, tự khoá khi máy ngủ, và cả bản Windows.
+- Trên Windows chưa trả lời được từ thông báo (bấm vào vẫn mở đúng hội thoại).
+- Hoãn, nhắc và khoá lưu riêng trên từng máy, không đồng bộ; Moshi cần đang chạy để nhắc đúng giờ (mở lại sau sẽ nhắc bù).
 
 ---
 
 ### English
-**Beta.** The stable version (0.2.14) will **not** update to this one; download the installer below to try it. Please report anything odd before 0.3.0.
+**Beta.** The stable version (0.2.14) will **not** update to this one; beta 1 users are offered the update in the app.
 
-- **Share Close friends as a story picture:** the *Share* button makes a 1080 × 1920 image (your orbit, message count, golden hour, streak and top-3 podium), saved to your downloads and copied, ready to paste into an Instagram, Facebook or Zalo story.
-- **New foundation: Electron 44 (Chromium 152).** Electron 33 no longer gets security fixes; this closes the advisories against Electron and its unzip helper and brings the newest Chromium, which renders what other people send you.
-- **Lighter:** the blinking logo in the sidebar only moves while it blinks; with Liquid Glass in use, CPU use roughly halved in our measurements.
-- **Fix:** Close friends no longer counts Saved Messages (your chat with yourself) or chats that never wrote back.
-- Notes: on Windows the app ran with sample data and the on-device AI components load, but real sign-ins, backups and AI with real models have not been re-tested on the new foundation; macOS is untested. The personal Messenger library (ws3-fca) still pulls in a few packages with advisories and no compatible fix; exposure is low, they only handle Facebook's own responses.
+- **Snooze a conversation** (right-click → *Snooze…*, the clock in the chat header or **⌘⇧H**): this evening, tomorrow morning, the weekend, next week or any time. It leaves the inbox and comes back at the top, marked *Back*, at that time or as soon as they write. Undo, and a *Snoozed* view.
+- **Remind me if no reply:** if they still haven't written back by then, Moshi tells you and lifts the chat to the top, marked *No reply*. A reply cancels it.
+- **Reply from notifications (macOS)** for messages, snoozes, follow-ups and birthdays, plus *Mark as read*. Message requests are never answered from a notification.
+- **Notes about a person** in their details, saved as you type, brought back when they matter: on the nudge card, in birthday notifications and in suggested openers.
+- **Birthday reminders:** a notification at 9 AM on the day, a sidebar card from the day before, and *Send wishes* opens the chat with a ready-made wish. Birthdays only need a day and a month.
+- **"Been a while" card** replaces *On this day* in the sidebar: only when a close friend has gone quiet far longer than usual, with *Say hi* (and on-device openers when the model is installed) and *Later*. *On this day* moves into Close friends, for real anniversaries only.
+- **Passcode lock** (Settings → General → Security & privacy): 4–8 digits, locks when you step away, when the screen locks or the computer sleeps, or with **⌃⌘L**. While locked, notifications only say "Something new". The code stays on this computer; forgetting it means signing out of every account.
+- **Hide Moshi when sharing your screen:** the window shows up black in Zoom, Meet and screenshots.
+- New Settings switches for Close friends, reconnect nudges and birthday reminders.
+- **Fix:** a birthday without a year is no longer lost when saving *Customize*; *Reset* keeps your notes.
+- Notes: tried on macOS with sample data; replying from real notifications, locking on sleep and the Windows build are not hand-tested yet. Replying from notifications is not available on Windows yet. Snoozes, reminders and the lock are kept per computer, and Moshi has to be running to remind you on time.
