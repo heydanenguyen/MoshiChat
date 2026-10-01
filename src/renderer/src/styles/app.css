@@ -147,12 +147,14 @@ a {
   background: var(--mesh-base);
 }
 
+/* The backdrop stands still in every style: each glass pane re-blurs whatever moves beneath it on every frame, so a
+   drifting backdrop kept the window busy the whole time it was in use (measured 50% of a core in the Moshi style,
+   13% with it still; 115% vs 36% in Liquid). It is just as soft standing still. */
 .mesh-blob {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.9;
-  animation: drift 26s ease-in-out infinite alternate;
 }
 
 .mesh-blob.b1 {
@@ -193,15 +195,6 @@ a {
   top: 40vh;
   background: var(--mesh-5);
   animation-delay: -22s;
-}
-
-@keyframes drift {
-  from {
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    transform: translate(4vw, 3vh) scale(1.08);
-  }
 }
 
 /* ================================================================== layout */
@@ -10423,12 +10416,6 @@ button.moment-card:hover {
 :root[data-style='liquid'] .chat-col,
 :root[data-style='liquid'] .details-col {
   border-color: transparent;
-}
-/* Every glass pane re-blurs whatever moves beneath it on every frame: with the backdrop drifting that kept the
-   GPU process near a full core at rest (measured 115% of one core, 36% with the backdrop still). The Liquid
-   backdrop stays put; it is just as soft standing still. */
-:root[data-style='liquid'] .mesh-blob {
-  animation: none;
 }
 /* panels: stronger refraction and a light sheen along the top edge */
 :root[data-style='liquid'] .panel,
