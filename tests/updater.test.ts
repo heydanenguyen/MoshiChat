@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UpdateState } from '../src/shared/types'
 
 class FakeUpdater extends EventEmitter {
@@ -30,10 +30,26 @@ async function started(automatic: boolean): Promise<{ states: UpdateState[]; upd
   return { states, updater }
 }
 
+const realPlatform = process.platform
+const onPlatform = (platform: NodeJS.Platform): void => {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+}
+
 describe('updates', () => {
   beforeEach(() => {
     fake = new FakeUpdater()
     vi.useFakeTimers()
+    // Windows (and a signed Mac) replace themselves; an unsigned Mac is covered below.
+    onPlatform('win32')
+  })
+  afterEach(() => onPlatform(realPlatform))
+
+  it('only offers the download page on an unsigned Mac', async () => {
+    onPlatform('darwin')
+    const { states } = await started(true)
+    fake.emit('update-available', { version: '0.3.0' })
+    expect(fake.downloadUpdate).not.toHaveBeenCalled()
+    expect(states.at(-1)).toMatchObject({ phase: 'available', version: '0.3.0', manual: true })
   })
 
   it('downloads a new version quietly when automatic, then offers the restart', async () => {
