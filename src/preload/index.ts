@@ -57,7 +57,10 @@ const bridge: MoshiBridge = {
   },
   insights: {
     backfill: (days) => ipcRenderer.invoke(IPC.insightsBackfill, days),
-    records: () => ipcRenderer.invoke(IPC.insightsRecords)
+    records: () => ipcRenderer.invoke(IPC.insightsRecords),
+    share: (card) => ipcRenderer.invoke(IPC.insightsShare, card),
+    shareData: () => ipcRenderer.invoke(IPC.insightsShareData),
+    shareReady: () => ipcRenderer.send(IPC.insightsShareReady)
   },
   stickers: {
     list: () => ipcRenderer.invoke(IPC.stickersList),

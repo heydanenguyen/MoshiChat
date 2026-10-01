@@ -40,7 +40,8 @@ describe('computeInsights', () => {
     expect(i.chats).toBe(3)
     expect(i.sent).toBe(3)
     expect(i.received).toBe(3)
-    expect(i.top.map((c) => c.title)).toEqual(['Lan', 'Bố', 'Minh'])
+    // Bố never wrote back in the period: not among the closest (still counted in quiet).
+    expect(i.top.map((c) => c.title)).toEqual(['Lan', 'Minh'])
     expect(i.top[0].streak).toBe(3)
     expect(i.streak?.title).toBe('Lan')
     expect(i.quiet.map((c) => c.title)).toEqual(['Bố'])

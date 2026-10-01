@@ -1,6 +1,6 @@
 import type { AiKind, AiStatus, SpeakLang } from './ai'
 import type { ChatLine } from './ai-prompts'
-import type { InsightRecord } from './insights'
+import type { InsightRecord, ShareCardData } from './insights'
 
 /** A sticker the user made (see main/stickers.ts). */
 export interface CustomSticker {
@@ -117,6 +117,11 @@ export interface MoshiBridge {
     backfill(days: number): Promise<void>
     /** Light records of the messages on this computer, for insights and memories. */
     records(): Promise<InsightRecord[]>
+    /** Draws the 9:16 share image off screen, saves it (download folder) and copies it; resolves with where it went. */
+    share(card: ShareCardData): Promise<{ path?: string }>
+    /** In the share window only: the card to draw, and the signal that it has finished drawing. */
+    shareData(): Promise<ShareCardData | undefined>
+    shareReady(): void
   }
   stickers: {
     /** The user's own stickers, image inline as a data URL, newest first. */
@@ -265,6 +270,9 @@ export const IPC = {
   appSticker: 'app:sticker',
   insightsRecords: 'insights:records',
   insightsBackfill: 'insights:backfill',
+  insightsShare: 'insights:share',
+  insightsShareData: 'insights:shareData',
+  insightsShareReady: 'insights:shareReady',
   appSaveImage: 'app:saveImage',
   appSaveMedia: 'app:saveMedia',
   appDownloadFolder: 'app:downloadFolder',

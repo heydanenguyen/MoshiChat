@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChartNoAxesColumn, Crown, Flame, Moon, Sparkles, X } from 'lucide-react'
-import { computeInsights, onThisDay, vibeOf, type ContactInsight, type InsightRecord, type Insights, type Memory, type Vibe } from '@shared/insights'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChartNoAxesColumn, Crown, Flame, Moon, Share2, Sparkles, X } from 'lucide-react'
+import { computeInsights, onThisDay, vibeOf, type ContactInsight, type InsightRecord, type Insights, type Memory, type ShareCardData, type Vibe } from '@shared/insights'
 import { LOGOS } from '@shared/logos'
 import { useStore, useT, anchorFor, useShownConversations } from '../store'
 import { formatListTime } from '../utils'
 import type { TKey } from '../i18n'
+import { BuddyLoader } from './BuddyLoader'
 import { Avatar } from './Avatar'
 
 interface InsightsState {
@@ -137,13 +138,13 @@ export function MemoryCard({ collapsed }: { collapsed: boolean }): JSX.Element |
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const WEEKDAYS = {
+export const WEEKDAYS = {
   vi: ['thứ Hai', 'thứ Ba', 'thứ Tư', 'thứ Năm', 'thứ Sáu', 'thứ Bảy', 'Chủ nhật'],
   en: ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays']
 }
 
 /** "2 AM" / "2 giờ sáng": the hour the way people say it. */
-function hourPhrase(h: number, language: string): string {
+export function hourPhrase(h: number, language: string): string {
   if (language === 'vi') {
     const part = h < 11 ? 'sáng' : h < 13 ? 'trưa' : h < 18 ? 'chiều' : h < 22 ? 'tối' : 'đêm'
     return `${h > 12 ? h - 12 : h === 0 ? 12 : h} giờ ${part}`
@@ -155,8 +156,8 @@ function hourPhrase(h: number, language: string): string {
  * The friends around you: you in the middle, the closest three on the inner ring, the next five further out.
  * Nearer and bigger means closer. They fly out from you once when the sheet opens (or the period changes).
  */
-const INNER = [-12, 168, 78]
-const OUTER = [-66, 4, 62, 122, 222]
+export const INNER = [-12, 168, 78]
+export const OUTER = [-66, 4, 62, 122, 222]
 function FriendOrbit({ top, onOpen }: { top: ContactInsight[]; onOpen(id: string): void }): JSX.Element {
   const t = useT()
   const conversations = useShownConversations()
@@ -222,9 +223,9 @@ const VIBE_ICON: Record<Vibe, JSX.Element> = {
 const VIBE_LABEL: Record<Vibe, TKey> = { night: 'vibeNight', you: 'vibeYou', them: 'vibeThem', even: 'vibeEven' }
 
 /** When you talk most, as a character: the time card takes its colours from it. */
-type Persona = 'early' | 'lunch' | 'afternoon' | 'evening' | 'night'
-const personaOf = (h: number): Persona => (h >= 5 && h < 11 ? 'early' : h < 14 && h >= 11 ? 'lunch' : h >= 14 && h < 18 ? 'afternoon' : h >= 18 && h < 22 ? 'evening' : 'night')
-const PERSONA_LABEL: Record<Persona, TKey> = { early: 'cfPersonaEarly', lunch: 'cfPersonaLunch', afternoon: 'cfPersonaAfternoon', evening: 'cfPersonaEvening', night: 'cfPersonaNight' }
+export type Persona = 'early' | 'lunch' | 'afternoon' | 'evening' | 'night'
+export const personaOf = (h: number): Persona => (h >= 5 && h < 11 ? 'early' : h < 14 && h >= 11 ? 'lunch' : h >= 14 && h < 18 ? 'afternoon' : h >= 18 && h < 22 ? 'evening' : 'night')
+export const PERSONA_LABEL: Record<Persona, TKey> = { early: 'cfPersonaEarly', lunch: 'cfPersonaLunch', afternoon: 'cfPersonaAfternoon', evening: 'cfPersonaEvening', night: 'cfPersonaNight' }
 
 /** The day as a clock: 24 rays, longer where you talked more, the busiest one lit. Midnight at the top. */
 function DayClock({ hours, peak }: { hours: number[]; peak: number }): JSX.Element {
@@ -361,6 +362,9 @@ export function InsightsSheet(): JSX.Element {
   const backfill = useInsights((s) => s.backfill)
   const progress = useInsights((s) => s.progress)
   const [period, setPeriod] = useState<'month' | 'year'>('month')
+  const [sharing, setSharing] = useState(false)
+  const accounts = useStore((s) => s.accounts)
+  const showToast = useStore((s) => s.showToast)
   useEffect(() => {
     void load(true).then(() => backfill())
   }, [load, backfill])
@@ -378,6 +382,35 @@ export function InsightsSheet(): JSX.Element {
   }
   const closest = insights?.top[0]
   const rest = insights?.top.slice(3) ?? []
+  // The story picture: everything resolved here, since it is drawn in a window without the app's store.
+  const share = async (): Promise<void> => {
+    if (!insights || sharing) return
+    const me = Object.values(accounts).find((a) => !a.demo) ?? Object.values(accounts)[0]
+    const card: ShareCardData = {
+      language: language === 'vi' ? 'vi' : 'en',
+      period,
+      accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4f7df3',
+      logoColor: (LOGOS[logo] ?? LOGOS.buddies).color,
+      logo,
+      me: { name: me?.displayName ?? t('cfYou'), avatarUrl: me?.avatarUrl },
+      friends: insights.top.slice(0, 8).map((c) => ({ name: c.title, avatarUrl: conversations[c.conversationId]?.avatarUrl, streak: c.streak, total: c.total })),
+      total: insights.sent + insights.received,
+      sent: insights.sent,
+      received: insights.received,
+      busiestHour: insights.busiestHour,
+      busiestWeekday: insights.busiestWeekday,
+      streak: insights.streak ? { name: insights.streak.title, days: insights.streak.streak } : undefined
+    }
+    setSharing(true)
+    try {
+      const { path } = await window.unison.insights.share(card)
+      if (path) showToast(t('shareSaved'))
+    } catch {
+      showToast(t('shareFailed'), 'error')
+    } finally {
+      setSharing(false)
+    }
+  }
   // Their side of every balance bar wears the colour of the logo character you picked.
   const sheetStyle = { '--cf-them': (LOGOS[logo] ?? LOGOS.buddies).color } as React.CSSProperties
   return (
@@ -393,6 +426,10 @@ export function InsightsSheet(): JSX.Element {
               {t('insightsYear')}
             </button>
           </div>
+          <button className="btn small secondary cf-share" onClick={() => void share()} disabled={!insights || insights.top.length === 0 || sharing}>
+            {sharing ? <BuddyLoader size={14} inline /> : <Share2 size={14} strokeWidth={2.4} />}
+            {t('shareButton')}
+          </button>
           <button className="icon-btn" onClick={closeSheet} title={t('close')}>
             <X size={16} strokeWidth={2.4} />
           </button>

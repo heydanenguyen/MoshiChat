@@ -172,7 +172,8 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
     sent,
     received,
     chats: per.size,
-    top: contacts.slice(0, 8),
+    // A chat that never wrote back in the period is not a close friend (and your own Saved Messages never do).
+    top: contacts.filter((c) => c.received > 0).slice(0, 8),
     hours,
     weekdays,
     busiestHour: argmax(hours),
@@ -181,6 +182,25 @@ export function computeInsights(records: InsightRecord[], titles: Record<string,
     streak: withStreak[0],
     quiet
   }
+}
+
+/** Everything the 9:16 share image shows, resolved by the sheet (it is drawn in a window without the app's store). */
+export interface ShareCardData {
+  language: 'vi' | 'en'
+  period: 'month' | 'year'
+  /** CSS colours: the accent and the chosen logo character. */
+  accent: string
+  logoColor: string
+  logo: string
+  me: { name: string; avatarUrl?: string }
+  /** The closest, in order (up to 8). */
+  friends: Array<{ name: string; avatarUrl?: string; streak: number; total: number }>
+  total: number
+  sent: number
+  received: number
+  busiestHour: number
+  busiestWeekday: number
+  streak?: { name: string; days: number }
 }
 
 export type MemoryAgo = { years: number } | { months: number } | { weeks: number }

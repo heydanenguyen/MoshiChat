@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
 import { join, basename } from 'path'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
@@ -22,6 +22,7 @@ import { Reminders } from './reminders'
 import { addSticker, customStickerFile, listStickers, pickStickerSource, removeSticker } from './stickers'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind, SpeakLang } from '@shared/ai'
+import type { ShareCardData } from '@shared/insights'
 import type { ChatLine } from '@shared/ai-prompts'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
 import { Updater } from './updater'
@@ -435,8 +436,8 @@ function createWindow(): void {
   setTimeout(() => {
     if (window && !window.isDestroyed() && !window.isVisible()) window.show()
   }, 4000)
-  window.webContents.on('console-message', (_e, level, message, line, source) => {
-    if (level >= 2) log('renderer:', message, source ? `(${source}:${line})` : '')
+  window.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
+    if (level === 'warning' || level === 'error') log('renderer:', message, sourceId ? `(${sourceId}:${lineNumber})` : '')
   })
   window.webContents.on('preload-error', (_e, path, error) => log('preload error', path, error.message))
   // macOS: closing the window hides it, like other messengers; the Dock icon brings it back. (It
@@ -488,7 +489,7 @@ function installUiScript(win: BrowserWindow): void {
   const script = process.env.MOSHI_UI_SCRIPT
   const dir = process.env.MOSHI_SHOT_DIR ?? app.getPath('temp')
   if (!script) return
-  win.webContents.on('console-message', (_e, _level, message) => {
+  win.webContents.on('console-message', ({ message }) => {
     if (message.startsWith('MOSHI_SHOT:')) {
       const name = message.slice(11).replace(/[^\w.-]/g, '_')
       void win.webContents
@@ -668,6 +669,68 @@ async function freePath(dir: string, file: string): Promise<string> {
     if (!(await stat(candidate).catch(() => undefined))) return candidate
   }
   return join(dir, `${stem}-${Date.now()}${ext}`)
+}
+
+/** The share image being drawn: its data for the share window, and how that window says it is done. */
+let sharing: { card: ShareCardData; ready(): void } | undefined
+
+/**
+ * Close friends as a 9:16 story image (1080 × 1920): the renderer draws the card in a hidden off-screen window
+ * (#share), main captures it, saves it like a download and puts it on the clipboard, ready to paste into a story.
+ */
+async function shareCard(card: ShareCardData): Promise<{ path?: string }> {
+  if (sharing) throw new Error('Already making a picture')
+  const W = 1080
+  const H = 1920
+  // Windows keeps even a hidden window within the screen (1920 px rarely fits), so the card is captured in
+  // slices: the window is one slice tall and the card moves up under it.
+  const SLICE = 640
+  const canvas = new BrowserWindow({
+    show: false,
+    width: W,
+    height: SLICE,
+    frame: false,
+    useContentSize: true,
+    backgroundColor: '#0b0720',
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false, contextIsolation: true, nodeIntegration: false, offscreen: true }
+  })
+  try {
+    const drawn = new Promise<void>((resolve) => {
+      sharing = { card, ready: resolve }
+      setTimeout(resolve, 8000)
+    })
+    if (process.env.ELECTRON_RENDERER_URL) await canvas.loadURL(`${process.env.ELECTRON_RENDERER_URL}#share`)
+    else await canvas.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'share' })
+    await drawn
+    const slices: Buffer[] = []
+    for (let y = 0; y < H; y += SLICE) {
+      // The app's root does not scroll, so the card itself moves up under the window, one slice at a time.
+      await canvas.webContents.executeJavaScript(
+        `document.querySelector('.share-card').style.translate = '0 -${y}px'; new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`
+      )
+      canvas.webContents.invalidate()
+      await new Promise((r) => setTimeout(r, 80))
+      const shot = await canvas.webContents.capturePage({ x: 0, y: 0, width: W, height: SLICE })
+      slices.push(shot.resize({ width: W, height: SLICE }).toBitmap())
+    }
+    const png = nativeImage.createFromBitmap(Buffer.concat(slices), { width: W, height: H }).toPNG()
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })]).catch(() => undefined)
+    const name = card.language === 'vi' ? 'Moshi - Thân thiết.png' : 'Moshi - Close friends.png'
+    const dir = await downloadDir()
+    if (storage.settings.askWhereToSave) {
+      const options = { defaultPath: join(dir, name), filters: [{ name: 'PNG', extensions: ['png'] }] }
+      const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+      if (picked.canceled || !picked.filePath) return {}
+      await writeFile(picked.filePath, png)
+      return { path: picked.filePath }
+    }
+    const path = await freePath(dir, name)
+    await writeFile(path, png)
+    return { path }
+  } finally {
+    sharing = undefined
+    canvas.destroy()
+  }
 }
 
 /** Download in the photo viewer: straight into the download folder, or wherever the user picks when Settings asks for that. */
@@ -1060,6 +1123,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appSticker, (_e, id: string) => stickerFile(id))
   ipcMain.handle(IPC.insightsRecords, () => manager.insightRecords())
   ipcMain.handle(IPC.insightsBackfill, (_e, days: number) => manager.backfillInsights(Math.max(1, Math.min(365, Number(days) || 30))))
+  ipcMain.handle(IPC.insightsShare, (_e, card: ShareCardData) => shareCard(card))
+  ipcMain.handle(IPC.insightsShareData, () => sharing?.card)
+  ipcMain.on(IPC.insightsShareReady, () => sharing?.ready())
   ipcMain.handle(IPC.appSaveImage, (_e, bytes: Uint8Array, mime: string, name?: string) => saveImage(bytes, String(mime ?? ''), name))
   ipcMain.handle(IPC.appSaveMedia, (_e, url: string, name?: string) => saveMedia(String(url ?? ''), typeof name === 'string' ? name : undefined))
   // The photo editor draws on a canvas; remote images would taint it, so it gets the bytes as a data URL.
@@ -1072,10 +1138,11 @@ function registerIpc(): void {
   ipcMain.on(IPC.appEditorKeys, (_e, on: unknown) => {
     editorKeys = on === true
   })
-  ipcMain.handle(IPC.appCopyImage, (_e, bytes: Uint8Array) => {
+  ipcMain.handle(IPC.appCopyImage, async (_e, bytes: Uint8Array) => {
     const image = nativeImage.createFromBuffer(Buffer.from(bytes))
     if (image.isEmpty()) throw new Error('Could not copy this image')
-    clipboard.writeImage(image)
+    // Electron 44's clipboard follows the W3C API: one item carrying the picture as a PNG blob.
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) })])
   })
   ipcMain.handle(IPC.appDownloadFolder, async () => {
     const path = await downloadDir()

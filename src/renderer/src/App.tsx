@@ -116,6 +116,24 @@ export default function App(): JSX.Element {
     return () => document.removeEventListener('scroll', onScroll, true)
   }, [])
 
+  // The buddies blink (every 5.6 s) and glance (every 9 s) on a slow clock: the animation runs only for the
+  // moment the eyes move, never while the window is in the background or motion is reduced.
+  useEffect(() => {
+    const root = document.documentElement
+    const still = (): boolean => root.classList.contains('window-idle') || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const pulse = (name: string, ms: number): void => {
+      if (still()) return
+      root.setAttribute(name, '')
+      setTimeout(() => root.removeAttribute(name), ms)
+    }
+    const blink = setInterval(() => pulse('data-blink', 340), 5600)
+    const glance = setInterval(() => pulse('data-glance', 2400), 9000)
+    return () => {
+      clearInterval(blink)
+      clearInterval(glance)
+    }
+  }, [])
+
   // Decorative animations rest while the window is in the background (see .window-idle in app.css).
   useEffect(() => {
     const apply = (): void => {

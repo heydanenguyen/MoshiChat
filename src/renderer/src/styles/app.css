@@ -5875,36 +5875,26 @@ kbd {
   transform-box: fill-box;
   transform-origin: 50% 100%;
 }
-/* blink every few seconds */
+/* Blink every few seconds and glance over at the other buddy now and then. App.tsx sets data-blink /
+   data-glance on a slow clock: endless CSS loops kept repainting the logo (and the glass behind it) on every
+   frame, about a third of a CPU core, though the eyes only move for a fraction of a second. */
 .buddy-eyes {
   transform-box: fill-box;
   transform-origin: 50% 50%;
-  animation: buddy-blink 5.6s ease-in-out infinite;
 }
-/* glance over at the other buddy, then back at you */
+:root[data-blink] .buddy-eyes {
+  animation: buddy-blink 0.32s ease-in-out;
+}
 .buddy-pupils {
   transform-box: fill-box;
-  animation: buddy-glance 9s ease-in-out infinite;
+  transition: transform 0.5s ease-in-out;
+}
+:root[data-glance] .buddy-pupils {
+  transform: translate(-3%, 2%);
 }
 @keyframes buddy-blink {
-  0%,
-  93%,
-  100% {
-    transform: scaleY(1);
-  }
-  96% {
+  50% {
     transform: scaleY(0.12);
-  }
-}
-@keyframes buddy-glance {
-  0%,
-  38%,
-  100% {
-    transform: translate(0, 0);
-  }
-  44%,
-  70% {
-    transform: translate(-3%, 2%);
   }
 }
 
@@ -6021,6 +6011,7 @@ kbd {
 .logo-option:not(.active) .buddy-eyes,
 .logo-option:not(.active) .buddy-pupils {
   animation: none;
+  transform: none;
 }
 
 /* ================================================================== accent groups & flat messages */
@@ -12307,4 +12298,313 @@ button.moment-card:hover {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
+}
+
+/* ================================================================== Close friends: the story picture */
+.cf-share {
+  gap: 6px;
+  margin-right: 8px;
+}
+/* The share window draws one 1080 × 1920 card and nothing else. */
+.share-mode,
+.share-mode body {
+  margin: 0;
+  overflow: hidden;
+  background: #0b0720;
+}
+.share-card {
+  --share-accent: #6b7dff;
+  --share-logo: #ff5b1f;
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 84px 72px 64px;
+  box-sizing: border-box;
+  color: #fff;
+  font-family: var(--font-display);
+  background:
+    radial-gradient(3px 3px at 9% 14%, rgba(255, 255, 255, 0.85) 50%, transparent 52%),
+    radial-gradient(2.4px 2.4px at 27% 62%, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(3.4px 3.4px at 41% 9%, rgba(255, 255, 255, 0.7) 50%, transparent 52%),
+    radial-gradient(2.4px 2.4px at 63% 52%, rgba(255, 255, 255, 0.5) 50%, transparent 52%),
+    radial-gradient(3px 3px at 82% 21%, rgba(255, 255, 255, 0.8) 50%, transparent 52%),
+    radial-gradient(2.4px 2.4px at 91% 71%, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(3px 3px at 14% 84%, rgba(255, 255, 255, 0.55) 50%, transparent 52%),
+    radial-gradient(2.4px 2.4px at 70% 93%, rgba(255, 255, 255, 0.5) 50%, transparent 52%),
+    radial-gradient(45% 30% at 92% 8%, color-mix(in srgb, var(--share-logo) 55%, transparent), transparent 70%),
+    radial-gradient(50% 32% at 6% 96%, rgba(91, 140, 255, 0.45), transparent 70%),
+    radial-gradient(70% 45% at 50% 42%, color-mix(in oklab, var(--share-accent) 58%, #2a1878) 0%, color-mix(in oklab, var(--share-accent) 22%, #120b36) 70%, #0b0720 100%);
+}
+.share-top {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.share-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.share-period {
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 30px;
+  font-weight: 700;
+}
+.share-title {
+  margin: 48px 0 0;
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  text-align: center;
+  text-wrap: balance;
+}
+.share-orbit {
+  position: relative;
+  flex-shrink: 0;
+  width: 1000px;
+  height: 700px;
+  margin-top: 24px;
+}
+.share-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+}
+.share-ring.inner {
+  width: 58%;
+  height: 66%;
+}
+.share-ring.outer {
+  width: 88%;
+  height: 90%;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.share-me {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -42%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 30px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+}
+.share-me .avatar {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 8px rgba(255, 255, 255, 0.92),
+    0 0 0 24px color-mix(in srgb, var(--share-accent) 30%, transparent),
+    0 0 100px color-mix(in srgb, var(--share-accent) 75%, transparent);
+}
+.share-friend {
+  position: absolute;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.share-face {
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.85),
+    0 20px 50px rgba(0, 0, 0, 0.4);
+}
+.share-friend.first .share-face {
+  box-shadow:
+    0 0 0 8px #ffd36b,
+    0 0 70px rgba(255, 211, 107, 0.6),
+    0 20px 50px rgba(0, 0, 0, 0.4);
+}
+.share-crown {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  translate: -50% 0;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffd36b;
+  color: #6b4200;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.share-flame {
+  position: absolute;
+  right: -16px;
+  bottom: -10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 14px 4px 10px;
+  border-radius: 999px;
+  background: #ff6a2b;
+  font-size: 26px;
+  font-weight: 800;
+  box-shadow: 0 0 0 5px #140e33;
+}
+.share-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 32px;
+  font-weight: 800;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+}
+.share-stats {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 32px;
+}
+.share-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 30px 28px;
+  border-radius: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.14);
+}
+.share-stat b {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 84px;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+.share-stat.persona b {
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.share-stat span {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0.82;
+}
+.share-stat.fire {
+  background: linear-gradient(165deg, #ffb341 0%, #ff5b2e 60%, #e3263a 100%);
+}
+.share-podium {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 20px;
+  margin-top: auto;
+}
+.share-place {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.share-place-face {
+  position: relative;
+  display: block;
+  margin-bottom: 30px;
+  border-radius: 50%;
+}
+.share-place.gold .share-place-face {
+  box-shadow:
+    0 0 0 7px #f6c445,
+    0 0 60px rgba(246, 196, 69, 0.5);
+}
+.share-place.silver .share-place-face {
+  box-shadow: 0 0 0 6px #c3cad6;
+}
+.share-place.bronze .share-place-face {
+  box-shadow: 0 0 0 6px #d88b52;
+}
+/* the medal hangs at the bottom of the face */
+.share-place-face .share-medal {
+  position: absolute;
+  left: 50%;
+  bottom: -34px;
+  translate: -50% 0;
+}
+.share-medal {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 36px;
+  font-weight: 800;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.3),
+    inset 0 3px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.14);
+}
+.share-place-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 34px;
+  font-weight: 800;
+}
+.share-step {
+  align-self: stretch;
+  border-radius: 34px 34px 12px 12px;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.85);
+}
+.share-place.gold .share-medal {
+  color: #6b4200;
+  background: radial-gradient(circle at 35% 30%, #fff6c9 0%, #f6c445 45%, #c98a12 100%);
+}
+.share-place.silver .share-medal {
+  color: #3d4453;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #d5dbe5 45%, #8e97a8 100%);
+}
+.share-place.bronze .share-medal {
+  color: #4a230a;
+  background: radial-gradient(circle at 35% 30%, #ffe0c2 0%, #e39a5e 45%, #9c5424 100%);
+}
+.share-place.gold .share-step {
+  height: 160px;
+  background: linear-gradient(180deg, #ffe99c 0%, #f6c445 48%, #d9981c 100%);
+}
+.share-place.silver .share-step {
+  height: 120px;
+  background: linear-gradient(180deg, #f7f9fc 0%, #d3d9e3 48%, #a3acbb 100%);
+}
+.share-place.bronze .share-step {
+  height: 90px;
+  background: linear-gradient(180deg, #ffd6b0 0%, #e49b60 48%, #b86b35 100%);
+}
+.share-foot {
+  margin-top: 36px;
+  font-size: 28px;
+  font-weight: 700;
+  opacity: 0.7;
 }
