@@ -210,6 +210,12 @@ interface State {
   /** Pick an image; still photos get their background cut out when `cutout` is on (the model downloads first). */
   addSticker(cutout: boolean): Promise<void>
   removeSticker(id: string): Promise<void>
+  /** A photo becoming a sticker (the cut-out in progress, then the result), shown by the sticker picker's maker. */
+  stickerMaker?: StickerMaker
+  /** Close the maker; the sticker stays in "Mine". */
+  dismissStickerMaker(): void
+  /** The cut went wrong: make the sticker again from the whole photo, no cut-out. */
+  remakeStickerWhole(): Promise<void>
   addTodo(input: { conversationId?: string; messageId?: string; text: string; due?: number }): Promise<void>
   updateTodo(id: string, patch: { text?: string; due?: number; done?: boolean }): Promise<void>
   removeTodo(id: string): Promise<void>
@@ -386,6 +392,22 @@ function upsertMessage(list: Message[] | undefined, message: Message, replaceId?
   }
   return [...base, message].sort((a, b) => a.sentAt - b.sentAt)
 }
+
+/** A photo becoming a sticker: cutting (the scan plays), done (the sticker lifts off), or error. */
+export interface StickerMaker {
+  phase: 'cutting' | 'done' | 'error'
+  /** The photo, small, as a data URL. */
+  preview: string
+  path: string
+  startedAt: number
+  sticker?: CustomSticker
+  error?: string
+  /** Made again from the whole photo (no cut-out). */
+  whole?: boolean
+}
+
+/** The scan always plays at least this long, even when the cut-out is quicker. */
+const MAKER_MIN_SCAN_MS = 1600
 
 export const useStore = create<State>((set, get) => ({
   ready: false,
@@ -1048,6 +1070,31 @@ export const useStore = create<State>((set, get) => ({
   async addSticker(cutout) {
     const picked = await window.unison.stickers.pick()
     if (!picked) return
+    if (cutout && !picked.animated) {
+      // The scan plays while the background is cut out, then the sticker lifts off the photo.
+      const make = async (): Promise<void> => {
+        const startedAt = Date.now()
+        set({ stickerMaker: { phase: 'cutting', preview: picked.preview ?? '', path: picked.path, startedAt } })
+        try {
+          const sticker = await window.unison.stickers.add(picked.path, true)
+          // A quick cut still gets a moment of scanning, so the reveal never feels like a glitch.
+          const rest = MAKER_MIN_SCAN_MS - (Date.now() - startedAt)
+          if (rest > 0) await new Promise((r) => setTimeout(r, rest))
+          set({ customStickers: [sticker, ...get().customStickers] })
+          if (get().stickerMaker?.startedAt !== startedAt) return
+          set({ stickerMaker: { ...get().stickerMaker!, phase: 'done', sticker } })
+          // Closed the picker meanwhile: the result waits there; a toast says it is ready.
+          if (!document.querySelector('.sticker-maker')) get().showToast(translate(get().settings.language, 'makerReadyToast'))
+        } catch (err) {
+          if (get().stickerMaker?.startedAt !== startedAt) return
+          set({ stickerMaker: { ...get().stickerMaker!, phase: 'error', error: cleanError(err) } })
+        }
+      }
+      // The cut-out model may still need downloading: the AI setup sheet takes over and calls back.
+      const { useAi } = await import('./aiStore')
+      await useAi.getState().withModel('cutout', make)
+      return
+    }
     const add = async (): Promise<void> => {
       try {
         const sticker = await window.unison.stickers.add(picked.path, cutout && !picked.animated)
@@ -1056,16 +1103,28 @@ export const useStore = create<State>((set, get) => ({
         get().showToast(cleanError(err), 'error')
       }
     }
-    if (cutout && !picked.animated) {
-      // The cut-out model may still need downloading: the AI setup sheet takes over and calls back.
-      const { useAi } = await import('./aiStore')
-      await useAi.getState().withModel('cutout', add)
-    } else await add()
+    await add()
   },
 
   async removeSticker(id) {
     await window.unison.stickers.remove(id)
     set({ customStickers: get().customStickers.filter((s) => s.id !== id) })
+  },
+
+  dismissStickerMaker() {
+    set({ stickerMaker: undefined })
+  },
+
+  async remakeStickerWhole() {
+    const maker = get().stickerMaker
+    if (!maker) return
+    try {
+      const sticker = await window.unison.stickers.add(maker.path, false)
+      if (maker.sticker) await get().removeSticker(maker.sticker.id)
+      set({ customStickers: [sticker, ...get().customStickers.filter((s) => s.id !== sticker.id)], stickerMaker: { ...maker, phase: 'done', sticker, whole: true } })
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
   },
 
   async addTodo(input) {

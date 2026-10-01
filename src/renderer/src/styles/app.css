@@ -7722,6 +7722,216 @@ button.moment-card:hover {
   color: var(--text-tertiary);
 }
 
+/* ================================================================== sticker maker
+   A photo becoming a sticker, over the "Mine" tab: a soft scan while the background is cut out, then the sticker
+   lifts off the photo (the photo dissolves into specks, a glow follows the sticker's own edge) and flies to its cell. */
+.sticker-maker {
+  position: absolute;
+  inset: 49px 0 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px 14px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  animation: maker-in var(--duration-base) var(--ease-smooth);
+}
+/* opaque like the other popovers (nothing of the grid shows through), on its own layer so it can fade for the flight */
+.sticker-maker::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-window);
+  transition: opacity 0.3s var(--ease-smooth);
+}
+.maker-stage {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  display: grid;
+  place-items: center;
+}
+.maker-stage > * {
+  grid-area: 1 / 1;
+}
+.maker-photo {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+}
+.maker-photo img {
+  display: block;
+  max-width: 200px;
+  max-height: 200px;
+}
+.sticker-maker.cutting .maker-photo {
+  animation: maker-breathe 2.4s ease-in-out infinite;
+}
+.sticker-maker.cutting .maker-photo img {
+  filter: saturate(0.85) brightness(0.96);
+}
+/* the scan: a soft band of light in the accent colour, gliding up and down */
+.maker-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: -45%;
+  height: 45%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--accent) 16%, transparent) 62%,
+    color-mix(in srgb, var(--accent) 38%, #ffffff) 97%,
+    transparent
+  );
+  mix-blend-mode: screen;
+  animation: maker-scan 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+.maker-twinkles i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+  animation: maker-twinkle 2s ease-in-out infinite;
+}
+.maker-twinkles i:nth-child(1) { top: -2px; left: 6px; }
+.maker-twinkles i:nth-child(2) { top: 18%; right: -4px; width: 9px; height: 9px; animation-delay: 0.5s; }
+.maker-twinkles i:nth-child(3) { bottom: 4px; right: 10px; animation-delay: 1s; }
+.maker-twinkles i:nth-child(4) { bottom: 22%; left: -6px; width: 8px; height: 8px; animation-delay: 1.5s; }
+/* done: the photo melts away, specks fly off, the sticker lifts and glows along its edge */
+.sticker-maker.done .maker-photo {
+  animation: maker-dissolve 0.7s var(--ease-smooth) forwards;
+}
+.maker-specks {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+.maker-specks i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--s);
+  height: var(--s);
+  margin: calc(var(--s) / -2);
+  border-radius: 50%;
+  background: var(--c);
+  opacity: 0;
+  animation: maker-speck 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) forwards;
+}
+.maker-result {
+  max-width: 184px;
+  max-height: 184px;
+  animation:
+    maker-lift 1s var(--ease-spring) 0.2s both,
+    maker-glow 1.5s ease-out 0.3s both;
+}
+.maker-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+.maker-mito {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+}
+.maker-caption {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  animation: maker-caption var(--duration-base) var(--ease-smooth);
+}
+.sticker-maker.done .maker-caption {
+  color: var(--text-primary);
+}
+.sticker-maker.error .maker-caption {
+  color: var(--danger);
+  max-width: 240px;
+}
+.maker-actions {
+  display: flex;
+  gap: 6px;
+  animation: maker-caption 0.4s var(--ease-smooth) 0.6s both;
+}
+/* "Done": the sheet clears so the sticker can fly to its cell, which pops as it lands */
+.sticker-maker.leaving {
+  pointer-events: none;
+}
+.sticker-maker.leaving::before {
+  opacity: 0;
+}
+.sticker-maker.leaving > :not(.maker-stage) {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.sticker-cell.mine.arriving {
+  visibility: hidden;
+}
+.sticker-cell.mine.landed {
+  animation: maker-land 0.55s var(--ease-spring);
+}
+@keyframes maker-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes maker-breathe {
+  50% { box-shadow: var(--shadow-md), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+@keyframes maker-scan {
+  to { top: 100%; }
+}
+@keyframes maker-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  50% { opacity: 0.9; transform: scale(1) rotate(45deg); }
+}
+@keyframes maker-dissolve {
+  to { opacity: 0; filter: blur(10px); transform: scale(1.06); }
+}
+@keyframes maker-speck {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(0.3); }
+}
+@keyframes maker-lift {
+  0% { opacity: 0; transform: scale(0.9); }
+  45% { opacity: 1; transform: translateY(-10px) scale(1.07) rotate(-2.5deg); }
+  72% { transform: translateY(1px) scale(0.98) rotate(1deg); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes maker-glow {
+  0% { filter: drop-shadow(0 0 0 transparent); }
+  35% { filter: drop-shadow(0 0 3px #ffffff) drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 75%, transparent)); }
+  100% { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.16)); }
+}
+@keyframes maker-caption {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@keyframes maker-land {
+  0% { transform: scale(0.7); }
+  60% { transform: scale(1.14); }
+  100% { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sticker-maker,
+  .sticker-maker * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .maker-scan,
+  .maker-twinkles,
+  .maker-specks {
+    display: none;
+  }
+}
+
 /* GIPHY stickers inside the sticker sheet: search and chips on top, see-through stickers in a 4-column grid */
 .sticker-sheet .giphy-top {
   padding-top: 8px;

@@ -12,6 +12,7 @@ const AI_MODELS_CUTOUT_MB = AI_MODELS.cutout.megabytes
 import { useKeepInside } from '../popover'
 import { LogoMark } from './Logo'
 import { GiphyStickers } from './GiphyStickers'
+import { StickerMaker } from './StickerMaker'
 
 const RECENT_KEY = 'unison.recentStickers'
 const MITO_NAME = 'Mito'
@@ -218,6 +219,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
   const loadStickers = useStore((s) => s.loadStickers)
   const addSticker = useStore((s) => s.addSticker)
   const removeSticker = useStore((s) => s.removeSticker)
+  const making = useStore((s) => s.stickerMaker)
   const cutoutReady = useAi((s) => !!s.status?.cutout.ready)
   const [cutout, setCutout] = useState(true)
   const [adding, setAdding] = useState(false)
@@ -311,7 +313,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
         <div className="sticker-grid scroll">
           {tab === 'mine' &&
             mine.map((s) => (
-              <span key={s.id} className="sticker-cell mine">
+              <span key={s.id} className={`sticker-cell mine ${making?.sticker?.id === s.id ? 'arriving' : ''}`} data-sticker={s.id}>
                 <button className="sticker-cell-img" onClick={() => onPick(`custom:${s.id}`)} title={s.name} aria-label={s.name}>
                   <img src={s.url} alt={s.name} draggable={false} />
                 </button>
@@ -327,6 +329,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
           ))}
         </div>
       )}
+      {tab === 'mine' && <StickerMaker onSend={onPick} />}
     </div>
   )
 }

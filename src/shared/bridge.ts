@@ -130,7 +130,7 @@ export interface MoshiBridge {
     /** The user's own stickers, image inline as a data URL, newest first. */
     list(): Promise<CustomSticker[]>
     /** Ask for an image file; null when cancelled. */
-    pick(): Promise<{ path: string; animated: boolean; name: string } | null>
+    pick(): Promise<{ path: string; animated: boolean; name: string; preview?: string } | null>
     /** Add it (cut the background out of still images when asked). */
     add(path: string, cutout: boolean): Promise<CustomSticker>
     remove(id: string): Promise<void>
