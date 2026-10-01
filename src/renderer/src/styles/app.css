@@ -1823,7 +1823,6 @@ mark {
   flex-direction: column;
   gap: 2px;
 }
-
 .day-sep {
   align-self: center;
   font-size: var(--text-xs);

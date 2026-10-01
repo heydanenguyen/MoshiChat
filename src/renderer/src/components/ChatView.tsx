@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { isPendingRequest } from '@shared/inbox'
 import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
@@ -151,9 +152,24 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const thread = useThread(conversation.id)
   const stored = thread.messages
   const sentStickers = useStore((s) => s.settings.sentStickers)
-  const rawConversations = useStore((s) => s.conversations)
-  const accounts = useStore((s) => s.accounts)
   const members = conversation.members
+  // Only the chats and accounts this thread shows: subscribing to all of them re-rendered the open thread (and every
+  // bubble in it) whenever any other chat in the app changed.
+  const via = useSendVia(conversation.id)
+  const rawConversations = useStore(
+    useShallow((s) => {
+      const picked: Record<string, Conversation> = {}
+      for (const id of [...(members ?? []), via]) if (s.conversations[id]) picked[id] = s.conversations[id]
+      return picked
+    })
+  )
+  const accounts = useStore(
+    useShallow((s) => {
+      const picked: Record<string, Account> = {}
+      for (const c of [conversation, ...Object.values(rawConversations)]) if (s.accounts[c.accountId]) picked[c.accountId] = s.accounts[c.accountId]
+      return picked
+    })
+  )
   // Our own stickers come back from the platforms as photos: show them as stickers again (per app, for a person).
   const messages = useMemo(() => {
     if (!stored) return stored
@@ -166,7 +182,6 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const hasMore = thread.hasMore
   const typing = useStore((s) => (members ?? [conversation.id]).map((id) => s.typing[id]).find(Boolean))
   // A merged person writes through one of its chats: that chat's account decides what the composer can do.
-  const via = useSendVia(conversation.id)
   const viaConversation = rawConversations[via] ?? conversation
   const account = accounts[viaConversation.accountId]
   const memberOf = useCallback((m: Message): Conversation => rawConversations[m.conversationId] ?? conversation, [rawConversations, conversation])
@@ -177,7 +192,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
     for (const id of memberKey?.split('\n') ?? []) void prefetch(id, false)
   }, [memberKey, prefetch])
   const featuresOf = useCallback(
-    (m: Message): Account['features'] => accounts[memberOf(m).accountId]?.features ?? { reply: false, react: false, attachments: false },
+    (m: Message): Account['features'] => accounts[memberOf(m).accountId]?.features ?? NO_FEATURES,
     [accounts, memberOf]
   )
   const detailsOpen = useStore((s) => s.detailsOpen)
@@ -203,9 +218,12 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const celebrate = useCallback(() => setEffect({ kind: 'birthday', key: `bday-${conversation.id}` }), [setEffect, conversation.id])
 
   const isTyping = !!typing && typing.until > Date.now()
-  const sections = sectionize(messages ?? [])
-  const lastOutgoing = [...(messages ?? [])].reverse().find((m) => m.isOutgoing)
-  const features = account?.features ?? { reply: false, react: false, attachments: false }
+  const sections = useMemo(() => sectionize(messages ?? []), [messages])
+  const lastOutgoing = useMemo(() => {
+    for (let i = (messages?.length ?? 0) - 1; i >= 0; i--) if (messages![i].isOutgoing) return messages![i]
+    return undefined
+  }, [messages])
+  const features = account?.features ?? NO_FEATURES
 
   // Keep the viewport pinned to the newest message unless the user scrolled up.
   useLayoutEffect(() => {
@@ -735,7 +753,25 @@ function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; c
   )
 }
 
-function Bubble({
+/** No account (or an unknown one): nothing can be done; one shared object so memoised bubbles see it unchanged. */
+const NO_FEATURES: Account['features'] = { reply: false, react: false, attachments: false }
+
+/** Saved messages as a set of "chat|message" keys, built once per list (every bubble asks). */
+const savedSets = new WeakMap<object, Set<string>>()
+function savedSetOf(list: Array<{ conversationId: string; messageId: string }> | undefined): Set<string> | undefined {
+  if (!list) return undefined
+  let set = savedSets.get(list)
+  if (!set) {
+    set = new Set(list.map((m) => `${m.conversationId}|${m.messageId}`))
+    savedSets.set(list, set)
+  }
+  return set
+}
+
+/** A bubble re-renders only when its own message (or how it is shown) changes, not for every message in the thread. */
+const Bubble = memo(BubbleView)
+
+function BubbleView({
   message,
   position,
   language,
@@ -755,7 +791,7 @@ function Bubble({
   const startForward = useStore((s) => s.startForward)
   const react = useStore((s) => s.react)
   const toggleSaved = useStore((s) => s.toggleSaved)
-  const saved = useStore((s) => !!s.settings.savedMessages?.some((m) => m.messageId === message.id && m.conversationId === message.conversationId))
+  const saved = useStore((s) => !!savedSetOf(s.settings.savedMessages)?.has(`${message.conversationId}|${message.id}`))
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)

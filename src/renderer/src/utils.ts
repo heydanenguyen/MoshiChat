@@ -2,21 +2,38 @@ import type { Conversation, Language, Message, Platform, SentSticker } from '@sh
 
 const locale = (lang: Language): string => (lang === 'vi' ? 'vi-VN' : 'en-US')
 
+/**
+ * One formatter per language and style, made once: toLocaleTimeString with options builds a new ICU formatter on every
+ * call, and every list row and bubble formats a time on every render.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>()
+function formatter(lang: Language, style: 'time' | 'weekday' | 'dayMonth'): Intl.DateTimeFormat {
+  const key = `${lang}|${style}`
+  let f = formatters.get(key)
+  if (!f) {
+    const options: Intl.DateTimeFormatOptions =
+      style === 'time' ? { hour: '2-digit', minute: '2-digit' } : style === 'weekday' ? { weekday: 'short' } : { day: 'numeric', month: 'numeric' }
+    f = new Intl.DateTimeFormat(locale(lang), options)
+    formatters.set(key, f)
+  }
+  return f
+}
+
 export function formatListTime(ts: number, lang: Language): string {
   const date = new Date(ts)
   const now = new Date()
   const sameDay = date.toDateString() === now.toDateString()
-  if (sameDay) return date.toLocaleTimeString(locale(lang), { hour: '2-digit', minute: '2-digit' })
+  if (sameDay) return formatter(lang, 'time').format(date)
   const yesterday = new Date(now)
   yesterday.setDate(now.getDate() - 1)
   if (date.toDateString() === yesterday.toDateString()) return lang === 'vi' ? 'Hôm qua' : 'Yesterday'
   const week = 6 * 24 * 60 * 60 * 1000
-  if (now.getTime() - ts < week) return date.toLocaleDateString(locale(lang), { weekday: 'short' })
-  return date.toLocaleDateString(locale(lang), { day: 'numeric', month: 'numeric' })
+  if (now.getTime() - ts < week) return formatter(lang, 'weekday').format(date)
+  return formatter(lang, 'dayMonth').format(date)
 }
 
 export function formatTime(ts: number, lang: Language): string {
-  return new Date(ts).toLocaleTimeString(locale(lang), { hour: '2-digit', minute: '2-digit' })
+  return formatter(lang, 'time').format(new Date(ts))
 }
 
 export function formatDayLabel(ts: number, lang: Language): string {
