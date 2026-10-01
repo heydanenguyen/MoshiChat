@@ -69,7 +69,8 @@ export class Storage {
   }
 
   private persist(): Promise<void> {
-    const snapshot = JSON.stringify(this.data, null, 2)
+    // Compact: written whole on every change (settings, accounts), so no indentation to write and parse.
+    const snapshot = JSON.stringify(this.data)
     this.writing = this.writing.then(async () => {
       const tmp = this.file + '.tmp'
       await fs.writeFile(tmp, snapshot, 'utf8')

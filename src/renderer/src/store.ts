@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { CustomSticker, StickerSource } from '@shared/bridge'
+import { shareSettings } from '@shared/settings-share'
 import type { SettingsPage } from './components/SettingsSheet'
 import type {
   Account,
@@ -540,7 +541,7 @@ export const useStore = create<State>((set, get) => ({
           break
         }
         case 'settings:updated':
-          set({ settings: { ...DEFAULT_SETTINGS, ...event.settings } })
+          set({ settings: shareSettings(get().settings, event.settings) })
           break
         case 'lock:state':
           set({ lock: event.state, ...(event.state.locked ? { laterPicker: undefined } : {}) })
@@ -988,7 +989,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   applySettings(settings) {
-    set({ settings: { ...DEFAULT_SETTINGS, ...settings } })
+    set({ settings: shareSettings(get().settings, settings) })
   },
 
   async scheduleMessage(selectedId, text, sendAt) {
@@ -998,7 +999,7 @@ export const useStore = create<State>((set, get) => ({
     const target = sendViaOf(get(), selectedId)
     try {
       const settings = await window.unison.scheduled.add({ conversationId: target, text, sendAt, replyToId: replyTo?.conversationId === target ? replyTo.id : undefined })
-      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, replyTos: { ...get().replyTos, [selectedId]: undefined } })
+      set({ settings: shareSettings(get().settings, settings), replyTos: { ...get().replyTos, [selectedId]: undefined } })
       const when = new Date(sendAt)
       const time = when.toLocaleString(get().settings.language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit', ...(when.toDateString() === new Date().toDateString() ? {} : { weekday: 'short', day: 'numeric', month: 'numeric' }) })
       get().showToast(translate(get().settings.language, 'scheduledToast', { time }))
@@ -1009,7 +1010,7 @@ export const useStore = create<State>((set, get) => ({
 
   async setSettings(patch) {
     const settings = await window.unison.settings.set(patch)
-    set({ settings: { ...DEFAULT_SETTINGS, ...settings } })
+    set({ settings: shareSettings(get().settings, settings) })
   },
 
   async toggleTag(conversationId, tag) {
@@ -1516,7 +1517,7 @@ export const useStore = create<State>((set, get) => ({
   async removeAccount(accountId) {
     await window.unison.accounts.remove(accountId)
     // Main drops that account's tags, pins, nicknames and saved messages; pick up the cleaned settings.
-    set({ settings: { ...DEFAULT_SETTINGS, ...(await window.unison.settings.get()) } })
+    set({ settings: shareSettings(get().settings, await window.unison.settings.get()) })
   },
 
   async reconnect(accountId) {
