@@ -131,7 +131,7 @@ export function StickerMaker({ onSend }: { onSend(id: string): void }): JSX.Elem
           >
             {t('makerSend')}
           </button>
-          {!maker.whole && (
+          {!maker.whole && !maker.recut && (
             <button
               className="btn small"
               disabled={busy}

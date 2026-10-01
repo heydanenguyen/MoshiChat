@@ -66,7 +66,11 @@ const bridge: MoshiBridge = {
   stickers: {
     list: () => ipcRenderer.invoke(IPC.stickersList),
     pick: () => ipcRenderer.invoke(IPC.stickersPick),
-    add: (path, cutout) => ipcRenderer.invoke(IPC.stickersAdd, path, cutout),
+    add: (path, cutout, name) => ipcRenderer.invoke(IPC.stickersAdd, path, cutout, name),
+    fromFile: (path) => ipcRenderer.invoke(IPC.stickersFromFile, path),
+    fromBytes: (bytes, mime) => ipcRenderer.invoke(IPC.stickersFromBytes, bytes, mime),
+    source: (id) => ipcRenderer.invoke(IPC.stickersSource, id),
+    rename: (id, name) => ipcRenderer.invoke(IPC.stickersRename, id, name),
     remove: (id) => ipcRenderer.invoke(IPC.stickersRemove, id)
   },
   backup: {

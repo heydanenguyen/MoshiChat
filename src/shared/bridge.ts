@@ -2,6 +2,15 @@ import type { AiKind, AiStatus, SpeakLang } from './ai'
 import type { ChatLine } from './ai-prompts'
 import type { InsightRecord, ShareCardData } from './insights'
 
+/** A picture about to become a sticker (see main/stickers.ts): picked, dropped, pasted, or an existing sticker. */
+export interface StickerSource {
+  path: string
+  animated: boolean
+  name: string
+  /** Small preview for the sticker maker (still pictures only). */
+  preview?: string
+}
+
 /** A sticker the user made (see main/stickers.ts). */
 export interface CustomSticker {
   id: string
@@ -10,6 +19,8 @@ export interface CustomSticker {
   animated: boolean
   createdAt: number
   url: string
+  /** Its background was cut out. */
+  cut?: boolean
 }
 import type {
   Account,
@@ -130,9 +141,16 @@ export interface MoshiBridge {
     /** The user's own stickers, image inline as a data URL, newest first. */
     list(): Promise<CustomSticker[]>
     /** Ask for an image file; null when cancelled. */
-    pick(): Promise<{ path: string; animated: boolean; name: string; preview?: string } | null>
+    pick(): Promise<StickerSource | null>
+    /** A dropped picture file as a source (rejects anything that is not a picture). */
+    fromFile(path: string): Promise<StickerSource>
+    /** A pasted picture as a source. */
+    fromBytes(bytes: Uint8Array, mime: string): Promise<StickerSource>
+    /** One of your stickers as a source (to make it again with the background cut out). */
+    source(id: string): Promise<StickerSource>
+    rename(id: string, name: string): Promise<void>
     /** Add it (cut the background out of still images when asked). */
-    add(path: string, cutout: boolean): Promise<CustomSticker>
+    add(path: string, cutout: boolean, name?: string): Promise<CustomSticker>
     remove(id: string): Promise<void>
   }
   backup: {
@@ -325,6 +343,10 @@ export const IPC = {
   stickersPick: 'stickers:pick',
   stickersAdd: 'stickers:add',
   stickersRemove: 'stickers:remove',
+  stickersFromFile: 'stickers:fromFile',
+  stickersFromBytes: 'stickers:fromBytes',
+  stickersSource: 'stickers:source',
+  stickersRename: 'stickers:rename',
   appGifSearch: 'app:gifSearch',
   appStickerSearch: 'app:stickerSearch',
   appGif: 'app:gif',

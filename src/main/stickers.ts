@@ -17,6 +17,17 @@ export interface CustomSticker {
   mime: string
   animated: boolean
   createdAt: number
+  /** Its background was cut out (so "cut it out" is not offered again). */
+  cut?: boolean
+}
+
+/** A picture about to become a sticker: from the file dialog, a drop, a paste, or an existing sticker. */
+export interface StickerSource {
+  path: string
+  animated: boolean
+  name: string
+  /** Small preview for the sticker maker (still pictures only). */
+  preview?: string
 }
 
 const MAX_SIDE = 512
@@ -59,13 +70,18 @@ export async function listStickers(): Promise<Array<CustomSticker & { url: strin
  * Ask for an image; says whether it is animated (kept as is) or still (cut out and resized). Still ones come with a
  * small preview, so the sticker maker can show the photo while the background is being cut out.
  */
-export async function pickStickerSource(window: BrowserWindow | undefined): Promise<{ path: string; animated: boolean; name: string; preview?: string } | null> {
+export async function pickStickerSource(window: BrowserWindow | undefined): Promise<StickerSource | null> {
   const result = await dialog.showOpenDialog(window!, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'apng'] }]
   })
   if (result.canceled || !result.filePaths[0]) return null
-  const path = result.filePaths[0]
+  return describeSource(result.filePaths[0])
+}
+
+/** A picture file (dropped on the sticker panel, or picked) as a sticker source; rejects anything that is not one. */
+export async function describeSource(path: string): Promise<StickerSource> {
+  if (!/\.(png|jpe?g|webp|gif|apng|bmp|avif|heic|tiff?)$/i.test(path)) throw new Error('Only pictures can become stickers')
   const meta = await sharp(path, { animated: true }).metadata()
   const animated = (meta.pages ?? 1) > 1
   const preview = animated ? undefined : dataUrl('image/jpeg', await sharp(path).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer())
@@ -121,10 +137,10 @@ export async function stickerEdge(png: Buffer): Promise<Buffer> {
  * Add a sticker from an image file. Still images are fitted into 512×512 PNG (after the optional cutout);
  * animated ones are copied unchanged so they keep moving.
  */
-export async function addSticker(path: string, cutout?: (png: Buffer) => Promise<Buffer>): Promise<CustomSticker & { url: string }> {
+export async function addSticker(path: string, cutout?: (png: Buffer) => Promise<Buffer>, named?: string): Promise<CustomSticker & { url: string }> {
   await mkdir(dir(), { recursive: true })
   const id = randomUUID().slice(0, 12)
-  const name = basename(path, extname(path)).slice(0, 40)
+  const name = (named || basename(path, extname(path))).slice(0, 40)
   const meta = await sharp(path, { animated: true }).metadata()
   const animated = (meta.pages ?? 1) > 1
   let sticker: CustomSticker
@@ -143,11 +159,36 @@ export async function addSticker(path: string, cutout?: (png: Buffer) => Promise
     await writeFile(join(dir(), file), png)
     // A copy on white for platforms that flatten transparency, like the built-in pack.
     await writeFile(join(dir(), `${id}-white.png`), await sharp(png).flatten({ background: '#ffffff' }).png().toBuffer())
-    sticker = { id, name, file, mime: 'image/png', animated: false, createdAt: Date.now() }
+    sticker = { id, name, file, mime: 'image/png', animated: false, createdAt: Date.now(), cut: !!cutout || undefined }
   }
   const list = await readIndex()
   await writeIndex([sticker, ...list])
   return { ...sticker, url: dataUrl(sticker.mime, await readFile(join(dir(), sticker.file))) }
+}
+
+/** A pasted picture (a screenshot, an image copied from a page) saved where a dropped file would be, as a source. */
+export async function sourceFromBytes(bytes: Uint8Array, mime: string): Promise<StickerSource> {
+  if (bytes.length > 40 * 1024 * 1024) throw new Error('This picture is too large')
+  const ext = mime === 'image/gif' ? 'gif' : mime === 'image/webp' ? 'webp' : mime === 'image/jpeg' ? 'jpg' : 'png'
+  const folder = join(app.getPath('temp'), 'moshi-sticker-paste')
+  await mkdir(folder, { recursive: true })
+  const path = join(folder, `pasted-${Date.now()}.${ext}`)
+  await writeFile(path, bytes)
+  // Named for what it is, not after the temporary file.
+  return { ...(await describeSource(path)), name: 'Sticker' }
+}
+
+/** One of your stickers as a source, to make it again with the background cut out. */
+export async function stickerSource(id: string): Promise<StickerSource> {
+  const sticker = (await readIndex()).find((s) => s.id === id)
+  if (!sticker) throw new Error('Unknown sticker')
+  return { ...(await describeSource(join(dir(), sticker.file))), name: sticker.name }
+}
+
+export async function renameSticker(id: string, name: string): Promise<void> {
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 40)
+  if (!clean) return
+  await writeIndex((await readIndex()).map((s) => (s.id === id ? { ...s, name: clean } : s)))
 }
 
 export async function removeSticker(id: string): Promise<void> {

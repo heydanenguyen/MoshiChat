@@ -26,7 +26,7 @@ import { AppLock } from './lock'
 import { previewOf, prunePreviews } from './media/preview'
 import { imageTypeOf } from './media/image-type'
 import { givenName } from '@shared/extras'
-import { addSticker, customStickerFile, listStickers, pickStickerSource, removeSticker } from './stickers'
+import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource } from './stickers'
 import { AiService, readMedia } from './ai/service'
 import type { AiKind, SpeakLang } from '@shared/ai'
 import type { ShareCardData } from '@shared/insights'
@@ -1412,9 +1412,13 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.stickersList, () => listStickers())
   ipcMain.handle(IPC.stickersPick, () => pickStickerSource(window))
-  ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean) =>
-    addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined)
+  ipcMain.handle(IPC.stickersAdd, (_e, path: string, cutout: boolean, name?: string) =>
+    addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined, typeof name === 'string' ? name : undefined)
   )
+  ipcMain.handle(IPC.stickersFromFile, (_e, path: string) => describeSource(String(path)))
+  ipcMain.handle(IPC.stickersFromBytes, (_e, bytes: Uint8Array, mime: string) => sourceFromBytes(bytes, String(mime ?? '')))
+  ipcMain.handle(IPC.stickersSource, (_e, id: string) => stickerSource(String(id)))
+  ipcMain.handle(IPC.stickersRename, (_e, id: string, name: string) => renameSticker(String(id), String(name ?? '')))
   ipcMain.handle(IPC.stickersRemove, (_e, id: string) => removeSticker(String(id)))
   ipcMain.handle(IPC.appLegal, (_e, name: string) => {
     const file = LEGAL_DOCS[name as keyof typeof LEGAL_DOCS]

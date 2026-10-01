@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { CustomSticker } from '@shared/bridge'
+import type { CustomSticker, StickerSource } from '@shared/bridge'
 import type { SettingsPage } from './components/SettingsSheet'
 import type {
   Account,
@@ -209,6 +209,14 @@ interface State {
   loadStickers(): Promise<void>
   /** Pick an image; still photos get their background cut out when `cutout` is on (the model downloads first). */
   addSticker(cutout: boolean): Promise<void>
+  /**
+   * Make a sticker from a picture (picked, dropped or pasted). A still one with `cutout` goes through the sticker maker;
+   * `replaces`: a sticker this one takes the place of (made again with its background cut out).
+   */
+  makeSticker(source: StickerSource, cutout: boolean, replaces?: string): Promise<void>
+  renameSticker(id: string, name: string): Promise<void>
+  /** Cut the background out of one of your stickers (made again in its place). */
+  recutSticker(id: string): Promise<void>
   removeSticker(id: string): Promise<void>
   /** A photo becoming a sticker (the cut-out in progress, then the result), shown by the sticker picker's maker. */
   stickerMaker?: StickerMaker
@@ -404,6 +412,8 @@ export interface StickerMaker {
   error?: string
   /** Made again from the whole photo (no cut-out). */
   whole?: boolean
+  /** One of your stickers being cut out again (its old picture is gone, so there is no whole photo to go back to). */
+  recut?: boolean
 }
 
 /** The scan always plays at least this long, even when the cut-out is quicker. */
@@ -1069,14 +1079,20 @@ export const useStore = create<State>((set, get) => ({
 
   async addSticker(cutout) {
     const picked = await window.unison.stickers.pick()
-    if (!picked) return
+    if (picked) await get().makeSticker(picked, cutout)
+  },
+
+  async makeSticker(picked, cutout, replaces) {
+    // One at a time: a second picture waits for the maker to be closed.
+    if (get().stickerMaker?.phase === 'cutting') return
     if (cutout && !picked.animated) {
       // The scan plays while the background is cut out, then the sticker lifts off the photo.
       const make = async (): Promise<void> => {
         const startedAt = Date.now()
-        set({ stickerMaker: { phase: 'cutting', preview: picked.preview ?? '', path: picked.path, startedAt } })
+        set({ stickerMaker: { phase: 'cutting', preview: picked.preview ?? '', path: picked.path, startedAt, recut: !!replaces || undefined } })
         try {
-          const sticker = await window.unison.stickers.add(picked.path, true)
+          const sticker = await window.unison.stickers.add(picked.path, true, picked.name)
+          if (replaces) await get().removeSticker(replaces)
           // A quick cut still gets a moment of scanning, so the reveal never feels like a glitch.
           const rest = MAKER_MIN_SCAN_MS - (Date.now() - startedAt)
           if (rest > 0) await new Promise((r) => setTimeout(r, rest))
@@ -1095,15 +1111,27 @@ export const useStore = create<State>((set, get) => ({
       await useAi.getState().withModel('cutout', make)
       return
     }
-    const add = async (): Promise<void> => {
-      try {
-        const sticker = await window.unison.stickers.add(picked.path, cutout && !picked.animated)
-        set({ customStickers: [sticker, ...get().customStickers] })
-      } catch (err) {
-        get().showToast(cleanError(err), 'error')
-      }
+    try {
+      const sticker = await window.unison.stickers.add(picked.path, false, picked.name)
+      set({ customStickers: [sticker, ...get().customStickers] })
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
     }
-    await add()
+  },
+
+  async renameSticker(id, name) {
+    const clean = name.replace(/\s+/g, ' ').trim().slice(0, 40)
+    if (!clean) return
+    await window.unison.stickers.rename(id, clean)
+    set({ customStickers: get().customStickers.map((s) => (s.id === id ? { ...s, name: clean } : s)) })
+  },
+
+  async recutSticker(id) {
+    try {
+      await get().makeSticker(await window.unison.stickers.source(id), true, id)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
   },
 
   async removeSticker(id) {
