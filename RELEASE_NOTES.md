@@ -1,32 +1,41 @@
-## Moshi 0.3.1
+## Moshi 0.4.0
 
-Bản sửa lỗi quan trọng cho 0.3.0, nên cập nhật ngay. Từ 0.3.0, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
+Bản tập trung vào **nhẹ, mượt và an toàn**. Không tính năng nào bị bỏ; từ 0.3.x, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
 
-### Messenger
-- **Không còn tự đánh dấu "đã xem":** trước đây mỗi lần mở Moshi, mọi cuộc trò chuyện Messenger bị đánh dấu đã đọc, nên bạn bè thấy "đã xem" dù bạn chưa mở. Giờ chỉ khi bạn đọc (và theo công tắc gửi trạng thái đã xem).
-- **Không còn tin nhắn và thông báo bị nhân đôi:** ngắt kết nối Messenger giờ ngắt thật; xoá tài khoản hay đăng nhập lại không còn để lại kết nối cũ chạy song song.
+### Mượt hơn với chat dài và nhiều hội thoại
+- **Khung chat chỉ vẽ những tin đang thấy:** với cuộc trò chuyện 2.000 tin, mở chat từ khoảng 5 giây xuống dưới 0,1 giây, tin mới đến không còn làm khựng. Mở chat luôn ở tin mới nhất, cuộn lên đọc thì tin mới không kéo bạn xuống.
+- **Ít tốn bộ nhớ khi để Moshi chạy cả ngày:** các cuộc trò chuyện lâu không mở được giải phóng (mở lại thì tải lại ngay), sticker của bạn không còn nằm trong bộ nhớ dưới dạng chuỗi lớn.
+- **Khởi động nhẹ hơn:** Cài đặt, thêm tài khoản, sao lưu, chỉnh ảnh… chỉ tải khi bạn mở lần đầu.
+- **Ít ghi đĩa hơn:** dữ liệu Thân thiết và bộ nhớ đệm Zalo được lưu thưa hơn thay vì sau mỗi tin nhắn; tệp tạm cũ hơn một tuần được tự dọn.
 
-### Nhẹ và mượt hơn
-- Nền phía sau đứng yên ở mọi kiểu giao diện: lúc đang dùng app, CPU giảm từ khoảng nửa nhân xuống dưới 10%.
-- Danh sách hội thoại chỉ vẽ những dòng đang thấy: với hàng nghìn cuộc trò chuyện, mở và cuộn nhanh hơn hàng chục lần, tin mới đến không làm khựng.
-- Khung chat không còn vẽ lại khi một cuộc trò chuyện khác có tin; mỗi tin nhắn chỉ vẽ lại khi chính nó thay đổi.
-- Ghim, lưu trữ, gắn nhãn… chỉ cập nhật đúng phần liên quan thay vì tính lại cả danh sách.
+### Kết nối nền nhẹ hơn
+- **Instagram:** cửa sổ ẩn dùng để nhận tin theo thời gian thực không tải ảnh, video, phông chữ nữa; hộp thư không còn bị tải lại liên tục sau mỗi lượt "đã xem" hay cảm xúc (tối đa mỗi 4 giây), và tạm dừng khi mất mạng.
+- **Telegram:** ngắt kết nối giờ ngắt hẳn, không còn vòng lặp chạy ngầm.
+- **WhatsApp:** mỗi tin mới chỉ cập nhật đúng cuộc trò chuyện đó thay vì gửi lại cả danh sách.
 
 ### An toàn hơn
-- Link trong tin nhắn chỉ mở được nếu là trang web, email hoặc số điện thoại; các loại link có thể chạy chương trình trên máy bị chặn.
-- Moshi chỉ đọc lại tệp trong thư mục của chính nó và không tải gì từ máy bạn hay mạng nội bộ theo yêu cầu của nội dung hiển thị.
-- Cửa sổ chính chạy cô lập (sandbox) và không thể bị chuyển sang trang khác.
+- Chỉ những tệp **bạn tự chọn hoặc kéo vào** mới gửi được; nội dung hiển thị trong app không thể tự gửi tệp khác trên máy.
+- Mọi lệnh nội bộ chỉ được nhận từ chính giao diện Moshi.
+- Ảnh từ Facebook/Instagram chỉ được tải từ máy chủ ảnh của họ, không thể dùng phiên đăng nhập của bạn để mở trang khác.
+- Trên Linux không có kho khoá (keyring), Moshi báo cho bạn biết phiên đăng nhập chưa được mã hoá thật sự.
+
+### Ổn định hơn
+- Một phần giao diện gặp lỗi chỉ hiện thông báo nhỏ và nút thử lại, không làm trắng cả cửa sổ; lỗi trước đây bị bỏ qua im lặng giờ được ghi lại và báo nhẹ.
 
 ### Lưu ý
-- Đã chạy trên Windows với dữ liệu mẫu, cả bản build thật. Các sửa lỗi Messenger được kiểm tra bằng bài kiểm tra tự động mô phỏng thư viện Messenger, chưa thử lại với tài khoản thật.
+- Đã chạy trên Windows với dữ liệu mẫu, cả bản build thật. Các thay đổi cho Instagram, Telegram và WhatsApp được kiểm tra bằng bài kiểm tra tự động, chưa thử lại với tài khoản thật.
+- Khi tải thêm tin cũ ở đầu cuộc trò chuyện, khung nhìn có thể lệch khoảng một bong bóng.
 
 ---
 
 ### English
-An important fix release for 0.3.0; please update. From 0.3.0, Moshi downloads it in the background and only asks you to restart.
+A release about being **lighter, smoother and safer**. Nothing was removed; from 0.3.x, Moshi downloads it in the background and only asks you to restart.
 
-- **Messenger no longer marks everything as seen:** every launch used to mark all Messenger chats read, so friends saw "seen" before you opened anything. Now only reading does (and the read-receipts setting decides).
-- **No more doubled Messenger messages and notifications:** disconnecting really disconnects; removing an account or signing in again no longer leaves the old connection running.
-- **Lighter:** the backdrop stands still in every style (CPU while in use from about half a core to under 10%); the chat list draws only the rows on screen (tens of times faster with thousands of chats); an open chat no longer redraws for other chats' messages; pins, archives and tags update only what they touch.
-- **Safer:** links from messages open only if they are web, mail or phone links; Moshi reads back files only from its own folders and never fetches from this computer or the local network on the page's behalf; the main window is sandboxed and cannot be navigated away.
-- Notes: ran on Windows with sample data, including the real build. The Messenger fixes are covered by automated tests against a stand-in for the Messenger library, not yet re-tried with a real account.
+- **Long chats:** the thread draws only the messages on screen. With 2,000 messages, opening a chat went from about 5 s to under 0.1 s, and new messages no longer stall it. Chats open on the newest message; reading further up, new messages do not pull you down.
+- **Memory over a long day:** chats not opened for a while are let go (they load again when opened); your own stickers no longer sit in memory as large strings.
+- **Startup:** Settings, adding accounts, backup, the photo editor and others load the first time you open them.
+- **Disk:** Close friends data and the Zalo cache are saved less often instead of after every message; temporary files older than a week are cleaned up.
+- **Connections:** Instagram's hidden realtime window no longer loads images, video or fonts, its inbox refreshes at most every 4 s and pauses offline; Telegram disconnects for real; WhatsApp updates only the chat a message is in.
+- **Safety:** only files you picked or dropped can be sent; internal commands answer only Moshi's own interface; Facebook/Instagram images load only from their image servers, never a page through your session; Linux without a keyring is told its sessions are not really encrypted.
+- **Stability:** a part of the window that fails shows a small note and a retry instead of a blank window; errors that used to vanish are logged and shown gently.
+- Notes: ran on Windows with sample data, including the real build. The Instagram, Telegram and WhatsApp changes are covered by automated tests, not yet re-tried with real accounts. Loading older messages at the top of a chat can leave the view about one bubble off.
