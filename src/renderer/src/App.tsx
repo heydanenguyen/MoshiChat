@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { isArchivedNow, useStore, useUnreadCounts } from './store'
 import { translate } from './i18n'
@@ -30,6 +30,62 @@ import { firstNameOf } from './greetings'
 import { AiSetupSheet } from './components/AiParts'
 import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
+
+/*
+ * The panes subscribe to what they show themselves. Memoised (they take no props), they skip the App re-renders that
+ * opening a sheet or the lock causes, and App itself no longer subscribes to the conversations at all: before, every
+ * incoming message re-rendered the whole tree from here.
+ */
+const TitleBarPane = memo(TitleBar)
+const SidebarPane = memo(Sidebar)
+const ConversationListPane = memo(ConversationList)
+const ChatPane = memo(ChatView)
+const DetailsPanePane = memo(DetailsPane)
+
+/** Unread count on the Dock / taskbar icon (0 until the first load, so a stale badge never lingers). */
+function BadgeSync(): null {
+  const ready = useStore((s) => s.ready)
+  const total = useUnreadCounts().total
+  useEffect(() => {
+    window.unison.app.setBadge(ready ? total : 0)
+  }, [ready, total])
+  return null
+}
+
+/** Remember what the launch screen needs next time (settings load after it appears). */
+function SplashPrefsSync(): null {
+  const ready = useStore((s) => s.ready)
+  const logo = useStore((s) => s.settings.logo)
+  const language = useStore((s) => s.settings.language)
+  const accounts = useStore((s) => s.accounts)
+  useEffect(() => {
+    if (ready) writeSplashPrefs({ logo: logo ?? 'buddies', language, name: firstNameOf(Object.values(accounts)) })
+  }, [ready, logo, language, accounts])
+  return null
+}
+
+function Toast(): JSX.Element | null {
+  const toast = useStore((s) => s.toast)
+  if (!toast) return null
+  return (
+    <div key={toast.id} className={`toast ${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
+      {toast.kind === 'error' && <AlertCircle size={16} />}
+      {toast.text}
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            toast.action?.run()
+            useStore.setState({ toast: undefined })
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
+    </div>
+  )
+}
 
 /** Step the whole interface zoom (saved in Settings) and say where it landed. */
 function zoomBy(direction: 1 | -1 | 0): void {
@@ -77,7 +133,6 @@ function runInboxCommand(command: InboxCommand): void {
 
 export default function App(): JSX.Element {
   const ready = useStore((s) => s.ready)
-  const unreadTotal = useUnreadCounts().total
   const init = useStore((s) => s.init)
   const theme = useStore((s) => s.settings.theme)
   const language = useStore((s) => s.settings.language)
@@ -89,7 +144,6 @@ export default function App(): JSX.Element {
   const detailsOpen = useStore((s) => s.detailsOpen)
   const toggleDetails = useStore((s) => s.toggleDetails)
   const selectedId = useStore((s) => s.selectedId)
-  const toast = useStore((s) => s.toast)
   const forwarding = useStore((s) => s.forwarding)
   const lightbox = useStore((s) => s.lightbox)
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
@@ -103,8 +157,6 @@ export default function App(): JSX.Element {
   const font = useStore((s) => s.settings.font)
   const messageShadows = useStore((s) => s.settings.messageShadows)
   const textSize = useStore((s) => s.settings.textSize ?? 'md')
-  const logo = useStore((s) => s.settings.logo)
-  const accounts = useStore((s) => s.accounts)
   const [splash, setSplash] = useState(true)
   const hideSplash = useCallback(() => setSplash(false), [])
 
@@ -202,11 +254,6 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
   }, [mesh, style, darkBase, accent, customAccents, font, messageShadows, textSize])
-
-  // Unread count on the Dock / taskbar icon (0 until the first load, so a stale badge never lingers).
-  useEffect(() => {
-    window.unison.app.setBadge(ready ? unreadTotal : 0)
-  }, [ready, unreadTotal])
 
   // The native menu bar (macOS) sends its shortcuts here.
   useEffect(() => {
@@ -306,11 +353,6 @@ export default function App(): JSX.Element {
     return () => media.removeEventListener('change', apply)
   }, [theme, ready])
 
-  // Remember what the launch screen needs next time (settings load after it appears).
-  useEffect(() => {
-    if (ready) writeSplashPrefs({ logo: logo ?? 'buddies', language, name: firstNameOf(Object.values(accounts)) })
-  }, [ready, logo, language, accounts])
-
   useEffect(() => {
     document.documentElement.lang = language
     document.documentElement.classList.toggle('platform-mac', isMac)
@@ -367,11 +409,13 @@ export default function App(): JSX.Element {
   // One tree for both phases so the launch screen stays mounted while the app appears beneath it.
   return (
     <div className="shell">
+      <BadgeSync />
+      <SplashPrefsSync />
       {splash && <Splash ready={ready} onDone={hideSplash} />}
       {ready && locked && <LockScreen />}
       {ready && (
         <>
-          <TitleBar />
+          <TitleBarPane />
           <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${detailsOpen && selectedId ? 'details-open' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
             <div className="mesh" aria-hidden>
               <span className="mesh-blob b1" />
@@ -380,10 +424,10 @@ export default function App(): JSX.Element {
               <span className="mesh-blob b4" />
               <span className="mesh-blob b5" />
             </div>
-            <Sidebar />
-            <ConversationList />
-            {hasAccounts ? <ChatView /> : <EmptyState kind="welcome" />}
-            {detailsOpen && selectedId ? <DetailsPane /> : <div />}
+            <SidebarPane />
+            <ConversationListPane />
+            {hasAccounts ? <ChatPane /> : <EmptyState kind="welcome" />}
+            {detailsOpen && selectedId ? <DetailsPanePane /> : <div />}
             {/* Mid-width windows float the details over the chat; the scrim closes them (see the responsive rules). */}
             {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => toggleDetails()} />}
 
@@ -402,24 +446,7 @@ export default function App(): JSX.Element {
             {lightbox && <Lightbox {...lightbox} />}
             {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
 
-            {toast && (
-              <div key={toast.id} className={`toast ${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
-                {toast.kind === 'error' && <AlertCircle size={16} />}
-                {toast.text}
-                {toast.action && (
-                  <button
-                    type="button"
-                    className="toast-action"
-                    onClick={() => {
-                      toast.action?.run()
-                      useStore.setState({ toast: undefined })
-                    }}
-                  >
-                    {toast.action.label}
-                  </button>
-                )}
-              </div>
-            )}
+            <Toast />
           </div>
         </>
       )}

@@ -1,7 +1,30 @@
 import { useEffect, useLayoutEffect, useState, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { createPortal } from 'react-dom'
 import { useScrollFade } from '../scrollFade'
-import { AlarmClock, AlarmClockOff, Archive, ArchiveRestore, AtSign, BellOff, BellRing, CheckCheck, ChevronLeft, ChevronRight, CircleDot, Columns2, EyeOff, MoreHorizontal, Pin, PinOff, Search, Link2, SquarePen, UserRoundPlus, X } from 'lucide-react'
+import {
+  AlarmClock,
+  AlarmClockOff,
+  Archive,
+  ArchiveRestore,
+  AtSign,
+  BellOff,
+  BellRing,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  Columns2,
+  EyeOff,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Search,
+  Link2,
+  SquarePen,
+  UserRoundPlus,
+  X
+} from 'lucide-react'
 import { PLATFORMS, type Conversation, type Platform } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
 import { PlatformIcon } from './PlatformIcon'
@@ -80,6 +103,10 @@ export function ConversationList(): JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   useScrollFade(listRef)
+  // Only the rows on screen (and a few around them) exist: with a few thousand chats the list used to hold every row,
+  // tens of thousands of nodes, and re-rendered them all for each incoming message.
+  const rowsTop = useRef<HTMLDivElement>(null)
+  const [rowsOffset, setRowsOffset] = useState(0)
   const hidden = useStore((s) => s.settings.hidden)
   const hideConversation = useStore((s) => s.hideConversation)
   /**
@@ -90,6 +117,20 @@ export function ConversationList(): JSX.Element {
     const r = el.getBoundingClientRect()
     setMenu((m) => (m?.conversationId === conversationId ? undefined : { conversationId, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4 }))
   }
+  const virtualizer = useVirtualizer({
+    count: conversations.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 68,
+    overscan: 8,
+    // What sits above the rows in the same scroller (the requests row, a filter note) shifts them down.
+    scrollMargin: rowsOffset,
+    getItemKey: (i) => conversations[i]?.id ?? i
+  })
+  // Measured again whenever what sits above the rows can change.
+  useLayoutEffect(() => {
+    const top = rowsTop.current?.offsetTop ?? 0
+    if (top !== rowsOffset) setRowsOffset(top)
+  }, [rowsOffset, requestCount, listView, quickFilter, search, conversations.length])
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
   const mutedChat = (c: Conversation): boolean => isChatMuted({ muted, tags }, c)
@@ -141,15 +182,25 @@ export function ConversationList(): JSX.Element {
   // Why the list is empty, if it is: nothing found, an empty archive, a chip with nothing in it (the inbox has
   // chats), everything archived, or no chats at all (the usual "no conversations" note).
   const empty =
-    conversations.length > 0 ? undefined
-    : searching ? (visibleHits.length === 0 ? 'no-results' : undefined)
-    : listView === 'archive' ? 'archive'
-    : listView === 'requests' ? 'requests'
-    : listView === 'snoozed' ? 'snoozed'
-    : counts.all > 0 && quickFilter !== 'all' ? 'chip'
-    : archivedCount > 0 ? 'inbox-zero'
-    : requestCount > 0 ? undefined // only requests so far: the Requests row says it all
-    : 'no-chats'
+    conversations.length > 0
+      ? undefined
+      : searching
+        ? visibleHits.length === 0
+          ? 'no-results'
+          : undefined
+        : listView === 'archive'
+          ? 'archive'
+          : listView === 'requests'
+            ? 'requests'
+            : listView === 'snoozed'
+              ? 'snoozed'
+              : counts.all > 0 && quickFilter !== 'all'
+                ? 'chip'
+                : archivedCount > 0
+                  ? 'inbox-zero'
+                  : requestCount > 0
+                    ? undefined // only requests so far: the Requests row says it all
+                    : 'no-chats'
 
   return (
     <section className="list-col">
@@ -214,13 +265,7 @@ export function ConversationList(): JSX.Element {
         .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
         .filter((a) => filter === 'all' || filter === a.platform || filter === `account:${a.id}`)
         .map((a) => (
-          <ReconnectBanner
-            key={a.id}
-            accountId={a.id}
-            status={a.status}
-            reason={a.error}
-            label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`}
-          />
+          <ReconnectBanner key={a.id} accountId={a.id} status={a.status} reason={a.error} label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`} />
         ))}
       <div className="conv-list scroll edge-fade" ref={listRef}>
         {empty === 'chip' && quickFilter !== 'all' && <QuickFilterEmpty filter={quickFilter} />}
@@ -250,152 +295,157 @@ export function ConversationList(): JSX.Element {
           </div>
         )}
         {searching && conversations.length > 0 && <div className="conv-group-label">{t('conversationsSection')}</div>}
-        {conversations.map((c) => {
-          const isTyping = typing[c.id] && typing[c.id].until > Date.now()
-          const preview = c.lastMessage
-          const prefix =
-            preview && !isTyping && (preview.isOutgoing || c.isGroup) ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: ` : ''
-          const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
-          const pinned = isPinned(c, pins)
-          const unread = isUnread(c, markedUnread)
-          const now = Date.now()
-          const snoozeEntry = snoozed?.[c.id]
-          const follow = followState(followUps?.[c.id], now)
-          // A merged person: the badge shows the app of the newest message, the title lists every app.
-          const memberChats = c.members?.map((id) => rawConversations[id]).filter((m): m is Conversation => !!m)
-          const merged = !!memberChats && memberChats.length > 1
-          const latestApp = memberChats?.find((m) => m.lastMessage && m.lastMessage.id === c.lastMessage?.id)?.platform ?? c.platform
-          return (
-            <button
-              key={c.id}
-              className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${unread ? 'unread' : ''} ${mutedChat(c) ? 'muted' : ''}`}
-              onClick={(e) => (canSplit && (e.metaKey || e.ctrlKey) ? openBeside(c.id) : select(c.id))}
-              draggable={canSplit}
-              onDragStart={(e) => {
-                e.dataTransfer.setData(CONVERSATION_DRAG, c.id)
-                e.dataTransfer.effectAllowed = 'move'
-              }}
-              onMouseEnter={() => {
-                // Resting on a chat for a moment starts loading it, so opening feels instant.
-                if (hoverTimer.current) clearTimeout(hoverTimer.current)
-                hoverTimer.current = setTimeout(() => void prefetch(c.id), 250)
-              }}
-              onMouseLeave={() => {
-                if (hoverTimer.current) clearTimeout(hoverTimer.current)
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setMenu({ conversationId: c.id, x: e.clientX, y: e.clientY })
-              }}
-            >
-              <Avatar name={c.title} url={c.avatarUrl} size={44} platform={merged ? latestApp : showBadge ? c.platform : undefined} />
-              <span className="conv-body">
-                <span className="conv-top">
-                  <span className="conv-title">
-                    <span className="conv-name">{c.title}</span>
-                    {merged && (
-                      <span className="conv-apps" title={memberChats!.map((m) => PLATFORMS[m.platform].name).join(' · ')}>
-                        {[...new Set(memberChats!.map((m) => m.platform))].map((p) => (
-                          <PlatformIcon key={p} platform={p} size={12} />
-                        ))}
+        <div ref={rowsTop} className="conv-rows" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((v) => {
+            const c = conversations[v.index]
+            const isTyping = typing[c.id] && typing[c.id].until > Date.now()
+            const preview = c.lastMessage
+            const prefix = preview && !isTyping && (preview.isOutgoing || c.isGroup) ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: ` : ''
+            const convTags = (tags[c.id] ?? []).filter((tag) => tagById[tag])
+            const pinned = isPinned(c, pins)
+            const unread = isUnread(c, markedUnread)
+            const now = Date.now()
+            const snoozeEntry = snoozed?.[c.id]
+            const follow = followState(followUps?.[c.id], now)
+            // A merged person: the badge shows the app of the newest message, the title lists every app.
+            const memberChats = c.members?.map((id) => rawConversations[id]).filter((m): m is Conversation => !!m)
+            const merged = !!memberChats && memberChats.length > 1
+            const latestApp = memberChats?.find((m) => m.lastMessage && m.lastMessage.id === c.lastMessage?.id)?.platform ?? c.platform
+            return (
+              <div
+                key={v.key}
+                data-index={v.index}
+                ref={virtualizer.measureElement}
+                className="conv-row"
+                style={{ transform: `translateY(${v.start - virtualizer.options.scrollMargin}px)` }}
+              >
+                <button
+                  className={`conv-item ${selectedId === c.id ? 'selected' : ''} ${beside.has(c.id) ? 'beside' : ''} ${unread ? 'unread' : ''} ${mutedChat(c) ? 'muted' : ''}`}
+                  onClick={(e) => (canSplit && (e.metaKey || e.ctrlKey) ? openBeside(c.id) : select(c.id))}
+                  draggable={canSplit}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(CONVERSATION_DRAG, c.id)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onMouseEnter={() => {
+                    // Resting on a chat for a moment starts loading it, so opening feels instant.
+                    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+                    hoverTimer.current = setTimeout(() => void prefetch(c.id), 250)
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ conversationId: c.id, x: e.clientX, y: e.clientY })
+                  }}
+                >
+                  <Avatar name={c.title} url={c.avatarUrl} size={44} platform={merged ? latestApp : showBadge ? c.platform : undefined} />
+                  <span className="conv-body">
+                    <span className="conv-top">
+                      <span className="conv-title">
+                        <span className="conv-name">{c.title}</span>
+                        {merged && (
+                          <span className="conv-apps" title={memberChats!.map((m) => PLATFORMS[m.platform].name).join(' · ')}>
+                            {[...new Set(memberChats!.map((m) => m.platform))].map((p) => (
+                              <PlatformIcon key={p} platform={p} size={12} />
+                            ))}
+                          </span>
+                        )}
+                        {isBirthdayToday(overrides?.[c.id]?.birthday) && (
+                          <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
+                            🎂
+                          </span>
+                        )}
+                        {convTags.length > 0 && (
+                          <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
+                            {convTags.slice(0, 2).map((tag) => (
+                              <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
+                            ))}
+                            {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
+                          </span>
+                        )}
                       </span>
-                    )}
-                    {isBirthdayToday(overrides?.[c.id]?.birthday) && (
-                      <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
-                        🎂
+                      <span className="conv-corner">
+                        <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
+                        <span
+                          className={`conv-more ${menu?.conversationId === c.id ? 'open' : ''}`}
+                          role="button"
+                          tabIndex={-1}
+                          title={t('moreActions')}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openMenuAt(e.currentTarget, c.id)
+                          }}
+                        >
+                          <MoreHorizontal size={15} strokeWidth={2.4} />
+                        </span>
                       </span>
-                    )}
-                    {convTags.length > 0 && (
-                      <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
-                        {convTags.slice(0, 2).map((tag) => (
-                          <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
-                        ))}
-                        {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
+                    </span>
+                    <span className="conv-bottom">
+                      {isSnoozed(snoozeEntry, now) ? (
+                        <span className="later-chip snoozed" title={t('laterSnoozedUntil', { time: formatLaterTime(snoozeEntry!.until, language) })}>
+                          <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                          {formatLaterTime(snoozeEntry!.until, language)}
+                        </span>
+                      ) : isWoken(snoozeEntry, now) ? (
+                        <span className="later-chip back">
+                          <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                          {t('laterBack')}
+                        </span>
+                      ) : follow === 'due' ? (
+                        <span className="later-chip due">
+                          <BellRing size={11} strokeWidth={2.6} aria-hidden />
+                          {t('laterNoReply')}
+                        </span>
+                      ) : null}
+                      <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
+                        {!isTyping && drafts[c.id] && selectedId !== c.id ? (
+                          <>
+                            <span className="conv-draft">{t('draft')}</span> {drafts[c.id]}
+                          </>
+                        ) : isTyping ? (
+                          c.isGroup ? (
+                            t('typingIn', { name: typing[c.id].name })
+                          ) : (
+                            t('typing')
+                          )
+                        ) : (
+                          <>
+                            {prefix}
+                            <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
+                          </>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="conv-corner">
-                    <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
-                    <span
-                      className={`conv-more ${menu?.conversationId === c.id ? 'open' : ''}`}
-                      role="button"
-                      tabIndex={-1}
-                      title={t('moreActions')}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openMenuAt(e.currentTarget, c.id)
-                      }}
-                    >
-                      <MoreHorizontal size={15} strokeWidth={2.4} />
+                      <span className="conv-meta">
+                        {follow === 'waiting' && (
+                          <span
+                            className="conv-follow-mark"
+                            role="img"
+                            title={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
+                            aria-label={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
+                          >
+                            <BellRing size={12} strokeWidth={2.2} />
+                          </span>
+                        )}
+                        {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
+                        {mutedChat(c) ? <BellOff size={12} strokeWidth={2.2} /> : mentionsOnly?.[c.id] && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />}
+                        {searching && archivedChat(c) && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
+                        {searching && isPendingRequest(c, acceptedRequests) && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
+                        {c.unreadCount > 0 ? (
+                          <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
+                        ) : (
+                          unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
+                        )}
+                      </span>
                     </span>
                   </span>
-                </span>
-                <span className="conv-bottom">
-                  {isSnoozed(snoozeEntry, now) ? (
-                    <span className="later-chip snoozed" title={t('laterSnoozedUntil', { time: formatLaterTime(snoozeEntry!.until, language) })}>
-                      <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
-                      {formatLaterTime(snoozeEntry!.until, language)}
-                    </span>
-                  ) : isWoken(snoozeEntry, now) ? (
-                    <span className="later-chip back">
-                      <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
-                      {t('laterBack')}
-                    </span>
-                  ) : follow === 'due' ? (
-                    <span className="later-chip due">
-                      <BellRing size={11} strokeWidth={2.6} aria-hidden />
-                      {t('laterNoReply')}
-                    </span>
-                  ) : null}
-                  <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
-                    {!isTyping && drafts[c.id] && selectedId !== c.id ? (
-                      <>
-                        <span className="conv-draft">{t('draft')}</span> {drafts[c.id]}
-                      </>
-                    ) : isTyping ? (
-                      c.isGroup ? (
-                        t('typingIn', { name: typing[c.id].name })
-                      ) : (
-                        t('typing')
-                      )
-                    ) : (
-                      <>
-                        {prefix}
-                        <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
-                      </>
-                    )}
-                  </span>
-                  <span className="conv-meta">
-                    {follow === 'waiting' && (
-                      <span
-                        className="conv-follow-mark"
-                        role="img"
-                        title={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
-                        aria-label={t('laterFollowingUntil', { time: formatLaterTime(followUps![c.id].until, language) })}
-                      >
-                        <BellRing size={12} strokeWidth={2.2} />
-                      </span>
-                    )}
-                    {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
-                    {mutedChat(c) ? (
-                      <BellOff size={12} strokeWidth={2.2} />
-                    ) : (
-                      mentionsOnly?.[c.id] && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />
-                    )}
-                    {searching && archivedChat(c) && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
-                    {searching && isPendingRequest(c, acceptedRequests) && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
-                    {c.unreadCount > 0 ? (
-                      <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
-                    ) : (
-                      unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
-                    )}
-                  </span>
-                </span>
-              </span>
-            </button>
-          )
-        })}
+                </button>
+              </div>
+            )
+          })}
+        </div>
 
         {searching && visibleHits.length > 0 && (
           <>
@@ -539,14 +589,8 @@ export function ConversationList(): JSX.Element {
                 setMenu(undefined)
               }}
             >
-              {isPinned(menuConversation, pins) ? (
-                <PinOff size={15} />
-              ) : (
-                <Pin size={15} />
-              )}
-              <span>
-                {isPinned(menuConversation, pins) ? t('unpin') : t('pin')}
-              </span>
+              {isPinned(menuConversation, pins) ? <PinOff size={15} /> : <Pin size={15} />}
+              <span>{isPinned(menuConversation, pins) ? t('unpin') : t('pin')}</span>
             </button>
             <button
               className="context-menu-item"
@@ -587,11 +631,7 @@ export function ConversationList(): JSX.Element {
             {tagList.map((tag) => {
               const active = (tags[menu.conversationId] ?? []).includes(tag.id)
               return (
-                <button
-                  key={tag.id}
-                  className={`context-menu-item tag-row ${active ? 'active' : ''}`}
-                  onClick={() => void toggleTag(menu.conversationId, tag.id)}
-                >
+                <button key={tag.id} className={`context-menu-item tag-row ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
                   <TagChip tag={tag} size="sm" flat={!active} />
                   {active && <span className="context-menu-check">✓</span>}
                 </button>

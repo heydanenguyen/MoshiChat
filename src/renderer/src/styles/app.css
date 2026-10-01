@@ -1390,8 +1390,20 @@ a {
 }
 
 .conv-list {
+  position: relative;
   flex: 1;
   padding: 0 var(--space-2) var(--space-2);
+}
+/* windowed rows (ConversationList): a block as tall as every row, holding only the ones on screen */
+.conv-rows {
+  position: relative;
+  width: 100%;
+}
+.conv-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .conv-item {
