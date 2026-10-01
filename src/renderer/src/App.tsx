@@ -66,7 +66,9 @@ function runInboxCommand(command: InboxCommand): void {
     // Under the open chat's own snooze button when it is on screen, else in the middle of the window.
     const anchor = document.querySelector<HTMLElement>('.chat-pane.active [data-later-anchor]')?.getBoundingClientRect()
     if (state.laterPicker) return state.closeLaterPicker()
-    return state.openLaterPicker(anchor ? { conversationId: id, mode: 'snooze', x: anchor.right, y: anchor.bottom + 6, align: 'end' } : { conversationId: id, mode: 'snooze' })
+    return state.openLaterPicker(
+      anchor ? { conversationId: id, mode: 'snooze', x: anchor.right, y: anchor.bottom + 6, align: 'end', keyboard: true } : { conversationId: id, mode: 'snooze', keyboard: true }
+    )
   }
   if (command === 'toggle-unread') void state.toggleUnread(id)
   else if (isArchivedNow(state, id)) void state.unarchive(id)

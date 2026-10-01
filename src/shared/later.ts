@@ -92,3 +92,46 @@ export function without<T>(record: Record<string, T> | undefined, key: string): 
   delete next[key]
   return next
 }
+
+/** "9 AM", "9:30 AM" / "9:00", "9:30": a time as short as it can be said. */
+export function shortClock(t: number, language: string): string {
+  const d = new Date(t)
+  if (language === 'vi') return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  const h = d.getHours() % 12 || 12
+  const m = d.getMinutes()
+  return `${h}${m ? `:${String(m).padStart(2, '0')}` : ''} ${d.getHours() < 12 ? 'AM' : 'PM'}`
+}
+
+/**
+ * What a preset row shows beside its name, without repeating it: just the time when the name already says the day
+ * ("Tomorrow morning" → "8 AM"), the weekday and time otherwise ("This weekend" → "Sat, 9 AM").
+ */
+export function presetWhen(preset: Preset, language: string, now = Date.now()): string {
+  const clock = shortClock(preset.until, language)
+  if (preset.id === 'hour' || preset.id === 'hours3' || preset.id === 'evening' || preset.id === 'tomorrow') return clock
+  const day = new Date(preset.until).getDay()
+  const days = Math.round((at(new Date(preset.until), 0, 0) - at(new Date(now), 0, 0)) / 86_400_000)
+  const weekday = (language === 'vi' ? VI_DAYS : EN_DAYS)[day]
+  if (days < 7) return `${weekday}, ${clock}`
+  const d = new Date(preset.until)
+  return language === 'vi' ? `${weekday} ${d.getDate()}/${d.getMonth() + 1}, ${clock}` : `${weekday} ${d.getMonth() + 1}/${d.getDate()}, ${clock}`
+}
+
+/** The next `count` days from today, as local midnights, for the day strip of "Pick a date and time". */
+export function nextDays(count: number, now = Date.now()): number[] {
+  const d = new Date(now)
+  return Array.from({ length: count }, (_, i) => at(d, i, 0))
+}
+
+/** A day (local midnight) at hh:mm. */
+export const atTime = (day: number, hour: number, minute = 0): number => {
+  const d = new Date(day)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour, minute, 0, 0).getTime()
+}
+
+/** Short weekday and day of the month for a day pill: { weekday: "T7", day: 3 }. */
+export function dayLabel(day: number, language: string, now = Date.now()): { weekday: string; day: number; relative?: 'today' | 'tomorrow' } {
+  const d = new Date(day)
+  const diff = Math.round((at(d, 0, 0) - at(new Date(now), 0, 0)) / 86_400_000)
+  return { weekday: (language === 'vi' ? VI_DAYS : EN_DAYS)[d.getDay()], day: d.getDate(), ...(diff === 0 ? { relative: 'today' as const } : diff === 1 ? { relative: 'tomorrow' as const } : {}) }
+}

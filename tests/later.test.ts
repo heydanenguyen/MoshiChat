@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { answers, followState, formatLaterTime, isSnoozed, isWoken, laterPresets, without } from '../src/shared/later'
+import { answers, atTime, dayLabel, followState, formatLaterTime, isSnoozed, isWoken, laterPresets, nextDays, presetWhen, shortClock, without } from '../src/shared/later'
 
-// Wednesday 1 October 2026, 10:00.
+// Thursday 1 October 2026, 10:00.
 const now = new Date(2026, 9, 1, 10, 0).getTime()
 const H = 60 * 60 * 1000
 
@@ -78,5 +78,26 @@ describe('without', () => {
     expect(without(record, 'a')).toEqual({ b: 2 })
     expect(record).toEqual({ a: 1, b: 2 })
     expect(without(record, 'z')).toBe(record)
+  })
+})
+
+describe('picker labels', () => {
+  it('never repeats the day the row name already says', () => {
+    const list = laterPresets('snooze', now)
+    const when = Object.fromEntries(list.map((p) => [p.id, presetWhen(p, 'en', now)]))
+    expect(when.tomorrow).toBe('8 AM')
+    expect(when.evening).toBe('7 PM')
+    expect(when.weekend).toBe('Sat, 9 AM')
+    expect(when.nextWeek).toBe('Mon, 8 AM')
+    expect(presetWhen(list.find((p) => p.id === 'weekend')!, 'vi', now)).toBe('T7, 9:00')
+    expect(shortClock(new Date(2026, 9, 1, 13, 24).getTime(), 'en')).toBe('1:24 PM')
+  })
+
+  it('lays out the next days with today and tomorrow marked', () => {
+    const days = nextDays(7, now)
+    expect(days).toHaveLength(7)
+    expect(dayLabel(days[0], 'vi', now)).toEqual({ weekday: 'T5', day: 1, relative: 'today' })
+    expect(dayLabel(days[1], 'en', now)).toEqual({ weekday: 'Fri', day: 2, relative: 'tomorrow' })
+    expect(new Date(atTime(days[2], 18, 30))).toEqual(new Date(2026, 9, 3, 18, 30))
   })
 })

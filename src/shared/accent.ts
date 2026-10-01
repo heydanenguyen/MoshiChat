@@ -68,6 +68,8 @@ export function accentVars(spec: AccentSpec): Record<string, string> {
     '--bubble-out-text': text,
     '--on-accent': text,
     '--bubble-out-shadow': `0 6px 16px rgba(${r}, ${g}, ${b}, 0.28)`,
+    // Pale enough for dark text: a hairline edge keeps the bubble from melting into a light chat.
+    '--bubble-out-ring': text === '#141414' ? 'inset 0 0 0 1px rgba(20, 20, 20, 0.1)' : 'inset 0 0 0 0 transparent',
     '--accent-shadow': `0 6px 16px rgba(${r}, ${g}, ${b}, 0.3)`,
     '--accent-shadow-strong': `0 9px 22px rgba(${r}, ${g}, ${b}, 0.42)`
   }

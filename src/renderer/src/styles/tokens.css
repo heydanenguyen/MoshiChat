@@ -95,7 +95,9 @@
   --separator: rgba(27, 29, 42, 0.08);
   --separator-strong: rgba(27, 29, 42, 0.16);
 
-  --bubble-in: rgba(255, 255, 255, 0.88);
+  --bubble-in: #ffffff;
+  /* A hairline edge: white bubbles on white glass need one to read as bubbles. */
+  --bubble-in-ring: inset 0 0 0 1px rgba(27, 29, 42, 0.04);
   --bubble-in-text: #1b1d2a;
   --bubble-out: linear-gradient(135deg, #5b8cff 0%, #8a6bff 100%);
   --bubble-out-solid: #6b7dff;
@@ -152,6 +154,7 @@
   --separator-strong: rgba(255, 255, 255, 0.16);
 
   --bubble-in: rgba(255, 255, 255, 0.09);
+  --bubble-in-ring: inset 0 0 0 0 transparent;
   --bubble-in-text: #f2f3fa;
   --bubble-out: linear-gradient(135deg, #5b8cff 0%, #8a6bff 100%);
   --bubble-out-solid: #6b7dff;

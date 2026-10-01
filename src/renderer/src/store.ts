@@ -70,6 +70,8 @@ export interface LaterPickerState {
   y?: number
   /** 'end': x is the picker's right edge (under a button at the right of a header). */
   align?: 'start' | 'end'
+  /** Opened from the keyboard: the first time is focused straight away. */
+  keyboard?: boolean
 }
 
 export interface Toast {
@@ -1740,7 +1742,13 @@ export function bubbleVarsOf(id: string | undefined, customAccents?: CustomAccen
   const spec = bubbleSpecOf(id, customAccents)
   if (!spec) return undefined
   const v = accentVars(spec)
-  return { '--bubble-out': v['--bubble-out'], '--bubble-out-solid': v['--bubble-out-solid'], '--bubble-out-text': v['--bubble-out-text'], '--bubble-out-shadow': v['--bubble-out-shadow'] } as React.CSSProperties
+  return {
+    '--bubble-out': v['--bubble-out'],
+    '--bubble-out-solid': v['--bubble-out-solid'],
+    '--bubble-out-text': v['--bubble-out-text'],
+    '--bubble-out-shadow': v['--bubble-out-shadow'],
+    '--bubble-out-ring': v['--bubble-out-ring']
+  } as React.CSSProperties
 }
 
 const decorated = new WeakSet<Conversation>()

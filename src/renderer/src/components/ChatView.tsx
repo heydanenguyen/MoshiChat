@@ -16,6 +16,8 @@ import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from '
 import { useWallpaper } from './Wallpaper'
 import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
 import { LaterButton } from './LaterPicker'
+import { ReactionGrid, ReactionPill } from './ReactionPill'
+import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
 import { MitoArt, StickerArt } from './StickerPicker'
@@ -577,7 +579,11 @@ function Group({
             return (
               <div key={item.messages[0].id} style={{ display: 'contents' }}>
                 <Album messages={item.messages} outgoing={group.isOutgoing} highlightId={highlightId} language={language} />
-                {reacted.length > 0 && (
+                {platform === 'zalo' && (() => {
+                  const reactedMessage = item.messages.find((m) => m.reactions.length)
+                  return reactedMessage ? <ReactionPill message={reactedMessage} outgoing={group.isOutgoing} canReact={features.react} /> : null
+                })()}
+                {platform !== 'zalo' && reacted.length > 0 && (
                   <div className="reactions">
                     {reacted.slice(0, 6).map((r, i) => (
                       <span key={i} className={`reaction-chip ${r.byMe ? 'mine' : ''}`}>
@@ -594,7 +600,9 @@ function Group({
           return (
             <div key={message.id} style={{ display: 'contents' }}>
               <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={platform} />
-              {message.reactions.length > 0 && (
+              {/* Zalo keeps one reaction per person and shows them as one pill; others get a chip per emoji. */}
+              {platform === 'zalo' && <ReactionPill message={message} outgoing={group.isOutgoing} canReact={features.react} />}
+              {platform !== 'zalo' && message.reactions.length > 0 && (
                 <div className="reactions">
                   {message.reactions.map((r) => (
                     <button
@@ -934,7 +942,7 @@ function Bubble({
           )}
           {picker && (
             <div className="emoji-picker reaction-bar">
-              {QUICK_REACTIONS.map((emoji) => (
+              {(platform === 'zalo' ? ZALO_QUICK : QUICK_REACTIONS).map((emoji) => (
                 <button
                   key={emoji}
                   className={mine === emoji ? 'active' : ''}
@@ -961,13 +969,26 @@ function Bubble({
           )}
           {moreEmoji && (
             <span className="reaction-emoji-anchor" ref={fitInChat}>
-              <EmojiPicker
-                onPick={(emoji) => {
-                  setMoreEmoji(false)
-                  void react(message.conversationId, message.id, emoji)
-                }}
-                onClose={() => setMoreEmoji(false)}
-              />
+              {platform === 'zalo' ? (
+                // Zalo only takes its own reactions: offer those, never an emoji it would refuse.
+                <ReactionGrid
+                  emojis={ZALO_ALL}
+                  current={mine}
+                  onPick={(emoji) => {
+                    setMoreEmoji(false)
+                    void react(message.conversationId, message.id, emoji)
+                  }}
+                  onClose={() => setMoreEmoji(false)}
+                />
+              ) : (
+                <EmojiPicker
+                  onPick={(emoji) => {
+                    setMoreEmoji(false)
+                    void react(message.conversationId, message.id, emoji)
+                  }}
+                  onClose={() => setMoreEmoji(false)}
+                />
+              )}
             </span>
           )}
         </div>

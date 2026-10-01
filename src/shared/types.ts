@@ -153,6 +153,8 @@ export interface Reaction {
   emoji: string
   count: number
   byMe: boolean
+  /** Who else reacted with it, when the platform says (for a tooltip). */
+  names?: string[]
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed'

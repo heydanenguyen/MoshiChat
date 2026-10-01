@@ -1,11 +1,11 @@
 import { readFile, writeFile } from 'fs/promises'
 import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
-import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User } from 'zca-js'
+import type { API, Credentials, Message as ZMessage, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
-import { toggleReaction, withoutMine } from '@shared/reactions'
+import { tally, zaloCode, zaloEmoji } from '@shared/reactions'
 import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
@@ -19,17 +19,8 @@ type ZcaModule = typeof import('zca-js')
 /** Messages kept per chat (memory and the cache on disk). */
 const HISTORY_LIMIT = 1000
 
-/** Emoji shown in the UI mapped onto Zalo's reaction codes. */
-const REACTION_CODES: Record<string, string> = {
-  '❤️': '/-heart',
-  '👍': '/-strong',
-  '😂': ':>',
-  '😮': ':o',
-  '😢': ':-((',
-  '😡': ':-h',
-  '🙏': '_()_'
-}
-const REACTION_EMOJI = Object.fromEntries(Object.entries(REACTION_CODES).map(([e, c]) => [c, e]))
+/** My own reactions are kept under this key (Zalo marks them isSelf; uidFrom can be "0"). */
+const ME = 'me'
 
 /**
  * Zalo personal account through the Zalo Web protocol (zca-js). Sign in by
@@ -49,6 +40,11 @@ export class ZaloAdapter implements PlatformAdapter {
   private startedByMe = new Set<string>()
   private groups = new Map<string, GroupInfo>()
   private names = new Map<string, string>()
+  /**
+   * Reactions as Zalo keeps them: one per person per message (thread id -> message id -> person -> code). Kept
+   * apart from the converted messages, which are rebuilt whenever history pages arrive, and saved with the cache.
+   */
+  private reacts = new Map<string, Map<string, Record<string, string>>>()
   private avatars = new Map<string, string>()
   private raw = new Map<string, TMessage[]>()
   private converted = new Map<string, Message[]>()
@@ -463,18 +459,60 @@ export class ZaloAdapter implements PlatformAdapter {
     const threadId = externalIdOf(id)
     const raw = this.rawMessage(threadId, messageId)
     if (!raw) throw new Error('Message not found')
-    const message = (this.converted.get(id) ?? []).find((m) => m.id === messageId)
-    // The same emoji again takes my reaction off (Zalo's empty reaction removes mine).
-    const removing = message?.reactions.find((r) => r.byMe)?.emoji === emoji
-    const code = removing ? '' : REACTION_CODES[emoji]
-    if (code === undefined) throw new Error('Zalo does not support this reaction')
-    await this.requireApi().addReaction(code as never, {
+    // One reaction of mine per message: the same one again takes it off (Zalo's empty reaction removes mine).
+    const mine = this.reacts.get(threadId)?.get(messageId)?.[ME]
+    const code = zaloCode(emoji)
+    if (code === undefined) throw new Error('Zalo does not have this reaction')
+    const removing = mine === code
+    await this.requireApi().addReaction((removing ? '' : code) as never, {
       data: { msgId: raw.msgId, cliMsgId: raw.cliMsgId },
       threadId,
       type: this.threadTypes.get(threadId) ?? 0
     })
-    if (message) {
-      message.reactions = toggleReaction(message.reactions, emoji)
+    this.setReaction(threadId, messageId, ME, removing ? '' : code)
+    this.refreshReactions(id, [messageId])
+    this.scheduleSave()
+  }
+
+  /** Who reacted with what on one message, tallied for its bubble. */
+  private reactionsOf(threadId: string, msgId: string): Message['reactions'] {
+    const byPerson = this.reacts.get(threadId)?.get(msgId)
+    if (!byPerson) return []
+    const emoji = Object.fromEntries(Object.entries(byPerson).map(([person, code]) => [person, zaloEmoji(code)]))
+    return tally(emoji, ME, (person) => this.names.get(person))
+  }
+
+  /** One person's reaction on a message (an empty code takes it off). */
+  private setReaction(threadId: string, msgId: string, person: string, code: string): void {
+    const thread = this.reacts.get(threadId) ?? new Map<string, Record<string, string>>()
+    const byPerson = { ...thread.get(msgId) }
+    if (code) byPerson[person] = code
+    else delete byPerson[person]
+    if (Object.keys(byPerson).length) thread.set(msgId, byPerson)
+    else thread.delete(msgId)
+    this.reacts.set(threadId, thread)
+  }
+
+  /** A reaction event (live or from history): returns the messages it touched. */
+  private applyReaction(reaction: ZReaction): string[] {
+    const person = reaction.isSelf ? ME : String(reaction.data.uidFrom)
+    if (!reaction.isSelf && reaction.data.dName) this.names.set(person, reaction.data.dName)
+    const code = reaction.data.content.rIcon ?? ''
+    return reaction.data.content.rMsg.map((target) => {
+      const msgId = String(target.gMsgID)
+      this.setReaction(reaction.threadId, msgId, person, code)
+      return msgId
+    })
+  }
+
+  /** Loaded messages whose reactions changed get them again, and the window hears of it. */
+  private refreshReactions(id: string, msgIds: string[]): void {
+    const threadId = externalIdOf(id)
+    const loaded = this.converted.get(id) ?? []
+    for (const msgId of new Set(msgIds)) {
+      const message = loaded.find((m) => m.id === msgId)
+      if (!message) continue
+      message.reactions = this.reactionsOf(threadId, msgId)
       this.ctx.emit({ type: 'message:updated', message: { ...message } })
     }
   }
@@ -555,31 +593,19 @@ export class ZaloAdapter implements PlatformAdapter {
       }
     })
     api.listener.on('reaction', (reaction) => {
-      const id = conversationId(this.account.id, reaction.threadId)
-      const icon = reaction.data.content.rIcon
-      const emoji = REACTION_EMOJI[icon] ?? icon
-      for (const target of reaction.data.content.rMsg) {
-        const message = (this.converted.get(id) ?? []).find((m) => m.id === String(target.gMsgID))
-        if (!message) continue
-        if (!icon) {
-          // A reaction taken off. Zalo does not say which one, so only mine (from another device) can be removed.
-          if (reaction.isSelf) {
-            message.reactions = withoutMine(message.reactions)
-            this.ctx.emit({ type: 'message:updated', message: { ...message } })
-          }
-          continue
-        }
-        if (reaction.isSelf) {
-          // Mine (from this app, already shown, or another device): one reaction of mine per message.
-          if (message.reactions.find((r) => r.byMe)?.emoji === emoji) continue
-          message.reactions = toggleReaction(message.reactions, emoji)
-        } else {
-          const existing = message.reactions.find((r) => r.emoji === emoji)
-          if (existing) existing.count += 1
-          else message.reactions.push({ emoji, count: 1, byMe: false })
-        }
-        this.ctx.emit({ type: 'message:updated', message: { ...message } })
+      // Kept even when the message is not loaded yet: it shows once it is.
+      this.refreshReactions(conversationId(this.account.id, reaction.threadId), this.applyReaction(reaction))
+      this.scheduleSave()
+    })
+    // Reactions from before this session (asked for with the history): oldest first, so the latest one wins.
+    api.listener.on('old_reactions', (reactions: ZReaction[]) => {
+      const touched = new Map<string, string[]>()
+      for (const reaction of [...reactions].sort((a, b) => Number(a.data.ts) - Number(b.data.ts))) {
+        const id = conversationId(this.account.id, reaction.threadId)
+        touched.set(id, [...(touched.get(id) ?? []), ...this.applyReaction(reaction)])
       }
+      for (const [id, msgIds] of touched) this.refreshReactions(id, msgIds)
+      if (touched.size) this.scheduleSave()
     })
     api.listener.on('undo', (undo) => {
       this.markUnsent(conversationId(this.account.id, undo.threadId), String(undo.data.content.globalMsgId))
@@ -634,7 +660,7 @@ export class ZaloAdapter implements PlatformAdapter {
       senderAvatarUrl: outgoing ? this.account.avatarUrl : this.avatars.get(raw.uidFrom),
       text: textOf(raw),
       attachments: attachmentsOf(raw, this.stickerUrlFor(raw)),
-      reactions: [],
+      reactions: this.reactionsOf(externalIdOf(id), raw.msgId),
       sentAt: Number(raw.ts),
       isOutgoing: outgoing,
       status: outgoing ? 'delivered' : 'delivered'
@@ -721,6 +747,12 @@ export class ZaloAdapter implements PlatformAdapter {
     this.ctx.log('zalo: syncing messages', JSON.stringify(this.syncCursors))
     api.listener.requestOldMessages(0)
     api.listener.requestOldMessages(1)
+    try {
+      api.listener.requestOldReactions(0)
+      api.listener.requestOldReactions(1)
+    } catch (err) {
+      this.ctx.log('zalo: old reactions request failed', (err as Error).message)
+    }
   }
 
   /** After each page: continue below it, skip down to where the last walk stopped, or stop. */
@@ -756,7 +788,10 @@ export class ZaloAdapter implements PlatformAdapter {
         sync?: Partial<Record<0 | 1, SyncCursor>>
         /** Chats with non-friends you opened yourself (never message requests). */
         started?: string[]
+        /** Thread id -> [message id, person -> reaction code]. */
+        reactions?: Array<[string, Array<[string, Record<string, string>]>]>
       }
+      for (const [threadId, byMsg] of data.reactions ?? []) this.reacts.set(threadId, new Map(byMsg))
       for (const threadId of data.started ?? []) this.startedByMe.add(threadId)
       for (const [stickerId, url] of data.stickers ?? []) this.stickerUrls.set(stickerId, url)
       this.syncCursors = { 0: data.sync?.[0] ?? {}, 1: data.sync?.[1] ?? {} }
@@ -776,7 +811,12 @@ export class ZaloAdapter implements PlatformAdapter {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     this.saveTimer = setTimeout(() => {
       const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
-      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe] })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
+      // Reactions only for messages still kept (the rest would never show again).
+      const reactions = [...this.reacts.entries()].map(([threadId, byMsg]) => {
+        const kept = new Set((this.raw.get(threadId) ?? []).map((m) => m.msgId))
+        return [threadId, [...byMsg.entries()].filter(([msgId]) => kept.has(msgId))] as const
+      })
+      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe], reactions })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
     }, 2000)
   }
 
