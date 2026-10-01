@@ -1803,6 +1803,38 @@ function applyLayout(layout: PaneLayout, options: { focus?: boolean } = {}): voi
       void useStore.getState().prefetch(member, false)
     }
   }
+  evictThreads()
+}
+
+/**
+ * Loaded threads kept besides the open ones: the most recently opened reopen at once, older ones (and chats only
+ * hovered) are let go and load again from the main process's cache when opened. Without this, every chat opened or
+ * hovered during the day stayed in memory, with its photos' previews.
+ */
+const KEEP_THREADS = 20
+function evictThreads(): void {
+  const s = useStore.getState()
+  const loaded = Object.keys(s.messages)
+  if (loaded.length <= KEEP_THREADS) return
+  const keep = new Set<string>()
+  const add = (id: string): void => {
+    for (const member of personFor(s, id)?.members ?? [id]) keep.add(member)
+  }
+  for (const id of openIds(s.layout)) add(id)
+  for (const id of s.recent) {
+    if (keep.size >= KEEP_THREADS) break
+    add(id)
+  }
+  // Never a chat still loading, or with a message on its way (the send would come back to an emptied thread).
+  const drop = loaded.filter((id) => !keep.has(id) && !s.loading[id] && !s.messages[id]?.some((m) => m.status === 'sending'))
+  if (!drop.length) return
+  const messages = { ...s.messages }
+  const hasMore = { ...s.hasMore }
+  for (const id of drop) {
+    delete messages[id]
+    delete hasMore[id]
+  }
+  useStore.setState({ messages, hasMore })
 }
 
 // ---------------------------------------------------------------- nicknames & custom photos
