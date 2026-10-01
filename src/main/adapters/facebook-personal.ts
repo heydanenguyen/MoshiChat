@@ -82,6 +82,10 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
   }
 
   async connect(): Promise<void> {
+    // A reconnect or a fresh sign-in must not leave the previous MQTT connection running beside the new one
+    // (every message and notification would arrive twice).
+    this.stopListening?.()
+    this.stopListening = undefined
     this.setStatus('connecting')
     pinUserAgent()
     const mod = (await import('ws3-fca')) as unknown as FcaModule & { default?: FcaModule['login'] }
@@ -114,7 +118,7 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
       this.ctx.log('facebook profile failed', (err as Error).message)
     }
     await this.ctx.saveSecret(this.secret)
-    this.listen(api)
+    await this.listen(api)
     this.setStatus('connected')
   }
 
@@ -318,16 +322,31 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
 
   // ---- events -----------------------------------------------------------
 
-  private listen(api: FcaApi): void {
-    const stop = (api as unknown as { listenMqtt(cb: (err: unknown, event: FcaEvent) => void): () => void }).listenMqtt((err, event) => {
-      if (err || !event) return
+  private async listen(api: FcaApi): Promise<void> {
+    // ws3-fca marks every thread as read on its first listen ("markAsReadAll on startup"), which would tell everyone
+    // their messages were seen whenever Moshi opens. Reading is the user's call (and the read-receipts setting's).
+    ;(api as unknown as { markAsReadAll(): Promise<void> }).markAsReadAll = async () => undefined
+    // listenMqtt resolves to an emitter whose stop() ends the connection and its 26-60 min reconnect timer; it does not
+    // return a stop function, so disconnecting used to leave the socket (and a duplicate on every sign-in) running.
+    const listenMqtt = (api as unknown as { listenMqtt(cb: (err: unknown, event: FcaEvent) => void): Promise<{ stop(): void } | undefined> }).listenMqtt
+    const emitter = await listenMqtt((err, event) => {
+      if (err || !event || this.api !== api) return
       try {
         this.onEvent(event)
       } catch (e) {
         this.ctx.log('facebook event failed', (e as Error).message)
       }
     })
-    this.stopListening = typeof stop === 'function' ? stop : undefined
+    const stop = (): void => {
+      try {
+        emitter?.stop()
+      } catch (e) {
+        this.ctx.log('facebook stop failed', (e as Error).message)
+      }
+    }
+    // Disconnected (or reconnected) while the connection was being set up: stop this one straight away.
+    if (this.api !== api) return stop()
+    this.stopListening = stop
   }
 
   private onEvent(event: FcaEvent): void {
