@@ -7734,11 +7734,15 @@ button.moment-card:hover {
   align-items: center;
   gap: 5px;
 }
+/* columns never grow to a picture's own width (GIPHY's are 200 px): scrolls up and down only */
 .giphy-grid {
   min-height: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .giphy-cell {
+  min-width: 0;
   padding: 4px;
 }
 .giphy-cell img {
