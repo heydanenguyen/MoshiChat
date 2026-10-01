@@ -167,6 +167,8 @@ export class ZaloAdapter implements PlatformAdapter {
     this.api?.listener.stop()
     this.api = undefined
     this.setStatus('disconnected')
+    // Whatever was waiting to be saved goes now (quitting, removing the account).
+    if (this.saveTimer) this.saveCache()
   }
 
   async listConversations(): Promise<Conversation[]> {
@@ -836,18 +838,28 @@ export class ZaloAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * Saved at most every 15 s (and on disconnect): the whole cache is rewritten each time, and every message or
+   * reaction used to trigger it 2 s later.
+   */
   private scheduleSave(): void {
-    if (!this.cacheFile) return
+    if (!this.cacheFile || this.saveTimer) return
+    this.saveTimer = setTimeout(() => this.saveCache(), 15_000)
+  }
+
+  private saveCache(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer)
-    this.saveTimer = setTimeout(() => {
-      const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
-      // Reactions only for messages still kept (the rest would never show again).
-      const reactions = [...this.reacts.entries()].map(([threadId, byMsg]) => {
-        const kept = new Set((this.raw.get(threadId) ?? []).map((m) => m.msgId))
-        return [threadId, [...byMsg.entries()].filter(([msgId]) => kept.has(msgId))] as const
-      })
-      void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe], reactions })).catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
-    }, 2000)
+    this.saveTimer = undefined
+    if (!this.cacheFile) return
+    const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
+    // Reactions only for messages still kept (the rest would never show again).
+    const reactions = [...this.reacts.entries()].map(([threadId, byMsg]) => {
+      const kept = new Set((this.raw.get(threadId) ?? []).map((m) => m.msgId))
+      return [threadId, [...byMsg.entries()].filter(([msgId]) => kept.has(msgId))] as const
+    })
+    void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe], reactions })).catch((err) =>
+      this.ctx.log('zalo cache save failed', (err as Error).message)
+    )
   }
 
   private rawMessage(threadId: string, messageId: string): TMessage | undefined {

@@ -1,12 +1,13 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, rename, writeFile } from 'fs/promises'
 import type { InsightRecord } from '@shared/insights'
 import type { Message } from '@shared/types'
 
 const DAY = 24 * 60 * 60 * 1000
 /** Records older than this are dropped; "this year" needs up to a year. */
 const KEEP_MS = 400 * DAY
+const SAVE_EVERY_MS = 30_000
 
 /** How far back a chat's history has been walked for the insights, and when. */
 export interface Coverage {
@@ -92,12 +93,34 @@ export class InsightStore {
     this.scheduleSave()
   }
 
+  /**
+   * Saved at most every 30 s, and on quit (flush). The whole file is rewritten (megabytes once there is a year of
+   * history), so saving 2 s after every message kept the disk and the main process busy while chats were lively.
+   */
   private scheduleSave(): void {
+    if (this.saveTimer) return
+    this.saveTimer = setTimeout(() => void this.save(), SAVE_EVERY_MS)
+  }
+
+  /** Write now if anything is waiting (on quit). */
+  async flush(): Promise<void> {
+    if (!this.saveTimer) return
+    await this.save()
+  }
+
+  private async save(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer)
-    this.saveTimer = setTimeout(() => {
-      const cutoff = Date.now() - KEEP_MS
-      const records = this.all().filter((r) => r.sentAt >= cutoff)
-      void writeFile(this.file, JSON.stringify({ records, coverage: this.coverage })).catch(() => undefined)
-    }, 2000)
+    this.saveTimer = undefined
+    const cutoff = Date.now() - KEEP_MS
+    // Old records leave memory too, not just the file.
+    for (const [key, r] of this.records) if (r.sentAt < cutoff) this.records.delete(key)
+    const tmp = this.file + '.tmp'
+    try {
+      // Through a temporary file, so quitting mid-write never leaves half a file.
+      await writeFile(tmp, JSON.stringify({ records: this.all(), coverage: this.coverage }))
+      await rename(tmp, this.file)
+    } catch {
+      /* the next save tries again */
+    }
   }
 }

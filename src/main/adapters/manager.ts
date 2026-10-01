@@ -512,6 +512,7 @@ export class AccountManager {
 
   async shutdown(): Promise<void> {
     await Promise.all([...this.adapters.values()].map((a) => a.disconnect().catch(() => undefined)))
+    await this.insightStore.flush()
   }
 
   // ---- internals --------------------------------------------------------
