@@ -1,4 +1,4 @@
-import type { Conversation, Language, Message, Platform, Reaction, SentSticker } from '@shared/types'
+import type { Conversation, Language, Message, Platform, SentSticker } from '@shared/types'
 
 const locale = (lang: Language): string => (lang === 'vi' ? 'vi-VN' : 'en-US')
 
@@ -180,6 +180,8 @@ export function shortcutLabel(key: string, shift = false): string {
   return isMac ? `⌘${shift ? '⇧' : ''}${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`
 }
 
+// Each code point is checked on its own (a ZWJ or variation selector inside a class is the point here).
+// eslint-disable-next-line no-misleading-character-class
 const EMOJI_GRAPHEME = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\u{200D}\u{FE0F}\u{20E3}#*0-9])+$/u
 
 /**

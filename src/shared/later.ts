@@ -39,18 +39,19 @@ const at = (base: Date, days: number, hour: number): number => new Date(base.get
 
 /**
  * The times offered, nearest first. Snooze: in an hour, this evening (until 17:00), tomorrow morning, the weekend
- * (on a weekday), next Monday. Follow-up: in an hour, in three hours, tomorrow, in three days, next Monday.
+ * (Monday to Friday), next Monday (the one after tomorrow on a Sunday). Follow-up: in an hour, in three hours, tomorrow, in three days, next Monday.
  * Each is a time people say out loud, never "in 1,440 minutes".
  */
 export function laterPresets(kind: LaterKind, now = Date.now()): Preset[] {
   const d = new Date(now)
   const day = d.getDay() // 0 Sunday .. 6 Saturday
-  const toMonday = ((8 - day) % 7) || 7
+  // Next Monday; on a Sunday that is tomorrow (already offered), so the one after.
+  const toMonday = day === 0 ? 8 : (8 - day) % 7 || 7
   const list: Preset[] = [{ id: 'hour', until: now + 60 * 60 * 1000 }]
   if (kind === 'snooze') {
     if (d.getHours() < 17) list.push({ id: 'evening', until: at(d, 0, 19) })
     list.push({ id: 'tomorrow', until: at(d, 1, 8) })
-    if (day >= 1 && day <= 4) list.push({ id: 'weekend', until: at(d, 6 - day, 9) })
+    if (day >= 1 && day <= 5) list.push({ id: 'weekend', until: at(d, 6 - day, 9) })
     list.push({ id: 'nextWeek', until: at(d, toMonday, 8) })
   } else {
     list.push({ id: 'hours3', until: now + 3 * 60 * 60 * 1000 })

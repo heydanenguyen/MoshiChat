@@ -23,6 +23,7 @@ export const validPasscode = (code: unknown): code is string => typeof code === 
 export class AppLock {
   private secret: { salt: string; hash: string } | undefined
   private locked = false
+  /** Wrong codes and the wait they earned; kept in the lock file so quitting and reopening does not reset them. */
   private failures = 0
   private blockedUntil = 0
   private hiddenSince = 0
@@ -58,8 +59,10 @@ export class AppLock {
   /** Read the secret; a lock that is on starts locked. A setting without its secret (copied from elsewhere) is dropped. */
   async load(): Promise<void> {
     try {
-      const raw = JSON.parse(await readFile(this.file, 'utf8')) as { salt?: string; hash?: string }
+      const raw = JSON.parse(await readFile(this.file, 'utf8')) as { salt?: string; hash?: string; failures?: number; blockedUntil?: number }
       if (raw.salt && raw.hash) this.secret = { salt: raw.salt, hash: raw.hash }
+      this.failures = Math.max(0, Number(raw.failures) || 0)
+      this.blockedUntil = Math.max(0, Number(raw.blockedUntil) || 0)
     } catch {
       /* no lock */
     }
@@ -110,27 +113,39 @@ export class AppLock {
   async unlock(code: unknown): Promise<LockState & { ok: boolean }> {
     if (Date.now() < this.blockedUntil) return { ...this.state(), ok: false }
     if (await this.verify(code)) {
+      const hadFailures = this.failures > 0
       this.failures = 0
       this.blockedUntil = 0
+      if (hadFailures) await this.saveFile()
       this.locked = false
       this.changed()
       return { ...this.state(), ok: true }
     }
     this.failures++
     if (this.failures >= FREE_TRIES) this.blockedUntil = Date.now() + Math.min(30_000 * 2 ** (this.failures - FREE_TRIES), MAX_WAIT_MS)
+    await this.saveFile()
     this.log(`[lock] wrong code (${this.failures})`)
     return { ...this.state(), ok: false }
+  }
+
+  private async saveFile(): Promise<void> {
+    if (!this.secret) return
+    await writeFile(this.file, JSON.stringify({ ...this.secret, failures: this.failures, blockedUntil: this.blockedUntil }), { mode: 0o600 })
   }
 
   private async writeSecret(code: string): Promise<void> {
     const salt = randomBytes(16)
     const hash = await scrypt(code, salt)
     this.secret = { salt: salt.toString('hex'), hash: hash.toString('hex') }
-    await writeFile(this.file, JSON.stringify(this.secret), { mode: 0o600 })
+    this.failures = 0
+    this.blockedUntil = 0
+    await this.saveFile()
   }
 
   private async clearSecret(): Promise<void> {
     this.secret = undefined
+    this.failures = 0
+    this.blockedUntil = 0
     await rm(this.file, { force: true })
   }
 

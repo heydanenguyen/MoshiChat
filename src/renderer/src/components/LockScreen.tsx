@@ -36,11 +36,18 @@ export function LockScreen(): JSX.Element {
     return () => window.removeEventListener('focus', keep)
   }, [forgot])
 
+  const waiting = wait > 0
+  // The wait is over: typing goes straight back into the code.
   useEffect(() => {
-    if (wait <= 0) return
+    if (!waiting && forgot === 'no') input.current?.focus()
+  }, [waiting, forgot])
+
+  // One timer for the whole wait, counting down a second at a time.
+  useEffect(() => {
+    if (!waiting) return
     const timer = setInterval(() => setWait((w) => Math.max(0, w - 1000)), 1000)
     return () => clearInterval(timer)
-  }, [wait > 0])
+  }, [waiting])
 
   const submit = async (value: string): Promise<void> => {
     if (busy || wait > 0 || value.length < 4) return
@@ -101,7 +108,8 @@ export function LockScreen(): JSX.Element {
               autoComplete="off"
               aria-label={t('lockEnter')}
               value={code}
-              disabled={wait > 0}
+              // Read-only, not disabled, while waiting: a disabled field loses focus and typing would go nowhere after.
+              readOnly={wait > 0}
               onChange={(e) => type(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submit(typed.current)

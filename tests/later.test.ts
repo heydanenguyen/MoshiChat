@@ -45,6 +45,18 @@ describe('laterPresets', () => {
     expect(new Date(laterPresets('snooze', saturday).at(-1)!.until)).toEqual(new Date(2026, 9, 5, 8))
   })
 
+  it('never offers the same time twice on a Sunday, and keeps the weekend on a Friday', () => {
+    const sunday = new Date(2026, 9, 4, 10).getTime()
+    for (const kind of ['snooze', 'follow'] as const) {
+      const times = laterPresets(kind, sunday).map((p) => p.until)
+      expect(new Set(times).size).toBe(times.length)
+    }
+    expect(new Date(laterPresets('snooze', sunday).at(-1)!.until)).toEqual(new Date(2026, 9, 12, 8)) // the Monday after tomorrow
+    const friday = new Date(2026, 9, 2, 10).getTime()
+    const weekend = laterPresets('snooze', friday).find((p) => p.id === 'weekend')
+    expect(new Date(weekend!.until)).toEqual(new Date(2026, 9, 3, 9))
+  })
+
   it('gives follow-ups their own steps', () => {
     expect(laterPresets('follow', now).map((p) => p.id)).toEqual(['hour', 'hours3', 'tomorrow', 'days3', 'nextWeek'])
   })

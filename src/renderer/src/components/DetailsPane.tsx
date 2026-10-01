@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AtSign, Bell, BellOff, Cake, Clock, File, FileText, Image, Info, Link2, Mic, Pencil, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
-import { ACCENTS, PLATFORMS, isMutedBy } from '@shared/types'
+import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
 import { ContactCustomizer } from './ContactCustomizer'
 import { NoteCard } from './NoteCard'
 import { TagChip } from './Tag'
 import { isPinned, peopleIndex, personIn, useShownConversations, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { candidatesFor } from '@shared/people'
-import { formatBytes, formatCount, formatDate, formatListTime, formatSpan, formatAgo, personLook } from '../utils'
+import { formatBytes, formatDate, formatListTime, formatAgo, personLook } from '../utils'
 import { Avatar } from './Avatar'
 import { useScrollFade } from '../scrollFade'
 import { PlatformIcon } from './PlatformIcon'
@@ -214,7 +214,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
 
       <PersonCard conversationId={conversationId} />
 
-      <NoteCard conversationId={conversationId} />
+      {/* A fresh card per person: a box still focused from the last chat must never save into this one. */}
+      <NoteCard key={conversationId} conversationId={conversationId} />
 
       <MomentsPreviewCard conversationId={conversationId} />
 

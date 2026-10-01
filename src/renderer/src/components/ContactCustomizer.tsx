@@ -51,7 +51,12 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   const [bYear, setBYear] = useState(stored?.year ? String(stored.year) : '')
   const pad = (n: string): string => n.padStart(2, '0')
   const yearOk = !bYear || (/^\d{4}$/.test(bYear) && Number(bYear) >= 1900 && Number(bYear) <= new Date().getFullYear())
-  const birthday = bDay && bMonth && yearOk ? `${bYear ? bYear : '-'}-${pad(bMonth)}-${pad(bDay)}` : ''
+  // Without a year, 29 February is allowed (a leap year stands in); 31 February never is.
+  const daysIn = (month: number, year?: number): number => new Date(year ?? 2000, month, 0).getDate()
+  const partial = !!bDay !== !!bMonth || (!!bYear && !bDay && !bMonth)
+  const dayOk = !bDay || !bMonth || Number(bDay) <= daysIn(Number(bMonth), bYear && yearOk ? Number(bYear) : undefined)
+  const birthdayError = !yearOk ? 'birthdayYearInvalid' : partial ? 'birthdayIncomplete' : !dayOk ? 'birthdayInvalidDay' : undefined
+  const birthday = !birthdayError && bDay && bMonth ? `${bYear ? bYear : '-'}-${pad(bMonth)}-${pad(bDay)}` : ''
   const [busy, setBusy] = useState(false)
   // Abstract characters: the name's own one first, then a fresh spread each time "another set" is pressed.
   const [round, setRound] = useState(0)
@@ -70,6 +75,8 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   }, [onClose])
 
   const save = async (): Promise<void> => {
+    // A half-typed or impossible birthday is said next to the field; saving would quietly drop it.
+    if (birthdayError) return
     setBusy(true)
     try {
       await setContactOverride(conversation.id, { ...override, nickname, avatar, birthday: birthday || undefined })
@@ -205,7 +212,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
             maxLength={4}
             placeholder={t('birthdayYearOptional')}
             aria-label={t('birthdayYearOptional')}
-            aria-invalid={!yearOk}
+            aria-invalid={!!birthdayError}
             value={bYear}
             onChange={(e) => setBYear(e.target.value.replace(/\D/g, ''))}
           />
@@ -223,7 +230,9 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
             </button>
           )}
         </span>
-        <span className={`field-hint ${yearOk ? '' : 'error'}`}>{yearOk ? t('birthdayHint') : t('birthdayYearInvalid')}</span>
+        <span className={`field-hint ${birthdayError ? 'error' : ''}`} role={birthdayError ? 'alert' : undefined}>
+          {birthdayError ? t(birthdayError) : t('birthdayHint')}
+        </span>
       </label>
 
       <div className="field customizer-looks">
@@ -251,7 +260,7 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
         <button className="btn secondary" onClick={onClose}>
           {t('cancel')}
         </button>
-        <button className="btn primary" onClick={() => void save()} disabled={busy}>
+        <button className="btn primary" onClick={() => void save()} disabled={busy || !!birthdayError}>
           {t('customSave')}
         </button>
       </div>

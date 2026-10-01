@@ -75,6 +75,17 @@ describe('AppLock', () => {
     expect(lock.isLocked()).toBe(true)
   })
 
+  it('keeps the wait across a restart, so quitting does not buy fresh tries', async () => {
+    const first = setup()
+    await first.lock.enable('2468')
+    first.lock.lock()
+    for (let i = 0; i < 5; i++) await first.lock.unlock('0000')
+    const reopened = setup(first.store.settings)
+    await reopened.lock.load()
+    expect(reopened.lock.state().retryIn).toBeGreaterThan(25_000)
+    expect((await reopened.lock.unlock('2468')).ok).toBe(false)
+  })
+
   it('changes and turns off only with the current code', async () => {
     const { lock, store } = setup()
     await lock.enable('2468')

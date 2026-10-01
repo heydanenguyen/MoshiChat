@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Cake, ChartNoAxesColumn, Crown, Flame, Image as ImageIcon, MessageCircleHeart, NotebookPen, Moon, Share2, Sparkles, X } from 'lucide-react'
-import { computeInsights, onThisDay, reconnectCandidates, vibeOf, type ContactInsight, type InsightRecord, type Insights, type Memory, type Reconnect, type ShareCardData, type Vibe } from '@shared/insights'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Cake, ChartNoAxesColumn, Crown, Flame, Image as ImageIcon, MessageCircleHeart, NotebookPen, Moon, Share2, X } from 'lucide-react'
+import { computeInsights, onThisDay, quietFromRecords, vibeOf, withActivity, type ContactInsight, type InsightRecord, type Insights, type Memory, type Reconnect, type ShareCardData, type Vibe } from '@shared/insights'
 import { LOGOS } from '@shared/logos'
 import { useStore, useT, anchorFor, useShownConversations } from '../store'
 import { useAi } from '../aiStore'
@@ -116,28 +116,53 @@ export const useInsights = create<InsightsState>((set, get) => ({
 /**
  * The records as people: one person across apps counts as one friend, their chats' messages adding up
  * under the person. Plus what the insight functions need to know about those people.
+ *
+ * The chat list changes with every message; the records and who is merged with whom do not. So the remapped
+ * records (a copy of every message) are only rebuilt when the records, the people or the set of merged chats that
+ * exist change, and the cheap per-chat lookups follow the list.
  */
-function usePeopleRecords(): { records?: InsightRecord[]; titles: Record<string, string>; groups: Set<string>; lastActivity: Record<string, number> } {
+function usePeopleRecords(): { records?: InsightRecord[]; titles: Record<string, string>; groups: ReadonlySet<string>; lastActivity: Record<string, number> } {
   const conversations = useShownConversations()
   const rawConversations = useStore((s) => s.conversations)
   const people = useStore((s) => s.settings.people)
   const records = useInsights((s) => s.records)
-  return useMemo(() => {
-    const shown = Object.values(conversations)
-    return {
-      records: records && people ? records.map((r) => ({ ...r, conversationId: anchorFor({ settings: { people }, conversations: rawConversations }, r.conversationId) })) : records,
-      titles: Object.fromEntries(shown.map((c) => [c.id, c.title])),
-      groups: new Set(shown.filter((c) => c.isGroup).map((c) => c.id)),
-      lastActivity: Object.fromEntries(shown.map((c) => [c.id, c.updatedAt]))
+  const present = people ? Object.values(people).map((p) => p.members.filter((id) => rawConversations[id]).join(',')).join('|') : ''
+  const peopleRecords = useMemo(() => {
+    if (!records || !people) return records
+    const state = { settings: { people }, conversations: useStore.getState().conversations }
+    const anchors = new Map<string, string>()
+    const anchorOf = (id: string): string => {
+      let anchor = anchors.get(id)
+      if (anchor === undefined) anchors.set(id, (anchor = anchorFor(state, id)))
+      return anchor
     }
-  }, [records, conversations, rawConversations, people])
+    // Only messages of merged chats change; the rest are passed through as they are.
+    return records.map((r) => {
+      const anchor = anchorOf(r.conversationId)
+      return anchor === r.conversationId ? r : { ...r, conversationId: anchor }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `present` stands for the part of the chat list that matters
+  }, [records, people, present])
+  const groupKey = Object.values(conversations)
+    .filter((c) => c.isGroup)
+    .map((c) => c.id)
+    .join(',')
+  // Rebuilt only when the set of group chats changes.
+  const groups = useMemo(() => new Set(groupKey ? groupKey.split(',') : []), [groupKey])
+  const lookups = useMemo(() => {
+    const shown = Object.values(conversations)
+    return { titles: Object.fromEntries(shown.map((c) => [c.id, c.title])), lastActivity: Object.fromEntries(shown.map((c) => [c.id, c.updatedAt])) }
+  }, [conversations])
+  return { records: peopleRecords, groups, ...lookups }
 }
 
 /** Close friends who have gone quiet, strongest first (snoozed ones left out). */
 function useReconnect(): Reconnect[] {
   const { records, titles, groups, lastActivity } = usePeopleRecords()
   const snoozed = useInsights((s) => s.snoozed)
-  return useMemo(() => (records ? reconnectCandidates(records, titles, { groups, lastActivity, snoozed }) : []), [records, titles, groups, lastActivity, snoozed])
+  // The pass over every message waits for new records; a new message only re-checks the few already found.
+  const quiet = useMemo(() => (records ? quietFromRecords(records, { groups, snoozed }) : []), [records, groups, snoozed])
+  return useMemo(() => withActivity(quiet, titles, lastActivity), [quiet, titles, lastActivity])
 }
 
 /** "12 ngày im lặng · thường 2 ngày một lần": how long, against how often you usually talk. */
@@ -377,7 +402,6 @@ function MemoryRow({ onClose }: { onClose(): void }): JSX.Element | null {
   )
 }
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
 export const WEEKDAYS = {
   vi: ['thứ Hai', 'thứ Ba', 'thứ Tư', 'thứ Năm', 'thứ Sáu', 'thứ Bảy', 'Chủ nhật'],
   en: ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays']
@@ -605,10 +629,10 @@ export function InsightsSheet(): JSX.Element {
   useEffect(() => {
     void load(true).then(() => backfill())
   }, [load, backfill])
-  const byPerson = usePeopleRecords()
+  const { records: personRecords, titles, groups } = usePeopleRecords()
   const insights = useMemo(
-    () => (byPerson.records ? computeInsights(byPerson.records, byPerson.titles, Date.now(), period === 'month' ? 30 : 365, byPerson.groups) : undefined),
-    [byPerson, period]
+    () => (personRecords ? computeInsights(personRecords, titles, Date.now(), period === 'month' ? 30 : 365, groups) : undefined),
+    [personRecords, titles, groups, period]
   )
   const openChat = (id: string): void => {
     closeSheet()

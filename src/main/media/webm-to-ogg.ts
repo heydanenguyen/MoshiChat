@@ -269,7 +269,7 @@ export function buildOgg(packets: Uint8Array[], channels: number, preSkip = 312)
     const last = i + PACKETS_PER_PAGE >= packets.length
     pages.push(oggPage(group, granule, serial, seq++, last ? 0x04 : 0))
   }
-  if (!packets.length) pages.push(oggPage([], 0, serial, seq++, 0x04))
+  if (!packets.length) pages.push(oggPage([], 0, serial, seq, 0x04))
   const total = pages.reduce((n, p) => n + p.length, 0)
   const out = new Uint8Array(total)
   let offset = 0

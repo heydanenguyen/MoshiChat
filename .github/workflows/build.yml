@@ -27,6 +27,9 @@ jobs:
       # The lockfile is written by npm 11; the runner ships npm 10, which resolves peers differently.
       - run: npm install -g npm@11
       - run: npm ci
+      # Types first: a type error must stop the release, not ship in it.
+      - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - name: Windows build
         shell: bash
@@ -69,6 +72,9 @@ jobs:
       # The lockfile is written by npm 11; the runner ships npm 10, which resolves peers differently.
       - run: npm install -g npm@11
       - run: npm ci
+      # Types first: a type error must stop the release, not ship in it.
+      - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - name: macOS build
         shell: bash

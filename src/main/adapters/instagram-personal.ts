@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promises'
 import { join } from 'path'
-import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, unsentCopy } from './types'
 import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
@@ -178,7 +178,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       this.web.close()
       if (err instanceof SessionExpiredError) {
         this.expire(err)
-        throw new Error(sessionMessage(err))
+        throw new Error(sessionMessage(err), { cause: err })
       }
       this.setStatus('error', `Instagram: ${(err as Error).message}`)
       throw err
@@ -940,7 +940,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         this.expire(err)
-        throw new Error(sessionMessage(err))
+        throw new Error(sessionMessage(err), { cause: err })
       }
       throw err
     }

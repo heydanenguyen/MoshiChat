@@ -6,7 +6,7 @@ import { LogLevel } from 'telegram/extensions/Logger'
 import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
-import { conversationId, externalIdOf, matchesQuery, previewKindOf, unsentCopy } from './types'
+import { conversationId, externalIdOf, previewKindOf, unsentCopy } from './types'
 
 export interface TelegramSecret {
   apiId: number

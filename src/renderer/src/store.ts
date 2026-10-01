@@ -24,7 +24,6 @@ import type {
   CustomAccent,
   SavedMessage,
   GifItem,
-  Reaction,
   SentSticker,
   LockState
 } from '@shared/types'
@@ -275,7 +274,6 @@ interface State {
   t(key: TKey, params?: Record<string, string | number>): string
 }
 
-const PAGE = 50
 /** What the platforms return for a search inside one chat (manager SEARCH_LIMIT). */
 const IN_CHAT_RESULTS = 60
 let toastCounter = 0
@@ -1860,6 +1858,7 @@ export function useChatList(): ChatList {
   // `now` is read again whenever the chats change, which is often enough for a 30-day window.
   const ctx = useMemo<QuickFilterContext>(
     () => ({ now: Date.now(), drafts, markedUnread, isMuted: (c) => isChatMuted({ muted, tags }, c) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `conversations` is there to refresh `now`
     [drafts, markedUnread, muted, tags, conversations]
   )
   const [inbox, archive, requests, later] = useMemo(() => {

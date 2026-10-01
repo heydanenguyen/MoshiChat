@@ -4,7 +4,7 @@ import { dirname, join } from 'path'
 import { browserUserAgent } from '../user-agent'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { mapFcaAttachment, mapFcaEvent, type FcaAttachment } from './facebook-items'
-import type { Account, Attachment, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
+import type { Account, Conversation, Message, Peer, PeerProfile, SendOptions } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
 

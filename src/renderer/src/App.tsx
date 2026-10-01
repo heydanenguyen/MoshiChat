@@ -349,8 +349,17 @@ export default function App(): JSX.Element {
   // Locked: everything behind the lock screen is out of reach (no focus, no clicks, not read aloud), and any open
   // sheet closes so it is not waiting there afterwards.
   useEffect(() => {
-    for (const el of document.querySelectorAll('.shell > :not(.lock-screen):not(.splash)')) el.toggleAttribute('inert', locked)
+    // The app inside the shell, and whatever is drawn straight into <body> (menus, pickers, toasts, the photo viewer).
+    const behind = [...document.querySelectorAll('.shell > :not(.lock-screen):not(.splash)'), ...document.querySelectorAll('body > :not(#root)')]
+    for (const el of behind) el.toggleAttribute('inert', locked)
     if (locked) useStore.getState().closeSheet()
+    if (!locked) return
+    // A menu or toast that opens while locked is out of reach too.
+    const watcher = new MutationObserver((changes) => {
+      for (const change of changes) for (const node of change.addedNodes) if (node instanceof HTMLElement && node.id !== 'root') node.inert = true
+    })
+    watcher.observe(document.body, { childList: true })
+    return () => watcher.disconnect()
   }, [locked, ready])
 
   // One tree for both phases so the launch screen stays mounted while the app appears beneath it.

@@ -100,7 +100,7 @@ export class ZaloAdapter implements PlatformAdapter {
         // The saved cookie no longer works (signed out, or signed in elsewhere). Ask for a new QR instead of retrying it.
         this.sessionEnded = true
         this.setStatus('needs_auth', 'Zalo signed this session out')
-        throw new Error('Zalo signed this session out. Sign in again with a new QR code.')
+        throw new Error('Zalo signed this session out. Sign in again with a new QR code.', { cause: err })
       }
       if (this.qrPromptId) this.ctx.dismissAuth(this.qrPromptId)
       this.qrPromptId = undefined

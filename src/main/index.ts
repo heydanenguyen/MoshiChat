@@ -119,9 +119,11 @@ const reminders = new Reminders(
   storage,
   emit,
   (todo) => {
-    window?.show()
-    window?.focus()
-    if (todo.conversationId) window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId: todo.conversationId, messageId: todo.messageId })
+    if (todo.conversationId) focusChat(todo.conversationId, todo.messageId)
+    else {
+      window?.show()
+      window?.focus()
+    }
   },
   log
 )
@@ -140,10 +142,7 @@ const scheduler = new Scheduler(
       body: item.text.slice(0, 120),
       silent: false
     })
-    n.on('click', () => {
-      window?.show()
-      window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId: item.conversationId })
-    })
+    n.on('click', () => focusChat(item.conversationId))
     n.show()
   },
   log
@@ -165,7 +164,7 @@ async function conversationOf(conversationId: string): Promise<Conversation | un
 /** The person a chat is merged into, when two or more of its chats are around: its anchor and name. */
 function shownPerson(conversationId: string): { anchor: string; name?: string; request?: boolean } | undefined {
   const people = storage.settings.people
-  const personId = memberIndex(people).get(conversationId)
+  const personId = peopleIndex().get(conversationId)
   const person = personId ? people?.[personId] : undefined
   if (!person) return undefined
   const known = new Map(manager.listConversations().map((c) => [c.id, c]))
@@ -188,10 +187,22 @@ function keepAlive(n: Notification): void {
   n.on('close', () => liveNotifications.delete(n))
 }
 
-function focusChat(conversationId: string): void {
+/** Bring Moshi to the front on a chat (and a message in it). */
+function focusChat(conversationId: string, messageId?: string): void {
   window?.show()
   window?.focus()
-  window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId })
+  window?.webContents.send(IPC.event, { type: 'focus-conversation', conversationId, ...(messageId ? { messageId } : {}) })
+}
+
+/**
+ * Chat id to person id, rebuilt only when the people change (settings.people is replaced on every edit). Every
+ * message event asks it, including the thousands an account's first sync replays.
+ */
+let peopleIndexCache: { people?: Settings['people']; index: Map<string, string> } = { index: new Map() }
+function peopleIndex(): Map<string, string> {
+  const people = storage.settings.people
+  if (peopleIndexCache.people !== people) peopleIndexCache = { people, index: memberIndex(people) }
+  return peopleIndexCache.index
 }
 
 /** Send what was typed into a notification, as if from the composer; a failure gets its own notification. */
@@ -220,7 +231,7 @@ async function replyFromNotification(conversationId: string, text: string): Prom
 /** The newest message of each chat behind a shown chat id: a merged person's chats, or just the one. */
 function latestOf(conversationId: string): Array<{ conversationId: string; message: MessagePreview }> {
   const people = storage.settings.people
-  const personId = memberIndex(people).get(conversationId)
+  const personId = peopleIndex().get(conversationId)
   const ids = (personId && people?.[personId]?.members) || [conversationId]
   const known = new Map(manager.listConversations().map((c) => [c.id, c]))
   return ids.flatMap((id) => {

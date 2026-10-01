@@ -257,6 +257,17 @@ export function reconnectCandidates(
   titles: Record<string, string>,
   opts: { now?: number; days?: number; groups?: ReadonlySet<string>; lastActivity?: Record<string, number>; snoozed?: Record<string, number> } = {}
 ): Reconnect[] {
+  return withActivity(quietFromRecords(records, opts), titles, opts.lastActivity ?? {}, opts.now)
+}
+
+/**
+ * The records half of reconnectCandidates: the heavy pass over every message, which only needs redoing when the
+ * records change (not on every new message in the chat list). Titles come later, from withActivity.
+ */
+export function quietFromRecords(
+  records: InsightRecord[],
+  opts: { now?: number; days?: number; groups?: ReadonlySet<string>; snoozed?: Record<string, number> } = {}
+): Reconnect[] {
   const now = opts.now ?? Date.now()
   const from = now - (opts.days ?? 60) * DAY
   const per = new Map<string, { out: Set<number>; inc: Set<number>; lastAt: number }>()
@@ -273,20 +284,29 @@ export function reconnectCandidates(
     const days = [...new Set([...e.out, ...e.inc])].sort((a, b) => a - b)
     const bothDays = [...e.out].filter((d) => e.inc.has(d)).length
     if (days.length < 4 || bothDays < 3) continue
-    const lastAt = Math.max(e.lastAt, opts.lastActivity?.[conversationId] ?? 0)
-    const silentDays = Math.floor((now - lastAt) / DAY)
+    const silentDays = Math.floor((now - e.lastAt) / DAY)
     const usualDays = Math.max(1, Math.round((days[days.length - 1] - days[0]) / DAY / (days.length - 1)))
-    const threshold = Math.max(7, usualDays * 3)
+    const threshold = quietThreshold(usualDays)
     if (silentDays < threshold) continue
-    out.push({
-      conversationId,
-      title: titles[conversationId] ?? conversationId,
-      silentDays,
-      usualDays,
-      lastAt,
-      bothDays,
-      score: (bothDays * 4 + days.length * 2) * Math.min(2, silentDays / threshold)
-    })
+    out.push({ conversationId, title: conversationId, silentDays, usualDays, lastAt: e.lastAt, bothDays, score: (bothDays * 4 + days.length * 2) * Math.min(2, silentDays / threshold) })
   }
   return out.sort((a, b) => b.score - a.score).map(({ score: _score, ...r }) => r)
+}
+
+/** Silent this many days, against a usual gap, counts as gone quiet: three gaps, a week at least. */
+const quietThreshold = (usualDays: number): number => Math.max(7, usualDays * 3)
+
+/**
+ * The cheap half: the chat list may know of something newer than the records (a message read on the phone), which
+ * shortens the silence and can take someone off the list; and the names as the list shows them.
+ */
+export function withActivity(quiet: Reconnect[], titles: Record<string, string>, lastActivity: Record<string, number>, now = Date.now()): Reconnect[] {
+  const out: Reconnect[] = []
+  for (const r of quiet) {
+    const lastAt = Math.max(r.lastAt, lastActivity[r.conversationId] ?? 0)
+    const silentDays = Math.floor((now - lastAt) / DAY)
+    if (silentDays < quietThreshold(r.usualDays)) continue
+    out.push({ ...r, lastAt, silentDays, title: titles[r.conversationId] ?? r.conversationId })
+  }
+  return out
 }
