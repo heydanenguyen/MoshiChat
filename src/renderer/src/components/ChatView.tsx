@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { isPendingRequest } from '@shared/inbox'
 import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
@@ -225,40 +226,174 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   }, [messages])
   const features = account?.features ?? NO_FEATURES
 
+  // The thread as rows (a day label, where a merged person switches app, a sender's run of messages), of which only
+  // the ones on screen and a few around them exist: a long history used to keep every bubble in the page, and each
+  // new message then laid all of them out again.
+  const rows = useMemo(() => {
+    const out: ChatRow[] = []
+    for (const section of sections) {
+      out.push({ key: `day:${section.day}`, kind: 'day', day: section.day })
+      section.groups.forEach((group, index) => {
+        if (members && (index === 0 || section.groups[index - 1].messages[0].conversationId !== group.messages[0].conversationId)) {
+          out.push({ key: `via:${group.key}`, kind: 'via', conversation: memberOf(group.messages[0]) })
+        }
+        out.push({ key: group.key, kind: 'group', group })
+      })
+    }
+    return out
+  }, [sections, members, memberOf])
+  const rowsRef = useRef<HTMLDivElement>(null)
+  const [rowsOffset, setRowsOffset] = useState(0)
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => (rows[i]?.kind === 'group' ? 30 + (rows[i] as Extract<ChatRow, { kind: 'group' }>).group.messages.length * 44 : 40),
+    overscan: 6,
+    getItemKey: (i) => rows[i]?.key ?? i,
+    // The loader and "load more" above the rows push them down inside the scroller.
+    scrollMargin: rowsOffset,
+    // A thread opens on its newest message (the virtualizer would otherwise start by scrolling to the top).
+    initialOffset: () => (stickToBottom.current ? Number.MAX_SAFE_INTEGER : 0),
+    // Rows are measured as they appear and photos finish loading: while pinned, follow the bottom as it moves.
+    onChange: () => {
+      if (!stickToBottom.current) return
+      requestAnimationFrame(() => {
+        const el = scrollRef.current
+        if (el && stickToBottom.current) el.scrollTop = el.scrollHeight
+      })
+    }
+  })
+  // While pinned to the newest message the thread keeps itself at the bottom (below); the virtualizer's own
+  // correction for rows that grow above the view (a photo finishing loading) would scroll away from it, and that
+  // scroll would read as the person scrolling up. Scrolled up, its correction keeps what is on screen in place.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => !stickToBottom.current && item.start < (instance.scrollOffset ?? 0)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    const top = rowsRef.current
+    if (!el || !top) return
+    const offset = Math.round(top.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop)
+    if (offset !== rowsOffset) setRowsOffset(offset)
+    // What sits above the rows: the loader and the "load more" button.
+  }, [rowsOffset, loading, hasMore, messages])
+
+  // The row at the top of the view and how far into it the view starts: older messages load above, and the view is
+  // put back on that same row (sizes above are only estimates until measured, so a height difference would drift).
+  const anchor = useRef<{ key: React.Key; within: number } | undefined>(undefined)
+  const rememberAnchor = useCallback((): void => {
+    const el = scrollRef.current
+    if (!el) return
+    const top = el.scrollTop - virtualizer.options.scrollMargin
+    const first = virtualizer.getVirtualItems().find((item) => item.end > top)
+    anchor.current = first ? { key: first.key, within: top - first.start } : undefined
+  }, [virtualizer])
+
   // Keep the viewport pinned to the newest message unless the user scrolled up.
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const firstId = messages?.[0]?.id
-    if (prevFirstId.current && firstId !== prevFirstId.current && prevHeight.current) {
-      el.scrollTop += el.scrollHeight - prevHeight.current
+    if (prevFirstId.current && firstId !== prevFirstId.current && !stickToBottom.current) {
+      const kept = anchor.current
+      const index = kept ? rows.findIndex((row) => row.key === kept.key) : -1
+      const start = index >= 0 ? virtualizer.measurementsCache[index]?.start : undefined
+      if (kept && start !== undefined) {
+        el.scrollTop = start + virtualizer.options.scrollMargin + kept.within
+        // Rows measured in this same commit are not in those offsets yet: once the anchor row is drawn, put it
+        // back exactly where it was (twice, as the rows around it settle).
+        // The offsets above still hold estimates for rows measured in this commit, so the anchor can land some way
+        // off. Over the next frames, once the virtualizer has redrawn with those sizes: go by its updated offsets
+        // until they stop moving, then, with the anchor row on screen, by where it really is.
+        const settle = (frames: number): void => {
+          requestAnimationFrame(() => {
+            if (stickToBottom.current) return
+            const row = rowsRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`)
+            const target = (virtualizer.measurementsCache[index]?.start ?? 0) + virtualizer.options.scrollMargin + kept.within
+            const off = row ? row.getBoundingClientRect().top - el.getBoundingClientRect().top + kept.within : target - el.scrollTop
+            if (Math.abs(off) >= 1) el.scrollTop += off
+            // Keep watching for a few frames: rows just above the view are measured late and move it again.
+            if (frames > 1) settle(frames - 1)
+          })
+        }
+        settle(16)
+      } else if (prevHeight.current) el.scrollTop += el.scrollHeight - prevHeight.current
     } else if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight
     }
     prevFirstId.current = firstId
     prevHeight.current = el.scrollHeight
+    rememberAnchor()
+    // rows follow messages; the virtualizer is one object for the thread's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isTyping])
 
-  // Jump to a search hit once its bubble exists.
+  // Rows are measured as they appear, so the thread's height settles after a render: stay on the newest message
+  // meanwhile (opening a chat, a photo that finished loading).
+  useEffect(() => {
+    const el = scrollRef.current
+    const inner = rowsRef.current
+    if (!el || !inner) return
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom.current) el.scrollTop = el.scrollHeight
+      prevHeight.current = el.scrollHeight
+    })
+    observer.observe(inner)
+    return () => observer.disconnect()
+  }, [])
+
+  // Jump to a search hit: bring its row into the window, then centre the bubble itself.
   useEffect(() => {
     if (!highlightId || !messages) return
-    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(highlightId)}"]`)
-    if (el) {
-      stickToBottom.current = false
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }
-  }, [highlightId, messages])
+    const index = rows.findIndex((row) => row.kind === 'group' && row.group.messages.some((m) => m.id === highlightId))
+    if (index < 0) return
+    stickToBottom.current = false
+    virtualizer.scrollToIndex(index, { align: 'center' })
+    const timer = setTimeout(() => {
+      scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(highlightId)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 120)
+    return () => clearTimeout(timer)
+    // The virtualizer object is stable; the rows decide where the message is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, rows])
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
+    // Only the person leaves the bottom: a wheel, a touch, a key or the scrollbar. Rows growing as they are measured
+    // (or as photos load) also move the bottom away, and that must not unpin the thread.
+    let lastInput = 0
+    let held = false
+    const input = (): void => {
+      lastInput = Date.now()
+    }
+    const down = (): void => {
+      held = true
+      input()
+    }
+    const up = (): void => {
+      held = false
+    }
     const onScroll = (): void => {
-      stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      rememberAnchor()
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      if (nearBottom) stickToBottom.current = true
+      else if (held || Date.now() - lastInput < 600) stickToBottom.current = false
       if (el.scrollTop < 60 && hasMore && !loading) void loadMore(conversation.id)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [conversation.id, hasMore, loading, loadMore])
+    el.addEventListener('wheel', input, { passive: true })
+    el.addEventListener('touchmove', input, { passive: true })
+    el.addEventListener('keydown', input)
+    el.addEventListener('mousedown', down)
+    window.addEventListener('mouseup', up)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('wheel', input)
+      el.removeEventListener('touchmove', input)
+      el.removeEventListener('keydown', input)
+      el.removeEventListener('mousedown', down)
+      window.removeEventListener('mouseup', up)
+    }
+  }, [conversation.id, hasMore, loading, loadMore, rememberAnchor])
 
   const subtitle = isTyping
     ? conversation.isGroup
@@ -340,28 +475,33 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
               {loading ? <BuddyLoader size={20} inline /> : t('loadMore')}
             </button>
           )}
-          {sections.map((section) => (
-            <div key={section.day} style={{ display: 'contents' }}>
-              <div className="day-sep">{formatDayLabel(section.day, language)}</div>
-              {section.groups.map((group, index) => (
-                <div key={group.key} style={{ display: 'contents' }}>
-                  {members && (index === 0 || section.groups[index - 1].messages[0].conversationId !== group.messages[0].conversationId) && (
-                    <ViaSeparator conversation={memberOf(group.messages[0])} />
+          <div ref={rowsRef} className="chat-rows" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualizer.getVirtualItems().map((v) => {
+              const row = rows[v.index]
+              return (
+                // Placed with top, not a transform: a transform would make each row its own layer, and a bubble's
+                // emoji or action popover would then slip under the row below it.
+                <div key={v.key} data-index={v.index} ref={virtualizer.measureElement} className="chat-row" style={{ top: v.start - virtualizer.options.scrollMargin }}>
+                  {row.kind === 'day' ? (
+                    <div className="day-sep">{formatDayLabel(row.day, language)}</div>
+                  ) : row.kind === 'via' ? (
+                    <ViaSeparator conversation={row.conversation} />
+                  ) : (
+                    <Group
+                      group={row.group}
+                      conversation={conversation}
+                      features={features}
+                      featuresOf={members ? featuresOf : undefined}
+                      platformOf={members ? (m) => memberOf(m).platform : undefined}
+                      lastOutgoingId={lastOutgoing?.id}
+                      highlightId={highlightId}
+                      language={language}
+                    />
                   )}
-                <Group
-                  group={group}
-                  conversation={conversation}
-                  features={features}
-                  featuresOf={members ? featuresOf : undefined}
-                  platformOf={members ? (m) => memberOf(m).platform : undefined}
-                  lastOutgoingId={lastOutgoing?.id}
-                  highlightId={highlightId}
-                  language={language}
-                />
                 </div>
-              ))}
-            </div>
-          ))}
+              )
+            })}
+          </div>
           {isTyping && (
             <div className="msg-group in">
               <div className="msg-avatar-slot">
@@ -752,6 +892,9 @@ function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; c
     </div>
   )
 }
+
+/** One row of a thread as drawn: a day label, where a merged person switches app, or a sender's run of messages. */
+type ChatRow = { key: string; kind: 'day'; day: number } | { key: string; kind: 'via'; conversation: Conversation } | { key: string; kind: 'group'; group: MessageGroup }
 
 /** No account (or an unknown one): nothing can be done; one shared object so memoised bubbles see it unchanged. */
 const NO_FEATURES: Account['features'] = { reply: false, react: false, attachments: false }

@@ -1812,9 +1812,12 @@ mark {
   display: flex;
   flex-direction: column;
 }
-/* The chat only ever scrolls up and down: hidden hover tooltips must not open a sideways scroll. */
+/* The chat only ever scrolls up and down: hidden hover tooltips must not open a sideways scroll. The thread keeps
+   its own place (pinned to the newest message, or steady while older ones load above), so the browser's scroll
+   anchoring stays out of it: with windowed rows it pulled the view up whenever rows were measured. */
 .chat-scroll.scroll {
   overflow-x: hidden;
+  overflow-anchor: none;
 }
 
 .chat-scroll-inner {
@@ -1822,6 +1825,26 @@ mark {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+/* windowed thread (ChatView): a block as tall as every row, holding only the rows on screen; each row keeps the 2 px
+   gap the column had, and a hovered or active row sits above its neighbours so its popovers are never covered */
+.chat-rows {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+}
+.chat-row {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 2px;
+}
+.chat-row:hover,
+.chat-row:focus-within,
+.chat-row:has(.open) {
+  z-index: 3;
 }
 .day-sep {
   align-self: center;
