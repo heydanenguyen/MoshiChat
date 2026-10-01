@@ -125,9 +125,12 @@ jobs:
           console.log(fs.readFileSync('artifacts/latest-mac.yml', 'utf8'))
           JS
       # Published straight away: the in-app updater only sees published releases. The body comes from
-      # RELEASE_NOTES.md at the tagged commit, so write the notes before tagging.
+      # RELEASE_NOTES.md at the tagged commit, so write the notes before tagging. A tag with a suffix
+      # (v0.3.0-beta.1) is marked as a pre-release: installed stable versions never see it, while installed
+      # betas (their version has a suffix) do, through the same latest.yml.
       - uses: softprops/action-gh-release@v2
         with:
           name: Moshi ${{ github.ref_name }}
           body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: artifacts/**/*
