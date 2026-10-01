@@ -40,6 +40,8 @@ export class TelegramAdapter implements PlatformAdapter {
 
   async connect(): Promise<void> {
     this.setStatus('connecting')
+    // A reconnect builds a new client; the old one would otherwise keep pinging and reconnecting in the background.
+    await this.destroyClient()
     const client = new TelegramClient(new StringSession(this.secret.session ?? ''), this.secret.apiId, this.secret.apiHash, {
       connectionRetries: 5,
       useWSS: false
@@ -58,6 +60,7 @@ export class TelegramAdapter implements PlatformAdapter {
       })
     } catch (err) {
       this.setStatus('error', (err as Error).message)
+      if (this.client === client) await this.destroyClient()
       throw err
     }
 
@@ -79,9 +82,18 @@ export class TelegramAdapter implements PlatformAdapter {
   }
 
   async disconnect(): Promise<void> {
-    await this.client?.disconnect().catch(() => undefined)
-    this.client = undefined
+    await this.destroyClient()
     this.setStatus('disconnected')
+  }
+
+  /**
+   * gramjs' disconnect() only closes the socket: its update loop keeps running, fails its next ping and
+   * reconnects on its own. destroy() stops that loop and drops the event handlers too.
+   */
+  private async destroyClient(): Promise<void> {
+    const client = this.client
+    this.client = undefined
+    await client?.destroy().catch(() => undefined)
   }
 
   async listConversations(): Promise<Conversation[]> {

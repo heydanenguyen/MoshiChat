@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { net } from 'electron'
 import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promises'
 import { join } from 'path'
 import type { Account, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
@@ -9,7 +10,7 @@ import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { DirectComposer } from '../direct-composer'
-import { InstagramRealtime } from '../instagram-realtime'
+import { InstagramRealtime, RefreshThrottle } from '../instagram-realtime'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -55,6 +56,11 @@ const HISTORY_CRAWL = false
 const REQUESTS_INTERVAL = 3 * 60_000
 /** Safety poll; realtime events trigger refreshes within a second. */
 const POLL_INTERVAL = 45_000
+/**
+ * Realtime refreshes come at most this often. Each one reads the whole 40-thread inbox, and receipts, reactions
+ * and MarkRead events can arrive many times a minute in a busy account.
+ */
+const REALTIME_MIN_GAP = 4000
 /** Instagram silently truncates bigger pages (100 returns 75 and claims there is nothing older). */
 const PAGE_SIZE = 20
 /** Delay between history pages while crawling, to stay a polite web client. */
@@ -104,7 +110,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),
     log: (...args) => this.ctx.log(...args)
   })
-  private activityTimer?: NodeJS.Timeout
+  private activity = new RefreshThrottle(() => void this.poll(), 350, REALTIME_MIN_GAP)
   private pollAgain = false
   /** A reaction came in over realtime: re-read reactions of the most recent chats on the next poll. */
   private reactionSweep = false
@@ -193,7 +199,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     await this.loadCrawls()
     await this.loadThreadCache()
     this.realtime.start()
-    this.timer = setInterval(() => void this.poll(), POLL_INTERVAL)
+    this.timer = setInterval(() => {
+      // Offline every request would only time out; realtime and the next tick after reconnecting catch up.
+      if (net.isOnline()) void this.poll()
+    }, POLL_INTERVAL)
     this.setStatus('connected')
   }
 
@@ -223,6 +232,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   async disconnect(): Promise<void> {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
+    this.activity.cancel()
     this.realtime.stop()
     this.web.close()
     this.composer.close()
@@ -981,12 +991,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   private onRealtimeActivity(): void {
-    // Coalesce bursts (a message often arrives with a receipt and a reaction).
-    if (this.activityTimer) return
-    this.activityTimer = setTimeout(() => {
-      this.activityTimer = undefined
-      void this.poll()
-    }, 350)
+    // Coalesced, and spaced out so a stream of receipts does not turn into a stream of inbox reads.
+    this.activity.trigger()
   }
 
   private onRealtimeTyping(threadId: string, senderId: string, typing: boolean): void {

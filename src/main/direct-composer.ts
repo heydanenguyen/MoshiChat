@@ -81,14 +81,14 @@ export class DirectComposer {
 
   /** Serialised so two sends never type into the same box at once. `threadUrls`: addresses to try, best first. */
   send(threadUrls: string | string[], text: string): Promise<void> {
-    const run = this.queue.then(() => this.sendNow(threadUrls, text))
+    const run = this.queue.then(() => this.idleAfter(() => this.sendNow(threadUrls, text)))
     this.queue = run.catch(() => undefined)
     return run
   }
 
   /** Photos, videos and audio through Instagram's own "Add Photo or Video" picker. */
   sendFiles(threadUrls: string | string[], paths: string[]): Promise<void> {
-    const run = this.queue.then(() => this.sendFilesNow(threadUrls, paths))
+    const run = this.queue.then(() => this.idleAfter(() => this.sendFilesNow(threadUrls, paths)))
     this.queue = run.catch(() => undefined)
     return run
   }
@@ -98,9 +98,23 @@ export class DirectComposer {
    * `queries` (then the tray's own picks) until the sticker with this GIPHY id shows up, and tap it, which sends it.
    */
   sendSticker(threadUrls: string | string[], sticker: { id: string; queries: string[] }): Promise<void> {
-    const run = this.queue.then(() => this.sendStickerNow(threadUrls, sticker))
+    const run = this.queue.then(() => this.idleAfter(() => this.sendStickerNow(threadUrls, sticker)))
     this.queue = run.catch(() => undefined)
     return run
+  }
+
+  /**
+   * Run one send and then (re)arm the idle close, whatever happened. open() stops the timer while a send is
+   * busy; a send that throws (no text box, logged out, picker failed) must not leave a hidden instagram.com
+   * page running for good.
+   */
+  private async idleAfter(work: () => Promise<void>): Promise<void> {
+    try {
+      await work()
+    } finally {
+      if (this.idle) clearTimeout(this.idle)
+      this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
+    }
   }
 
   /**
@@ -290,7 +304,6 @@ export class DirectComposer {
       })()`,
       true
     )) as string
-    this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
     if (outcome === 'STUCK') throw new Error('Instagram is still uploading; check the conversation before sending again')
   }
 
@@ -362,7 +375,6 @@ export class DirectComposer {
       })()`,
       true
     )) as string
-    this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
     this.log('[instagram composer] sticker', sticker.id, outcome)
     if (outcome === 'OK' || outcome === 'OK_SEND' || outcome === 'TRAY_OPEN') return
     if (outcome === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
@@ -500,7 +512,6 @@ export class DirectComposer {
       true
     )) as string
 
-    this.idle = setTimeout(() => this.close(), IDLE_CLOSE_MS)
     if (outcome === 'OK') return
     if (outcome === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
     this.log(`[instagram composer] text send failed (${outcome}):`, await this.describe(win))

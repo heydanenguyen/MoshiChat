@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, type Session, type WebContents } from 'electron'
 
 export type RealtimeKind = 'NewMessage' | 'NewRavenMessage' | 'ReadReceipt' | 'CreateReaction' | 'DeleteReaction' | 'DeleteMessage' | 'EditMessage' | 'MarkRead' | 'AdminTextMessage'
 
@@ -18,6 +18,20 @@ const RELOAD_EVERY = 30 * 60_000
 const KNOWN_DOC_IDS: Record<string, string> = { IGDThreadDetailQuery: '28288012930891325' }
 /** Anything that looks typing-related; used to log key names (never values) once per shape. */
 const DIAG_RE = /activity_indicator|typing_indicator|is_typing|"typing"|TypingIndicator/i
+/** Nothing shorter can hold any of the markers above (`"typing"` is the shortest), even base64 encoded. */
+const MIN_FRAME = 8
+/**
+ * Spellings the patterns above need, looked for inside base64 runs before decoding any. KIND_RE and TYPING_RE
+ * are case sensitive; the case variants are only for the typing diagnostics, which ignore case.
+ */
+const ENCODED_MARKERS = ['SlideUQPP', 'activity_indicator', 'ACTIVITY_INDICATOR', 'typing', 'Typing', 'TYPING'].flatMap(base64Forms)
+/**
+ * Resource types the hidden inbox never needs: it is only there for its websocket and its tokens. Stylesheets still
+ * load: they are small, and a page whose loader waited on CSS that never came would never start its realtime socket.
+ */
+const BLOCKED_TYPES: Array<'image' | 'media' | 'font'> = ['image', 'media', 'font']
+/** Web contents ids whose heavy resources are refused, per session (Electron keeps one onBeforeRequest listener per session). */
+const blockedBySession = new WeakMap<Session, Set<number>>()
 
 /**
  * Keeps instagram.com/direct/inbox open in a hidden window of the user's
@@ -47,6 +61,7 @@ export class InstagramRealtime {
       webPreferences: { partition: this.partition, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
     })
     win.webContents.setAudioMuted(true)
+    blockHeavyResources(win.webContents)
     this.window = win
     const dbg = win.webContents.debugger
     try {
@@ -67,6 +82,8 @@ export class InstagramRealtime {
       if (!this.stopped) setTimeout(() => this.start(), 5000)
     })
     void win.loadURL('https://www.instagram.com/direct/inbox/').catch(() => undefined)
+    // start() runs again after the window closes on its own, without stop(): never keep two reload timers.
+    if (this.reloadTimer) clearInterval(this.reloadTimer)
     this.reloadTimer = setInterval(() => {
       if (this.window && !this.window.isDestroyed()) this.window.webContents.reload()
     }, RELOAD_EVERY)
@@ -182,12 +199,53 @@ export interface FrameScan {
   typing: { threadId: string; senderId: string; typing: boolean }[]
 }
 
+/**
+ * Refuse images, media and fonts for one web contents. The partition is shared with the composer
+ * and the web client, so the listener only cancels requests made by this web contents and lets the rest through.
+ */
+export function blockHeavyResources(contents: WebContents): void {
+  const session = contents.session
+  let ids = blockedBySession.get(session)
+  if (!ids) {
+    const blocked = new Set<number>()
+    ids = blocked
+    blockedBySession.set(session, blocked)
+    // Installing a listener replaces any earlier one on this session; nothing else in the app sets one on it.
+    session.webRequest.onBeforeRequest({ urls: ['<all_urls>'], types: BLOCKED_TYPES }, (details, callback) => {
+      callback({ cancel: details.webContentsId !== undefined && blocked.has(details.webContentsId) })
+    })
+  }
+  const id = contents.id
+  const set = ids
+  set.add(id)
+  contents.once('destroyed', () => set.delete(id))
+}
+
+/**
+ * Every way `marker` can show up inside a base64 run: one string per byte alignment, holding only the
+ * characters the marker fully decides (the ones at its edges also depend on its neighbours).
+ */
+export function base64Forms(marker: string): string[] {
+  const bytes = Buffer.from(marker, 'utf8')
+  return [0, 1, 2].map((k) =>
+    Buffer.concat([Buffer.alloc(k), bytes])
+      .toString('base64')
+      .slice(Math.ceil((8 * k) / 6), Math.floor((8 * (k + bytes.length)) / 6))
+  )
+}
+
 /** Pull event names and typing updates out of one websocket frame (binary MQTT or text). */
 export function scanFrame(frame: { opcode: number; payloadData: string }): FrameScan {
+  // Pings and acks are a few bytes: too short to hold any marker, so skip them before decoding anything.
+  if (frame.payloadData.length < MIN_FRAME) return { text: '', kinds: new Set(), typing: [] }
   const raw = (frame.opcode === 2 ? Buffer.from(frame.payloadData, 'base64').toString('latin1') : frame.payloadData).replace(/\\\//g, '/')
-  // Realtime payloads are often base64 JSON nested inside the MQTT/thrift envelope.
+  // Realtime payloads are often base64 JSON nested inside the MQTT/thrift envelope. Decoding every long run is
+  // the expensive part, so it only happens when a marker shows up in base64 form; without any marker, plain or
+  // encoded, nothing below can match and the frame is done.
+  const encoded = ENCODED_MARKERS.some((m) => raw.includes(m))
+  if (!encoded && !raw.includes('SlideUQPP') && !raw.includes('activity_indicator') && !DIAG_RE.test(raw)) return { text: raw, kinds: new Set(), typing: [] }
   let text = raw
-  for (const run of raw.matchAll(/[A-Za-z0-9+/]{60,}={0,2}/g)) text += '\n' + Buffer.from(run[0], 'base64').toString('utf8')
+  if (encoded) for (const run of raw.matchAll(/[A-Za-z0-9+/]{60,}={0,2}/g)) text += '\n' + Buffer.from(run[0], 'base64').toString('utf8')
 
   const kinds = new Set<RealtimeKind>()
   for (const m of text.matchAll(KIND_RE)) kinds.add(m[1] as RealtimeKind)
@@ -203,4 +261,35 @@ export function scanFrame(frame: { opcode: number; payloadData: string }): Frame
     }
   }
   return { text, kinds, typing }
+}
+
+/**
+ * Runs `run` at most once per `minGap` ms however often `trigger()` is called. A trigger inside the gap is not
+ * dropped: it becomes one trailing run as soon as the gap is over, so the last event of a burst is always seen.
+ * `delay` still coalesces the first burst (a message often arrives with a receipt and a reaction).
+ */
+export class RefreshThrottle {
+  private timer?: NodeJS.Timeout
+  private lastRun = -Infinity
+
+  constructor(
+    private readonly run: () => void,
+    private readonly delay: number,
+    private readonly minGap: number
+  ) {}
+
+  trigger(): void {
+    if (this.timer) return
+    const wait = Math.max(this.delay, this.lastRun + this.minGap - Date.now())
+    this.timer = setTimeout(() => {
+      this.timer = undefined
+      this.lastRun = Date.now()
+      this.run()
+    }, wait)
+  }
+
+  cancel(): void {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = undefined
+  }
 }

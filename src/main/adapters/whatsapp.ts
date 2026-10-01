@@ -18,6 +18,20 @@ const HISTORY_LIMIT = 300
 /** proto.Message.ProtocolMessage.Type.REVOKE and WAMessageStubType.REVOKE (baileys is loaded lazily). */
 const REVOKE = 0
 const REVOKED_STUB = 1
+/** More changed chats than this in one go (an app state sync) is sent as one full list instead of chat by chat. */
+const MAX_UPSERTS = 25
+
+/** Chats the inbox shows: status broadcasts and channels are left out. */
+const listable = (jid: string | null | undefined): jid is string => !!jid && !jid.endsWith('@broadcast') && !jid.endsWith('@newsletter')
+
+/**
+ * What to send for the chats that changed since the last flush: the whole list when it is genuinely needed
+ * (history sync, or so many chats changed that one list is cheaper), otherwise just the changed ones.
+ */
+export function planChatSync(dirty: Iterable<string>, resetPending: boolean, max = MAX_UPSERTS): { reset: true } | { reset: false; jids: string[] } {
+  const jids = [...new Set(dirty)].filter(listable)
+  return resetPending || jids.length > max ? { reset: true } : { reset: false, jids }
+}
 
 /**
  * WhatsApp through the multi-device web protocol (Baileys). Pair by scanning a
@@ -38,7 +52,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
   private mePhone = ''
   private qrPromptId?: string
   private closing = false
-  private resetTimer?: NodeJS.Timeout
+  private syncTimer?: NodeJS.Timeout
+  /** Chats changed since the last flush, sent as conversation:upserted. */
+  private dirtyChats = new Set<string>()
+  /** A full conversations:reset is due (initial load, history sync). */
+  private resetPending = false
   private historyWaiters = new Map<string, () => void>()
 
   constructor(
@@ -131,7 +149,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async listConversations(): Promise<Conversation[]> {
     const list = [...this.chats.values()]
-      .filter((c) => c.id && !c.id.endsWith('@broadcast') && !c.id.endsWith('@newsletter'))
+      .filter((c) => listable(c.id))
       .map((c) => this.toConversation(c))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     void this.hydrateAvatars(list.slice(0, 30))
@@ -359,11 +377,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
         this.converted.delete(conversationId(this.account.id, jid))
         this.historyWaiters.get(jid)?.()
       }
-      this.scheduleReset()
+      this.scheduleChats()
     })
     sock.ev.on('chats.upsert', (chats) => {
       for (const chat of chats) if (chat.id) this.chats.set(chat.id, { ...this.chats.get(chat.id), ...chat })
-      this.scheduleReset()
+      this.scheduleChats(chats.map((c) => c.id))
     })
     sock.ev.on('chats.update', (updates) => {
       for (const update of updates) {
@@ -371,7 +389,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
         const chat = this.chats.get(update.id)
         if (chat) Object.assign(chat, update)
       }
-      this.scheduleReset()
+      // Unknown ids too: the message that creates the chat may be processed right after this update.
+      this.scheduleChats(updates.map((u) => u.id))
     })
     sock.ev.on('contacts.upsert', (contacts) => {
       for (const contact of contacts) this.contacts.set(contact.id, { ...this.contacts.get(contact.id), ...contact })
@@ -384,6 +403,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     })
     sock.ev.on('messages.upsert', ({ messages, type }) => {
       void (async () => {
+        const touched = new Set<string>()
         for (const raw of messages) {
           const jid = raw.key.remoteJid
           if (!jid || jid === 'status@broadcast') continue
@@ -398,7 +418,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
             continue
           }
           this.remember(jid, [raw])
-          if (!this.chats.has(jid)) this.chats.set(jid, { id: jid, conversationTimestamp: Number(raw.messageTimestamp) } as Chat)
+          if (!this.chats.has(jid)) {
+            this.chats.set(jid, { id: jid, conversationTimestamp: Number(raw.messageTimestamp) } as Chat)
+            touched.add(jid)
+          }
+          if (type !== 'notify') touched.add(jid)
           const chat = this.chats.get(jid)!
           chat.conversationTimestamp = Number(raw.messageTimestamp ?? 0)
           if (type === 'notify') {
@@ -408,7 +432,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
             this.ctx.emit({ type: 'message:new', message })
           }
         }
-        if (type !== 'notify') this.scheduleReset()
+        if (touched.size) this.scheduleChats(touched)
       })()
     })
     sock.ev.on('messages.update', (updates) => {
@@ -446,14 +470,36 @@ export class WhatsAppAdapter implements PlatformAdapter {
     })
   }
 
-  private scheduleReset(): void {
-    if (this.resetTimer) clearTimeout(this.resetTimer)
-    this.resetTimer = setTimeout(() => {
-      this.resetTimer = undefined
-      void this.listConversations().then((list) =>
-        this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: list })
-      )
-    }, 800)
+  /**
+   * Tell the app about changed chats 800 ms later, batched. With `jids` only those chats go out (every incoming
+   * message updates its chat, and resending the whole account each time is wasteful); without, the full list.
+   */
+  private scheduleChats(jids?: Iterable<string | null | undefined>): void {
+    if (!jids) this.resetPending = true
+    else for (const jid of jids) if (jid) this.dirtyChats.add(jid)
+    // A full list waits for the burst to settle (history sync arrives in chunks); single chats go out on time.
+    if (this.syncTimer && !this.resetPending) return
+    if (this.syncTimer) clearTimeout(this.syncTimer)
+    this.syncTimer = setTimeout(() => this.flushChats(), 800)
+  }
+
+  private flushChats(): void {
+    this.syncTimer = undefined
+    const plan = planChatSync(this.dirtyChats, this.resetPending)
+    this.dirtyChats.clear()
+    this.resetPending = false
+    if (plan.reset) {
+      void this.listConversations().then((list) => this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: list }))
+      return
+    }
+    const changed: Conversation[] = []
+    for (const jid of plan.jids) {
+      const chat = this.chats.get(jid)
+      if (chat) changed.push(this.toConversation(chat))
+    }
+    for (const conversation of changed) this.ctx.emit({ type: 'conversation:upserted', conversation })
+    // A chat that just appeared has no photo yet (the full list used to fetch them).
+    void this.hydrateAvatars(changed)
   }
 
   async unsend(id: string, messageId: string): Promise<void> {
