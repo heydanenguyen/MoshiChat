@@ -106,4 +106,28 @@ describe('RefreshThrottle', () => {
     vi.advanceTimersByTime(10_000)
     expect(run).not.toHaveBeenCalled()
   })
+
+describe('RefreshThrottle with messages', () => {
+  it('reads at once for a message, even inside the gap a receipt would wait for', () => {
+    vi.useFakeTimers()
+    const run = vi.fn()
+    const throttle = new RefreshThrottle(run, 350, 4000)
+    throttle.trigger()
+    vi.advanceTimersByTime(350)
+    expect(run).toHaveBeenCalledTimes(1)
+    // A receipt 1 s later waits for the 4 s gap...
+    vi.advanceTimersByTime(1000)
+    throttle.trigger()
+    vi.advanceTimersByTime(400)
+    expect(run).toHaveBeenCalledTimes(1)
+    // ...but a message arriving meanwhile brings the read forward to the short delay.
+    throttle.trigger(true)
+    vi.advanceTimersByTime(350)
+    expect(run).toHaveBeenCalledTimes(2)
+    // Nothing else was left waiting.
+    vi.advanceTimersByTime(5000)
+    expect(run).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+})
 })

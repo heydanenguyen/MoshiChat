@@ -11,7 +11,7 @@ import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { legacyPartition } from '../web-partitions'
 import { DirectComposer } from '../direct-composer'
-import { InstagramRealtime, RefreshThrottle } from '../instagram-realtime'
+import { InstagramRealtime, RefreshThrottle, type RealtimeKind } from '../instagram-realtime'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -99,12 +99,16 @@ const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
  * executed inside the session the user created in the in-app login window.
  * Messages are polled every few seconds.
  */
+/** Realtime events someone is waiting to see; the rest (receipts, reactions, read marks) can wait for the spacing. */
+const URGENT_KINDS = new Set<RealtimeKind>(['NewMessage', 'NewRavenMessage', 'EditMessage', 'DeleteMessage', 'AdminTextMessage'])
+
 export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
   // All three work inside this account's own browser session (set in the constructor).
   private web: WebClient
   private composer: DirectComposer
   private realtime: InstagramRealtime
+  /** Inbox reads after realtime events: coalesced, and at most every few seconds unless a message arrived. */
   private activity = new RefreshThrottle(() => void this.poll(), 350, REALTIME_MIN_GAP)
   private pollAgain = false
   /** A reaction came in over realtime: re-read reactions of the most recent chats on the next poll. */
@@ -168,7 +172,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       onActivity: (kinds) => {
         // A reaction does not move the thread in the inbox, so the poll would not notice it: look again at recent chats.
         if (kinds.has('CreateReaction') || kinds.has('DeleteReaction')) this.reactionSweep = true
-        this.onRealtimeActivity()
+        // Messages (new, edited, taken back) show at once; receipts and reactions wait for the spacing.
+        this.activity.trigger([...kinds].some((k) => URGENT_KINDS.has(k)))
       },
       onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
       onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),

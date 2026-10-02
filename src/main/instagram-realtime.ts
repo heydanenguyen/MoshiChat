@@ -278,15 +278,23 @@ export class RefreshThrottle {
     private readonly minGap: number
   ) {}
 
-  trigger(): void {
-    if (this.timer) return
-    const wait = Math.max(this.delay, this.lastRun + this.minGap - Date.now())
+  /** `urgent`: something the person is waiting to see (a new message): only the short coalescing delay, no gap. */
+  trigger(urgent = false): void {
+    const wait = urgent ? this.delay : Math.max(this.delay, this.lastRun + this.minGap - Date.now())
+    if (this.timer) {
+      // A gap-spaced run is already waiting: an urgent one moves it forward; otherwise it covers this trigger too.
+      if (!urgent || this.due <= Date.now() + wait) return
+      clearTimeout(this.timer)
+    }
+    this.due = Date.now() + wait
     this.timer = setTimeout(() => {
       this.timer = undefined
       this.lastRun = Date.now()
       this.run()
     }, wait)
   }
+
+  private due = 0
 
   cancel(): void {
     if (this.timer) clearTimeout(this.timer)
