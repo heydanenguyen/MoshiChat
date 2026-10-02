@@ -33,6 +33,7 @@ import { ZaloAdapter, type ZaloSecret } from './zalo'
 import { WhatsAppAdapter, type WhatsAppSecret } from './whatsapp'
 import { FacebookPersonalAdapter, type FacebookPersonalSecret, type WebCookie } from './facebook-personal'
 import { InstagramPersonalAdapter, type InstagramPersonalSecret } from './instagram-personal'
+import { forgetPartition, legacyPartition, rememberPartition, wipePartition, type WebPlatform } from '../web-partitions'
 
 interface PendingAuth {
   resolve(value: string): void
@@ -136,15 +137,28 @@ export class AccountManager {
     return this.adoptPending(tempId, adapter)
   }
 
-  /** Personal Facebook / Instagram from cookies captured in the in-app login window. */
-  async addWebSession(platform: 'messenger' | 'instagram', cookies: WebCookie[]): Promise<Account> {
+  /**
+   * Personal Facebook / Instagram from cookies captured in the in-app login window, in `partition` (the browser
+   * session it signed in with, kept as the account's own). The same person signing in again replaces their account.
+   */
+  async addWebSession(platform: WebPlatform, cookies: WebCookie[], partition = legacyPartition(platform)): Promise<Account> {
     const tempId = `${platform}:pending-${randomUUID().slice(0, 8)}`
     let adapter: PlatformAdapter
     const ctx = this.contextFor(tempId, () => adapter.account.id)
-    adapter = platform === 'messenger' ? new FacebookPersonalAdapter(tempId, { cookies }, ctx) : new InstagramPersonalAdapter(tempId, { cookies }, ctx)
+    const secret = { cookies, partition }
+    adapter = platform === 'messenger' ? new FacebookPersonalAdapter(tempId, secret, ctx) : new InstagramPersonalAdapter(tempId, secret, ctx)
+    const previous = this.storage.readSecret<{ partition?: string }>(`${platform === 'messenger' ? 'messenger:fb-' : 'instagram:ig-'}${userIdOf(platform, cookies)}`)?.partition
     const account = await this.adoptPending(tempId, adapter)
-    await this.storage.upsertAccount(account, { cookies })
+    await this.storage.upsertAccount(account, secret)
+    rememberPartition(account.id, platform, partition)
+    // Signed in again from a new session: the one it used before is let go.
+    if (previous && previous !== partition) void wipePartition(platform, previous)
     return account
+  }
+
+  /** The browser session a personal Facebook / Instagram account signs in with. */
+  storedPartition(accountId: string, platform: WebPlatform): string {
+    return this.storage.readSecret<{ partition?: string }>(accountId)?.partition ?? legacyPartition(platform)
   }
 
   /** Fresh cookies for an existing personal Facebook/Instagram account, then reconnect. */
@@ -159,7 +173,8 @@ export class AccountManager {
     await adapter.disconnect().catch(() => undefined)
     adapter.replaceCookies(cookies)
     await adapter.connect()
-    await this.storage.upsertAccount(adapter.account, { cookies })
+    const partition = this.storage.readSecret<{ partition?: string }>(accountId)?.partition
+    await this.storage.upsertAccount(adapter.account, partition ? { cookies, partition } : { cookies })
     await this.loadConversations(adapter)
     return { ...adapter.account }
   }
@@ -254,6 +269,8 @@ export class AccountManager {
   }
 
   async remove(accountId: string): Promise<void> {
+    const web = webPlatformOf(accountId)
+    const partition = web ? this.storage.readSecret<{ partition?: string }>(accountId)?.partition : undefined
     const adapter = this.adapters.get(accountId)
     if (adapter) {
       await adapter.disconnect().catch(() => undefined)
@@ -266,6 +283,10 @@ export class AccountManager {
       }
     }
     await this.storage.removeAccount(accountId)
+    if (web) {
+      forgetPartition(accountId)
+      if (partition) await wipePartition(web, partition)
+    }
     this.emit({ type: 'account:removed', accountId })
   }
 
@@ -787,9 +808,11 @@ function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Sto
   } else if (stored.id.startsWith('messenger:fb-')) {
     const secret = storage.readSecret<FacebookPersonalSecret>(stored.id)
     if (secret) adapter = new FacebookPersonalAdapter(stored.id, secret, ctx)
+    if (secret) rememberPartition(stored.id, 'messenger', secret.partition ?? legacyPartition('messenger'))
   } else if (stored.id.startsWith('instagram:ig-')) {
     const secret = storage.readSecret<InstagramPersonalSecret>(stored.id)
     if (secret) adapter = new InstagramPersonalAdapter(stored.id, secret, ctx)
+    if (secret) rememberPartition(stored.id, 'instagram', secret.partition ?? legacyPartition('instagram'))
   } else {
     const secret = storage.readSecret<MetaSecret>(stored.id)
     if (secret) adapter = new MetaAdapter(stored.platform, secret, ctx)
@@ -799,4 +822,14 @@ function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Sto
   adapter.account.handle = stored.handle
   adapter.account.avatarUrl = stored.avatarUrl
   return adapter
+}
+
+/** Personal Facebook / Instagram accounts (web sessions) by their id. */
+function webPlatformOf(accountId: string): WebPlatform | undefined {
+  return accountId.startsWith('messenger:fb-') ? 'messenger' : accountId.startsWith('instagram:ig-') ? 'instagram' : undefined
+}
+
+/** Whose session these cookies are (c_user on Facebook, ds_user_id on Instagram). */
+function userIdOf(platform: WebPlatform, cookies: WebCookie[]): string | undefined {
+  return cookies.find((c) => c.name === (platform === 'messenger' ? 'c_user' : 'ds_user_id'))?.value
 }

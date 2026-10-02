@@ -28,6 +28,7 @@ import { previewOf, prunePreviews } from './media/preview'
 import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
 import { cutoutMemoryOk, nativeCutout, nativeCutoutAvailable, NativeCutoutError } from './media/mac-cutout'
+import { freshPartition, legacyPartition, newPartition, partitionFor, sessionUser, USER_COOKIE, wipePartition, type WebPlatform } from './web-partitions'
 import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource, customStickerPath } from './stickers'
 import { AiService, readMedia } from './ai/service'
@@ -812,9 +813,9 @@ function registerImageProxy(): void {
       const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
       const zalo = /zdn\.vn|zadn\.vn|dlfl\.vn|zaloapp\.com/.test(target.hostname)
       const ses = /fbcdn|cdninstagram|instagram/.test(target.hostname)
-        ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
+        ? session.fromPartition(partitionFor(instagram ? 'instagram' : 'messenger'))
         : /facebook|fbsbx/.test(target.hostname)
-          ? session.fromPartition('persist:login-messenger')
+          ? session.fromPartition(partitionFor('messenger'))
           : session.defaultSession
       const get = (): Promise<Response> =>
         ses.fetch(target.toString(), { headers: { Referer: zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
@@ -970,9 +971,9 @@ async function mediaBytes(url: string): Promise<{ data: Buffer; type: string }> 
   const instagram = /instagram|cdninstagram/.test(host) || target.searchParams.has('_nc_cat')
   const zalo = /zdn\.vn|zadn\.vn|zaloapp\.com/.test(host)
   const ses = /fbcdn|cdninstagram|instagram/.test(host)
-    ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
+    ? session.fromPartition(partitionFor(instagram ? 'instagram' : 'messenger'))
     : /facebook|fbsbx/.test(host)
-      ? session.fromPartition('persist:login-messenger')
+      ? session.fromPartition(partitionFor('messenger'))
       : session.defaultSession
   const referer = zalo ? 'https://chat.zalo.me/' : instagram ? 'https://www.instagram.com/' : /fbcdn|facebook|fbsbx/.test(host) ? 'https://www.facebook.com/' : undefined
   const res = await ses.fetch(target.toString(), referer ? { headers: { Referer: referer } } : undefined)
@@ -1169,12 +1170,41 @@ const WEB_LOGIN: Record<'messenger' | 'instagram', { url: string; domain: string
 const openLogins = new Map<string, BrowserWindow>()
 
 /**
+ * A personal Facebook / Instagram account signs in again in its own browser session. If that session is now signed
+ * in to somebody else (another account of yours), it gets a fresh one instead, so the sign-in page shows and the
+ * other account is left alone; and a sign-in as the wrong person is refused rather than attached to this account.
+ */
+async function signInAgain(id: string, web: WebPlatform): Promise<void> {
+  const expected = id.slice(id.indexOf('-') + 1)
+  const stored = manager.storedPartition(id, web)
+  const owner = await sessionUser(web, stored)
+  const partition = owner && owner !== expected ? newPartition(web) : stored
+  log(`[web login] ${id} signs in again in ${partition}${partition !== stored ? ` (${stored} is signed in to another account)` : ''}`)
+  let cookies: WebCookie[]
+  try {
+    cookies = await captureWebSession(web, manager.storedCookies(id), partition)
+  } catch (err) {
+    if (partition !== stored) void wipePartition(web, partition)
+    throw err
+  }
+  const signedIn = cookies.find((c) => c.name === USER_COOKIE[web])?.value
+  if (signedIn !== expected) {
+    if (partition !== stored) void wipePartition(web, partition)
+    const vi = storage.settings.language !== 'en'
+    throw new Error(vi ? 'Bạn vừa đăng nhập một tài khoản khác. Hãy đăng nhập đúng tài khoản này, hoặc dùng "Thêm tài khoản" cho tài khoản mới.' : 'You signed in to a different account. Sign in to this one, or use "Add account" for a new one.')
+  }
+  // A new session means a new adapter around it (Instagram works inside its session); the old one is let go.
+  if (partition !== stored) await manager.addWebSession(web, cookies, partition)
+  else await manager.reauthWebSession(id, cookies)
+}
+
+/**
  * Open the platform's own sign-in page in an app window and return its cookies once the
  * user is signed in. `dead` are cookies known to be rejected: only those exact values are
  * dropped first, so a newer session already in the window (for example one the user just
  * completed) is reused instead of forcing another sign-in.
  */
-async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebCookie[] = []): Promise<WebCookie[]> {
+async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebCookie[] = [], partition = legacyPartition(platform)): Promise<WebCookie[]> {
   const existing = openLogins.get(platform)
   if (existing && !existing.isDestroyed()) {
     // Already waiting on this platform (for example a two-factor step): bring it back instead of opening another.
@@ -1183,7 +1213,8 @@ async function captureWebSession(platform: 'messenger' | 'instagram', dead: WebC
     throw new Error('Finish signing in in the Instagram/Facebook window that is already open')
   }
   const spec = WEB_LOGIN[platform]
-  const ses = session.fromPartition(`persist:login-${platform}`)
+  // The account's own browser session (a new account gets an empty one, so the sign-in page shows).
+  const ses = session.fromPartition(partition)
   // Facebook sessions are shared with ws3-fca, which now uses this exact browser identity.
   if (platform === 'messenger') ses.setUserAgent(browserUserAgent())
   // If the window still holds exactly the rejected session, drop its login cookies so the sign-in page shows.
@@ -1337,13 +1368,23 @@ function registerIpc(): void {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
     if (web && account && account.status !== 'connected') {
-      await manager.reauthWebSession(id, await captureWebSession(web, manager.storedCookies(id)))
+      await signInAgain(id, web)
       return
     }
     await manager.reconnect(id)
   })
   handle(IPC.accountsAddDemo, () => manager.addDemo())
-  handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => manager.addWebSession(platform, await captureWebSession(platform)))
+  handle(IPC.accountsConnectWeb, async (_e, platform: 'messenger' | 'instagram') => {
+    // A second account signs in in a session of its own, leaving the first one signed in.
+    const partition = freshPartition(platform)
+    log(`[web login] a new ${platform} account signs in in ${partition}`)
+    try {
+      return await manager.addWebSession(platform, await captureWebSession(platform, [], partition), partition)
+    } catch (err) {
+      void wipePartition(platform, partition)
+      throw err
+    }
+  })
   handle(IPC.accountsListPages, (_e, appId: string) => listPages(appId))
   handle(IPC.accountsAddPages, (_e, pages: PageOption[], includeInstagram: boolean) => manager.addPages(pages, includeInstagram))
   handle(IPC.contactsList, (_e, query: string) => manager.contacts(query))

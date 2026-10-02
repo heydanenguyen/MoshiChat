@@ -4,6 +4,7 @@ import { join } from 'path'
 import { fileInside } from '../safety'
 import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import { nativeCutoutAvailable } from '../media/mac-cutout'
+import { partitionFor } from '../web-partitions'
 import { openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
 /** The worker goes away after this long without work, giving its memory back. */
@@ -310,7 +311,7 @@ export async function readMedia(url: string): Promise<Uint8Array> {
   if (target.protocol !== 'https:' || !MEDIA_HOSTS.test(target.hostname)) throw new Error('This media host is not allowed')
   const instagram = /instagram|cdninstagram/.test(target.hostname) || target.searchParams.has('_nc_cat')
   const ses = /fbcdn|cdninstagram|instagram|facebook|fbsbx/.test(target.hostname)
-    ? session.fromPartition(instagram ? 'persist:login-instagram' : 'persist:login-messenger')
+    ? session.fromPartition(partitionFor(instagram ? 'instagram' : 'messenger'))
     : session.defaultSession
   const res = await ses.fetch(target.toString(), { headers: { Referer: instagram ? 'https://www.instagram.com/' : 'https://www.facebook.com/' } })
   if (!res.ok) throw new Error(`Could not load the voice note (${res.status})`)

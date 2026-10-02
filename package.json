@@ -1,7 +1,7 @@
 {
   "name": "moshi",
   "productName": "Moshi",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "All your conversations, in one place. Messenger, Instagram and Telegram in a single Apple-grade inbox.",
   "main": "./out/main/index.js",
   "author": {
@@ -25,7 +25,8 @@
     "dist:mac": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --publish never",
     "dist:mac:arm64": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --arm64 --publish never",
     "dist:mac:x64": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --x64 --publish never",
-    "dist:win": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs"
+    "dist:win": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs",
+    "postinstall": "node scripts/patch-deps.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

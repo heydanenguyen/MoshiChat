@@ -1,6 +1,6 @@
 import { createReadStream } from 'fs'
 import { createRequire } from 'module'
-import { dirname, join } from 'path'
+import { dirname, join, sep } from 'path'
 import { browserUserAgent } from '../user-agent'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { mapFcaAttachment, mapFcaEvent, type FcaAttachment } from './facebook-items'
@@ -19,6 +19,8 @@ export interface WebCookie {
 
 export interface FacebookPersonalSecret {
   cookies: WebCookie[]
+  /** The browser session this account signed in with (see web-partitions.ts); absent: the shared one from before. */
+  partition?: string
 }
 
 type FcaModule = typeof import('ws3-fca')
@@ -87,17 +89,15 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     this.stopListening?.()
     this.stopListening = undefined
     this.setStatus('connecting')
-    pinUserAgent()
-    const mod = (await import('ws3-fca')) as unknown as FcaModule & { default?: FcaModule['login'] }
-    const login = (mod.login ?? mod.default) as FcaModule['login']
     const appState = this.secret.cookies.map((c) => ({ key: c.name, name: c.name, value: c.value, domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }))
-    const api = await new Promise<FcaApi>((resolve, reject) => {
+    const api = await withOwnFca((mod) => new Promise<FcaApi>((resolve, reject) => {
+      const login = (mod.login ?? mod.default) as FcaModule['login']
       // autoMarkRead defaults to true in ws3-fca: it would send "seen" for every incoming message.
       login({ appState } as never, { listenEvents: true, selfListen: true, updatePresence: false, autoReconnect: true, online: false, userAgent: browserUserAgent(), randomUserAgent: false, autoMarkRead: false, autoMarkDelivery: false } as never, (err, result) => {
         if (err || !result) reject(new Error(typeof err === 'string' ? err : (err?.error ?? err?.message ?? 'Facebook login failed')))
         else resolve(result)
       })
-    }).catch((err: Error) => {
+    })).catch((err: Error) => {
       // ws3-fca reports a dead or rejected session as "Error retrieving userID".
       if (/retrieving userID|login|checkpoint/i.test(err.message)) {
         this.setStatus('needs_auth', 'logged_out')
@@ -124,7 +124,7 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
 
   /** New cookies from a fresh sign-in; takes effect on the next connect(). */
   replaceCookies(cookies: WebCookie[]): void {
-    this.secret = { cookies }
+    this.secret = { ...this.secret, cookies }
   }
 
   async disconnect(): Promise<void> {
@@ -534,12 +534,8 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
  * request, so one session appears to hop between devices and Facebook logs it
  * out. Pin it to the same browser identity used in the login window.
  */
-let uaPinned = false
-function pinUserAgent(): void {
-  if (uaPinned) return
-  const req = createRequire(__filename)
-  const entry = req.resolve('ws3-fca')
-  const uaModule = req(join(dirname(entry), '..', 'src', 'utils', 'user-agents.js')) as { randomUserAgent: () => unknown; defaultUserAgent: string }
+function pinUserAgent(req: NodeJS.Require, root: string): void {
+  const uaModule = req(join(root, 'src', 'utils', 'user-agents.js')) as { randomUserAgent: () => unknown; defaultUserAgent: string }
   const ua = browserUserAgent()
   const major = /Chrome\/(\d+)/.exec(ua)?.[1] ?? '130'
   const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux'
@@ -552,7 +548,28 @@ function pinUserAgent(): void {
     secChUaPlatformVersion: process.platform === 'win32' ? '"15.0.0"' : '"14.0.0"'
   })
   uaModule.defaultUserAgent = ua
-  uaPinned = true
+}
+
+let fcaQueue: Promise<unknown> = Promise.resolve()
+/**
+ * Runs `use` (a sign-in) with a copy of ws3-fca of its own. ws3-fca keeps one cookie jar per loaded module, so two
+ * accounts signed in through the same copy share it: the second sign-in's cookies replaced the first's, and the
+ * first account then read the second one's chats. Each sign-in drops the cached copy and loads a fresh one; they run
+ * one at a time, because ws3-fca loads its API parts during sign-in and those must come from the same copy.
+ */
+export function withOwnFca<T>(use: (mod: FcaModule & { default?: FcaModule['login'] }) => Promise<T>): Promise<T> {
+  const run = fcaQueue.then(() => {
+    const req = createRequire(__filename)
+    const root = join(dirname(req.resolve('ws3-fca')), '..')
+    for (const key of Object.keys(req.cache)) if (key.startsWith(root + sep)) delete req.cache[key]
+    // Pinned before ws3-fca loads: its headers module copies randomUserAgent when it is first required, so a pin
+    // made afterwards never takes effect (requests then hop between devices and Facebook signs the session out).
+    pinUserAgent(req, root)
+    const mod = req('ws3-fca') as FcaModule & { default?: FcaModule['login'] }
+    return use(mod)
+  })
+  fcaQueue = run.catch(() => undefined)
+  return run
 }
 
 function summarizeReactions(list: Array<{ reaction: string; userID: string }>, meId: string): Message['reactions'] {

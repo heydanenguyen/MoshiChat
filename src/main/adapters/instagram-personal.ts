@@ -9,12 +9,15 @@ import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
 import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
+import { legacyPartition } from '../web-partitions'
 import { DirectComposer } from '../direct-composer'
 import { InstagramRealtime, RefreshThrottle } from '../instagram-realtime'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
   username?: string
+  /** This account's own browser session (see web-partitions.ts); absent: the shared one from before. */
+  partition?: string
 }
 
 interface IgUser {
@@ -98,18 +101,10 @@ const APP_HEADERS = { 'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '129477' }
  */
 export class InstagramPersonalAdapter implements PlatformAdapter {
   readonly account: Account
-  private web = new WebClient('persist:login-instagram', 'https://www.instagram.com')
-  private composer = new DirectComposer('persist:login-instagram', (...args) => this.ctx.log(...args))
-  private realtime = new InstagramRealtime('persist:login-instagram', {
-    onActivity: (kinds) => {
-      // A reaction does not move the thread in the inbox, so the poll would not notice it: look again at recent chats.
-      if (kinds.has('CreateReaction') || kinds.has('DeleteReaction')) this.reactionSweep = true
-      this.onRealtimeActivity()
-    },
-    onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
-    onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),
-    log: (...args) => this.ctx.log(...args)
-  })
+  // All three work inside this account's own browser session (set in the constructor).
+  private web: WebClient
+  private composer: DirectComposer
+  private realtime: InstagramRealtime
   private activity = new RefreshThrottle(() => void this.poll(), 350, REALTIME_MIN_GAP)
   private pollAgain = false
   /** A reaction came in over realtime: re-read reactions of the most recent chats on the next poll. */
@@ -166,6 +161,19 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     private readonly ctx: AdapterContext
   ) {
     this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true, unsend: true } }
+    const partition = secret.partition ?? legacyPartition('instagram')
+    this.web = new WebClient(partition, 'https://www.instagram.com')
+    this.composer = new DirectComposer(partition, (...args) => this.ctx.log(...args))
+    this.realtime = new InstagramRealtime(partition, {
+      onActivity: (kinds) => {
+        // A reaction does not move the thread in the inbox, so the poll would not notice it: look again at recent chats.
+        if (kinds.has('CreateReaction') || kinds.has('DeleteReaction')) this.reactionSweep = true
+        this.onRealtimeActivity()
+      },
+      onTyping: (threadId, senderId, typing) => this.onRealtimeTyping(threadId, senderId, typing),
+      onSessionLost: () => this.expire(new SessionExpiredError('logged_out')),
+      log: (...args) => this.ctx.log(...args)
+    })
   }
 
   async connect(): Promise<void> {
@@ -185,7 +193,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       this.account.displayName = me?.full_name || me?.username || this.secret.username || 'Instagram'
       this.account.handle = me?.username ? `@${me.username}` : this.secret.username ? `@${this.secret.username}` : undefined
       this.account.avatarUrl = me?.profile_pic_url
-      this.secret = { cookies: await this.web.cookies(), username: me?.username ?? this.secret.username }
+      this.secret = { ...this.secret, cookies: await this.web.cookies(), username: me?.username ?? this.secret.username }
     } catch (err) {
       this.web.close()
       if (err instanceof SessionExpiredError) {
