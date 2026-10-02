@@ -1640,7 +1640,10 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
-    if (isWindows) app.setAppUserModelId('com.danenguyen.moshi')
+    // Windows ties notifications and the taskbar to this id through a Start menu shortcut. A development run sending a
+    // notification makes Electron create "Electron.lnk" (electron.exe) under the same id, after which the installed
+    // Moshi showed Electron's name and logo: development runs get an id of their own.
+    if (isWindows) app.setAppUserModelId(app.isPackaged ? 'com.danenguyen.moshi' : 'com.danenguyen.moshi.dev')
     await storage.load()
     // Before any window exists: a locked Moshi must open locked.
     await appLock.load()
