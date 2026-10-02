@@ -20,6 +20,7 @@ import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBl
 import { LaterButton } from './LaterPicker'
 import { ReactionGrid, ReactionPill } from './ReactionPill'
 import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
+import { useAccountLabels } from '../accountLabels'
 import { giphyIdOf } from '@shared/giphy'
 import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
@@ -395,7 +396,9 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
     }
   }, [conversation.id, hasMore, loading, loadMore, rememberAnchor])
 
-  const subtitle = isTyping
+  // The account this chat is on, where its app has more than one: so a reply never goes out from the wrong one.
+  const accountLabel = useAccountLabels()[conversation.accountId]
+  const base = isTyping
     ? conversation.isGroup
       ? t('typingIn', { name: typing.name })
       : t('typing')
@@ -404,6 +407,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
       : conversation.isGroup
         ? t('members', { count: conversation.participants.length })
         : (conversation.participants.find((p) => !p.isMe)?.handle ?? PLATFORMS[conversation.platform].name)
+  const subtitle = accountLabel && !isTyping && !members ? `${base} · ${t('viaAccount', { account: accountLabel })}` : base
 
   // Only real files light up the drop overlay; a chat dragged from the list is handled by the chat area.
   const isFileDrag = (e: React.DragEvent): boolean => e.dataTransfer.types.includes('Files')

@@ -1,29 +1,24 @@
-## Moshi 0.4.2
+## Moshi 0.4.3
 
-**Nhiều tài khoản Facebook và Instagram cá nhân.** Từ 0.4.1, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
+**Biết ngay mỗi cuộc trò chuyện thuộc tài khoản nào** khi bạn có nhiều tài khoản trên cùng một ứng dụng. Từ 0.4.2, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
 
-### Nhiều tài khoản Facebook / Instagram
-- **Thêm tài khoản thứ hai, thứ ba…:** mỗi tài khoản cá nhân giờ có trình duyệt đăng nhập riêng. "Thêm tài khoản" mở một cửa sổ đăng nhập trống, tài khoản đang dùng giữ nguyên, không bị đăng xuất. Tài khoản có từ trước không cần đăng nhập lại.
-- **Các tài khoản chạy song song:** tin nhắn của từng tài khoản Facebook tách bạch, không còn tài khoản này đọc nhầm tin của tài khoản kia.
-- **Đăng nhập lại đúng tài khoản:** khi một tài khoản cần đăng nhập lại mà cửa sổ đang đăng nhập tài khoản khác của bạn, Moshi mở cửa sổ trống mới; lỡ đăng nhập nhầm người thì Moshi báo thay vì gán nhầm.
-- Xoá một tài khoản thêm sau thì cookie đăng nhập của nó trên máy cũng được xoá.
-
-### Sửa lỗi
-- **Facebook không còn hiện danh sách trống** khi có cuộc trò chuyện với người không có ảnh đại diện (tài khoản đã khoá, đã xoá, một số Trang).
+### Nhiều tài khoản trên cùng ứng dụng
+- **Nhãn tài khoản trên từng cuộc trò chuyện:** cạnh giờ có nhãn nhỏ như @dane.log hay tên tài khoản Facebook, để biết chat đó thuộc tài khoản nào.
+- **Đầu khung chat ghi rõ tài khoản:** ví dụ "Instagram · qua @dane.log", để không trả lời khách bằng nhầm tài khoản.
+- **Lọc theo tài khoản:** khi chọn Instagram hay Facebook, phía trên danh sách có hàng "Mọi tài khoản · @tài khoản 1 · @tài khoản 2" kèm số tin chưa đọc của từng tài khoản.
+- Chỉ hiện khi một ứng dụng có từ hai tài khoản trở lên; ai chỉ có một tài khoản thì giao diện không đổi.
 
 ### Lưu ý
-- Facebook / Instagram coi tài khoản thêm mới như đăng nhập từ thiết bị mới, có thể gửi email cảnh báo hoặc yêu cầu xác minh.
-- Mỗi tài khoản Instagram có một cửa sổ ẩn riêng để nhận tin tức thời, nên tốn thêm bộ nhớ (vài trăm MB mỗi tài khoản).
-- Nhiều tài khoản Instagram cùng lúc chưa được thử với tài khoản thật (Facebook đã thử với 2 tài khoản). Bản Windows chưa được thử bằng tay.
+- Một tài khoản Instagram có thể hiện danh sách trống nếu tin nhắn của nó nằm ở mục "Chung" (tài khoản chuyên nghiệp) hoặc đã chuyển sang mã hoá đầu cuối; đang tìm hiểu.
+- Bản Windows chưa được thử bằng tay.
 
 ---
 
 ### English
-From 0.4.1, Moshi downloads this update in the background and only asks you to restart.
+From 0.4.2, Moshi downloads this update in the background and only asks you to restart.
 
-- **Several personal Facebook and Instagram accounts:** each one now signs in in a browser session of its own. "Add account" opens an empty sign-in window and the account you already have stays signed in; existing accounts need no new sign-in.
-- **Accounts run side by side:** each Facebook account's messages stay its own (one account no longer reads the other's chats).
-- **Signing in again lands on the right account:** if the window is signed in to another of your accounts, Moshi opens a fresh one; signing in as the wrong person is refused instead of attached to the account.
-- Removing an added account also removes its sign-in cookies from this computer.
-- **Fixed:** Facebook no longer shows an empty chat list when a chat includes someone without a profile picture (deactivated or deleted accounts, some Pages).
-- Notes: Facebook / Instagram treat a newly added account as a sign-in from a new device and may email you or ask for a check. Each Instagram account keeps its own hidden window for live messages (a few hundred MB more each). Several Instagram accounts at once are not yet tried with real accounts (Facebook was, with two). The Windows build is not hand-tested.
+- **See which account each chat is on** when you have several on one app: a small label beside the time (@handle, or the Facebook account's name).
+- **The chat header names the account** ("Instagram · via @dane.log"), so you never reply from the wrong one.
+- **Filter by account:** with Instagram or Facebook picked, "All accounts · @one · @two" sits above the list, with each account's unread count.
+- Shown only when an app has two or more accounts; with one account nothing changes.
+- Notes: an Instagram account may show an empty list when its messages are in the "General" folder (professional accounts) or moved to end-to-end encryption; being looked into. The Windows build is not hand-tested.

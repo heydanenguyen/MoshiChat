@@ -41,6 +41,8 @@ import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
 import { isBirthdayToday } from '@shared/extras'
 import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
+import { AccountFilters } from './AccountFilters'
+import { useAccountLabels } from '../accountLabels'
 import { isArchived, isChatMuted, isPendingRequest, maskCode } from '@shared/inbox'
 import { followState, formatLaterTime, isSnoozed, isWoken } from '@shared/later'
 
@@ -99,6 +101,8 @@ export function ConversationList(): JSX.Element {
   const toggleMute = useStore((s) => s.toggleMute)
   const openSheet = useStore((s) => s.openSheet)
   const showBadge = useShowPlatformBadge()
+  // Which account a chat is on, where an app has more than one (not needed once a single account is picked).
+  const accountLabels = useAccountLabels()
   const [menu, setMenu] = useState<TagMenuState | undefined>()
   const menuRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -258,6 +262,7 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
+      {!searching && listView === 'inbox' && <AccountFilters />}
       {!searching && listView === 'inbox' && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
       {!searching && listView === 'requests' && <p className="requests-note">{t('requestsNote')}</p>}
 
@@ -311,6 +316,7 @@ export function ConversationList(): JSX.Element {
             const memberChats = c.members?.map((id) => rawConversations[id]).filter((m): m is Conversation => !!m)
             const merged = !!memberChats && memberChats.length > 1
             const latestApp = memberChats?.find((m) => m.lastMessage && m.lastMessage.id === c.lastMessage?.id)?.platform ?? c.platform
+            const accountLabel = !merged && !filter.startsWith('account:') ? accountLabels[c.accountId] : undefined
             return (
               <div
                 key={v.key}
@@ -366,6 +372,11 @@ export function ConversationList(): JSX.Element {
                           </span>
                         )}
                       </span>
+                      {accountLabel && (
+                        <span className="conv-account" title={t('viaAccount', { account: accountLabel })}>
+                          {accountLabel}
+                        </span>
+                      )}
                       <span className="conv-corner">
                         <span className="conv-time">{c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}</span>
                         <span

@@ -1251,6 +1251,29 @@ a {
   mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
 }
 
+/* Which account a chat is on, beside its time, where an app has more than one */
+.conv-account {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+/* All · @one · @two above the list; each account chip carries its avatar */
+.account-chip {
+  padding-left: 4px;
+}
+.account-chip .avatar {
+  flex-shrink: 0;
+}
 .quick-chip {
   display: inline-flex;
   align-items: center;
