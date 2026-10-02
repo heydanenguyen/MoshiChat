@@ -61,7 +61,10 @@ function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device, chatModel: C
     const { pipeline } = await lib()
     // The service is told before a GPU load starts: if DirectML crashes the process, it knows why.
     if (device === 'dml') send({ type: 'gpu-load', kind })
-    const result = (await pipeline(task as never, spec.repo, { dtype: spec.dtype as never, device, progress_callback } as never)) as unknown as Pipe
+    // ONNX Runtime's CPU arena grows in ever larger blocks; Electron's allocator refuses blocks that big and kills the
+    // process (BiRefNet at 1024 px died at ~1.8 GB). Without the arena each tensor is allocated on its own and it runs.
+    const session_options = kind === 'cutout' ? { enableCpuMemArena: false } : undefined
+    const result = (await pipeline(task as never, spec.repo, { dtype: spec.dtype as never, device, progress_callback, session_options } as never)) as unknown as Pipe
     if (device === 'dml') send({ type: 'gpu-ok', kind })
     send({ type: 'progress', kind, phase: 'ready', progress: 1 })
     return result

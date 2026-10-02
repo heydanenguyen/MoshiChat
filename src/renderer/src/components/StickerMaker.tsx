@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useStore, useT } from '../store'
 import { MitoArt } from './StickerPicker'
+import { useAi } from '../aiStore'
 
 const SCAN_LINES = ['makerScan1', 'makerScan2', 'makerScan3', 'makerScan4'] as const
 const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -16,6 +17,9 @@ export function StickerMaker({ onSend }: { onSend(id: string): void }): JSX.Elem
   const maker = useStore((s) => s.stickerMaker)
   const dismiss = useStore((s) => s.dismissStickerMaker)
   const remake = useStore((s) => s.remakeStickerWhole)
+  const remakePrecise = useStore((s) => s.remakeStickerPrecise)
+  // macOS lifted the subject: the bigger on-device model can be asked for a finer cut.
+  const native = useAi((s) => !!s.status?.cutout.native)
   const [line, setLine] = useState(0)
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -142,6 +146,11 @@ export function StickerMaker({ onSend }: { onSend(id: string): void }): JSX.Elem
               }}
             >
               {t('makerWhole')}
+            </button>
+          )}
+          {native && !maker.whole && !maker.precise && (
+            <button className="btn small" disabled={busy} title={t('makerPreciseHint')} onClick={() => void remakePrecise()}>
+              {t('makerPrecise')}
             </button>
           )}
           <button className="btn small secondary" onClick={finish}>

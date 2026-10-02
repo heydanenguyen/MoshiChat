@@ -83,7 +83,7 @@ jobs:
         # On failure the last 50 log lines become an annotation, readable without signing in.
         run: |
           set -o pipefail
-          npx electron-vite build && npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee build.log || { echo "::error title=macOS build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
+          npx electron-vite build && node scripts/build-mac-cutout.mjs && npx electron-builder --mac --${{ matrix.arch }} --publish never 2>&1 | tee build.log || { echo "::error title=macOS build failed::$(tail -n 50 build.log | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: Moshi-mac-${{ matrix.arch }}

@@ -3,6 +3,7 @@ import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
 import { join } from 'path'
 import { fileInside } from '../safety'
 import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
+import { nativeCutoutAvailable } from '../media/mac-cutout'
 import { openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
 
 /** The worker goes away after this long without work, giving its memory back. */
@@ -115,7 +116,7 @@ export class AiService {
       translate: { ready: await present(AI_MODELS.translate) },
       chat: { model: this.chatModel(), ready: await present(AI_MODELS.chat[this.chatModel()]) },
       speak: { vi: await present(AI_MODELS.speak.vi), en: await present(AI_MODELS.speak.en) },
-      cutout: { ready: await present(AI_MODELS.cutout) },
+      cutout: { ready: await present(AI_MODELS.cutout), native: nativeCutoutAvailable() },
       bytes: await folderSize(modelsDir())
     }
   }
@@ -227,6 +228,11 @@ export class AiService {
     const bullets = parseSummary(text)
     if (bullets.length) this.remember('summaries', cacheKey, JSON.stringify(bullets))
     return bullets
+  }
+
+  /** Whether the BiRefNet cut-out model is downloaded. */
+  cutoutModelReady(): Promise<boolean> {
+    return present(AI_MODELS.cutout)
   }
 
   /** The photo with its background made transparent (PNG in, PNG out). */

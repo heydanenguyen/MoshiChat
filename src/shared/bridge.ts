@@ -150,7 +150,8 @@ export interface MoshiBridge {
     source(id: string): Promise<StickerSource>
     rename(id: string, name: string): Promise<void>
     /** Add it (cut the background out of still images when asked). */
-    add(path: string, cutout: boolean, name?: string): Promise<CustomSticker>
+    /** `cutout`: true lifts the subject the quickest way this computer has; 'precise' always uses the BiRefNet model. */
+    add(path: string, cutout: boolean | 'precise', name?: string): Promise<CustomSticker>
     remove(id: string): Promise<void>
   }
   backup: {

@@ -46,7 +46,8 @@ export interface AiStatus {
   translate: { ready: boolean }
   chat: { model: ChatModel; ready: boolean }
   speak: Record<SpeakLang, boolean>
-  cutout: { ready: boolean }
+  /** `native`: macOS lifts the subject itself (no model to download; BiRefNet only for "Cut more precisely"). */
+  cutout: { ready: boolean; native?: boolean }
   /** Space the downloaded models take. */
   bytes: number
 }

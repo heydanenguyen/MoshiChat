@@ -214,7 +214,8 @@ interface State {
    * Make a sticker from a picture (picked, dropped or pasted). A still one with `cutout` goes through the sticker maker;
    * `replaces`: a sticker this one takes the place of (made again with its background cut out).
    */
-  makeSticker(source: StickerSource, cutout: boolean, replaces?: string): Promise<void>
+  /** `cutout` 'precise': with the BiRefNet model even where macOS could lift the subject itself. */
+  makeSticker(source: StickerSource, cutout: boolean | 'precise', replaces?: string, recut?: boolean): Promise<void>
   renameSticker(id: string, name: string): Promise<void>
   /** Cut the background out of one of your stickers (made again in its place). */
   recutSticker(id: string): Promise<void>
@@ -225,6 +226,8 @@ interface State {
   dismissStickerMaker(): void
   /** The cut went wrong: make the sticker again from the whole photo, no cut-out. */
   remakeStickerWhole(): Promise<void>
+  /** The sticker being made, cut again with the BiRefNet model ("Cut more precisely"). */
+  remakeStickerPrecise(): Promise<void>
   addTodo(input: { conversationId?: string; messageId?: string; text: string; due?: number }): Promise<void>
   updateTodo(id: string, patch: { text?: string; due?: number; done?: boolean }): Promise<void>
   removeTodo(id: string): Promise<void>
@@ -415,6 +418,8 @@ export interface StickerMaker {
   whole?: boolean
   /** One of your stickers being cut out again (its old picture is gone, so there is no whole photo to go back to). */
   recut?: boolean
+  /** Cut with the BiRefNet model rather than macOS's own subject lifting. */
+  precise?: boolean
 }
 
 /** The scan always plays at least this long, even when the cut-out is quicker. */
@@ -1086,16 +1091,16 @@ export const useStore = create<State>((set, get) => ({
     if (picked) await get().makeSticker(picked, cutout)
   },
 
-  async makeSticker(picked, cutout, replaces) {
+  async makeSticker(picked, cutout, replaces, recut = !!replaces) {
     // One at a time: a second picture waits for the maker to be closed.
     if (get().stickerMaker?.phase === 'cutting') return
     if (cutout && !picked.animated) {
       // The scan plays while the background is cut out, then the sticker lifts off the photo.
       const make = async (): Promise<void> => {
         const startedAt = Date.now()
-        set({ stickerMaker: { phase: 'cutting', preview: picked.preview ?? '', path: picked.path, startedAt, recut: !!replaces || undefined } })
+        set({ stickerMaker: { phase: 'cutting', preview: picked.preview ?? '', path: picked.path, startedAt, recut: recut || undefined, precise: cutout === 'precise' || undefined } })
         try {
-          const sticker = await window.unison.stickers.add(picked.path, true, picked.name)
+          const sticker = await window.unison.stickers.add(picked.path, cutout, picked.name)
           if (replaces) await get().removeSticker(replaces)
           // A quick cut still gets a moment of scanning, so the reveal never feels like a glitch.
           const rest = MAKER_MIN_SCAN_MS - (Date.now() - startedAt)
@@ -1112,7 +1117,7 @@ export const useStore = create<State>((set, get) => ({
       }
       // The cut-out model may still need downloading: the AI setup sheet takes over and calls back.
       const { useAi } = await import('./aiStore')
-      await useAi.getState().withModel('cutout', make)
+      await useAi.getState().withModel('cutout', make, cutout === 'precise')
       return
     }
     try {
@@ -1145,6 +1150,12 @@ export const useStore = create<State>((set, get) => ({
 
   dismissStickerMaker() {
     set({ stickerMaker: undefined })
+  },
+
+  async remakeStickerPrecise() {
+    const maker = get().stickerMaker
+    if (!maker?.sticker) return
+    await get().makeSticker({ path: maker.path, preview: maker.preview, animated: false, name: maker.sticker.name }, 'precise', maker.sticker.id, maker.recut)
   },
 
   async remakeStickerWhole() {

@@ -1,41 +1,26 @@
-## Moshi 0.4.0
+## Moshi 0.4.1
 
-Bản tập trung vào **nhẹ, mượt và an toàn**. Không tính năng nào bị bỏ; từ 0.3.x, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
+Bản sửa lỗi và làm nhẹ tính năng **tách nền sticker**. Từ 0.4.0, Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
 
-### Mượt hơn với chat dài và nhiều hội thoại
-- **Khung chat chỉ vẽ những tin đang thấy:** với cuộc trò chuyện 2.000 tin, mở chat từ khoảng 5 giây xuống dưới 0,1 giây, tin mới đến không còn làm khựng. Mở chat luôn ở tin mới nhất, cuộn lên đọc thì tin mới không kéo bạn xuống.
-- **Ít tốn bộ nhớ khi để Moshi chạy cả ngày:** các cuộc trò chuyện lâu không mở được giải phóng (mở lại thì tải lại ngay), sticker của bạn không còn nằm trong bộ nhớ dưới dạng chuỗi lớn.
-- **Khởi động nhẹ hơn:** Cài đặt, thêm tài khoản, sao lưu, chỉnh ảnh… chỉ tải khi bạn mở lần đầu.
-- **Ít ghi đĩa hơn:** dữ liệu Thân thiết và bộ nhớ đệm Zalo được lưu thưa hơn thay vì sau mỗi tin nhắn; tệp tạm cũ hơn một tuần được tự dọn.
-
-### Kết nối nền nhẹ hơn
-- **Instagram:** cửa sổ ẩn dùng để nhận tin theo thời gian thực không tải ảnh, video, phông chữ nữa; hộp thư không còn bị tải lại liên tục sau mỗi lượt "đã xem" hay cảm xúc (tối đa mỗi 4 giây), và tạm dừng khi mất mạng.
-- **Telegram:** ngắt kết nối giờ ngắt hẳn, không còn vòng lặp chạy ngầm.
-- **WhatsApp:** mỗi tin mới chỉ cập nhật đúng cuộc trò chuyện đó thay vì gửi lại cả danh sách.
-
-### An toàn hơn
-- Chỉ những tệp **bạn tự chọn hoặc kéo vào** mới gửi được; nội dung hiển thị trong app không thể tự gửi tệp khác trên máy.
-- Mọi lệnh nội bộ chỉ được nhận từ chính giao diện Moshi.
-- Ảnh từ Facebook/Instagram chỉ được tải từ máy chủ ảnh của họ, không thể dùng phiên đăng nhập của bạn để mở trang khác.
-- Trên Linux không có kho khoá (keyring), Moshi báo cho bạn biết phiên đăng nhập chưa được mã hoá thật sự.
-
-### Ổn định hơn
-- Một phần giao diện gặp lỗi chỉ hiện thông báo nhỏ và nút thử lại, không làm trắng cả cửa sổ; lỗi trước đây bị bỏ qua im lặng giờ được ghi lại và báo nhẹ.
+### Tách nền sticker
+- **Sửa lỗi "The AI worker stopped":** tách nền bằng mô hình AI (BiRefNet) bị sập giữa chừng vì Moshi giới hạn những khối bộ nhớ quá lớn; giờ chạy hết, mỗi ảnh vài giây.
+- **Trên Mac (macOS 14 trở lên) nhanh và nhẹ hơn hẳn:** Moshi dùng tính năng tách chủ thể có sẵn của macOS (như "nhấc chủ thể" trong ứng dụng Ảnh): khoảng 0,3 giây và vài chục MB thay vì vài giây và khoảng 6 GB bộ nhớ, không cần tải mô hình 115 MB.
+- **Nút "Cắt kỹ hơn":** khi muốn đường cắt tinh hơn, bấm để cắt lại bằng mô hình AI của Moshi (lần đầu cần tải mô hình).
+- **Máy thiếu bộ nhớ được báo rõ:** trên Windows và Mac đời cũ, nếu máy không đủ khoảng 6 GB bộ nhớ trống, Moshi báo lý do thay vì báo lỗi khó hiểu.
+- Các nút sau khi tách nền không còn bị gãy chữ.
 
 ### Lưu ý
-- Đã chạy trên Windows với dữ liệu mẫu, cả bản build thật. Các thay đổi cho Instagram, Telegram và WhatsApp được kiểm tra bằng bài kiểm tra tự động, chưa thử lại với tài khoản thật.
-- Khi tải thêm tin cũ ở đầu cuộc trò chuyện, khung nhìn có thể lệch khoảng một bong bóng.
+- Tách nền bằng tính năng của macOS giữ cả những thứ nó coi là chủ thể (ví dụ cái bàn trong ảnh); dùng "Cắt kỹ hơn" khi cần cắt sát hơn.
+- Bản Windows chưa được thử bằng tay.
 
 ---
 
 ### English
-A release about being **lighter, smoother and safer**. Nothing was removed; from 0.3.x, Moshi downloads it in the background and only asks you to restart.
+From 0.4.0, Moshi downloads this update in the background and only asks you to restart.
 
-- **Long chats:** the thread draws only the messages on screen. With 2,000 messages, opening a chat went from about 5 s to under 0.1 s, and new messages no longer stall it. Chats open on the newest message; reading further up, new messages do not pull you down.
-- **Memory over a long day:** chats not opened for a while are let go (they load again when opened); your own stickers no longer sit in memory as large strings.
-- **Startup:** Settings, adding accounts, backup, the photo editor and others load the first time you open them.
-- **Disk:** Close friends data and the Zalo cache are saved less often instead of after every message; temporary files older than a week are cleaned up.
-- **Connections:** Instagram's hidden realtime window no longer loads images, video or fonts, its inbox refreshes at most every 4 s and pauses offline; Telegram disconnects for real; WhatsApp updates only the chat a message is in.
-- **Safety:** only files you picked or dropped can be sent; internal commands answer only Moshi's own interface; Facebook/Instagram images load only from their image servers, never a page through your session; Linux without a keyring is told its sessions are not really encrypted.
-- **Stability:** a part of the window that fails shows a small note and a retry instead of a blank window; errors that used to vanish are logged and shown gently.
-- Notes: ran on Windows with sample data, including the real build. The Instagram, Telegram and WhatsApp changes are covered by automated tests, not yet re-tried with real accounts. Loading older messages at the top of a chat can leave the view about one bubble off.
+- **Fixed "The AI worker stopped"** when cutting out a sticker's background: the AI model (BiRefNet) crashed because Moshi's memory allocator refuses very large blocks; it now runs through, a few seconds a picture.
+- **Much faster and lighter on Macs with macOS 14 or later:** Moshi uses macOS's own subject lifting (like "lift subject" in Photos), about 0.3 s and a few dozen MB instead of seconds and ~6 GB, with no 115 MB model to download.
+- **"Cut more precisely"** re-cuts the sticker with Moshi's AI model when you want a finer edge (downloads the model the first time).
+- **Not enough memory is said plainly** on Windows and older Macs (the AI model needs about 6 GB free) instead of an obscure error.
+- The buttons after a cut-out no longer break their labels.
+- Notes: macOS keeps everything it considers part of the subject (a desk, for example); use "Cut more precisely" for a tighter cut. The Windows build is not hand-tested.

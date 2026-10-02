@@ -27,6 +27,7 @@ import { AppLock } from './lock'
 import { previewOf, prunePreviews } from './media/preview'
 import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
+import { cutoutMemoryOk, nativeCutout, nativeCutoutAvailable, NativeCutoutError } from './media/mac-cutout'
 import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource, customStickerPath } from './stickers'
 import { AiService, readMedia } from './ai/service'
@@ -753,6 +754,30 @@ function registerMediaProxy(): void {
 
 import { IMAGE_HOSTS } from '@shared/media'
 import { externalUrl, fileInside, isPrivateHost, proxyAllowed } from './safety'
+
+/**
+ * A sticker's background taken away: macOS lifts the subject itself when it can (fast and light); otherwise, or for
+ * "Cut more precisely", the BiRefNet model, which needs ~6 GB of memory and is refused on a computer without it.
+ */
+async function cutOut(png: Buffer, precise: boolean): Promise<Buffer> {
+  const vi = storage.settings.language !== 'en'
+  if (!precise && nativeCutoutAvailable()) {
+    try {
+      return await nativeCutout(png)
+    } catch (err) {
+      log('[cutout] macOS could not lift the subject:', (err as Error).message)
+      // Nothing to lift, and no model here to try harder: say so instead of downloading 115 MB unasked.
+      if (!(await ai.cutoutModelReady())) {
+        const message = err instanceof NativeCutoutError && err.noSubject ? (vi ? 'Không tìm thấy chủ thể trong ảnh' : 'No subject found in the picture') : (err as Error).message
+        throw new Error(message, { cause: err })
+      }
+    }
+  }
+  if (!cutoutMemoryOk()) {
+    throw new Error(vi ? 'Máy không đủ bộ nhớ trống để tách nền (cần khoảng 6 GB). Đóng bớt ứng dụng rồi thử lại.' : 'Not enough free memory to cut out the background (about 6 GB). Close some apps and try again.')
+  }
+  return Buffer.from(await ai.cutout(new Uint8Array(png)))
+}
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
@@ -1514,9 +1539,9 @@ function registerIpc(): void {
     if (picked) grantFile(picked.path)
     return picked
   })
-  handle(IPC.stickersAdd, (_e, path: string, cutout: boolean, name?: string) => {
+  handle(IPC.stickersAdd, (_e, path: string, cutout: boolean | 'precise', name?: string) => {
     if (!fileAllowed(path)) throw new Error('This file cannot be used here')
-    return addSticker(String(path), cutout ? async (png) => Buffer.from(await ai.cutout(new Uint8Array(png))) : undefined, typeof name === 'string' ? name : undefined)
+    return addSticker(String(path), cutout ? (png) => cutOut(png, cutout === 'precise') : undefined, typeof name === 'string' ? name : undefined)
   })
   handle(IPC.stickersFromFile, (_e, path: string) => {
     if (!fileAllowed(path)) throw new Error('This file cannot be used here')

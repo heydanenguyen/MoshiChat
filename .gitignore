@@ -7,3 +7,5 @@ dist
 # Mito sticker frames: rendered from design/mito/animation.html, only needed to rebuild the pack
 design/mito/frames
 design/mito/giphy
+# The macOS cut-out helper, built from scripts/mac-cutout by scripts/build-mac-cutout.mjs
+resources/bin

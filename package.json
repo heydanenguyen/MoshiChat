@@ -1,7 +1,7 @@
 {
   "name": "moshi",
   "productName": "Moshi",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "All your conversations, in one place. Messenger, Instagram and Telegram in a single Apple-grade inbox.",
   "main": "./out/main/index.js",
   "author": {
@@ -11,7 +11,7 @@
   "license": "GPL-3.0-or-later",
   "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/build-mac-cutout.mjs && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
@@ -22,9 +22,9 @@
     "icons": "node scripts/make-icons.mjs",
     "installer-art": "node scripts/make-installer-art.mjs",
     "setup": "node scripts/build-setup.mjs",
-    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
-    "dist:mac:arm64": "electron-vite build && electron-builder --mac --arm64 --publish never",
-    "dist:mac:x64": "electron-vite build && electron-builder --mac --x64 --publish never",
+    "dist:mac": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --publish never",
+    "dist:mac:arm64": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --arm64 --publish never",
+    "dist:mac:x64": "electron-vite build && node scripts/build-mac-cutout.mjs && electron-builder --mac --x64 --publish never",
     "dist:win": "electron-vite build && electron-builder --win --publish never && node scripts/build-setup.mjs"
   },
   "dependencies": {
@@ -129,6 +129,12 @@
         "!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**",
         "!node_modules/@img/sharp-{win32,linux,linuxmusl}*/**",
         "!node_modules/@img/sharp-libvips-{win32,linux,linuxmusl}*/**"
+      ],
+      "extraResources": [
+        {
+          "from": "resources/bin",
+          "to": "bin"
+        }
       ]
     },
     "linux": {

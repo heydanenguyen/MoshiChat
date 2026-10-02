@@ -56,7 +56,8 @@ interface AiState {
   remove(kind: AiKind): Promise<void>
   closeSetup(): void
   /** Run now if the model is here, otherwise offer the download first and run afterwards. */
-  withModel(kind: AiKind, run: () => Promise<void>): Promise<void>
+  /** Runs `run` once the model is here (offering the download first). A Mac that lifts subjects itself needs no cut-out model, unless `requireModel`. */
+  withModel(kind: AiKind, run: () => Promise<void>, requireModel?: boolean): Promise<void>
   transcribe(message: Message, attachment: Attachment): Promise<void>
   translate(message: Message): Promise<void>
   toggleHidden(key: string): void
@@ -143,11 +144,12 @@ export const useAi = create<AiState>((set, get) => {
   const patch = (key: string, value: AiResult): void => set({ results: { ...get().results, [key]: value } })
 
   /** Run now if the model is here, otherwise offer the download first and run afterwards. */
-  const withModel = async (kind: AiKind, run: () => Promise<void>): Promise<void> => {
+  const withModel = async (kind: AiKind, run: () => Promise<void>, requireModel = false): Promise<void> => {
     const status = get().status ?? (await window.unison.ai.status())
     if (!get().status) set({ status })
     // Reading voices are per language and handled by speak() itself.
     if (kind !== 'speak' && status[kind].ready) return run()
+    if (kind === 'cutout' && status.cutout.native && !requireModel) return run()
     set({ setup: { kind, then: () => void run() } })
   }
 

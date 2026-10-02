@@ -8161,8 +8161,16 @@ button.moment-card:hover {
 }
 .maker-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
+  max-width: 100%;
+  padding: 0 12px;
   animation: maker-caption 0.4s var(--ease-smooth) 0.6s both;
+}
+/* four choices on a narrow sheet: each label stays on one line, the row wraps instead */
+.maker-actions .btn {
+  white-space: nowrap;
 }
 /* "Done": the sheet clears so the sticker can fly to its cell, which pops as it lands */
 .sticker-maker.leaving {
