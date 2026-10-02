@@ -4,7 +4,8 @@
  * Drawn on the character's 64x64 canvas; the sticker canvas adds room for props.
  * Used inline by the picker and rendered to PNG by scripts/make-icons.mjs (resources/stickers).
  */
-import { LOGO_ORDER, logoBody, type LogoId } from './logos'
+// Sticker packs exist for the six Moshi characters only (the Pals logos have their own picture pack).
+import { LOGO_ORDER, logoBody, type ClassicLogoId as LogoId } from './logos'
 
 export type StickerExpression =
   | 'love'

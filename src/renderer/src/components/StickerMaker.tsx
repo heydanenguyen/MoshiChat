@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useStore, useT } from '../store'
-import { MitoArt } from './StickerPicker'
+import { PictureArt } from './StickerPicker'
 import { useAi } from '../aiStore'
 
 const SCAN_LINES = ['makerScan1', 'makerScan2', 'makerScan3', 'makerScan4'] as const
@@ -118,7 +118,7 @@ export function StickerMaker({ onSend }: { onSend(id: string): void }): JSX.Elem
       </div>
       <div className="maker-foot">
         <span className="maker-mito">
-          <MitoArt id={maker.phase === 'done' ? 'mito:quay' : 'mito:khohieu'} size={40} play="auto" />
+          <PictureArt id={maker.phase === 'done' ? 'mito:quay' : 'mito:khohieu'} size={40} play="auto" />
         </span>
         <span className="maker-caption" key={caption}>
           {caption}

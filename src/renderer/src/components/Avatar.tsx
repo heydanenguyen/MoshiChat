@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Platform } from '@shared/types'
+import { useStore } from '../store'
 import { abstractAvatarUrl } from './AbstractAvatar'
+import { palAvatarUrl } from './Pals'
 import { PlatformIcon } from './PlatformIcon'
 
 interface Props {
@@ -22,8 +24,11 @@ interface Props {
 function AvatarImage({ name, url }: { name: string; url?: string }): JSX.Element {
   const [stage, setStage] = useState(0)
   useEffect(() => setStage(0), [url])
+  // The Pals style draws its own characters for people without a photo.
+  const pals = useStore((s) => s.settings.style === 'pals')
+  const generated = pals ? palAvatarUrl(name) : abstractAvatarUrl(name)
   const proxied = url && /^https:/.test(url) ? `unison-img://img/?u=${encodeURIComponent(url)}` : undefined
-  const src = !url || stage >= 2 || (stage === 1 && !proxied) ? abstractAvatarUrl(name) : stage === 1 ? proxied! : url
+  const src = !url || stage >= 2 || (stage === 1 && !proxied) ? generated : stage === 1 ? proxied! : url
   return <img className="avatar-img" src={src} alt="" draggable={false} loading="lazy" onError={() => setStage((s) => Math.min(s + 1, 2))} />
 }
 

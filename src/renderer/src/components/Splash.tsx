@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
+import { LOGOS, isLogoId, type LogoId } from '@shared/logos'
 import type { Language } from '@shared/types'
 import { pickSplashLine } from '../greetings'
 import { LogoMark } from './Logo'
@@ -45,7 +45,7 @@ export function writeSplashPrefs(patch: SplashPrefs): void {
  */
 export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }): JSX.Element {
   const [prefs] = useState(readSplashPrefs)
-  const logo = prefs.logo && LOGO_ORDER.includes(prefs.logo) ? prefs.logo : 'buddies'
+  const logo = isLogoId(prefs.logo) ? prefs.logo : 'buddies'
   // Before the first run has saved a language: follow the system (English unless it is Vietnamese).
   const language = prefs.language ?? (navigator.language.toLowerCase().startsWith('vi') ? 'vi' : 'en')
   // The very first launch (right after installing) gets a proper welcome; later ones a random greeting.

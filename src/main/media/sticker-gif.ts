@@ -23,8 +23,22 @@ export async function stickerAsGif(path: string, size = 180): Promise<string> {
   const info = await stat(path)
   const out = join(await dir(), `${createHash('sha1').update(`${path}|${info.mtimeMs}|${size}`).digest('hex').slice(0, 20)}.gif`)
   if ((await stat(out).catch(() => undefined))?.size) return out
-  await sharp(path, { animated: true })
-    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  const fitted = (input: ReturnType<typeof sharp>): ReturnType<typeof sharp> => input.resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  const { pages = 1, delay = [] } = await sharp(path, { animated: true }).metadata()
+  if (pages > 1 && delay.length === pages && Math.min(...delay) < 20) {
+    // GIF counts time in hundredths of a second and players slow anything under 20 ms right down, so a 60 fps loop
+    // (the Pals pack) would crawl: keep every other frame, each shown for the two it stands for (same loop length).
+    const keep = Array.from({ length: Math.ceil(pages / 2) }, (_, i) => i * 2)
+    const frames = await Promise.all(keep.map((page) => fitted(sharp(path, { page })).png().toBuffer()))
+    // whole hundredths that add up to the real loop (30, 30, 40 ms…), or it would run 10% fast
+    const total = delay.reduce((sum, d) => sum + d, 0) / 10
+    const at = (i: number): number => Math.round((total * i) / keep.length) * 10
+    await sharp(frames, { join: { animated: true } })
+      .gif({ delay: keep.map((_, i) => at(i + 1) - at(i)), loop: 0, effort: 8, dither: 0 })
+      .toFile(out)
+    return out
+  }
+  await fitted(sharp(path, { animated: true }))
     .gif({ effort: 8, dither: 0 })
     .toFile(out)
   return out

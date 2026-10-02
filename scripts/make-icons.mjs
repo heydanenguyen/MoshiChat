@@ -16,7 +16,7 @@ const load = async (entry) => {
   await rm(bundle, { force: true })
   return mod
 }
-const { LOGO_ORDER, logoIconSvg } = await load('src/shared/logos.ts')
+const { ALL_LOGOS, logoIconSvg } = await load('src/shared/logos.ts')
 const { stickerIds, stickerSvg } = await load('src/shared/stickers.ts')
 
 /** Rasterise an SVG string at 2x the target size, then downsample (density is relative to its viewBox). */
@@ -62,7 +62,7 @@ for (const size of icoSizes) images.push({ size, data: await render(size <= 48 ?
 await writeFile('build/icon.ico', ico(images))
 
 await mkdir('resources/icons', { recursive: true })
-for (const id of LOGO_ORDER) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 256))
+for (const id of ALL_LOGOS) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 256))
 // Stickers: transparent PNG plus a copy on white (Instagram/Telegram flatten transparency).
 await mkdir('resources/stickers', { recursive: true })
 for (const id of stickerIds()) {
@@ -71,4 +71,4 @@ for (const id of stickerIds()) {
   await writeFile(`resources/stickers/${id}-white.png`, await sharp(png).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
 }
 console.log(`stickers written: ${stickerIds().length} × 2`)
-console.log(`icons written: build/icon.png, build/icon.ico (${icoSizes.join(', ')}), resources/icon.png, resources/icons/{${LOGO_ORDER.join(',')}}.png`)
+console.log(`icons written: build/icon.png, build/icon.ico (${icoSizes.join(', ')}), resources/icon.png, resources/icons/{${ALL_LOGOS.join(',')}}.png`)

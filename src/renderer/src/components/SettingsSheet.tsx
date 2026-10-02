@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
 import type { BubbleAction, Language, SyncStatus, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PLATFORMS, PLATFORM_ORDER, STYLES, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
+import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
 import { LogoMark } from './Logo'
-import { LOGOS, LOGO_ORDER } from '@shared/logos'
+import { StyleBanners } from './StyleBanners'
+import { Pal } from './Pals'
+import { castById, specOf } from '@shared/pals-art'
+import { LOGOS, LOGO_ORDER, PAL_LOGO_ORDER, type LogoId } from '@shared/logos'
 import { useStore, useT, useTagDefs } from '../store'
 import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
@@ -182,6 +185,88 @@ function GeneralPage(): JSX.Element {
   )
 }
 
+/**
+ * A tiny Moshi at the top of Appearance, drawn with the app's own tokens: it changes the moment anything below does
+ * (light or dark, style, accent, background, logo, font), so every choice can be seen before scrolling on.
+ */
+function AppearancePreview(): JSX.Element {
+  const t = useT()
+  return (
+    <div className="ap-preview" aria-hidden>
+      <span className="ap-mesh">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="ap-window">
+        <span className="ap-side">
+          <span className="ap-brand">
+            <LogoMark size={22} title="" />
+            Moshi
+          </span>
+          <i className="ap-nav active" />
+          <i className="ap-nav" />
+          <i className="ap-nav" />
+          <i className="ap-nav short" />
+        </span>
+        <span className="ap-chat">
+          <span className="ap-head">
+            <i className="ap-face" />
+            <i className="ap-line" />
+          </span>
+          <span className="ap-bubble in">{t('customizeSampleIn')}</span>
+          <span className="ap-bubble out">{t('customizeSampleOut')}</span>
+          <span className="ap-composer" />
+        </span>
+      </span>
+    </div>
+  )
+}
+
+/** Pals' paper colours, each a little sheet of paper with its pal peeking in from the corner. */
+const PAPER_PALS = Object.fromEntries(PALS_PAPERS.map((p) => [p.id, specOf(castById(p.pal), 'joy')]))
+function PalsPaperPicker(): JSX.Element {
+  const t = useT()
+  const settings = useStore((s) => s.settings)
+  const setSettings = useStore((s) => s.setSettings)
+  const picked = settings.palsPaper ?? 'lilac'
+  return (
+    <div className="paper-picker" role="radiogroup" aria-label={t('palsPaper')}>
+      {PALS_PAPERS.map((p) => (
+        <button key={p.id} className={`paper-swatch ${picked === p.id ? 'active' : ''}`} role="radio" aria-checked={picked === p.id} onClick={() => void setSettings({ palsPaper: p.id })} title={p.name[settings.language]} style={{ background: p.paper }}>
+          <Pal spec={PAPER_PALS[p.id]} size={56} className="paper-pal" />
+          <span>{p.name[settings.language]}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Logo tiles, one group at a time (the six Moshi characters, then the Pals). */
+function LogoGroup({ label, ids }: { label: string; ids: LogoId[] }): JSX.Element {
+  const settings = useStore((s) => s.settings)
+  const setSettings = useStore((s) => s.setSettings)
+  const language = settings.language
+  return (
+    <div className="logo-group">
+      <span className="logo-group-label">{label}</span>
+      <div className="logo-picker" role="radiogroup" aria-label={label}>
+        {ids.map((id) => {
+          const active = (settings.logo ?? 'buddies') === id
+          return (
+            <button key={id} className={`logo-option ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ logo: id })} title={LOGOS[id].name[language]}>
+              <span className="logo-tile" style={{ background: LOGOS[id].background }}>
+                <LogoMark logo={id} size={40} title="" />
+              </span>
+              <span className="logo-option-name">{LOGOS[id].name[language]}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function AppearancePage(): JSX.Element {
   const t = useT()
   const darkNow = useDarkNow()
@@ -190,6 +275,8 @@ function AppearancePage(): JSX.Element {
   const language = settings.language
   return (
     <>
+      <AppearancePreview />
+
       <Group>
         <Row title={t('themeMode')}>
           <div className="segmented">
@@ -200,72 +287,12 @@ function AppearancePage(): JSX.Element {
             ))}
           </div>
         </Row>
-        <Row title={t('style')} sub={t('styleHint')} stack>
-          <div className="style-picker" role="radiogroup" aria-label={t('style')}>
-            {STYLES.map((style) => {
-              const active = (settings.style ?? 'moshi') === style.id
-              return (
-                <button key={style.id} className={`style-card ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ style: style.id })}>
-                  <span className={`style-preview ${style.id}`} aria-hidden>
-                    <i className="blob b1" />
-                    <i className="blob b2" />
-                    <i className="blob b3" />
-                    <i className="pane p1" />
-                    <i className="pane p2">
-                      <i className="line" />
-                      <i className="line short" />
-                      <i className="pill" />
-                    </i>
-                  </span>
-                  <span className="style-name">{style.name[language]}</span>
-                  <span className="style-sub">{style.sub[language]}</span>
-                </button>
-              )
-            })}
-          </div>
+        <Row title={t('style')} stack>
+          <StyleBanners />
         </Row>
       </Group>
 
       <Group label={t('groupColors')}>
-        <Row title={t('background')} sub={t('backgroundHint')} stack>
-          <div className="mesh-picker">
-            {MESHES.map((mesh) => (
-              <button
-                key={mesh.id}
-                className={`mesh-swatch ${settings.mesh === mesh.id ? 'active' : ''}`}
-                onClick={() => void setSettings({ mesh: mesh.id })}
-                title={mesh.name[language]}
-                style={{ background: `linear-gradient(135deg, ${mesh.swatch[0]} 0%, ${mesh.swatch[1]} 35%, ${mesh.swatch[2]} 70%, ${mesh.swatch[3]} 100%)` }}
-              >
-                <span>{mesh.name[language]}</span>
-              </button>
-            ))}
-          </div>
-        </Row>
-        {darkNow && (
-        <Row title={t('darkBackground')} sub={t('darkBackgroundHint')} stack>
-          <div className="dark-base-picker" role="radiogroup" aria-label={t('darkBackground')}>
-            {DARK_BASES.map((base) => {
-              const active = (settings.darkBase ?? 'navy') === base.id
-              return (
-                <button key={base.id} className={`dark-base-swatch ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ darkBase: base.id })} title={base.name[language]} style={{ background: base.base }}>
-                  <span>{base.name[language]}</span>
-                </button>
-              )
-            })}
-            {(() => {
-              const custom = !!settings.darkBase && !DARK_BASES.some((b) => b.id === settings.darkBase)
-              const value = custom ? darkBaseHex(settings.darkBase) : '#1c1c1e'
-              return (
-                <label className={`dark-base-swatch custom ${custom ? 'active' : ''}`} title={t('darkBackgroundCustom')} style={{ background: custom ? value : undefined }}>
-                  <input type="color" value={value} aria-label={t('darkBackgroundCustom')} onChange={(e) => void setSettings({ darkBase: e.target.value.toLowerCase() })} />
-                  <span>{t('darkBackgroundCustom')}</span>
-                </label>
-              )
-            })()}
-          </div>
-        </Row>
-        )}
         <Row title={t('accentColor')} sub={t('accentHint')} stack>
           <div className="accent-rows">
             {[false, true].map((flat) => (
@@ -289,23 +316,58 @@ function AppearancePage(): JSX.Element {
           </div>
         </Row>
         <CustomAccentRow />
+        {settings.style === 'pals' && !darkNow && (
+          <Row title={t('palsPaper')} sub={t('palsPaperHint')} stack>
+            <PalsPaperPicker />
+          </Row>
+        )}
+        {settings.style !== 'pals' && (
+          <Row title={t('background')} sub={t('backgroundHint')} stack>
+            <div className="mesh-picker">
+              {MESHES.map((mesh) => (
+                <button
+                  key={mesh.id}
+                  className={`mesh-swatch ${settings.mesh === mesh.id ? 'active' : ''}`}
+                  onClick={() => void setSettings({ mesh: mesh.id })}
+                  title={mesh.name[language]}
+                  style={{ background: `linear-gradient(135deg, ${mesh.swatch[0]} 0%, ${mesh.swatch[1]} 35%, ${mesh.swatch[2]} 70%, ${mesh.swatch[3]} 100%)` }}
+                >
+                  <span>{mesh.name[language]}</span>
+                </button>
+              ))}
+            </div>
+          </Row>
+        )}
+        {darkNow && (
+          <Row title={t('darkBackground')} sub={t('darkBackgroundHint')} stack>
+            <div className="dark-base-picker" role="radiogroup" aria-label={t('darkBackground')}>
+              {DARK_BASES.map((base) => {
+                const active = (settings.darkBase ?? 'navy') === base.id
+                return (
+                  <button key={base.id} className={`dark-base-swatch ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ darkBase: base.id })} title={base.name[language]} style={{ background: base.base }}>
+                    <span>{base.name[language]}</span>
+                  </button>
+                )
+              })}
+              {(() => {
+                const custom = !!settings.darkBase && !DARK_BASES.some((b) => b.id === settings.darkBase)
+                const value = custom ? darkBaseHex(settings.darkBase) : '#1c1c1e'
+                return (
+                  <label className={`dark-base-swatch custom ${custom ? 'active' : ''}`} title={t('darkBackgroundCustom')} style={{ background: custom ? value : undefined }}>
+                    <input type="color" value={value} aria-label={t('darkBackgroundCustom')} onChange={(e) => void setSettings({ darkBase: e.target.value.toLowerCase() })} />
+                    <span>{t('darkBackgroundCustom')}</span>
+                  </label>
+                )
+              })()}
+            </div>
+          </Row>
+        )}
       </Group>
 
-      <Group label={t('groupIdentity')}>
-        <Row title={t('logo')} sub={t('logoHint')} stack>
-          <div className="logo-picker" role="radiogroup" aria-label={t('logo')}>
-            {LOGO_ORDER.map((id) => {
-              const active = (settings.logo ?? 'buddies') === id
-              return (
-                <button key={id} className={`logo-option ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ logo: id })} title={LOGOS[id].name[language]}>
-                  <span className="logo-tile" style={{ background: LOGOS[id].background }}>
-                    <LogoMark logo={id} size={52} />
-                  </span>
-                  <span className="logo-option-name">{LOGOS[id].name[language]}</span>
-                </button>
-              )
-            })}
-          </div>
+      <Group label={t('logo')}>
+        <Row title={t('logoPick')} sub={t('logoHint')} stack>
+          <LogoGroup label="Moshi" ids={LOGO_ORDER} />
+          <LogoGroup label="Pals" ids={PAL_LOGO_ORDER} />
         </Row>
       </Group>
 

@@ -3,9 +3,15 @@
  * (scripts/make-icons.mjs). Flat colours, black features, no outlines; every character is a
  * chat bubble with a face. Marks use a 64x64 canvas; app icons put a mark on a coloured tile.
  * Class names (buddy-body / buddy-eyes / buddy-pupils) drive the blink and glance animations.
+ * The Pals characters (src/shared/pals-art.ts) can be the logo too: `pal-<cast id>`, drawn from the same art the
+ * Pals style, avatars and sticker pack use. They are logos only: the logo sticker packs stay the six above.
  */
+import { CAST, palParts, specOf } from './pals-art'
 
-export type LogoId = 'buddies' | 'sunny' | 'sporty' | 'blossom' | 'curious' | 'grape'
+
+export type ClassicLogoId = 'buddies' | 'sunny' | 'sporty' | 'blossom' | 'curious' | 'grape'
+export type PalLogoId = `pal-${string}`
+export type LogoId = ClassicLogoId | PalLogoId
 export type LogoMood = 'happy' | 'calm'
 
 export interface LogoMeta {
@@ -17,7 +23,7 @@ export interface LogoMeta {
   background: string
 }
 
-export const LOGOS: Record<LogoId, LogoMeta> = {
+const CLASSIC: Record<ClassicLogoId, LogoMeta> = {
   buddies: { id: 'buddies', name: { vi: 'Bộ đôi', en: 'Buddies' }, color: '#FF5B1F', background: '#CDBBFF' },
   sunny: { id: 'sunny', name: { vi: 'Nắng', en: 'Sunny' }, color: '#FFC21A', background: '#7CC4FF' },
   sporty: { id: 'sporty', name: { vi: 'Năng động', en: 'Sporty' }, color: '#13B26B', background: '#FFE45C' },
@@ -26,7 +32,34 @@ export const LOGOS: Record<LogoId, LogoMeta> = {
   grape: { id: 'grape', name: { vi: 'Nho', en: 'Grape' }, color: '#9B5DE5', background: '#D6F36B' }
 }
 
-export const LOGO_ORDER: LogoId[] = ['buddies', 'sunny', 'sporty', 'blossom', 'curious', 'grape']
+/** The six Moshi characters: the default logos, and the ones with sticker packs. */
+export const LOGO_ORDER: ClassicLogoId[] = ['buddies', 'sunny', 'sporty', 'blossom', 'curious', 'grape']
+/** The Pals as logos, in the cast's order; the icon tile is the pal's own first avatar backdrop. */
+export const PAL_LOGO_ORDER: PalLogoId[] = CAST.map((c) => `pal-${c.id}` as PalLogoId)
+export const ALL_LOGOS: LogoId[] = [...LOGO_ORDER, ...PAL_LOGO_ORDER]
+
+export const LOGOS: Record<LogoId, LogoMeta> = {
+  ...CLASSIC,
+  ...Object.fromEntries(CAST.map((c) => [`pal-${c.id}`, { id: `pal-${c.id}` as PalLogoId, name: c.name, color: c.color, background: c.backdrops[0] }]))
+} as Record<LogoId, LogoMeta>
+
+export const isLogoId = (value: unknown): value is LogoId => typeof value === 'string' && ALL_LOGOS.includes(value as LogoId)
+
+/** A pal on the 64 × 64 logo canvas: its body, and its face (smiling, or asleep for the calm mood) in a blinking group. */
+function palCharacter(id: PalLogoId): Character | undefined {
+  const member = CAST.find((c) => `pal-${c.id}` === id)
+  if (!member) return undefined
+  const art = (face: 'smile' | 'sleepy'): { body: string; face: string } => {
+    const p = palParts(specOf(member, face), `logo-${member.id}`)
+    const put = (inner: string): string => `<g transform="scale(${64 / 120})">${inner}</g>`
+    return {
+      body: put(`<defs>${p.defs}</defs>${p.behind}<g fill="url(#${p.fill})">${p.body}</g>${p.over}`),
+      face: put(`<g transform="translate(${p.face.x} ${p.face.y}) scale(${p.face.scale}) translate(-60 -62)">${p.blush}<g class="buddy-eyes">${p.eyes}</g>${p.mouth}</g>`)
+    }
+  }
+  const happy = art('smile')
+  return { body: happy.body, happy: happy.face, calm: art('sleepy').face }
+}
 
 const INK = '#141414'
 
@@ -48,7 +81,7 @@ interface Character {
   calm: string
 }
 
-const CHARACTERS: Record<LogoId, Character> = {
+const CLASSIC_CHARACTERS: Record<ClassicLogoId, Character> = {
   // Orange scalloped speech bubble, googly eyes, grin.
   buddies: {
     body:
@@ -103,8 +136,11 @@ const CHARACTERS: Record<LogoId, Character> = {
 }
 
 /** Inner SVG markup of a mark (64x64 coordinates). */
+const characterOf = (id: LogoId): Character =>
+  CLASSIC_CHARACTERS[id as ClassicLogoId] ?? (id.startsWith('pal-') ? palCharacter(id as PalLogoId) : undefined) ?? CLASSIC_CHARACTERS.buddies
+
 export function logoMarkInner(id: LogoId, mood: LogoMood = 'happy'): string {
-  const c = CHARACTERS[id] ?? CHARACTERS.buddies
+  const c = characterOf(id)
   return `<g class="buddy-body">${c.body}${mood === 'calm' ? c.calm : c.happy}</g>`
 }
 
@@ -153,5 +189,5 @@ export function logoIconSvg(id: LogoId, small = false): string {
 
 /** A character's body without its face (stickers draw their own expressions on it). */
 export function logoBody(id: LogoId): string {
-  return (CHARACTERS[id] ?? CHARACTERS.buddies).body
+  return characterOf(id).body
 }

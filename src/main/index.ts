@@ -8,6 +8,8 @@ import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
 import { MITO_GIPHY, isMitoId, mitoSticker } from '@shared/mito'
+import { isPictureStickerId, packOf, pictureSticker } from '@shared/picture-packs'
+import { isLogoId } from '@shared/logos'
 import { IPC } from '@shared/bridge'
 import { clampZoom, isMutedBy } from '@shared/types'
 import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
@@ -375,17 +377,18 @@ const stickerDir = (): string => (app.isPackaged ? join(process.resourcesPath, '
 
 /**
  * A sticker as an outgoing image: transparent PNG, plus a copy on white for platforms that flatten transparency,
- * and for an animated Mito sticker its looping WebP (Zalo sends that one, moving).
+ * and for an animated picture-pack sticker (Mito, Pals) its looping WebP (Zalo sends that one, moving).
  */
 async function stickerFile(id: string): Promise<OutgoingAttachment> {
   if (id.startsWith('custom:')) return customStickerFile(id.slice(7))
   if (isGiphyStickerId(id)) return giphyStickerFile(id.slice('giphy:'.length), giphyKey())
+  const picture = isPictureStickerId(id)
   const mito = isMitoId(id)
-  if (!mito && !isStickerId(id)) throw new Error('Unknown sticker')
-  const base = mito ? join(stickerDir(), 'mito', id.slice('mito:'.length)) : join(stickerDir(), id)
+  if (!picture && !isStickerId(id)) throw new Error('Unknown sticker')
+  const base = picture ? join(stickerDir(), packOf(id), id.slice(id.indexOf(':') + 1)) : join(stickerDir(), id)
   const path = `${base}.png`
   const opaque = `${base}-white.png`
-  const animated = mito && mitoSticker(id).loop ? `${base}.webp` : undefined
+  const animated = picture && pictureSticker(id).loop ? `${base}.webp` : undefined
   const [data, opaqueInfo, animatedInfo] = await Promise.all([
     readFile(path),
     stat(opaque).catch(() => undefined),
@@ -459,7 +462,8 @@ async function pruneOrphanedSettings(): Promise<void> {
 
 /** Window/taskbar icon for the chosen logo (rendered by scripts/make-icons.mjs into resources/icons). */
 function appIcon(logo: Settings['logo'] = storage.settings.logo): Electron.NativeImage | undefined {
-  const name = `${logo ?? 'buddies'}.png`
+  // Only a known logo names a file (the setting comes from the renderer).
+  const name = `${isLogoId(logo) ? logo : 'buddies'}.png`
   const candidates = app.isPackaged
     ? [join(process.resourcesPath, 'icons', name)]
     : [join(__dirname, '../../resources/icons', name), join(__dirname, '../../resources/icon.png')]
@@ -782,7 +786,7 @@ async function cutOut(png: Buffer, precise: boolean): Promise<Buffer> {
 
 function registerImageProxy(): void {
   protocol.handle('unison-img', async (request) => {
-    // unison-img://sticker/mito/<id>.png|webp: the Mito pack's pictures, straight from the app's resources.
+    // unison-img://sticker/<pack>/<id>.png|webp: a picture pack's pictures (Mito, Pals), straight from the app's resources.
     const url = new URL(request.url)
     // unison-img://custom-sticker/<file>: your own stickers, from the stickers folder (only names Moshi gives them).
     if (url.hostname === 'custom-sticker') {
@@ -798,11 +802,11 @@ function registerImageProxy(): void {
       }
     }
     if (url.hostname === 'sticker') {
-      const m = /^\/mito\/([a-z]+)\.(png|webp)$/.exec(url.pathname)
-      if (!m || !isMitoId(`mito:${m[1]}`)) return new Response('blocked', { status: 403 })
+      const m = /^\/([a-z]+)\/([a-z]+)\.(png|webp)$/.exec(url.pathname)
+      if (!m || !isPictureStickerId(`${m[1]}:${m[2]}`)) return new Response('blocked', { status: 403 })
       try {
-        const data = await readFile(join(stickerDir(), 'mito', `${m[1]}.${m[2]}`))
-        return new Response(new Uint8Array(data), { status: 200, headers: { 'content-type': `image/${m[2]}`, 'cache-control': 'max-age=31536000', 'access-control-allow-origin': '*' } })
+        const data = await readFile(join(stickerDir(), m[1], `${m[2]}.${m[3]}`))
+        return new Response(new Uint8Array(data), { status: 200, headers: { 'content-type': `image/${m[3]}`, 'cache-control': 'max-age=31536000', 'access-control-allow-origin': '*' } })
       } catch {
         return new Response('missing', { status: 404 })
       }

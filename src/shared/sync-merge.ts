@@ -16,6 +16,7 @@ const VALUE_KEYS = [
   'mesh',
   'style',
   'darkBase',
+  'palsPaper',
   'accent',
   'font',
   'logo',

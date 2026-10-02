@@ -14,7 +14,7 @@ import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, DARK_BASE_VAR_NAMES, accentVars, darkBaseVars } from '@shared/accent'
-import { darkBaseHex, stepZoom } from '@shared/types'
+import { darkBaseHex, palsPaperHex, stepZoom } from '@shared/types'
 import { TodoSheet } from './components/TodoSheet'
 import { InsightsSheet } from './components/Insights'
 import { LaterPicker } from './components/LaterPicker'
@@ -157,6 +157,7 @@ export default function App(): JSX.Element {
   const closeFriends = useStore((s) => s.settings.closeFriends !== false)
   const mesh = useStore((s) => s.settings.mesh)
   const darkBase = useStore((s) => s.settings.darkBase)
+  const palsPaper = useStore((s) => s.settings.palsPaper)
   const style = useStore((s) => s.settings.style)
   const accent = useStore((s) => s.settings.accent)
   const customAccents = useStore((s) => s.settings.customAccents)
@@ -271,10 +272,13 @@ export default function App(): JSX.Element {
     // Dark-mode base tone: the dark theme reads these through var(--dark-*, navy default).
     for (const name of DARK_BASE_VAR_NAMES) root.style.removeProperty(name)
     if (darkBase && darkBase !== 'navy') for (const [name, value] of Object.entries(darkBaseVars(darkBaseHex(darkBase)))) root.style.setProperty(name, value)
+    // Pals' paper in light mode (lilac, the default, sets nothing)
+    if (palsPaper && palsPaper !== 'lilac') root.style.setProperty('--pals-pick', palsPaperHex(palsPaper))
+    else root.style.removeProperty('--pals-pick')
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
-  }, [mesh, style, darkBase, accent, customAccents, font, messageShadows, textSize])
+  }, [mesh, style, darkBase, palsPaper, accent, customAccents, font, messageShadows, textSize])
 
   // The native menu bar (macOS) sends its shortcuts here.
   useEffect(() => {

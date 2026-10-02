@@ -450,10 +450,11 @@ export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatc
 ]
 
 /** Surface style: how panels, bubbles and sheets are drawn. The layout never changes with it. */
-export type StyleId = 'moshi' | 'liquid'
+export type StyleId = 'moshi' | 'liquid' | 'pals'
 export const STYLES: Array<{ id: StyleId; name: { vi: string; en: string }; sub: { vi: string; en: string } }> = [
   { id: 'moshi', name: { vi: 'Moshi', en: 'Moshi' }, sub: { vi: 'Pastel mềm, kính mờ nhẹ', en: 'Soft pastel, light frosted glass' } },
-  { id: 'liquid', name: { vi: 'Liquid Glass', en: 'Liquid Glass' }, sub: { vi: 'Kính trong, viền sáng, bo tròn sâu', en: 'Clear glass, bright edges, deep rounding' } }
+  { id: 'liquid', name: { vi: 'Liquid Glass', en: 'Liquid Glass' }, sub: { vi: 'Kính trong, viền sáng, bo tròn sâu', en: 'Clear glass, bright edges, deep rounding' } },
+  { id: 'pals', name: { vi: 'Pals', en: 'Pals' }, sub: { vi: 'Màu kẹo, nét mực đen, bạn blob', en: 'Candy colours, ink-black type, blob pals' } }
 ]
 
 /** Base tone behind everything in dark mode: a preset id, or any `#rrggbb` picked by the user. */
@@ -467,6 +468,21 @@ export const DARK_BASES: Array<{ id: DarkBaseId; name: { vi: string; en: string 
 ]
 /** The hex behind a dark-base setting (a preset id, a custom hex, or nothing = navy). */
 export const darkBaseHex = (value: string | undefined): string => DARK_BASES.find((d) => d.id === value)?.base ?? (value && /^#[0-9a-f]{6}$/i.test(value) ? value : DARK_BASES[0].base)
+
+/** Pals' paper in light mode: a candy tone with the pal it goes with (dark mode follows the dark base). */
+export type PalsPaperId = 'lilac' | 'pink' | 'peach' | 'butter' | 'cream' | 'mint' | 'sky' | 'cloud'
+export const PALS_PAPERS: Array<{ id: PalsPaperId; name: { vi: string; en: string }; paper: string; pal: string }> = [
+  { id: 'lilac', name: { vi: 'Oải hương', en: 'Lilac' }, paper: '#ebe7f4', pal: 'ma' },
+  { id: 'pink', name: { vi: 'Hồng', en: 'Pink' }, paper: '#fae3ee', pal: 'hoa' },
+  { id: 'peach', name: { vi: 'Đào', en: 'Peach' }, paper: '#fbe4d8', pal: 'trung' },
+  { id: 'butter', name: { vi: 'Bơ sữa', en: 'Butter' }, paper: '#f9efd2', pal: 'nang' },
+  { id: 'cream', name: { vi: 'Kem', en: 'Cream' }, paper: '#f3ece1', pal: 'flan' },
+  { id: 'mint', name: { vi: 'Bạc hà', en: 'Mint' }, paper: '#def1e3', pal: 'co' },
+  { id: 'sky', name: { vi: 'Bầu trời', en: 'Sky' }, paper: '#dcebf8', pal: 'giot' },
+  { id: 'cloud', name: { vi: 'Mây', en: 'Cloud' }, paper: '#ececef', pal: 'may' }
+]
+/** The paper behind a Pals setting (a preset id, or nothing = lilac). */
+export const palsPaperHex = (value: string | undefined): string => (PALS_PAPERS.find((p) => p.id === value) ?? PALS_PAPERS[0]).paper
 
 /** `flat` accents are single solid colours taken from the logo characters (no gradients anywhere). */
 export const ACCENTS: Array<{ id: AccentId; name: { vi: string; en: string }; from: string; to: string; flat?: boolean }> = [
@@ -532,6 +548,8 @@ export interface Settings {
   style?: StyleId
   /** Dark-mode base tone: a DarkBaseId or a custom `#rrggbb`; absent = navy. */
   darkBase?: DarkBaseId | string
+  /** Pals' paper colour in light mode; absent = lilac. */
+  palsPaper?: PalsPaperId
   accent: AccentId | CustomAccentId
   font: FontId
   muted: MuteRules

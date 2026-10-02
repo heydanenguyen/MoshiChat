@@ -1,0 +1,388 @@
+/* ================================================================== Pals style
+   Candy-coloured blob characters, ink-black type and pills, flat paper instead of glass. One white sheet (the
+   chat) sits on lilac paper; the sidebar and the list live on the paper itself, so the hierarchy comes from
+   surface, not from shadows. Black is the structural colour: big headings, my bubbles, the primary button, the
+   place you are. Candy colours belong to the characters and the counts. Loaded after app.css. */
+
+:root[data-style='pals'] {
+  --font-pop: 'Unbounded', var(--font-display);
+  /* the paper picked in Settings (lilac, the default, sets nothing); the soft fill is the same tone lighter */
+  --pals-paper: var(--pals-pick, #ebe7f4);
+  --pals-sheet: #ffffff;
+  --pals-soft: color-mix(in srgb, var(--pals-paper), white 42%);
+  --pals-ink: #000000;
+  --pals-on-ink: #ffffff;
+  --pals-candy: #c3adff;
+  --pals-candy-2: #ffdc5e;
+
+  --mesh-base: var(--pals-paper);
+  --bg-window: var(--pals-paper);
+  --glass: var(--pals-sheet);
+  --glass-strong: var(--pals-sheet);
+  --glass-border: transparent;
+  --bg-chat: var(--pals-sheet);
+  --bg-elevated: #ffffff;
+  --bg-input: var(--pals-soft);
+  --bg-hover: rgba(0, 0, 0, 0.045);
+  --bg-active: rgba(0, 0, 0, 0.08);
+  --bg-selected: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: rgba(0, 0, 0, 0.68);
+  --text-tertiary: rgba(0, 0, 0, 0.6);
+  --separator: rgba(0, 0, 0, 0.07);
+  --separator-strong: rgba(0, 0, 0, 0.14);
+
+  --bubble-in: var(--pals-soft);
+  --bubble-in-ring: inset 0 0 0 0 transparent;
+  --bubble-in-text: #000000;
+  --bubble-out: var(--pals-ink);
+  --bubble-out-solid: var(--pals-ink);
+  --bubble-out-text: var(--pals-on-ink);
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --bubble-out-ring: inset 0 0 0 0 transparent;
+
+  --radius-panel: 32px;
+  --radius-bubble: 22px;
+  --shadow-sm: 0 0 0 0 transparent;
+  --shadow-md: 0 0 0 0 transparent;
+  --shadow-panel: 0 0 0 0 transparent;
+  --shadow-lg: 0 28px 70px rgba(52, 30, 110, 0.2);
+}
+:root[data-style='pals'][data-theme='dark'] {
+  /* follows the dark background picked in Settings (navy, the default, sets nothing) */
+  --pals-paper: var(--dark-base, #19181d);
+  --pals-sheet: color-mix(in srgb, var(--pals-paper), white 7%);
+  --pals-soft: color-mix(in srgb, var(--pals-paper), white 13%);
+  --pals-ink: #ffffff;
+  --pals-on-ink: #000000;
+
+  --bg-elevated: color-mix(in srgb, var(--pals-paper), white 9%);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.56);
+  --separator: rgba(255, 255, 255, 0.08);
+  --separator-strong: rgba(255, 255, 255, 0.16);
+  --bubble-in-text: #ffffff;
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.6);
+}
+
+/* paper, not glass: nothing blurs */
+:root[data-style='pals'] .mesh-blob {
+  display: none;
+}
+:root[data-style='pals'] .panel,
+:root[data-style='pals'] .list-col,
+:root[data-style='pals'] .chat-col,
+:root[data-style='pals'] .details-col,
+:root[data-style='pals'] .sheet {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-style='pals'] .list-col {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ink display type for the big words only; names and messages keep the reading face */
+:root[data-style='pals'] .brand-word,
+:root[data-style='pals'] .list-title,
+:root[data-style='pals'] .empty-title,
+:root[data-style='pals'] .welcome-title,
+:root[data-style='pals'] .sheet-title,
+:root[data-style='pals'] .settings-page-title,
+:root[data-style='pals'] .pane-empty-title,
+:root[data-style='pals'] .todo-empty-title {
+  font-family: var(--font-pop);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+:root[data-style='pals'] .brand-word {
+  font-size: 18px;
+}
+:root[data-style='pals'] .list-title {
+  font-size: 24px;
+}
+
+/* the place you are is an ink pill */
+:root[data-style='pals'] .nav-item {
+  border-radius: var(--radius-full);
+}
+:root[data-style='pals'] .nav-item.active {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .nav-item.active .nav-item-icon:not(.tile) {
+  color: var(--pals-on-ink);
+}
+:root[data-style='pals'] .nav-item.active .unread-pill {
+  background: var(--pals-candy-2);
+  color: #000;
+}
+
+/* list rows sit on the paper; the open chat lifts onto a white card */
+:root[data-style='pals'] .conv-item,
+:root[data-style='pals'] .requests-row {
+  border-radius: 22px;
+}
+:root[data-style='pals'] .conv-item:hover,
+:root[data-style='pals'] .requests-row:hover {
+  background: color-mix(in srgb, var(--pals-sheet) 55%, transparent);
+}
+:root[data-style='pals'] .conv-item.selected {
+  background: var(--pals-sheet);
+  box-shadow: none;
+}
+:root[data-style='pals'] .unread-pill {
+  background: var(--pals-candy);
+  color: #000;
+  font-weight: 800;
+}
+:root[data-style='pals'] .conv-item.muted .unread-pill {
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+}
+
+/* fields and chips: white capsules on paper, ink when picked */
+:root[data-style='pals'] .search-field input {
+  height: 38px;
+  border-radius: var(--radius-full);
+  background: var(--pals-sheet);
+}
+:root[data-style='pals'] .search-field input:focus,
+:root[data-style='pals'] .composer-box:focus-within {
+  border-color: var(--pals-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .quick-chip {
+  height: 30px;
+  padding: 0 12px;
+  background: var(--pals-sheet);
+  box-shadow: none;
+}
+:root[data-style='pals'] .quick-chip:hover {
+  background: var(--pals-sheet);
+  color: var(--text-primary);
+}
+:root[data-style='pals'] .quick-chip.active {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .quick-chip-count.strong {
+  color: var(--text-primary);
+}
+:root[data-style='pals'] .quick-chip.active .quick-chip-count {
+  color: var(--pals-on-ink);
+}
+
+/* My bubbles are ink, the look's signature, even over a custom accent (that sets its colours inline on :root).
+   A colour picked for one chat (inline on its pane) still wins. */
+:root[data-style='pals'] .chat-col:not([style*='--bubble-out']) {
+  --bubble-out: var(--pals-ink);
+  --bubble-out-solid: var(--pals-ink);
+  --bubble-out-text: var(--pals-on-ink);
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --bubble-out-ring: inset 0 0 0 0 transparent;
+}
+
+/* the chat sheet */
+:root[data-style='pals'] .chat-header {
+  height: 64px;
+  border-bottom-color: transparent;
+}
+:root[data-style='pals'] .composer-box {
+  border-radius: var(--radius-full);
+  border-color: transparent;
+  background: var(--pals-soft);
+}
+:root[data-style='pals'] .composer-send {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .composer-send.idle {
+  background: var(--fill-tertiary);
+  color: var(--text-tertiary);
+}
+:root[data-style='pals'] .icon-btn {
+  border-radius: var(--radius-full);
+}
+
+/* buttons: ink pill and white pill */
+:root[data-style='pals'] .btn {
+  border-radius: var(--radius-full);
+  padding: 0 20px;
+}
+:root[data-style='pals'] .btn.primary {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .btn.primary:hover {
+  box-shadow: none;
+  transform: none;
+  background: color-mix(in srgb, var(--pals-ink) 84%, var(--pals-paper));
+}
+:root[data-style='pals'] .btn.secondary {
+  background: var(--pals-sheet);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
+}
+:root[data-style='pals'] .sheet {
+  border-color: transparent;
+}
+
+/* empty chat and welcome: the pals gather around an ink speech bubble */
+.pals-stage {
+  position: relative;
+  width: 400px;
+  max-width: 100%;
+  height: 280px;
+  margin-bottom: var(--space-3);
+}
+.pal {
+  display: block;
+  flex-shrink: 0;
+}
+.pal svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* one entrance: the pals pop in, one after another, then only blink */
+.stage-pal {
+  position: absolute;
+  animation: pal-pop 620ms var(--ease-spring) both;
+  animation-delay: var(--pop-delay, 0ms);
+}
+@keyframes pal-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.6, 0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-6px) scale(0.96, 1.06);
+  }
+  100% {
+    transform: none;
+  }
+}
+.pals-say {
+  position: absolute;
+  left: calc(50% + 22px);
+  top: calc(50% - 124px);
+  animation: pal-pop 620ms var(--ease-spring) 380ms both;
+  padding: 9px 18px 10px;
+  border-radius: 999px;
+  background: var(--pals-ink, #000);
+  color: var(--pals-on-ink, #fff);
+  font-family: var(--font-pop, var(--font-display));
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  rotate: -6deg;
+}
+.pals-say::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  bottom: -7px;
+  width: 16px;
+  height: 14px;
+  background: inherit;
+  clip-path: polygon(0 0, 100% 0, 10% 100%);
+}
+/* in the dark the pals glow softly, like the gummy lamps they look like */
+:root[data-theme='dark'] .stage-pal svg {
+  filter: drop-shadow(0 0 24px rgba(150, 204, 255, 0.22));
+}
+:root[data-style='pals'] .empty-title {
+  font-size: 22px;
+  max-width: 420px;
+  line-height: 1.2;
+}
+:root[data-style='pals'] .welcome-title {
+  font-size: 30px;
+  line-height: 1.15;
+  background: none;
+  color: var(--text-primary);
+}
+
+/* blinking: each pal on its own beat; still when the window rests or motion is reduced */
+.pal-live .pal-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pal-blink 5.2s infinite;
+  animation-delay: var(--blink-delay, 0s);
+}
+@keyframes pal-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+:root.window-idle .pal-live .pal-eyes {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pal-live .pal-eyes,
+  .stage-pal,
+  .pals-say {
+    animation: none;
+  }
+}
+
+/* the customize panel: the picked set is an ink pill, the sample bubble is ink like the chat's */
+:root[data-style='pals'] .cz-tabs button.active {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+  box-shadow: none;
+}
+:root[data-style='pals'] .cz-stage:not(.has-wallpaper) {
+  background: var(--pals-soft);
+  box-shadow: none;
+}
+:root[data-style='pals'] .cz-stage:not([style*='--bubble-out']) {
+  --bubble-out: var(--pals-ink);
+  --bubble-out-text: var(--pals-on-ink);
+  --bubble-out-shadow: 0 0 0 0 transparent;
+}
+:root[data-style='pals'] .cz-stage .bubble.in {
+  background: var(--pals-sheet);
+}
+
+/* the birthday calendar: picked month and day in ink, the line on the soft paper */
+:root[data-style='pals'] .bday-months button.active,
+:root[data-style='pals'] .bday-days button.active {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+}
+:root[data-style='pals'] .bday {
+  background: var(--pals-soft);
+}
+:root[data-style='pals'] .bday-months button,
+:root[data-style='pals'] .bday-days button {
+  background: var(--pals-sheet);
+}
+
+/* the note: butter paper with an ink focus ring */
+:root[data-style='pals'] .note-card {
+  --note-paper: color-mix(in srgb, var(--pals-candy-2) 24%, var(--pals-sheet));
+  box-shadow: none;
+}
+:root[data-style='pals'][data-theme='dark'] .note-card {
+  --note-paper: color-mix(in srgb, var(--pals-candy-2) 10%, var(--pals-sheet));
+}
+:root[data-style='pals'] .note-card.focused {
+  box-shadow: 0 0 0 2px var(--pals-ink);
+}

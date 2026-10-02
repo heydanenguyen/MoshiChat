@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { Cake, Image as ImageIcon, ImagePlus, Palette, RotateCcw, Shuffle, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Image as ImageIcon, ImagePlus, Palette, Pencil, RotateCcw, Shuffle } from 'lucide-react'
 import { abstractChoices, abstractId, abstractIdUrl, parseAbstractId } from './AbstractAvatar'
-import type { Conversation } from '@shared/types'
+import { palPickId, palPickUrl, palPicks, parsePalPickId } from '@shared/pals-art'
+import type { ContactOverride, Conversation } from '@shared/types'
 import { LOGOS, LOGO_ORDER } from '@shared/logos'
-import { parseBirthday } from '@shared/extras'
-import { customAvatarUrl, useStore, useT } from '../store'
+import { bubbleVarsOf, customAvatarUrl, useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { LogoMark } from './Logo'
 import { BubbleColorRow } from './BubbleColorRow'
-import { WallpaperRow } from './Wallpaper'
+import { WallpaperRow, useWallpaper } from './Wallpaper'
+import { BirthdayPicker } from './BirthdayPicker'
+
+/** The sets of looks the photo picker shows, one at a time. */
+const LOOK_SETS = ['photo', 'moshi', 'abstract', 'pals'] as const
+type LookSet = (typeof LOOK_SETS)[number]
+const setOf = (avatar?: string): LookSet =>
+  avatar?.startsWith('logo:') ? 'moshi' : avatar?.startsWith('abstract:') ? 'abstract' : avatar?.startsWith('pal:') ? 'pals' : 'photo'
 
 /** Square-crop and shrink an image file to a small WebP data URL (kept in settings). */
 async function toAvatarDataUrl(file: File, size = 256): Promise<string> {
@@ -44,227 +51,217 @@ export function ContactCustomizer({ conversation, onClose }: { conversation: Con
   const showToast = useStore((s) => s.showToast)
   const [nickname, setNickname] = useState(override?.nickname ?? '')
   const [avatar, setAvatar] = useState<string | undefined>(override?.avatar)
-  // Day and month are enough for a reminder; the year is optional (a stored --MM-DD keeps working).
-  const stored = parseBirthday(override?.birthday)
-  const [bDay, setBDay] = useState(stored ? String(stored.day) : '')
-  const [bMonth, setBMonth] = useState(stored ? String(stored.month) : '')
-  const [bYear, setBYear] = useState(stored?.year ? String(stored.year) : '')
-  const pad = (n: string): string => n.padStart(2, '0')
-  const yearOk = !bYear || (/^\d{4}$/.test(bYear) && Number(bYear) >= 1900 && Number(bYear) <= new Date().getFullYear())
-  // Without a year, 29 February is allowed (a leap year stands in); 31 February never is.
-  const daysIn = (month: number, year?: number): number => new Date(year ?? 2000, month, 0).getDate()
-  const partial = !!bDay !== !!bMonth || (!!bYear && !bDay && !bMonth)
-  const dayOk = !bDay || !bMonth || Number(bDay) <= daysIn(Number(bMonth), bYear && yearOk ? Number(bYear) : undefined)
-  const birthdayError = !yearOk ? 'birthdayYearInvalid' : partial ? 'birthdayIncomplete' : !dayOk ? 'birthdayInvalidDay' : undefined
-  const birthday = !birthdayError && bDay && bMonth ? `${bYear ? bYear : '-'}-${pad(bMonth)}-${pad(bDay)}` : ''
-  const [busy, setBusy] = useState(false)
   // Abstract characters: the name's own one first, then a fresh spread each time "another set" is pressed.
   const [round, setRound] = useState(0)
+  const [palRound, setPalRound] = useState(0)
+  const language = useStore((s) => s.settings.language)
   const fileInput = useRef<HTMLInputElement>(null)
   const ref = useRef<HTMLDivElement>(null)
   const originalName = conversation.originalTitle ?? conversation.title
   const originalAvatar = 'originalAvatarUrl' in conversation ? conversation.originalAvatarUrl : conversation.avatarUrl
 
+  // Every change is saved as it is made (like the colour and wallpaper always were); how things were when the
+  // editor opened is kept, so Undo can put all of it back.
+  const opened = useRef(override)
+  const patch = (fields: Partial<ContactOverride>): void => {
+    const current = useStore.getState().settings.contactOverrides?.[conversation.id]
+    void setContactOverride(conversation.id, { ...current, ...fields })
+  }
+  const nameRef = useRef(nickname)
+  nameRef.current = nickname
+  const commitName = useCallback((): void => {
+    const name = nameRef.current.trim()
+    const current = useStore.getState().settings.contactOverrides?.[conversation.id]
+    if (name !== (current?.nickname ?? '')) void setContactOverride(conversation.id, { ...current, nickname: name || undefined })
+  }, [conversation.id, setContactOverride])
+  const pickAvatar = (value: string | undefined): void => {
+    setAvatar(value)
+    patch({ avatar: value })
+  }
+  const done = useCallback((): void => {
+    commitName()
+    onClose()
+  }, [commitName, onClose])
+  const changed = JSON.stringify(override ?? {}) !== JSON.stringify(opened.current ?? {}) || nickname.trim() !== (override?.nickname ?? '')
+  const undo = (): void => {
+    void setContactOverride(conversation.id, opened.current)
+    setNickname(opened.current?.nickname ?? '')
+    setAvatar(opened.current?.avatar)
+  }
+
   useEffect(() => {
-    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    ref.current?.scrollIntoView({ block: 'start' })
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') done()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [done])
+  // Leaving another way (another chat, the pane closing) still keeps a typed name.
+  useEffect(() => () => commitName(), [commitName])
 
-  const save = async (): Promise<void> => {
-    // A half-typed or impossible birthday is said next to the field; saving would quietly drop it.
-    if (birthdayError) return
-    setBusy(true)
-    try {
-      await setContactOverride(conversation.id, { ...override, nickname, avatar, birthday: birthday || undefined })
-      onClose()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const reset = async (): Promise<void> => {
-    // Looks go back to the platform's; your notes about them stay.
-    await setContactOverride(conversation.id, override?.note ? { note: override.note, noteAt: override.noteAt } : undefined)
-    onClose()
+  const reset = (): void => {
+    // Looks go back to the platform's; your notes about them stay. Undo still brings them back.
+    void setContactOverride(conversation.id, override?.note ? { note: override.note, noteAt: override.noteAt } : undefined)
+    setNickname('')
+    setAvatar(undefined)
   }
 
   const upload = async (file?: File): Promise<void> => {
     if (!file) return
     try {
-      setAvatar(await toAvatarDataUrl(file))
+      pickAvatar(await toAvatarDataUrl(file))
     } catch (err) {
       showToast((err as Error).message, 'error')
     }
   }
 
+  // The set shown under the photo: the one the current pick belongs to, so it is in view on opening.
+  const [set, setSet] = useState<LookSet>(() => setOf(override?.avatar))
+  const shuffle = set === 'abstract' ? () => setRound((r) => r + 1) : set === 'pals' ? () => setPalRound((r) => r + 1) : undefined
+  const customAccents = useStore((s) => s.settings.customAccents)
+  const bubbleVars = bubbleVarsOf(override?.bubble, customAccents)
+  const wallpaper = useWallpaper(conversation.id)
+  const choice = (id: string, label: string, art: JSX.Element): JSX.Element => (
+    <button key={id} className={`avatar-choice ${avatar === id ? 'active' : ''}`} role="radio" aria-checked={avatar === id} onClick={() => pickAvatar(id)} title={label}>
+      {art}
+    </button>
+  )
+
   return (
     <div className="contact-customizer" ref={ref} role="dialog" aria-label={t('customize')}>
-      <div className="contact-customizer-head">
-        <span className="contact-customizer-title">{t('customize')}</span>
-        <button className="icon-btn" onClick={onClose} title={t('close')}>
-          <X size={15} strokeWidth={2.4} />
+      <div className="cz-bar">
+        <span className="cz-title">
+          <strong>{t('customize')}</strong>
+          <span>{t('customizeOnlyYou')}</span>
+        </span>
+        <button className="btn primary small" onClick={done}>
+          {t('done')}
         </button>
       </div>
-      <div className="contact-customizer-preview">
-        <Avatar name={nickname || originalName} url={customAvatarUrl(avatar) ?? originalAvatar} size={56} />
-        <span className="contact-customizer-preview-text">
-          <strong>{nickname.trim() || originalName}</strong>
-          {nickname.trim() && <span>{t('originalName', { name: originalName })}</span>}
+
+      {/* The stage: this chat in miniature, with its wallpaper and bubble colour, so every change shows where it counts. */}
+      <div className={`cz-stage ${wallpaper.attr ? 'has-wallpaper' : ''}`} style={{ ...bubbleVars, ...wallpaper.style }}>
+        {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
+        <span className="cz-avatar" key={avatar ?? 'original'}>
+          <Avatar name={nickname || originalName} url={customAvatarUrl(avatar) ?? originalAvatar} size={76} />
+        </span>
+        <label className="cz-name">
+          <input
+            value={nickname}
+            placeholder={originalName}
+            maxLength={60}
+            aria-label={t('nickname')}
+            onChange={(e) => setNickname(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          />
+          <Pencil size={12} strokeWidth={2.4} aria-hidden />
+        </label>
+        <span className="cz-original">{nickname.trim() ? t('originalName', { name: originalName }) : t('nicknameHint')}</span>
+        <span className="cz-sample" aria-hidden>
+          <span className="bubble in">{t('customizeSampleIn')}</span>
+          <span className="bubble out">{t('customizeSampleOut')}</span>
         </span>
       </div>
 
-      <label className="field">
-        <span className="field-label">{t('nickname')}</span>
-        <input
-          className="field-input"
-          value={nickname}
-          placeholder={originalName}
-          maxLength={60}
-          onChange={(e) => setNickname(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void save()}
-        />
-      </label>
-
-      <div className="field">
-        <span className="field-label">{t('customPhoto')}</span>
-        <div className="avatar-choices" role="radiogroup" aria-label={t('customPhoto')}>
-          <button className={`avatar-choice ${!avatar ? 'active' : ''}`} role="radio" aria-checked={!avatar} onClick={() => setAvatar(undefined)} title={t('photoOriginal')}>
-            <Avatar name={originalName} url={originalAvatar} size={40} />
+      <div className="cz-section">
+        <div className="cz-sets">
+          <div className="cz-tabs" role="tablist" aria-label={t('customPhoto')}>
+            {LOOK_SETS.map((s) => (
+              <button key={s} role="tab" aria-selected={set === s} className={set === s ? 'active' : ''} onClick={() => setSet(s)}>
+                {s === 'photo' ? t('lookPhoto') : s === 'abstract' ? t('lookAbstract') : s === 'moshi' ? 'Moshi' : 'Pals'}
+              </button>
+            ))}
+          </div>
+          <button
+            className="icon-btn cz-shuffle"
+            onClick={shuffle}
+            disabled={!shuffle}
+            title={set === 'pals' ? t('avatarPalsShuffle') : t('avatarShuffle')}
+            aria-label={set === 'pals' ? t('avatarPalsShuffle') : t('avatarShuffle')}
+          >
+            <Shuffle size={15} strokeWidth={2.3} />
           </button>
-          {avatar?.startsWith('data:') && (
-            <button className="avatar-choice active" role="radio" aria-checked title={t('photoUpload')}>
-              <Avatar name={originalName} url={avatar} size={40} />
-            </button>
+        </div>
+        <div className="avatar-choices cz-grid" role="radiogroup" aria-label={t('customPhoto')}>
+          {set === 'photo' && (
+            <>
+              <button className={`avatar-choice ${!avatar ? 'active' : ''}`} role="radio" aria-checked={!avatar} onClick={() => pickAvatar(undefined)} title={t('photoOriginal')}>
+                <Avatar name={originalName} url={originalAvatar} size={40} />
+              </button>
+              {avatar?.startsWith('data:') && (
+                <button className="avatar-choice active" role="radio" aria-checked title={t('photoUpload')}>
+                  <Avatar name={originalName} url={avatar} size={40} />
+                </button>
+              )}
+              <button className="avatar-choice upload" onClick={() => fileInput.current?.click()} title={t('photoUpload')}>
+                <ImagePlus size={17} strokeWidth={2.2} />
+              </button>
+            </>
           )}
-          <button className="avatar-choice upload" onClick={() => fileInput.current?.click()} title={t('photoUpload')}>
-            <ImagePlus size={17} strokeWidth={2.2} />
-          </button>
-          {LOGO_ORDER.map((id) => (
-            <button
-              key={id}
-              className={`avatar-choice ${avatar === `logo:${id}` ? 'active' : ''}`}
-              role="radio"
-              aria-checked={avatar === `logo:${id}`}
-              onClick={() => setAvatar(`logo:${id}`)}
-              title={LOGOS[id].name.vi}
-            >
-              <span className="avatar-choice-logo" style={{ background: LOGOS[id].background }}>
-                <LogoMark logo={id} size={30} title="" />
-              </span>
-            </button>
-          ))}
+          {set === 'moshi' &&
+            LOGO_ORDER.map((id) =>
+              choice(
+                `logo:${id}`,
+                LOGOS[id].name[language],
+                <span className="avatar-choice-logo" style={{ background: LOGOS[id].background }}>
+                  <LogoMark logo={id} size={30} title="" />
+                </span>
+              )
+            )}
+          {set === 'abstract' &&
+            (() => {
+              const choices = abstractChoices(originalName, round)
+              // Keep the picked character in view even after the set changes.
+              const picked = avatar && parseAbstractId(avatar)
+              if (picked && !choices.some((p) => abstractId(p) === avatar)) choices.splice(1, 0, picked)
+              return choices.map((p) => choice(abstractId(p), t('lookAbstract'), <img className="avatar-choice-abstract" src={abstractIdUrl(abstractId(p))} alt="" draggable={false} />))
+            })()}
+          {set === 'pals' &&
+            (() => {
+              const picks = palPicks(originalName, palRound)
+              const picked = avatar && parsePalPickId(avatar)
+              if (picked && !picks.some((p) => palPickId(p) === avatar)) picks.splice(1, 0, picked)
+              return picks.map((p) => choice(palPickId(p), p.member.name[language], <img className="avatar-choice-abstract" src={palPickUrl(palPickId(p))} alt="" draggable={false} />))
+            })()}
         </div>
         <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void upload(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
       </div>
 
-      <div className="field">
-        <span className="field-label">{t('avatarAbstract')}</span>
-        <div className="avatar-choices" role="radiogroup" aria-label={t('avatarAbstract')}>
-          {(() => {
-            const choices = abstractChoices(originalName, round)
-            // Keep the picked character in view even after the set changes.
-            const picked = avatar && parseAbstractId(avatar)
-            if (picked && !choices.some((p) => abstractId(p) === avatar)) choices.splice(1, 0, picked)
-            return choices.map((p) => {
-              const id = abstractId(p)
-              return (
-                <button key={id} className={`avatar-choice ${avatar === id ? 'active' : ''}`} role="radio" aria-checked={avatar === id} onClick={() => setAvatar(id)} title={t('avatarAbstract')}>
-                  <img className="avatar-choice-abstract" src={abstractIdUrl(id)} alt="" draggable={false} />
-                </button>
-              )
-            })
-          })()}
-          <button className="avatar-choice upload" onClick={() => setRound((r) => r + 1)} title={t('avatarShuffle')}>
-            <Shuffle size={17} strokeWidth={2.2} />
-          </button>
+      <div className="cz-section">
+        <div className="cz-label">{t('customizeInChat')}</div>
+        <div className="cz-row">
+          <span className="cz-row-label">
+            <Palette size={13} strokeWidth={2.2} /> {t('bubbleColor')}
+          </span>
+          <BubbleColorRow conversationId={conversation.id} />
         </div>
-        <span className="field-hint">{t('avatarAbstractHint')}</span>
+        <div className="cz-row">
+          <span className="cz-row-label">
+            <ImageIcon size={13} strokeWidth={2.2} /> {t('wallpaper')}
+          </span>
+          <WallpaperRow conversationId={conversation.id} />
+        </div>
       </div>
 
-      <label className="field">
-        <span className="field-label">
-          <Cake size={13} strokeWidth={2.2} /> {t('birthday')}
-        </span>
-        <span className="field-row birthday-row">
-          <select className="field-input" value={bDay} onChange={(e) => setBDay(e.target.value)} aria-label={t('birthdayDay')}>
-            <option value="">{t('birthdayDay')}</option>
-            {Array.from({ length: 31 }, (_, i) => (
-              <option key={i} value={String(i + 1)}>
-                {i + 1}
-              </option>
-            ))}
-          </select>
-          <select className="field-input" value={bMonth} onChange={(e) => setBMonth(e.target.value)} aria-label={t('birthdayMonth')}>
-            <option value="">{t('birthdayMonth')}</option>
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i} value={String(i + 1)}>
-                {t('birthdayMonthN', { n: String(i + 1) })}
-              </option>
-            ))}
-          </select>
-          <input
-            className="field-input birthday-year"
-            inputMode="numeric"
-            maxLength={4}
-            placeholder={t('birthdayYearOptional')}
-            aria-label={t('birthdayYearOptional')}
-            aria-invalid={!!birthdayError}
-            value={bYear}
-            onChange={(e) => setBYear(e.target.value.replace(/\D/g, ''))}
-          />
-          {(bDay || bMonth || bYear) && (
-            <button
-              className="icon-btn"
-              onClick={() => {
-                setBDay('')
-                setBMonth('')
-                setBYear('')
-              }}
-              title={t('clear')}
-            >
-              <X size={14} strokeWidth={2.4} />
-            </button>
-          )}
-        </span>
-        <span className={`field-hint ${birthdayError ? 'error' : ''}`} role={birthdayError ? 'alert' : undefined}>
-          {birthdayError ? t(birthdayError) : t('birthdayHint')}
-        </span>
-      </label>
+      <BirthdayPicker value={override?.birthday} onChange={(birthday) => patch({ birthday })} />
 
-      <div className="field customizer-looks">
-        <span className="field-label">
-          <Palette size={13} strokeWidth={2.2} /> {t('bubbleColor')}
-        </span>
-        <BubbleColorRow conversationId={conversation.id} />
-      </div>
-      <div className="field customizer-looks">
-        <span className="field-label">
-          <ImageIcon size={13} strokeWidth={2.2} /> {t('wallpaper')}
-        </span>
-        <WallpaperRow conversationId={conversation.id} />
-        <span className="field-hint">{t('looksInstantHint')}</span>
-      </div>
-
-      <div className="contact-customizer-actions">
-        {override && (
-          <button className="btn secondary" onClick={() => void reset()} title={t('customReset')}>
-            <RotateCcw size={14} strokeWidth={2.4} />
-            {t('customReset')}
-          </button>
-        )}
-        <span style={{ flex: 1 }} />
-        <button className="btn secondary" onClick={onClose}>
-          {t('cancel')}
+      {/* Quiet and last: it clears every look you gave this person (Undo still brings them back). */}
+      {override && (
+        <button className="cz-reset" onClick={reset}>
+          <RotateCcw size={13} strokeWidth={2.4} />
+          {t('customReset')}
         </button>
-        <button className="btn primary" onClick={() => void save()} disabled={busy || !!birthdayError}>
-          {t('customSave')}
+      )}
+
+      <div className={`cz-undo ${changed ? 'shown' : ''}`} role="status" aria-hidden={!changed}>
+        <Check size={14} strokeWidth={2.6} />
+        <span>{t('customizeSaved')}</span>
+        <button onClick={undo} tabIndex={changed ? 0 : -1}>
+          {t('undo')}
         </button>
       </div>
-      <div className="field-hint centered">{t('customizeHint')}</div>
     </div>
   )
 }

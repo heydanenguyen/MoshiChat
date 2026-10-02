@@ -30,10 +30,11 @@ import type {
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
-import { LOGO_ORDER, logoIconSvg, type LogoId } from '@shared/logos'
+import { isLogoId, logoIconSvg, type LogoId } from '@shared/logos'
 import { accentVars, type AccentSpec } from '@shared/accent'
 import { previewKindOf } from '@shared/preview'
 import { abstractIdUrl } from './components/AbstractAvatar'
+import { palPickUrl } from '@shared/pals-art'
 import { playSent, playSound } from './sounds'
 import { toggleReaction } from './utils'
 import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
@@ -1855,9 +1856,10 @@ export function customAvatarUrl(value?: string): string | undefined {
   if (!value) return undefined
   if (value.startsWith('data:image/')) return value
   if (value.startsWith('abstract:')) return abstractIdUrl(value)
+  if (value.startsWith('pal:')) return palPickUrl(value)
   if (value.startsWith('logo:')) {
     const id = value.slice(5) as LogoId
-    if (LOGO_ORDER.includes(id)) return `data:image/svg+xml;utf8,${encodeURIComponent(logoIconSvg(id, true))}`
+    if (isLogoId(id)) return `data:image/svg+xml;utf8,${encodeURIComponent(logoIconSvg(id, true))}`
   }
   return undefined
 }

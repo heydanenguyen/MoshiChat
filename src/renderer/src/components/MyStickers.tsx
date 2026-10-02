@@ -4,7 +4,7 @@ import { AI_MODELS } from '@shared/ai'
 import type { CustomSticker } from '@shared/bridge'
 import { useStore, useT } from '../store'
 import { useAi } from '../aiStore'
-import { MitoArt } from './StickerPicker'
+import { PictureArt } from './StickerPicker'
 
 const USES_KEY = 'unison.stickerUses'
 const CUTOUT_KEY = 'unison.stickerCutout'
@@ -196,7 +196,7 @@ export function MyStickers({ onPick }: { onPick(id: string): void }): JSX.Elemen
       {mine.length === 0 ? (
         <div className="album-empty">
           <span className="album-empty-mito">
-            <MitoArt id="mito:chao" size={88} play="auto" />
+            <PictureArt id="mito:chao" size={88} play="auto" />
           </span>
           <strong>{t('albumEmptyTitle')}</strong>
           <span className="album-empty-text">{t('albumEmptyText')}</span>

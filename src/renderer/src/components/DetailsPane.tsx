@@ -123,6 +123,8 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   }, [conversationId, loadProfile])
 
   if (!conversation) return <></>
+  // Customizing takes over the pane, like a contact card's edit mode: its stage stands in for the profile on top.
+  if (customizing) return <ContactCustomizer conversation={conversation} onClose={() => setCustomizing(false)} />
   const pinned = isPinned(conversation, pins)
   // A nickname / custom photo set in Moshi wins over the platform profile.
   const name = custom?.nickname ? conversation.title : (profile?.name ?? conversation.title)
@@ -183,7 +185,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           <span className="quick-action-icon">{mutedHere ? <BellOff size={17} strokeWidth={2.2} /> : <Bell size={17} strokeWidth={2.2} />}</span>
           {mutedHere ? t('unmuteShort') : t('muteShort')}
         </button>
-        <button className={`quick-action ${customizing ? 'on' : ''}`} onClick={() => setCustomizing((v) => !v)} aria-expanded={customizing}>
+        <button className="quick-action" onClick={() => setCustomizing(true)}>
           <span className="quick-action-icon">
             <Pencil size={16} strokeWidth={2.2} />
           </span>
@@ -218,12 +220,6 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       <NoteCard key={conversationId} conversationId={conversationId} />
 
       <MomentsPreviewCard conversationId={conversationId} />
-
-      {customizing && (
-        <div className="details-card plain">
-          <ContactCustomizer conversation={conversation} onClose={() => setCustomizing(false)} />
-        </div>
-      )}
 
       <div className="details-card">
         <div className="details-card-title">{t('tags')}</div>

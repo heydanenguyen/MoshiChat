@@ -3,7 +3,7 @@ import { Clock, Scissors, Sparkles } from 'lucide-react'
 import { LOGOS, LOGO_ORDER, type LogoId } from '@shared/logos'
 import { STICKER_EXPRESSIONS, STICKER_VIEWBOX, isStickerId, stickerInner, type StickerId } from '@shared/stickers'
 import { stickerMotionCss } from '@shared/sticker-motion'
-import { MITO_STICKERS, isMitoId, mitoSticker, mitoUrl, type MitoId } from '@shared/mito'
+import { isPictureStickerId, packStickerIds, pictureSticker, pictureUrl, type PicturePack, type PictureStickerId } from '@shared/picture-packs'
 import { useStore, useT } from '../store'
 import { useKeepInside } from '../popover'
 import { LogoMark } from './Logo'
@@ -12,13 +12,17 @@ import { MyStickers } from './MyStickers'
 import { StickerMaker } from './StickerMaker'
 
 const RECENT_KEY = 'unison.recentStickers'
-const MITO_NAME = 'Mito'
+/** The picture packs' tabs: their names are names, the same in every language. */
+const PICTURE_TABS: Array<{ pack: PicturePack; name: string; cover: PictureStickerId }> = [
+  { pack: 'mito', name: 'Mito', cover: 'mito:chao' },
+  { pack: 'pals', name: 'Pals', cover: 'pals:chao' }
+]
 
-type PackSticker = StickerId | MitoId
+type PackSticker = StickerId | PictureStickerId
 
 function loadRecent(): PackSticker[] {
   try {
-    return (JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[]).filter((id): id is PackSticker => isStickerId(id) || isMitoId(id))
+    return (JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[]).filter((id): id is PackSticker => isStickerId(id) || isPictureStickerId(id))
   } catch {
     return []
   }
@@ -116,13 +120,13 @@ export function StickerArt({ id, size = 72, play = 'none' }: { id: StickerId; si
 }
 
 /**
- * A Mito sticker (a picture, not drawn in code). The animated ones move like StickerArt: while hovered ('hover',
+ * A picture-pack sticker (Mito, Pals: a picture, not drawn in code). The animated ones move like StickerArt: while hovered ('hover',
  * finishing the loop when the pointer leaves) and all the time while on screen in a chat ('auto'). Each play loads the
  * animation afresh so it starts at its first frame, which is the still pose, and it hands back to the still on a loop
  * boundary, so nothing snaps. Until the animation has loaded the still stays in place.
  */
-export function MitoArt({ id, size = 72, play = 'none' }: { id: MitoId; size?: number; play?: 'none' | 'hover' | 'auto' }): JSX.Element {
-  const loop = mitoSticker(id).loop
+export function PictureArt({ id, size = 72, play = 'none' }: { id: PictureStickerId; size?: number; play?: 'none' | 'hover' | 'auto' }): JSX.Element {
+  const loop = pictureSticker(id).loop
   const ref = useRef<HTMLSpanElement>(null)
   const effects = useStore((s) => s.settings.effects !== false)
   // n: which play this is (a fresh copy of the animation each time); shown once it has loaded; 0 = the still.
@@ -200,8 +204,8 @@ export function MitoArt({ id, size = 72, play = 'none' }: { id: MitoId; size?: n
 
   return (
     <span ref={ref} className="sticker-art mito-art" style={{ width: size, height: size }} aria-hidden>
-      <img src={mitoUrl(id, 'still')} alt="" draggable={false} style={{ visibility: run.shown ? 'hidden' : undefined }} />
-      {run.n > 0 && <img key={run.n} src={mitoUrl(id, 'animated', run.n)} alt="" draggable={false} onLoad={loaded} style={{ visibility: run.shown ? undefined : 'hidden' }} />}
+      <img src={pictureUrl(id, 'still')} alt="" draggable={false} style={{ visibility: run.shown ? 'hidden' : undefined }} />
+      {run.n > 0 && <img key={run.n} src={pictureUrl(id, 'animated', run.n)} alt="" draggable={false} onLoad={loaded} style={{ visibility: run.shown ? undefined : 'hidden' }} />}
     </span>
   )
 }
@@ -211,7 +215,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const [recent, setRecent] = useState<PackSticker[]>(loadRecent)
-  const [tab, setTab] = useState<'recent' | 'mine' | 'mito' | 'giphy' | LogoId>(() => (loadRecent().length ? 'recent' : 'mito'))
+  const [tab, setTab] = useState<'recent' | 'mine' | PicturePack | 'giphy' | LogoId>(() => (loadRecent().length ? 'recent' : 'mito'))
   const loadStickers = useStore((s) => s.loadStickers)
   useEffect(() => {
     void loadStickers()
@@ -239,10 +243,10 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
       ? recent
       : tab === 'mine' || tab === 'giphy'
         ? []
-        : tab === 'mito'
-          ? MITO_STICKERS.map((m) => `mito:${m.id}` as MitoId)
+        : tab === 'mito' || tab === 'pals'
+          ? packStickerIds(tab)
           : STICKER_EXPRESSIONS.map((e) => `${tab}-${e.id}` as StickerId)
-  const nameOf = (id: PackSticker): string => (isMitoId(id) ? mitoSticker(id).name[language] : (STICKER_EXPRESSIONS.find((e) => id.endsWith(`-${e.id}`))?.name[language] ?? ''))
+  const nameOf = (id: PackSticker): string => (isPictureStickerId(id) ? pictureSticker(id).name[language] : (STICKER_EXPRESSIONS.find((e) => id.endsWith(`-${e.id}`))?.name[language] ?? ''))
 
   const pick = (id: PackSticker): void => {
     const next = [id, ...recent.filter((r) => r !== id)]
@@ -262,9 +266,11 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
         <button role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')} title={t('stickerMine')}>
           <Scissors size={16} strokeWidth={2.2} />
         </button>
-        <button role="tab" aria-selected={tab === 'mito'} className={tab === 'mito' ? 'active' : ''} onClick={() => setTab('mito')} title={MITO_NAME}>
-          <img className="sticker-tab-pic" src={mitoUrl('mito:chao', 'still')} alt="" draggable={false} />
-        </button>
+        {PICTURE_TABS.map(({ pack, name, cover }) => (
+          <button key={pack} role="tab" aria-selected={tab === pack} className={tab === pack ? 'active' : ''} onClick={() => setTab(pack)} title={name}>
+            <img className="sticker-tab-pic" src={pictureUrl(cover, 'still')} alt="" draggable={false} />
+          </button>
+        ))}
         <button role="tab" aria-selected={tab === 'giphy'} className={tab === 'giphy' ? 'active' : ''} onClick={() => setTab('giphy')} title={t('giphyStickers')}>
           <Sparkles size={16} strokeWidth={2.2} />
         </button>
@@ -276,14 +282,14 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
       </div>
       {tab === 'giphy' && <GiphyStickers onPick={onPick} />}
       {tab !== 'giphy' && (
-        <div className="sticker-title">{tab === 'recent' ? t('recent') : tab === 'mine' ? t('stickerMine') : tab === 'mito' ? MITO_NAME : LOGOS[tab].name[language]}</div>
+        <div className="sticker-title">{tab === 'recent' ? t('recent') : tab === 'mine' ? t('stickerMine') : tab === 'mito' || tab === 'pals' ? PICTURE_TABS.find((p) => p.pack === tab)!.name : LOGOS[tab].name[language]}</div>
       )}
       {tab === 'mine' && <MyStickers onPick={onPick} />}
       {tab !== 'giphy' && tab !== 'mine' && (
         <div className="sticker-grid scroll">
           {items.map((id) => (
             <button key={id} className="sticker-cell" onClick={() => pick(id)} title={nameOf(id)} aria-label={nameOf(id)}>
-              {isMitoId(id) ? <MitoArt id={id} size={68} play="hover" /> : <StickerArt id={id} size={68} play="hover" />}
+              {isPictureStickerId(id) ? <PictureArt id={id} size={68} play="hover" /> : <StickerArt id={id} size={68} play="hover" />}
             </button>
           ))}
         </div>

@@ -26,9 +26,9 @@ import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
 import { TodoButton } from './TodoSheet'
 import { EmojiPicker } from './EmojiPicker'
-import { MitoArt, StickerArt } from './StickerPicker'
+import { PictureArt, StickerArt } from './StickerPicker'
 import { isStickerId } from '@shared/stickers'
-import { isMitoId } from '@shared/mito'
+import { isPictureStickerId } from '@shared/picture-packs'
 import { matchSticker } from '../stickerMatch'
 import { isSplit, type PaneIndex } from '../panes'
 import { CONVERSATION_DRAG } from './ConversationList'
@@ -1080,9 +1080,9 @@ function BubbleView({
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
                   <StickerArt id={sticker.sticker} play="auto" />
                 </span>
-              ) : sticker.sticker && isMitoId(sticker.sticker) ? (
+              ) : sticker.sticker && isPictureStickerId(sticker.sticker) ? (
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
-                  <MitoArt id={sticker.sticker} size={120} play="auto" />
+                  <PictureArt id={sticker.sticker} size={120} play="auto" />
                 </span>
               ) : sticker.frames && sticker.frames > 1 && sticker.url ? (
                 <span

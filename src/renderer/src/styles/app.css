@@ -4745,6 +4745,58 @@ kbd {
   pointer-events: none;
 }
 
+/* Pals' paper: little sheets of paper in a 4-up grid, each with its pal peeking in from the corner */
+.paper-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.paper-swatch {
+  position: relative;
+  overflow: hidden;
+  height: 62px;
+  display: flex;
+  align-items: flex-end;
+  padding: 7px 9px;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  transition: box-shadow var(--duration-fast) ease;
+}
+.paper-swatch span {
+  position: relative;
+  font-family: var(--font-pop, var(--font-display));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: rgba(0, 0, 0, 0.72);
+}
+.paper-swatch .paper-pal {
+  position: absolute;
+  right: -10px;
+  top: -12px;
+  transition: translate var(--duration-base) var(--ease-spring);
+}
+.paper-swatch:hover .paper-pal {
+  translate: -2px 3px;
+}
+.paper-swatch.active,
+.paper-swatch:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--pals-ink, var(--accent));
+}
+.paper-swatch.active .paper-pal {
+  animation: sb-hop 560ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper-swatch .paper-pal {
+    transition: none;
+    animation: none !important;
+  }
+}
+
 .accent-picker {
   display: flex;
   gap: 8px;
@@ -6499,55 +6551,481 @@ kbd {
   color: var(--text-tertiary);
 }
 
+/* Customizing a person takes over the Info pane, like a contact card's edit mode: a bar with Cancel and Save on
+   top, then a stage standing in for the profile (this chat in miniature: its wallpaper, the photo, the name you can
+   edit in place, a sample of your bubble colour), one set of looks at a time, the chat's colours and the birthday. */
 .contact-customizer {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  border: 1px solid var(--separator);
-  box-shadow: var(--shadow-sm);
-  animation: sheet-in var(--duration-base) var(--ease-spring);
+  gap: 16px;
+  padding: 0 var(--space-3) var(--space-5);
+  animation: cz-in var(--duration-slow) var(--ease-out);
 }
-.contact-customizer-head {
+@keyframes cz-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+/* while editing, the pane is only the editor: the Info / AI / search tabs step aside */
+.details-col:has(.contact-customizer) .details-tabs {
+  display: none;
+}
+.cz-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin: 0 calc(-1 * var(--space-3));
+  padding: 8px var(--space-3);
+  border-bottom: 1px solid var(--separator);
+  background: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
-.contact-customizer-title {
-  font-family: var(--font-display);
-  font-weight: 800;
+.cz-bar .btn {
+  padding: 0 14px;
 }
-.contact-customizer-preview {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  background: var(--fill-tertiary);
-}
-.contact-customizer-preview-text {
+.cz-title {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
-.contact-customizer-preview-text strong {
+.cz-title strong {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-md);
+  letter-spacing: -0.01em;
+}
+.cz-title span {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cz-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 12px 14px;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--accent-soft), transparent 70%),
+    var(--fill-tertiary);
+  box-shadow: inset 0 0 0 1px var(--separator);
+}
+.cz-stage > .chat-wallpaper {
+  z-index: -1;
+}
+.cz-avatar {
+  display: block;
+  border-radius: var(--radius-full);
+  box-shadow:
+    0 0 0 3px var(--bg-elevated),
+    0 12px 26px rgba(20, 20, 40, 0.16);
+  animation: cz-pop 460ms var(--ease-spring);
+}
+/* a new pick lands with a small bounce, so it is clear what changed */
+@keyframes cz-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: none;
+  }
+}
+.cz-name {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin-top: 12px;
+  color: var(--text-tertiary);
+  cursor: text;
+}
+.cz-name input {
+  field-sizing: content;
+  min-width: 3ch;
+  max-width: 200px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  outline: none;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  transition: background var(--duration-fast) ease;
+}
+/* the original name stands in as the placeholder, so it reads like the name itself */
+.cz-name input::placeholder {
+  color: var(--text-primary);
+  opacity: 1;
+}
+.cz-name:hover input,
+.cz-name input:focus {
+  background: var(--bg-input);
+}
+.cz-name input:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.cz-original {
+  margin-top: 1px;
+  max-width: 100%;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.contact-customizer-preview-text span {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
+/* over a wallpaper the name and its note sit on a frosted chip, readable on any picture */
+.cz-stage.has-wallpaper .cz-name input,
+.cz-stage.has-wallpaper .cz-original {
+  background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
-.contact-customizer .field {
-  gap: 6px;
+.cz-stage.has-wallpaper .cz-original {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
 }
-.contact-customizer .field-label {
+.cz-sample {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+.cz-sample .bubble {
+  width: fit-content;
+  max-width: 82%;
+  padding: 6px 11px;
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  user-select: none;
+}
+.cz-sample .bubble.out {
+  align-self: flex-end;
+}
+
+.cz-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cz-label {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.cz-sets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cz-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+}
+.cz-tabs button {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.cz-tabs button:hover {
+  color: var(--text-primary);
+}
+.cz-tabs button.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 0.5px var(--separator);
+}
+.cz-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.cz-shuffle:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+/* two rows' worth of room whichever set is open, so switching sets never makes the panel jump */
+.cz-grid {
+  min-height: 94px;
+  align-content: flex-start;
+}
+.cz-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cz-row + .cz-row {
+  margin-top: 4px;
+}
+.cz-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.cz-row .wallpaper-choice {
+  width: 32px;
+  height: 42px;
+  border-radius: 10px;
+}
+/* Every change is saved as it is made; once something changed, a small pill floats at the bottom of the pane
+   saying so, with Undo to put everything back the way it was when the editor opened. It is the inverse of the page
+   (dark on light, light on dark), like a toast, and slides up the first time there is something to undo. */
+.cz-undo {
+  position: sticky;
+  bottom: 14px;
+  z-index: 3;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -6px;
+  padding: 5px 5px 5px 14px;
+  border-radius: var(--radius-full);
+  background: var(--text-primary);
+  color: var(--bg-window);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  box-shadow: 0 10px 28px rgba(20, 20, 40, 0.22);
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-base) ease,
+    transform var(--duration-slow) var(--ease-spring);
+}
+.cz-undo.shown {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.cz-undo button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-window) 18%, transparent);
+  color: inherit;
+  font-weight: 800;
+}
+.cz-undo button:hover {
+  background: color-mix(in srgb, var(--bg-window) 28%, transparent);
+}
+
+/* Birthday: one line that says the date and how far off it is, opening into a small calendar of twelve months and
+   just the days the picked month has, so an impossible date cannot be picked at all. */
+.bday {
+  border-radius: var(--radius-lg);
+  background: var(--fill-tertiary);
+  overflow: hidden;
+}
+.bday-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+}
+.bday-line:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: inherit;
+}
+.bday-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, #ff6fa0 18%, transparent);
+  color: #e0457b;
+}
+.bday-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bday-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.bday-value {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bday-value strong {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.bday-value span {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.bday-value.empty {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+}
+.bday-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-base) var(--ease-spring);
+}
+.bday.open .bday-chevron {
+  transform: rotate(180deg);
+}
+.bday-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 12px;
+  animation: bday-in var(--duration-base) var(--ease-out);
+}
+@keyframes bday-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.bday-months,
+.bday-days {
+  display: grid;
+  gap: 4px;
+}
+.bday-months {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.bday-days {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.bday-months button,
+.bday-days button {
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.bday-months button:hover,
+.bday-days button:hover {
+  color: var(--text-primary);
+  background: var(--bg-selected);
+}
+.bday-months button.active,
+.bday-days button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.bday-months button:focus-visible,
+.bday-days button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* days wait for a month */
+.bday-days.waiting button {
+  opacity: 0.35;
+}
+.bday-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bday-year {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+}
+.bday-clear {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* resetting sits at the very end, quiet and far from the rest */
+.cz-reset {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+  transition: background var(--duration-fast) ease;
+}
+.cz-reset:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-avatar,
+  .contact-customizer,
+  .bday-panel {
+    animation: none;
+  }
+  .cz-undo {
+    transition: opacity var(--duration-fast) ease;
+    transform: none;
+  }
 }
 .field-row {
   display: flex;
@@ -6597,12 +7075,6 @@ kbd {
   display: grid;
   place-items: center;
 }
-.contact-customizer-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* ================================================================== thread width, photos, albums, big emoji */
 
 /* a little more room for messages and photos when the chat is wide (narrow layouts keep their rules) */
@@ -9711,15 +10183,6 @@ button.moment-card:hover {
   font-size: var(--text-xs);
 }
 
-/* customize panel: bubble colour + wallpaper live here now */
-.customizer-looks .bubble-colors,
-.customizer-looks .wallpaper-choices {
-  margin-top: 2px;
-}
-.customizer-looks .wallpaper-choice {
-  width: 34px;
-  height: 46px;
-}
 .ai-status.gpu {
   color: #7c3aed;
   background: color-mix(in srgb, #8b5cf6 16%, transparent);
@@ -10553,172 +11016,6 @@ button.moment-card:hover {
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--liquid-edge) inset;
 }
 
-/* ---- style picker in Settings: tiny mock scenes, one per style */
-.style-picker {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-top: 10px;
-}
-.style-card {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: 8px 8px 9px;
-  border-radius: var(--radius-lg);
-  border: 2px solid transparent;
-  background: var(--fill-tertiary);
-  text-align: left;
-  transition:
-    border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease;
-}
-.style-card:hover {
-  background: var(--bg-hover);
-}
-.style-card.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.style-preview {
-  position: relative;
-  height: 76px;
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 7px;
-  background: #f3f4fa;
-}
-.style-preview i {
-  position: absolute;
-  display: block;
-}
-.style-preview .blob {
-  border-radius: 50%;
-  filter: blur(14px);
-}
-.style-preview .b1 {
-  left: -14px;
-  top: -18px;
-  width: 80px;
-  height: 80px;
-  background: #ffd6e0;
-}
-.style-preview .b2 {
-  right: -16px;
-  top: -10px;
-  width: 76px;
-  height: 76px;
-  background: #d6e6ff;
-}
-.style-preview .b3 {
-  left: 40%;
-  bottom: -30px;
-  width: 80px;
-  height: 80px;
-  background: #e7dbff;
-}
-.style-preview .pane {
-  top: 10px;
-  bottom: 10px;
-  background: rgba(255, 255, 255, 0.64);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(31, 38, 135, 0.08);
-}
-.style-preview .p1 {
-  left: 10px;
-  width: 36px;
-}
-.style-preview .p2 {
-  left: 54px;
-  right: 10px;
-}
-.style-preview .line {
-  left: 10px;
-  right: 10px;
-  top: 12px;
-  height: 5px;
-  border-radius: 3px;
-  background: rgba(27, 29, 42, 0.16);
-}
-.style-preview .line.short {
-  top: 22px;
-  right: 40%;
-}
-.style-preview .pill {
-  left: 10px;
-  right: 10px;
-  bottom: 9px;
-  height: 12px;
-  border-radius: 999px;
-  background: rgba(27, 29, 42, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-}
-.style-preview.liquid {
-  background: #f5f6fb;
-}
-.style-preview.liquid .blob {
-  filter: blur(20px);
-}
-.style-preview.liquid .b1 {
-  background: #ffd9e2;
-}
-.style-preview.liquid .b2 {
-  background: #cfe3ff;
-}
-.style-preview.liquid .pane {
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  border-radius: 13px;
-  box-shadow:
-    0 8px 20px rgba(31, 38, 135, 0.08),
-    inset 0 1px 0 #fff;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-}
-.style-preview.liquid .pill {
-  background: rgba(255, 255, 255, 0.7);
-}
-:root[data-theme='dark'] .style-preview {
-  background: #14162a;
-}
-:root[data-theme='dark'] .style-preview .b1 {
-  background: #3a2447;
-}
-:root[data-theme='dark'] .style-preview .b2 {
-  background: #1e2c58;
-}
-:root[data-theme='dark'] .style-preview .b3 {
-  background: #2c2456;
-}
-:root[data-theme='dark'] .style-preview .pane {
-  background: rgba(30, 32, 50, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-:root[data-theme='dark'] .style-preview .line {
-  background: rgba(255, 255, 255, 0.22);
-}
-:root[data-theme='dark'] .style-preview .pill {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-}
-:root[data-theme='dark'] .style-preview.liquid .pane {
-  background: rgba(40, 42, 60, 0.45);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-.style-name {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.style-sub {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
 
 /* ================================================================== settings: page list + one page at a time */
 .settings-sheet {
@@ -13596,13 +13893,51 @@ button.moment-card:hover {
 }
 
 /* ================================================================== notes & birthdays */
+/* Notes: a sticky note on the person's profile. The card is the paper (a soft butter tint with a folded corner)
+   and you write straight on it: no box inside a box. Empty, it offers a few starters. */
+.note-card {
+  --note-paper: color-mix(in srgb, #ffd84d 17%, var(--glass-strong));
+  --note-fold: color-mix(in srgb, #e0a800 24%, transparent);
+  position: relative;
+  background: var(--note-paper);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in srgb, #e0a800 14%, transparent);
+  transition: box-shadow var(--duration-fast) ease;
+}
+:root[data-theme='dark'] .note-card {
+  --note-paper: color-mix(in srgb, #ffd84d 8%, var(--glass-strong));
+  --note-fold: color-mix(in srgb, #ffd84d 16%, transparent);
+}
+/* the folded corner */
+.note-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 0 var(--radius-lg) 0 7px;
+  background: linear-gradient(225deg, var(--bg-window) 0 50%, var(--note-fold) 50% 100%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+.note-card.focused {
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
 .note-title {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding-right: 14px;
 }
 .note-state {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -13611,27 +13946,52 @@ button.moment-card:hover {
 .note-input {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 42px;
   resize: none;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: var(--fill-tertiary);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  transition:
-    border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-secondary) transparent;
 }
 .note-input::placeholder {
   color: var(--text-tertiary);
 }
 .note-input:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  background: var(--bg-elevated);
+}
+.note-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.note-prompts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, #ffd84d 24%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.note-prompts button:hover {
+  background: color-mix(in srgb, #ffd84d 40%, transparent);
+  color: var(--text-primary);
+}
+.note-prompts button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .reconnect-note {
   display: flex;
@@ -14092,6 +14452,456 @@ button.moment-card:hover {
 }
 @media (prefers-reduced-motion: reduce) {
   .zreact-pill {
+    animation: none;
+  }
+}
+
+/* ================================================================== Appearance page
+   A tiny Moshi on top, drawn with the app's own tokens, so mode, style, accent, background, logo and font all show
+   there the moment they change. Below it the choices run from the biggest change to the smallest. */
+.ap-preview {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  flex-shrink: 0;
+  height: 172px;
+  border-radius: var(--radius-xl);
+  background: var(--mesh-base);
+  box-shadow: inset 0 0 0 1px var(--separator);
+}
+.ap-mesh i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(30px);
+  opacity: 0.9;
+}
+.ap-mesh i:nth-child(1) {
+  left: -8%;
+  top: -30%;
+  width: 46%;
+  height: 120%;
+  background: var(--mesh-1);
+}
+.ap-mesh i:nth-child(2) {
+  right: -6%;
+  top: -20%;
+  width: 42%;
+  height: 110%;
+  background: var(--mesh-2);
+}
+.ap-mesh i:nth-child(3) {
+  left: 30%;
+  bottom: -50%;
+  width: 40%;
+  height: 100%;
+  background: var(--mesh-3);
+}
+.ap-window {
+  position: absolute;
+  inset: 14px 18px;
+  display: grid;
+  grid-template-columns: 30% minmax(0, 1fr);
+  gap: 10px;
+}
+.ap-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px;
+  min-width: 0;
+}
+.ap-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-family: var(--font-pop, var(--font-display));
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.ap-nav {
+  display: block;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+}
+.ap-nav.active {
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-sm);
+}
+.ap-nav.short {
+  width: 62%;
+}
+.ap-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: calc(var(--radius-panel) * 0.6);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-chat);
+  box-shadow: var(--shadow-panel);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+.ap-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.ap-face {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+}
+.ap-line {
+  width: 64px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--fill-secondary);
+}
+.ap-bubble {
+  width: fit-content;
+  max-width: 82%;
+  padding: 5px 10px;
+  border-radius: 14px;
+  font-family: var(--font-text);
+  font-size: 11.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ap-bubble.in {
+  background: var(--bubble-in);
+  color: var(--bubble-in-text);
+  box-shadow: var(--bubble-in-ring, 0 0 0 0 transparent);
+}
+.ap-bubble.out {
+  align-self: flex-end;
+  background: var(--bubble-out);
+  color: var(--bubble-out-text);
+}
+.ap-composer {
+  margin-top: auto;
+  height: 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-input);
+}
+:root[data-style='pals'] .ap-mesh {
+  display: none;
+}
+:root[data-style='pals'] .ap-preview {
+  --bubble-out: var(--pals-ink);
+  --bubble-out-text: var(--pals-on-ink);
+}
+:root[data-style='pals'] .ap-chat {
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-style='pals'] .ap-nav.active {
+  background: var(--pals-ink);
+}
+
+/* logos in two families: the Moshi characters, then the Pals */
+.logo-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.logo-group + .logo-group {
+  margin-top: 16px;
+}
+.logo-group-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+.settings-row.stack .logo-group .logo-picker {
+  margin-top: 0;
+  /* the same columns for both families, so the Pals line up under the Moshi characters */
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 2px;
+}
+.logo-group .logo-option {
+  gap: 5px;
+  padding: 8px 2px 6px;
+}
+.logo-group .logo-tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+}
+.logo-group .logo-option-name {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ================================================================== style banners
+   Each style is a small banner drawn in its own look, with its own characters, three in a row: Moshi as a poster
+   (its name giant and white behind the Buddies, the words on frosted glass); Liquid Glass as a glass dock with a
+   character on each tile over a soft wallpaper; Pals as one giant pal spilling out of the frame, saying hello in ink. */
+.style-banners {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.style-banner {
+  --sb-ink: #14151f;
+  --sb-sub: rgba(20, 21, 31, 0.64);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 156px;
+  padding: 0;
+  border-radius: 20px;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: box-shadow var(--duration-base) ease;
+}
+.style-banner:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.05),
+    0 10px 26px -12px rgba(30, 30, 70, 0.35);
+}
+.style-banner.active,
+.style-banner:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
+}
+.sb-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.sb-art > * {
+  position: absolute;
+}
+.sb-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 12px;
+}
+.sb-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--sb-ink);
+}
+.sb-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--sb-sub);
+}
+.sb-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 0 0 2px var(--bg-elevated);
+}
+/* picking a style: its characters give a little hop */
+.style-banner.active .sb-duo,
+.style-banner.active .sb-tile,
+.style-banner.active .sb-pal {
+  animation: sb-hop 560ms var(--ease-spring);
+}
+.style-banner.active .sb-tile:nth-child(2) {
+  animation-delay: 60ms;
+}
+.style-banner.active .sb-tile:nth-child(3) {
+  animation-delay: 120ms;
+}
+.style-banner.active .sb-tile:nth-child(4) {
+  animation-delay: 180ms;
+}
+@keyframes sb-hop {
+  30% {
+    transform: translateY(-6px);
+  }
+  60% {
+    transform: translateY(1px);
+  }
+}
+
+/* ---- Moshi: the poster */
+.sb-moshi {
+  background: linear-gradient(140deg, #ffd9e8, #e3d6ff 50%, #cfe4ff);
+}
+.sb-giant {
+  left: -6px;
+  top: 0;
+  font-family: var(--font-display);
+  font-size: 74px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+.sb-duo {
+  left: calc(50% - 37px);
+  top: 8px;
+  height: 74px;
+  width: auto;
+  filter: drop-shadow(0 10px 14px rgba(255, 91, 31, 0.3));
+}
+.sb-moshi .sb-text {
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+:root[data-theme='dark'] .sb-moshi {
+  --sb-ink: #f2f3fa;
+  --sb-sub: rgba(242, 243, 250, 0.68);
+  background: linear-gradient(140deg, #45284f, #2c2a5a 50%, #1e3158);
+}
+:root[data-theme='dark'] .sb-giant {
+  color: rgba(255, 255, 255, 0.16);
+  text-shadow: none;
+}
+:root[data-theme='dark'] .sb-moshi .sb-text {
+  border-top-color: rgba(255, 255, 255, 0.12);
+  background: rgba(24, 26, 46, 0.5);
+}
+
+/* ---- Liquid Glass: the dock */
+.sb-liquid {
+  --sb-ink: #0f1117;
+  --sb-sub: rgba(15, 17, 23, 0.7);
+  justify-content: flex-start;
+}
+.sb-wall {
+  inset: 0;
+  background:
+    radial-gradient(60% 70% at 20% 10%, #ffb7d5, transparent 60%),
+    radial-gradient(60% 70% at 90% 30%, #8fd0ff, transparent 60%),
+    linear-gradient(160deg, #c8b6ff, #ffd2a8);
+}
+.sb-dock {
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 6px;
+  border-radius: 22px;
+}
+.sb-dock,
+.sb-tile {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0.25));
+  -webkit-backdrop-filter: blur(3px) saturate(180%);
+  backdrop-filter: blur(3px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -8px 14px rgba(255, 255, 255, 0.24),
+    0 10px 22px rgba(50, 40, 140, 0.16);
+}
+.sb-tile {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+:root[data-theme='dark'] .sb-liquid {
+  --sb-ink: #f4f5fb;
+  --sb-sub: rgba(244, 245, 251, 0.72);
+}
+:root[data-theme='dark'] .sb-wall {
+  background:
+    radial-gradient(60% 70% at 20% 10%, #6a2f5c, transparent 60%),
+    radial-gradient(60% 70% at 90% 30%, #1f4f80, transparent 60%),
+    linear-gradient(160deg, #2c2560, #4a3040);
+}
+:root[data-theme='dark'] .sb-dock,
+:root[data-theme='dark'] .sb-tile {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03) 55%, rgba(255, 255, 255, 0.09));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 22px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- Pals: the giant */
+.sb-pals {
+  --sb-ink: #000;
+  --sb-sub: rgba(0, 0, 0, 0.64);
+  background: #ffe0ee;
+}
+.sb-pals .sb-name {
+  font-family: 'Unbounded', var(--font-display);
+  font-size: 14px;
+}
+.sb-pal.giant {
+  right: -34px;
+  top: -24px;
+}
+.sb-say {
+  left: 12px;
+  top: 14px;
+  padding: 3px 9px 4px;
+  border-radius: 999px;
+  background: #000;
+  color: #fff;
+  font-family: 'Unbounded', var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  rotate: -7deg;
+}
+:root[data-theme='dark'] .sb-pals {
+  --sb-ink: #fff;
+  --sb-sub: rgba(255, 255, 255, 0.68);
+  background: #2c1f2a;
+}
+:root[data-theme='dark'] .sb-say {
+  background: #fff;
+  color: #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .style-banner.active .sb-duo,
+  .style-banner.active .sb-tile,
+  .style-banner.active .sb-pal {
     animation: none;
   }
 }

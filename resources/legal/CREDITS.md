@@ -20,6 +20,18 @@ Full list of every dependency: run `npx license-checker --production` in the sou
 | opus-recorder | BSD-3-Clause | https://github.com/chris-rudmin/opus-recorder |
 | sharp (libvips) | Apache-2.0; libvips LGPL-3.0-or-later | https://github.com/lovell/sharp |
 
+## Phông chữ / Fonts
+
+Đi kèm trong ứng dụng, theo SIL Open Font License 1.1 (https://openfontlicense.org).
+Bundled with the app under the SIL Open Font License 1.1 (https://openfontlicense.org).
+
+| Phông chữ / Font | Bản quyền / Copyright | Nguồn / Source |
+| --- | --- | --- |
+| Plus Jakarta Sans | The Plus Jakarta Sans Project Authors | https://github.com/tokotype/PlusJakartaSans |
+| Inter | The Inter Project Authors | https://github.com/rsms/inter |
+| Nunito | The Nunito Project Authors | https://github.com/googlefonts/nunito |
+| Unbounded (kiểu Pals / the Pals style) | The Unbounded Project Authors | https://github.com/googlefonts/unbounded |
+
 ## Kết nối nền tảng / Platform connectors
 
 | Thành phần / Component | Giấy phép / License | Nguồn / Source |
