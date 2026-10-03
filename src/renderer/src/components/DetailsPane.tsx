@@ -8,6 +8,7 @@ import { NoteCard } from './NoteCard'
 import { TagChip } from './Tag'
 import { isPinned, peopleIndex, personIn, useShownConversations, useStore, useT, useTagDefs, type DetailsTab } from '../store'
 import { candidatesFor } from '@shared/people'
+import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
 import { formatBytes, formatDate, formatListTime, formatAgo, personLook } from '../utils'
 import { Avatar } from './Avatar'
 import { useScrollFade } from '../scrollFade'
@@ -97,6 +98,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const conversation = useShownConversations()[conversationId]
   const account = useStore((s) => s.accounts[conversation?.accountId ?? ''])
   const profile = useStore((s) => s.profiles[conversationId])
+  const noteCard = useStore((s) => s.settings.noteCard !== false)
   const loadProfile = useStore((s) => s.loadProfile)
   const storedTags = useStore((s) => s.settings.tags[conversationId])
   const tags = storedTags ?? EMPTY_TAGS
@@ -200,7 +202,7 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
       <PersonCard conversationId={conversationId} />
 
       {/* A fresh card per person: a box still focused from the last chat must never save into this one. */}
-      <NoteCard key={conversationId} conversationId={conversationId} />
+      {noteCard && <NoteCard key={conversationId} conversationId={conversationId} />}
 
       <MomentsPreviewCard conversationId={conversationId} />
 
@@ -338,6 +340,38 @@ function SearchTab({ conversationId }: { conversationId: string }): JSX.Element 
   )
 }
 
+/**
+ * One picture in the Media tab. A video shows its poster, or its own first frame when the platform gave none (a
+ * video file is never put in an <img>). Pictures go through Moshi's preview cache, with the platform's session,
+ * like the chat's own; if that fails the original is tried, and a picture that still cannot load becomes a quiet
+ * placeholder instead of a broken-image icon.
+ */
+function MediaThumb({ attachment }: { attachment: Message['attachments'][number] }): JSX.Element {
+  const [failed, setFailed] = useState(false)
+  const video = attachment.kind === 'video'
+  if (failed) return <span className="media-fallback">{video ? null : <Image size={20} />}</span>
+  if (video && !attachment.thumbnailUrl) {
+    if (!attachment.url) return <span className="media-fallback" />
+    return <video src={`${mediaSrc(attachment.url)}#t=0.1`} preload="metadata" muted playsInline onError={() => setFailed(true)} />
+  }
+  const original = video ? attachment.thumbnailUrl : (attachment.url ?? attachment.thumbnailUrl)
+  if (!original) return <span className="media-fallback">{video ? null : <Image size={20} />}</span>
+  return (
+    <img
+      src={previewSrc(original, 240)}
+      alt=""
+      draggable={false}
+      loading="lazy"
+      decoding="async"
+      onError={(e) => {
+        const raw = imageSrc(original)
+        if (raw && e.currentTarget.src !== raw) e.currentTarget.src = raw
+        else setFailed(true)
+      }}
+    />
+  )
+}
+
 function SharedTab({ conversationId, kind }: { conversationId: string; kind: SharedKind }): JSX.Element {
   const t = useT()
   const key = `${conversationId}|${kind}`
@@ -398,7 +432,6 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
         {header}
         <div className="media-grid">
           {(items as Array<{ message: Message; attachment: Message['attachments'][number] }>).map(({ message, attachment }) => {
-            const src = attachment.url ?? attachment.thumbnailUrl
             const open = async (): Promise<void> => {
               if (attachment.kind === 'video') {
                 await openAttachment(message.conversationId, message.id, attachment.id)
@@ -409,7 +442,7 @@ function SharedTab({ conversationId, kind }: { conversationId: string; kind: Sha
             }
             return (
               <button key={`${message.id}-${attachment.id}`} className="media-cell" onClick={() => void open()} title={formatListTime(message.sentAt, language)}>
-                {src ? <img src={src} alt="" draggable={false} loading="lazy" /> : <Image size={20} />}
+                <MediaThumb attachment={attachment} />
                 {attachment.kind === 'video' && (
                   <span className="play">
                     <Play size={22} fill="currentColor" />

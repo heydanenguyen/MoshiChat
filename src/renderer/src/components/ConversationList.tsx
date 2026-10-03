@@ -71,6 +71,7 @@ export function ConversationList(): JSX.Element {
   const unsnooze = useStore((s) => s.unsnooze)
   const cancelFollowUp = useStore((s) => s.cancelFollowUp)
   const openLaterPicker = useStore((s) => s.openLaterPicker)
+  const laterOn = useStore((s) => s.settings.laterTools !== false)
   const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
   const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
   const allConversations = useShownConversations()
@@ -536,6 +537,7 @@ export function ConversationList(): JSX.Element {
               </button>
             )}
             {menuConversation &&
+              laterOn &&
               (isSnoozed(snoozed?.[menuConversation.id]) ? (
                 <button
                   className="context-menu-item"
@@ -562,6 +564,7 @@ export function ConversationList(): JSX.Element {
                 </button>
               ))}
             {menuConversation &&
+              laterOn &&
               (followState(followUps?.[menuConversation.id]) === 'waiting' ? (
                 <button
                   className="context-menu-item"

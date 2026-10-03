@@ -477,6 +477,13 @@ export const MONO_CANVASES: Array<{ id: MonoCanvasId; name: { vi: string; en: st
   { id: 'graphite', name: { vi: 'Graphite', en: 'Graphite' }, canvas: '#1c1c1e' }
 ]
 
+/**
+ * Where a message's reactions sit, after the apps people know: on the bubble's lower edge (Messenger), on its top
+ * corner (iMessage), in a row of their own under it (Slack, Discord), or beside its end (Telegram on desktop).
+ */
+export type ReactionPlacement = 'overlap' | 'top' | 'below' | 'side'
+export const REACTION_PLACEMENTS: ReactionPlacement[] = ['overlap', 'top', 'below', 'side']
+
 export type IconStyle = 'classic' | 'gummy' | 'liquid' | 'pixel'
 /** The icon style in use: the one picked in Settings, else the one that belongs to the surface style. */
 export const iconStyleOf = (settings: { iconStyle?: IconStyle; style?: StyleId }): IconStyle =>
@@ -681,6 +688,16 @@ export interface Settings {
   sendSound?: boolean
   /** Word effects (birthday confetti, hearts...). Default on. */
   effects?: boolean
+  /** The note card in a chat's details. Default on. */
+  noteCard?: boolean
+  /** "Send later": the clock in the composer. Messages already scheduled still go out. Default on. */
+  scheduleSend?: boolean
+  /** Snooze and follow-up reminders: the chat header's clock, the list's menu items and ⌘⇧H. Default on. */
+  laterTools?: boolean
+  /** To-dos: the sidebar item and sheet, and "Add to to-dos" on messages. Default on. */
+  todosOn?: boolean
+  /** Where reactions sit on a message. Default 'overlap'. */
+  reactionPlacement?: ReactionPlacement
   /** Close friends: the sidebar item and sheet, the quiet-friend card, and the 30-day history fill behind them. Default on. */
   closeFriends?: boolean
   /** The sidebar card when a close friend has gone quiet. Default on. */

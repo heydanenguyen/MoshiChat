@@ -122,6 +122,7 @@ function runInboxCommand(command: InboxCommand): void {
   const state = useStore.getState()
   if (state.sheet.kind !== 'none' || state.lightbox || state.forwarding) return
   if (command === 'show-archive') return state.setListView(state.listView === 'archive' ? 'inbox' : 'archive')
+  if (command === 'snooze' && state.settings.laterTools === false) return
   const id = state.selectedId
   if (!id) return
   if (command === 'snooze') {
@@ -155,6 +156,7 @@ export default function App(): JSX.Element {
   const collapsed = useStore((s) => s.settings.sidebarCollapsed)
   const locked = useStore((s) => !!s.lock?.locked)
   const closeFriends = useStore((s) => s.settings.closeFriends !== false)
+  const todosOn = useStore((s) => s.settings.todosOn !== false)
   const mesh = useStore((s) => s.settings.mesh)
   const darkBase = useStore((s) => s.settings.darkBase)
   const palsPaper = useStore((s) => s.settings.palsPaper)
@@ -492,7 +494,7 @@ export default function App(): JSX.Element {
               {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
             </Suspense>
             {sheet.kind === 'command' && <CommandPalette />}
-            {sheet.kind === 'todos' && <TodoSheet />}
+            {sheet.kind === 'todos' && todosOn && <TodoSheet />}
             {sheet.kind === 'insights' && closeFriends && <InsightsSheet />}
             <AiSetupSheet />
             <LaterPicker />

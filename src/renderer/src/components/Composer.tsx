@@ -65,6 +65,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const [stickersOpen, setStickersOpen] = useState(false)
   const [gifsOpen, setGifsOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const scheduleOn = useStore((s) => s.settings.scheduleSend !== false)
   const scheduleMessage = useStore((s) => s.scheduleMessage)
   const composerDraft = useStore((s) => s.composerDrafts[conversationId])
   // Translating what you type: the language is remembered per chat; "auto" translates every message on send.
@@ -551,7 +552,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 )}
               </span>
             )}
-            {text.trim() && !pendingFiles.length && (
+            {scheduleOn && text.trim() && !pendingFiles.length && (
               <span className="emoji-anchor">
                 <button
                   className={`icon-btn ${scheduleOpen ? 'active' : ''}`}

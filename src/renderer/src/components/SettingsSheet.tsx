@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
-import type { BubbleAction, Language, SyncStatus, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, LIQUID_TONES, MESHES, MONO_CANVASES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, iconStyleOf, stepZoom } from '@shared/types'
+import type { BubbleAction, Language, ReactionPlacement, SyncStatus, TextSize, ThemePreference } from '@shared/types'
+import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, LIQUID_TONES, MESHES, MONO_CANVASES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, REACTION_PLACEMENTS, clampZoom, darkBaseHex, iconStyleOf, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
@@ -559,6 +559,34 @@ function AccountsPage(): JSX.Element {
   )
 }
 
+const PLACEMENT_LABELS: Record<ReactionPlacement, [TKey, TKey]> = {
+  overlap: ['reactionOverlap', 'reactionOverlapHint'],
+  top: ['reactionTop', 'reactionTopHint'],
+  below: ['reactionBelow', 'reactionBelowHint'],
+  side: ['reactionSide', 'reactionSideHint']
+}
+
+/** The four reaction positions, each drawn as a tiny bubble with its reaction where it would sit. */
+function ReactionPlacementPicker(): JSX.Element {
+  const t = useT()
+  const picked = useStore((s) => s.settings.reactionPlacement ?? 'overlap')
+  const setSettings = useStore((s) => s.setSettings)
+  return (
+    <div className="placement-picker" role="radiogroup" aria-label={t('reactionPlacement')}>
+      {REACTION_PLACEMENTS.map((p) => (
+        <button key={p} className={`placement-card ${picked === p ? 'active' : ''}`} role="radio" aria-checked={picked === p} onClick={() => void setSettings({ reactionPlacement: p })}>
+          <span className={`placement-demo at-${p}`} aria-hidden>
+            <i className="demo-bubble" />
+            <b className="demo-react">❤️</b>
+          </span>
+          <span className="placement-name">{t(PLACEMENT_LABELS[p][0])}</span>
+          <span className="placement-sub">{t(PLACEMENT_LABELS[p][1])}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Settings rows reuse the buttons' own labels. */
 const BUBBLE_ACTION_LABELS: Record<BubbleAction, TKey> = {
   react: 'react',
@@ -630,7 +658,20 @@ function ChatPage(): JSX.Element {
           <Switch on={settings.effects !== false} onChange={(on) => void setSettings({ effects: on })} />
         </Row>
       </Group>
-      <Group label={t('insights')}>
+      <Group label={t('featuresTitle')}>
+        <Row title={t('featuresTitle')} sub={t('featuresHint')} />
+        <Row title={t('noteCardSetting')} sub={t('noteCardSettingHint')}>
+          <Switch on={settings.noteCard !== false} onChange={(on) => void setSettings({ noteCard: on })} />
+        </Row>
+        <Row title={t('scheduleSendSetting')} sub={t('scheduleSendSettingHint')}>
+          <Switch on={settings.scheduleSend !== false} onChange={(on) => void setSettings({ scheduleSend: on })} />
+        </Row>
+        <Row title={t('laterToolsSetting')} sub={t('laterToolsSettingHint')}>
+          <Switch on={settings.laterTools !== false} onChange={(on) => void setSettings({ laterTools: on })} />
+        </Row>
+        <Row title={t('todosOnSetting')} sub={t('todosOnSettingHint')}>
+          <Switch on={settings.todosOn !== false} onChange={(on) => void setSettings({ todosOn: on })} />
+        </Row>
         <Row title={t('closeFriendsSetting')} sub={t('closeFriendsSettingHint')}>
           <Switch on={settings.closeFriends !== false} onChange={(on) => void setSettings({ closeFriends: on })} />
         </Row>
@@ -641,6 +682,11 @@ function ChatPage(): JSX.Element {
         )}
         <Row title={t('birthdaySetting')} sub={t('birthdaySettingHint')}>
           <Switch on={settings.birthdayReminders !== false} onChange={(on) => void setSettings({ birthdayReminders: on })} />
+        </Row>
+      </Group>
+      <Group label={t('reactionPlacement')}>
+        <Row title={t('reactionPlacement')} sub={t('reactionPlacementHint')} stack>
+          <ReactionPlacementPicker />
         </Row>
       </Group>
       <Group label={t('bubbleActionsTitle')}>

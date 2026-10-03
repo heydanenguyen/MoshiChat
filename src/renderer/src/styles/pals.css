@@ -395,31 +395,7 @@
 /* ================================================================== one language
    Tags, icons, counts and labels speak Pals too, so the style is the whole app and not a coat of paint. */
 
-/* tags: ink-outlined capsules on white, the tag's own colour kept for its little icon */
-:root[data-style='pals'] .tag-pill {
-  border-radius: var(--radius-full);
-  background: var(--pals-sheet);
-  color: var(--pals-ink);
-  box-shadow: inset 0 0 0 1.5px var(--pals-ink);
-}
-:root[data-style='pals'] .tag-pill .tag-glyph {
-  color: var(--tag);
-}
-:root[data-style='pals'] .tag-pill.flat {
-  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
-  color: var(--text-secondary);
-}
-:root[data-style='pals'] .tag-pill.selected {
-  background: var(--pals-ink);
-  color: var(--pals-on-ink);
-}
-:root[data-style='pals'] .tag-pill.selected .tag-glyph {
-  color: var(--pals-on-ink);
-}
-:root[data-style='pals'] .tag-pill::before,
-:root[data-style='pals'] .tag-pill::after {
-  display: none;
-}
+/* tags keep the Moshi look: their own colour on a candy slab */
 
 /* icons: the thick ink line the pals are drawn with */
 :root[data-style='pals'] .lucide {
@@ -447,10 +423,7 @@
   color: #000;
 }
 
-/* a busy row gives its room back to the name: one tag, and a merged person's apps stacked */
-:root[data-style='pals'] .conv-tags > :nth-child(n + 2) {
-  display: none;
-}
+/* a busy row gives its room back to the name: a merged person's apps stacked */
 :root[data-style='pals'] .conv-apps {
   gap: 0;
 }

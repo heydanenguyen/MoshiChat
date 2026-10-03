@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { isPendingRequest } from '@shared/inbox'
-import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, File, Forward, Info, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, X } from 'lucide-react'
+import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, Copy, File, Forward, Info, Languages, ListTodo, MoreHorizontal, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, Volume2, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
@@ -16,7 +16,7 @@ import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from '
 import { BuddyLoader } from './BuddyLoader'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
-import { SpeakButton, SummaryButton, SummaryCard, TranslateButton, TranslationBlock, VoiceTranscript } from './AiParts'
+import { SummaryButton, SummaryCard, TranslationBlock, VoiceTranscript } from './AiParts'
 import { LaterButton } from './LaterPicker'
 import { ReactionGrid, ReactionPill } from './ReactionPill'
 import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
@@ -24,7 +24,8 @@ import { useAccountLabels } from '../accountLabels'
 import { giphyIdOf } from '@shared/giphy'
 import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
-import { TodoButton } from './TodoSheet'
+import { TodoPicker } from './TodoSheet'
+import { textKey, useAi } from '../aiStore'
 import { EmojiPicker } from './EmojiPicker'
 import { PictureArt, StickerArt } from './StickerPicker'
 import { isStickerId } from '@shared/stickers'
@@ -149,6 +150,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const t = useT()
   const activatePane = useStore((s) => s.activatePane)
   const closePane = useStore((s) => s.closePane)
+  const laterOn = useStore((s) => s.settings.laterTools !== false)
   const toggleSplit = useStore((s) => s.toggleSplit)
   const canSplit = useStore((s) => s.wide && !s.narrow)
   const thread = useThread(conversation.id)
@@ -458,7 +460,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
               <Columns2 size={18} strokeWidth={2} />
             </button>
           )}
-          <LaterButton conversationId={conversation.id} />
+          {laterOn && <LaterButton conversationId={conversation.id} />}
           <SummaryButton conversationId={conversation.id} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
             <Info size={18} strokeWidth={2} />
@@ -724,7 +726,6 @@ function Group({
   language: 'vi' | 'en'
 }): JSX.Element {
   const t = useT()
-  const react = useStore((s) => s.react)
   const showSender = !group.isOutgoing && conversation.isGroup
   // A group never mixes apps (sectionize splits them), so its first message speaks for it.
   const features = featuresOf?.(group.messages[0]) ?? chatFeatures
@@ -766,24 +767,8 @@ function Group({
           const message = item.message
           return (
             <div key={message.id} style={{ display: 'contents' }}>
+              {/* the bubble draws its own reactions, wherever Settings > Chat puts them */}
               <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={platform} />
-              {/* Zalo keeps one reaction per person and shows them as one pill; others get a chip per emoji. */}
-              {platform === 'zalo' && <ReactionPill message={message} outgoing={group.isOutgoing} canReact={features.react} />}
-              {platform !== 'zalo' && message.reactions.length > 0 && (
-                <div className="reactions">
-                  {message.reactions.map((r) => (
-                    <button
-                      key={r.emoji}
-                      className={`reaction-chip ${r.byMe ? 'mine' : ''}`}
-                      onClick={() => features.react && void react(message.conversationId, message.id, r.emoji)}
-                      title={r.byMe ? t('removeReaction') : t('react')}
-                    >
-                      {r.emoji}
-                      {r.count > 1 && <span>{r.count}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
               {message.id === lastOutgoingId && (
                 <div className={`status-line ${message.status === 'failed' ? 'failed' : ''}`}>
                   {message.status === 'read'
@@ -944,10 +929,20 @@ function BubbleView({
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
+  // The bar's "…": everything but reacting and replying, in a menu (like Instagram), so the bar stays short.
+  const [moreOpen, setMoreOpen] = useState(false)
+  const translate = useAi((s) => s.translate)
+  const translated = useAi((s) => !!s.results[`t:${textKey(message)}`]?.text && !s.results[`t:${textKey(message)}`]?.hidden)
+  const speak = useAi((s) => s.speak)
+  const speaking = useAi((s) => s.speaking === textKey(message))
+  const showToast = useStore((s) => s.showToast)
   const unsend = useStore((s) => s.unsend)
   const [confirmUnsend, setConfirmUnsend] = useState(false)
   // Small labels on the bar's buttons (Settings > Chat > Message actions); on by default.
   const tips = useStore((s) => s.settings.actionLabels !== false)
+  // Where reactions sit (Settings > Chat): the lower edge (default), the top corner, a row below, or beside the end.
+  const placement = useStore((s) => s.settings.reactionPlacement ?? 'overlap')
+  const todosOn = useStore((s) => s.settings.todosOn !== false)
   // Which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
   const bubbleActions = useStore((s) => s.settings.bubbleActions)
   const wants = (action: BubbleAction): boolean => bubbleActions?.[action] !== false
@@ -1031,14 +1026,15 @@ function BubbleView({
   const mine = message.reactions.find((r) => r.byMe)?.emoji
 
   useEffect(() => {
-    if (!picker && !confirmUnsend) return
+    if (!picker && !confirmUnsend && !moreOpen) return
     const close = (): void => {
       setPicker(false)
       setConfirmUnsend(false)
+      setMoreOpen(false)
     }
     window.addEventListener('mousedown', close)
     return () => window.removeEventListener('mousedown', close)
-  }, [picker, confirmUnsend])
+  }, [picker, confirmUnsend, moreOpen])
 
   const settled = message.status !== 'sending' && message.status !== 'failed'
   const showActions = settled && !message.unsent && BUBBLE_ACTIONS.some(wants)
@@ -1058,8 +1054,55 @@ function BubbleView({
     )
   }
 
+  // The More menu: what is switched on in Settings > Chat > Message actions, and possible for this message.
+  const hasText = !!message.text.trim()
+  const moreItems: Array<{ key: string; icon: JSX.Element; label: string; run(): void; danger?: boolean }> = []
+  // Reply is in the bar too; in the menu as well, so everything is in one place once it is open.
+  if (features.reply && wants('reply')) moreItems.push({ key: 'reply', icon: <Reply size={15} strokeWidth={2} />, label: t('reply'), run: () => setReplyTo(message.conversationId, message) })
+  const canReact = features.react && wants('react')
+  if (wants('forward')) moreItems.push({ key: 'forward', icon: <Forward size={15} strokeWidth={2} />, label: t('forward'), run: () => startForward(message) })
+  if (hasText)
+    moreItems.push({
+      key: 'copy',
+      icon: <Copy size={15} strokeWidth={2} />,
+      label: t('copyText'),
+      run: () => void navigator.clipboard.writeText(message.text).then(() => showToast(t('textCopied')))
+    })
+  if (wants('translate') && hasText) moreItems.push({ key: 'translate', icon: <Languages size={15} strokeWidth={2} />, label: translated ? t('aiShowOriginal') : t('aiTranslate'), run: () => void translate(message) })
+  if (wants('speak') && hasText) moreItems.push({ key: 'speak', icon: <Volume2 size={15} strokeWidth={2} />, label: speaking ? t('aiSpeakStop') : t('aiSpeak'), run: () => void speak(message) })
+  if (wants('todo') && todosOn) moreItems.push({ key: 'todo', icon: <ListTodo size={15} strokeWidth={2} />, label: t('todoFromMessage'), run: () => setTodoOpen(true) })
+  if (wants('save'))
+    moreItems.push({ key: 'save', icon: <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />, label: saved ? t('unsaveAction') : t('saveAction'), run: () => void toggleSaved(message) })
+  if (message.isOutgoing && features.unsend && wants('unsend')) moreItems.push({ key: 'unsend', icon: <Undo2 size={15} strokeWidth={2} />, label: t('unsend'), run: () => setConfirmUnsend(true), danger: true })
+
+  // Zalo keeps one reaction per person and shows them as one pill; others get a chip per emoji.
+  const reactionSlot =
+    platform === 'zalo' ? (
+      message.reactions.length > 0 ? (
+        <div className={`react-slot at-${placement}`}>
+          <ReactionPill message={message} outgoing={message.isOutgoing} canReact={features.react} />
+        </div>
+      ) : null
+    ) : message.reactions.length > 0 ? (
+      <div className={`react-slot at-${placement}`}>
+        <div className="reactions">
+          {message.reactions.map((r) => (
+            <button
+              key={r.emoji}
+              className={`reaction-chip ${r.byMe ? 'mine' : ''}`}
+              onClick={() => features.react && void react(message.conversationId, message.id, r.emoji)}
+              title={r.byMe ? t('removeReaction') : t('react')}
+            >
+              {r.emoji}
+              {r.count > 1 && <span>{r.count}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null
+
   return (
-    <div className={`bubble-row ${highlighted ? 'highlight' : ''}`} data-message-id={message.id}>
+    <div className={`bubble-row ${highlighted ? 'highlight' : ''} ${reactionSlot && placement === 'top' ? 'react-top' : ''}`} data-message-id={message.id}>
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
@@ -1107,9 +1150,11 @@ function BubbleView({
             {message.edited && <span style={{ opacity: 0.6, fontSize: 11 }}> · {t('edited')}</span>}
           </div>
         )}
+        {placement !== 'side' && reactionSlot}
       </div>
+      {placement === 'side' && reactionSlot}
       {showActions && (
-        <div className={`bubble-actions ${picker || moreEmoji || todoOpen || confirmUnsend ? 'open' : ''} ${tips ? 'tips' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`bubble-actions ${picker || moreEmoji || todoOpen || confirmUnsend || moreOpen ? 'open' : ''} ${tips ? 'tips' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
           {features.react && wants('react') && (
             <button className="icon-btn" {...tip(t('react'))} onClick={() => setPicker((p) => !p)}>
               <SmilePlus size={15} strokeWidth={2} />
@@ -1120,24 +1165,59 @@ function BubbleView({
               <Reply size={15} strokeWidth={2} />
             </button>
           )}
-          {wants('forward') && (
-            <button className="icon-btn" {...tip(t('forward'))} onClick={() => startForward(message)}>
-              <Forward size={15} strokeWidth={2} />
+          {(moreItems.length > 0 || canReact) && (
+            <button className={`icon-btn ${moreOpen ? 'active' : ''}`} {...tip(t('moreActions'))} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen} aria-haspopup="menu">
+              <MoreHorizontal size={16} strokeWidth={2} />
             </button>
           )}
-          {wants('translate') && <TranslateButton message={message} />}
-          {wants('speak') && <SpeakButton message={message} />}
-          {wants('todo') && <TodoButton message={message} onOpenChange={setTodoOpen} />}
-          {wants('save') && (
-            <button className={`icon-btn ${saved ? 'saved-on' : ''}`} {...tip(saved ? t('unsaveAction') : t('saveAction'))} onClick={() => void toggleSaved(message)} aria-pressed={saved}>
-              <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
-            </button>
+          {moreOpen && (
+            <span className="bubble-more-anchor" ref={fitInChat}>
+              <div className="context-menu bubble-more-menu" role="menu">
+                {canReact && (
+                  <div className="bubble-more-reacts">
+                    {(platform === 'zalo' ? ZALO_QUICK : QUICK_REACTIONS).map((emoji) => (
+                      <button
+                        key={emoji}
+                        className={mine === emoji ? 'active' : ''}
+                        title={mine === emoji ? t('removeReaction') : undefined}
+                        onClick={() => {
+                          setMoreOpen(false)
+                          void react(message.conversationId, message.id, emoji)
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                    <button
+                      className="reaction-more"
+                      title={t('moreReactions')}
+                      onClick={() => {
+                        setMoreOpen(false)
+                        setMoreEmoji(true)
+                      }}
+                    >
+                      <Plus size={15} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                )}
+                {moreItems.map((item) => (
+                  <button
+                    key={item.key}
+                    className={`context-menu-item ${item.danger ? 'danger' : ''}`}
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      item.run()
+                    }}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </span>
           )}
-          {message.isOutgoing && features.unsend && wants('unsend') && (
-            <button className={`icon-btn ${confirmUnsend ? 'active' : ''}`} {...tip(t('unsend'))} onClick={() => setConfirmUnsend((c) => !c)} aria-expanded={confirmUnsend}>
-              <Undo2 size={15} strokeWidth={2} />
-            </button>
-          )}
+          {todoOpen && <TodoPicker message={message} onClose={() => setTodoOpen(false)} />}
           {confirmUnsend && (
             <div className="unsend-confirm" role="dialog" aria-label={t('unsend')}>
               <span>{t('unsendConfirm')}</span>

@@ -59,6 +59,7 @@ export function Sidebar(): JSX.Element {
   const openSheet = useStore((s) => s.openSheet)
   const pinnedCollapsed = useStore((s) => s.settings.sidebarCollapsed)
   const closeFriends = useStore((s) => s.settings.closeFriends !== false)
+  const todosOn = useStore((s) => s.settings.todosOn !== false)
   const autoRail = useAutoRail()
   /** Rail layout, folded by hand or by the window: everything below renders from this. */
   const collapsed = pinnedCollapsed || autoRail
@@ -202,6 +203,7 @@ export function Sidebar(): JSX.Element {
               </button>
             )
           })}
+          {todosOn && (
           <button className="nav-item" onClick={() => openSheet({ kind: 'todos' })} title={t('todos')}>
             {tiles ? (
               <GummyIcon kind={tiles} name="todos" size={26} className="nav-item-icon" />
@@ -214,6 +216,7 @@ export function Sidebar(): JSX.Element {
             {!collapsed && badge(openTodos)}
             {openTodos > 0 && <span className="rail-dot" />}
           </button>
+          )}
           {closeFriends && (
             <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
               {tiles ? (

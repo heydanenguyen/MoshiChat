@@ -18,16 +18,29 @@ export function useOpenTodos(): number {
 /** In the bubble's action bar: turn this message into a to-do, with or without a reminder. */
 export function TodoButton({ message, onOpenChange }: { message: Message; onOpenChange?(open: boolean): void }): JSX.Element {
   const t = useT()
-  const addTodo = useStore((s) => s.addTodo)
   const already = useStore((s) => !!s.settings.todos?.some((x) => x.messageId === message.id && x.conversationId === message.conversationId && !x.done))
   const [open, setOpenState] = useState(false)
   const setOpen = (next: boolean): void => {
     setOpenState(next)
     onOpenChange?.(next)
   }
+  return (
+    <>
+      <button className={`icon-btn ${already || open ? 'active' : ''}`} {...tip(t('todoFromMessage'))} onClick={() => setOpen(!open)} aria-pressed={already}>
+        <ListTodo size={15} strokeWidth={2} />
+      </button>
+      {open && <TodoPicker message={message} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+/** "When?" for a to-do made from a message: a time, or none. Adds it and closes. */
+export function TodoPicker({ message, onClose }: { message: Message; onClose(): void }): JSX.Element {
+  const t = useT()
+  const addTodo = useStore((s) => s.addTodo)
   const text = message.text.trim() || message.attachments.map((a) => `[${a.kind}]`).join(' ')
   const add = (due?: number): void => {
-    setOpen(false)
+    onClose()
     void addTodo({ conversationId: message.conversationId, messageId: message.id, text: text.slice(0, 200), due })
   }
   // Keep the picker inside the chat: slide it sideways at the column's edges, open it below the
@@ -45,16 +58,9 @@ export function TodoButton({ message, onOpenChange }: { message: Message; onOpen
     if (dx) sheet.style.translate = `${dx}px 0`
   }, [])
   return (
-    <>
-      <button className={`icon-btn ${already || open ? 'active' : ''}`} {...tip(t('todoFromMessage'))} onClick={() => setOpen(!open)} aria-pressed={already}>
-        <ListTodo size={15} strokeWidth={2} />
-      </button>
-      {open && (
-        <span className="todo-picker-anchor" ref={place}>
-          <SchedulePicker onPick={add} onClose={() => setOpen(false)} title={t('todoWhen')} noneLabel={t('todoNoDue')} onNone={() => add(undefined)} />
-        </span>
-      )}
-    </>
+    <span className="todo-picker-anchor" ref={place}>
+      <SchedulePicker onPick={add} onClose={onClose} title={t('todoWhen')} noneLabel={t('todoNoDue')} onNone={() => add(undefined)} />
+    </span>
   )
 }
 
