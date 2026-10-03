@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AtSign, Bell, BellOff, Cake, Clock, File, FileText, Image, Info, Link2, Mic, Pencil, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
+import { AtSign, Bell, BellOff, Cake, Check, Clock, File, FileText, Image, Info, Link2, Mic, Pencil, Phone, Pin, PinOff, Play, Plus, RefreshCw, Search, Sparkles, User, X } from 'lucide-react'
 import type { Message, SharedKind, TagId } from '@shared/types'
 import { PLATFORMS, isMutedBy } from '@shared/types'
 import { TagCreator } from './TagEditor'
@@ -110,7 +110,6 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
   const muted = useStore((s) => s.settings.muted)
   const toggleMute = useStore((s) => s.toggleMute)
   const mentionsOnly = useStore((s) => !!s.settings.mentionsOnly?.[conversationId])
-  const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
   const allTags = useStore((s) => s.settings.tags)
   const language = useStore((s) => s.settings.language)
   const openLightbox = useStore((s) => s.openLightbox)
@@ -181,10 +180,14 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
           <span className="quick-action-icon">{pinned ? <PinOff size={17} strokeWidth={2.2} /> : <Pin size={17} strokeWidth={2.2} />}</span>
           {pinned ? t('unpinShort') : t('pinShort')}
         </button>
-        <button className={`quick-action ${mutedHere ? 'on' : ''}`} onClick={() => void toggleMute('conversations', conversationId)} aria-pressed={mutedHere}>
-          <span className="quick-action-icon">{mutedHere ? <BellOff size={17} strokeWidth={2.2} /> : <Bell size={17} strokeWidth={2.2} />}</span>
-          {mutedHere ? t('unmuteShort') : t('muteShort')}
-        </button>
+        {conversation.isGroup ? (
+          <NotifyAction conversationId={conversationId} mutedHere={mutedHere} mentionsOnly={mentionsOnly} />
+        ) : (
+          <button className={`quick-action ${mutedHere ? 'on' : ''}`} onClick={() => void toggleMute('conversations', conversationId)} aria-pressed={mutedHere}>
+            <span className="quick-action-icon">{mutedHere ? <BellOff size={17} strokeWidth={2.2} /> : <Bell size={17} strokeWidth={2.2} />}</span>
+            {mutedHere ? t('unmuteShort') : t('muteShort')}
+          </button>
+        )}
         <button className="quick-action" onClick={() => setCustomizing(true)}>
           <span className="quick-action-icon">
             <Pencil size={16} strokeWidth={2.2} />
@@ -193,26 +196,6 @@ function InfoTab({ conversationId }: { conversationId: string }): JSX.Element {
         </button>
       </div>
       {mutedByRule && <div className="field-hint centered details-hint">{t('mutedByRule')}</div>}
-      {conversation.isGroup && !mutedHere && !mutedByRule && (
-        <div className="details-card mentions-only-card">
-          <div className="settings-row">
-            <AtSign size={16} strokeWidth={2.2} className="mentions-only-icon" aria-hidden />
-            <div className="settings-row-text">
-              <div className="settings-row-title" id={`mentions-only-${conversationId}`}>
-                {t('mentionsOnly')}
-              </div>
-              <div className="settings-row-sub">{t('mentionsOnlyHint')}</div>
-            </div>
-            <button
-              className={`switch ${mentionsOnly ? 'on' : ''}`}
-              role="switch"
-              aria-checked={mentionsOnly}
-              aria-labelledby={`mentions-only-${conversationId}`}
-              onClick={() => void toggleMentionsOnly(conversationId)}
-            />
-          </div>
-        </div>
-      )}
 
       <PersonCard conversationId={conversationId} />
 
@@ -577,6 +560,74 @@ function PersonCard({ conversationId }: { conversationId: string }): JSX.Element
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+type NotifyLevel = 'all' | 'mentions' | 'off'
+
+/**
+ * A group's bell: three levels in one place (every message, only when you are @mentioned or replied to, or off),
+ * picked from a small menu under the quick actions. The button shows the level you are on.
+ */
+function NotifyAction({ conversationId, mutedHere, mentionsOnly }: { conversationId: string; mutedHere: boolean; mentionsOnly: boolean }): JSX.Element {
+  const t = useT()
+  const toggleMute = useStore((s) => s.toggleMute)
+  const toggleMentionsOnly = useStore((s) => s.toggleMentionsOnly)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const level: NotifyLevel = mutedHere ? 'off' : mentionsOnly ? 'mentions' : 'all'
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const pick = async (next: NotifyLevel): Promise<void> => {
+    setOpen(false)
+    if ((next === 'off') !== mutedHere) await toggleMute('conversations', conversationId)
+    if ((next === 'mentions') !== mentionsOnly) await toggleMentionsOnly(conversationId)
+  }
+
+  const icon = (l: NotifyLevel, size: number): JSX.Element =>
+    l === 'off' ? <BellOff size={size} strokeWidth={2.2} /> : l === 'mentions' ? <AtSign size={size} strokeWidth={2.2} /> : <Bell size={size} strokeWidth={2.2} />
+  const levels: Array<{ id: NotifyLevel; title: string; sub?: string }> = [
+    { id: 'all', title: t('notifyAll') },
+    { id: 'mentions', title: t('mentionsOnly'), sub: t('notifyMentionsSub') },
+    { id: 'off', title: t('mute') }
+  ]
+
+  return (
+    <div className="quick-action-wrap" ref={ref}>
+      <button className={`quick-action ${level !== 'all' ? 'on' : ''} ${open ? 'open' : ''}`} onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}>
+        <span className="quick-action-icon">{icon(level, 17)}</span>
+        {level === 'off' ? t('notifyOffShort') : level === 'mentions' ? t('notifyMentionsShort') : t('notifyAllShort')}
+      </button>
+      {open && (
+        <div className="notify-menu" role="menu" aria-label={t('notifyAllShort')}>
+          {levels.map((l) => (
+            <button key={l.id} role="menuitemradio" aria-checked={level === l.id} className={`notify-item ${level === l.id ? 'on' : ''}`} onClick={() => void pick(l.id)}>
+              <span className="notify-item-icon">{icon(l.id, 16)}</span>
+              <span className="notify-item-text">
+                <span className="notify-item-title">{l.title}</span>
+                {l.sub && <span className="notify-item-sub">{l.sub}</span>}
+              </span>
+              {level === l.id && <Check size={15} strokeWidth={2.6} className="notify-item-check" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

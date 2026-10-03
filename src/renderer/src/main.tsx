@@ -9,7 +9,10 @@ import { useUpdate } from './updateStore'
 import { useInsights } from './components/Insights'
 import './styles/tokens.css'
 import './styles/app.css'
+import './styles/todos.css'
+import './styles/liquid.css'
 import './styles/pals.css'
+import './styles/mono.css'
 
 // Development only: scripted UI checks (MOSHI_UI_SCRIPT, see main/index.ts) drive the store from the page.
 if (import.meta.env.DEV) (window as unknown as { __moshi: unknown }).__moshi = { store: useStore, update: useUpdate, insights: useInsights }

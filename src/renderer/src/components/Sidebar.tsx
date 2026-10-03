@@ -12,6 +12,7 @@ import { TagCreator } from './TagEditor'
 import { useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { GummyIcon, useTileIcons } from './GummyIcon'
 import { useScrollFade } from '../scrollFade'
 
 type MuteTarget = { kind: 'platforms'; id: Platform } | { kind: 'accounts'; id: string } | { kind: 'tags'; id: TagId }
@@ -61,6 +62,7 @@ export function Sidebar(): JSX.Element {
   const autoRail = useAutoRail()
   /** Rail layout, folded by hand or by the window: everything below renders from this. */
   const collapsed = pinnedCollapsed || autoRail
+  const tiles = useTileIcons()
   const folded = useStore((s) => s.settings.sidebarSections)
   const setSettings = useStore((s) => s.setSettings)
   const isFolded = (section: SidebarSection): boolean => !collapsed && !!folded?.[section]
@@ -171,9 +173,13 @@ export function Sidebar(): JSX.Element {
           {!isFolded('inboxes') && (
           <>
           <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} title={withCount(t('allInboxes'), unread.total)}>
-            <span className="nav-item-icon tile accent">
-              <Inbox size={14} strokeWidth={2.4} />
-            </span>
+            {tiles ? (
+              <GummyIcon kind={tiles} name="inbox" size={26} className="nav-item-icon" />
+            ) : (
+              <span className="nav-item-icon tile accent">
+                <Inbox size={14} strokeWidth={2.4} />
+              </span>
+            )}
             {!collapsed && <span className="nav-item-label">{t('allInboxes')}</span>}
             {!collapsed && badge(unread.total)}
             {unread.total > 0 && <span className="rail-dot" />}
@@ -197,18 +203,26 @@ export function Sidebar(): JSX.Element {
             )
           })}
           <button className="nav-item" onClick={() => openSheet({ kind: 'todos' })} title={t('todos')}>
-            <span className="nav-item-icon tile todo">
-              <ListTodo size={16} strokeWidth={2.2} />
-            </span>
+            {tiles ? (
+              <GummyIcon kind={tiles} name="todos" size={26} className="nav-item-icon" />
+            ) : (
+              <span className="nav-item-icon tile todo">
+                <ListTodo size={16} strokeWidth={2.2} />
+              </span>
+            )}
             {!collapsed && <span className="nav-item-label">{t('todos')}</span>}
             {!collapsed && badge(openTodos)}
             {openTodos > 0 && <span className="rail-dot" />}
           </button>
           {closeFriends && (
             <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
-              <span className="nav-item-icon tile insights">
-                <ChartNoAxesColumn size={16} strokeWidth={2.2} />
-              </span>
+              {tiles ? (
+                <GummyIcon kind={tiles} name="insights" size={26} className="nav-item-icon" />
+              ) : (
+                <span className="nav-item-icon tile insights">
+                  <ChartNoAxesColumn size={16} strokeWidth={2.2} />
+                </span>
+              )}
               {!collapsed && <span className="nav-item-label">{t('insights')}</span>}
             </button>
           )}

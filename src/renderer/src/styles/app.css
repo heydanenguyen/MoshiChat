@@ -573,6 +573,13 @@ a {
 .list-title-row .list-title {
   animation: list-title-in var(--duration-base) var(--ease-out) both;
 }
+/* one line always: a long title (a wide display face, a long tag name) is cut short, never wrapped */
+.list-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 @keyframes list-title-in {
   from {
     opacity: 0;
@@ -3080,6 +3087,21 @@ button.reaction-chip.mine:hover {
 
 .composer-attach {
   margin-bottom: 1px;
+}
+/* a message longer than a line: the text runs the full width, the attach button and the tools sit in a row under it */
+.composer-box.tall {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0;
+  padding: 6px 5px 5px 6px;
+}
+.composer-box.tall .composer-input {
+  order: -1;
+  flex: 1 0 100%;
+  padding: 6px 10px 4px;
+}
+.composer-box.tall .composer-tools {
+  margin-left: auto;
 }
 
 .composer-send {
@@ -7286,19 +7308,83 @@ kbd {
   background: var(--glass-strong);
   box-shadow: var(--shadow-sm);
 }
-.mentions-only-card {
-  padding: 0;
+/* a group's bell: three levels in a menu under the quick actions, as wide as they are */
+.quick-actions {
+  position: relative;
 }
-.mentions-only-card .settings-row {
-  align-items: flex-start;
+.quick-action-wrap {
+  display: grid;
 }
-.mentions-only-icon {
-  margin-top: 2px;
+.notify-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 6px);
+  left: var(--space-3);
+  right: var(--space-3);
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  animation: notify-menu-in 180ms var(--ease-spring);
+  transform-origin: top center;
+}
+@keyframes notify-menu-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: 0 -4px;
+  }
+}
+.notify-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  text-align: left;
+  color: var(--text-primary);
+}
+.notify-item:hover {
+  background: var(--bg-hover);
+}
+.notify-item-icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+}
+.notify-item.on .notify-item-icon {
+  background: var(--accent-soft);
   color: var(--accent);
-  flex-shrink: 0;
 }
-.mentions-only-card .switch {
-  margin-top: 2px;
+.notify-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.notify-item-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.notify-item-sub {
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+.notify-item-check {
+  flex: none;
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .notify-menu {
+    animation: none;
+  }
 }
 
 .details-card.plain {
@@ -14904,4 +14990,72 @@ button.moment-card:hover {
   .style-banner.active .sb-pal {
     animation: none;
   }
+}
+
+/* ================================================================== gummy icons
+   Settings > Appearance > Icon style: candy tiles with a jelly shine (light from the top left, a soft lip at the
+   bottom), the glyph in white. The same in light and dark: the candy carries itself on both. */
+.gummy-tile {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  background: radial-gradient(120% 90% at 28% 18%, color-mix(in srgb, var(--gummy) 52%, white) 0%, var(--gummy) 55%, color-mix(in srgb, var(--gummy) 86%, black) 100%);
+  box-shadow:
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.gummy-tile svg {
+  display: block;
+  overflow: visible;
+}
+.icon-style-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.icon-style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 10px 12px;
+  border-radius: 18px;
+  background: var(--fill-tertiary);
+  transition: box-shadow var(--duration-fast) ease;
+}
+.icon-style-card.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
+}
+.icon-style-row {
+  display: flex;
+  gap: 6px;
+}
+.icon-style-name {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.icon-style-card.active .icon-style-name {
+  color: var(--text-primary);
+}
+
+/* the empty screen's one action */
+.empty-cta {
+  margin-top: 18px;
+  gap: 8px;
+}
+.empty-cta kbd {
+  display: inline-block;
+  color: inherit;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  opacity: 0.8;
 }

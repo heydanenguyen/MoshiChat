@@ -1,0 +1,272 @@
+/* ================================================================== Liquid Glass, tone-driven
+   A soft mesh in the picked tone (Settings › Appearance › Tone) behind glass whose density follows each pane's job:
+   the chat is read most and is nearly solid, the list is scanned, the details are looked up, the sidebar only points
+   and is the clearest. Nothing glows at rest; colour lifts in only on hover. White things stand apart by a hairline
+   and lifting, never by turning grey. Loaded after app.css; the Moshi style is untouched. */
+
+:root[data-style='liquid'] {
+  --lq-edge: #ffffff;
+  --lq-rim: rgba(255, 255, 255, 0.75);
+  --lq-hair: rgba(30, 34, 70, 0.08);
+  --lq-lift: 0 18px 40px -28px rgba(20, 24, 60, 0.18);
+}
+
+/* the backdrop: four tone colours meeting from the corners, light in the middle */
+:root[data-style='liquid'] .mesh {
+  background:
+    radial-gradient(60% 55% at 8% 6%, var(--lq-1) 0%, transparent 62%),
+    radial-gradient(55% 60% at 94% 10%, var(--lq-3) 0%, transparent 64%),
+    radial-gradient(62% 62% at 86% 96%, var(--lq-2) 0%, transparent 62%),
+    radial-gradient(52% 52% at 14% 94%, var(--lq-4) 0%, transparent 64%),
+    color-mix(in srgb, var(--lq-3) 35%, white);
+}
+:root[data-style='liquid'] .mesh-blob {
+  opacity: 0;
+}
+
+/* glass by job: a bright top edge and a thin rim instead of the drawn ring and sheen */
+:root[data-style='liquid'] :is(.sidebar, .list-col, .chat-col, .details-col)::before,
+:root[data-style='liquid'] :is(.sidebar, .list-col, .chat-col, .details-col)::after {
+  content: none;
+}
+:root[data-style='liquid'] :is(.sidebar, .list-col, .chat-col, .details-col) {
+  box-shadow:
+    inset 0 1.5px 0 var(--lq-edge),
+    inset 0 0 0 1px var(--lq-rim),
+    var(--lq-lift);
+}
+:root[data-style='liquid'] .chat-col {
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+:root[data-style='liquid'] .list-col {
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  backdrop-filter: blur(32px) saturate(160%);
+}
+:root[data-style='liquid'] .details-col {
+  background: rgba(255, 255, 255, 0.56);
+  -webkit-backdrop-filter: blur(38px) saturate(170%);
+  backdrop-filter: blur(38px) saturate(170%);
+}
+:root[data-style='liquid'] .sidebar {
+  background: rgba(255, 255, 255, 0.34);
+  -webkit-backdrop-filter: blur(46px) saturate(180%);
+  backdrop-filter: blur(46px) saturate(180%);
+}
+
+/* where you are: a white card lifted off the glass with a hairline in the tone */
+:root[data-style='liquid'] .sidebar .nav-item.active {
+  background: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--lq-tone) 26%, transparent),
+    0 4px 14px -6px rgba(30, 40, 90, 0.14);
+}
+:root[data-style='liquid'] .list-col .conv-item.selected {
+  background: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--lq-tone) 30%, transparent),
+    0 6px 18px -8px rgba(30, 40, 90, 0.16);
+}
+:root[data-style='liquid'] .conv-item {
+  transition: box-shadow var(--duration-base) ease;
+}
+:root[data-style='liquid'] .list-col .conv-item:not(.selected):hover {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 24px -16px color-mix(in srgb, var(--lq-tone) 55%, transparent);
+}
+
+/* counts: a pastel chip in the tone, quiet at rest, a soft lift on hover */
+:root[data-style='liquid'] :is(.unread-pill, .nav-badge):not(.dot) {
+  background: color-mix(in srgb, var(--lq-tone) 15%, white);
+  color: color-mix(in srgb, var(--lq-tone) 70%, #24273f);
+  font-weight: 650;
+  box-shadow: none;
+  transition:
+    background-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+:root[data-style='liquid'] .conv-item.muted .unread-pill:not(.dot) {
+  background: rgba(120, 125, 150, 0.12);
+  color: rgba(40, 44, 70, 0.55);
+}
+:root[data-style='liquid'] :is(.nav-item, .conv-item):hover :is(.unread-pill, .nav-badge):not(.dot) {
+  background: color-mix(in srgb, var(--lq-tone) 22%, white);
+  box-shadow: 0 3px 10px -4px color-mix(in srgb, var(--lq-tone) 45%, transparent);
+}
+
+/* bubbles: mine in the tone, theirs solid white with a faint hairline */
+:root[data-style='liquid'] .bubble.out {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--lq-tone) 62%, white), var(--lq-tone));
+  color: #ffffff;
+  box-shadow: none;
+}
+:root[data-style='liquid'] .chat-col :is(.bubble.in, .typing-bubble) {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(30, 34, 70, 0.05);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* the composer and the reply bar: white with a hairline; the tone comes in on hover and while typing */
+:root[data-style='liquid'] .composer .composer-box,
+:root[data-style='liquid'] .chat-col .reply-banner {
+  background: #ffffff;
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px var(--lq-hair),
+    0 4px 14px -8px rgba(30, 40, 90, 0.16);
+  transition: box-shadow var(--duration-base) ease;
+}
+:root[data-style='liquid'] .composer .composer-box:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--lq-tone) 28%, transparent),
+    0 8px 22px -10px color-mix(in srgb, var(--lq-tone) 50%, transparent);
+}
+:root[data-style='liquid'] .composer .composer-box:focus-within {
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--lq-tone) 45%, transparent),
+    0 8px 22px -10px color-mix(in srgb, var(--lq-tone) 50%, transparent);
+}
+:root[data-style='liquid'] .composer-send {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--lq-tone) 62%, white), var(--lq-tone));
+  color: #ffffff;
+  box-shadow: none;
+  transition: box-shadow var(--duration-fast) ease;
+}
+:root[data-style='liquid'] .composer-send:hover {
+  box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--lq-tone) 60%, transparent);
+}
+:root[data-style='liquid'] .search-field input {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px var(--lq-hair);
+  border-color: transparent;
+}
+
+/* ---- dark: the same order of glass over a dark mesh lit faintly in the tone */
+:root[data-style='liquid'][data-theme='dark'] {
+  --lq-edge: rgba(255, 255, 255, 0.16);
+  --lq-rim: rgba(255, 255, 255, 0.07);
+  --lq-hair: rgba(255, 255, 255, 0.08);
+  --lq-lift: 0 18px 40px -26px rgba(0, 0, 0, 0.55);
+  --lq-card: color-mix(in srgb, var(--bg-window), white 10%);
+}
+:root[data-style='liquid'][data-theme='dark'] .mesh {
+  background:
+    radial-gradient(60% 55% at 8% 6%, color-mix(in srgb, var(--lq-2) 26%, transparent) 0%, transparent 62%),
+    radial-gradient(55% 60% at 94% 10%, color-mix(in srgb, var(--lq-tone) 20%, transparent) 0%, transparent 64%),
+    radial-gradient(62% 62% at 86% 96%, color-mix(in srgb, var(--lq-tone) 26%, transparent) 0%, transparent 62%),
+    radial-gradient(52% 52% at 14% 94%, color-mix(in srgb, var(--lq-2) 16%, transparent) 0%, transparent 64%),
+    var(--dark-base, #0f1122);
+}
+:root[data-style='liquid'][data-theme='dark'] .chat-col {
+  background: color-mix(in srgb, var(--bg-window) 90%, transparent);
+}
+:root[data-style='liquid'][data-theme='dark'] .list-col {
+  background: color-mix(in srgb, var(--bg-window) 72%, transparent);
+}
+:root[data-style='liquid'][data-theme='dark'] .details-col {
+  background: color-mix(in srgb, var(--bg-window) 60%, transparent);
+}
+:root[data-style='liquid'][data-theme='dark'] .sidebar {
+  background: color-mix(in srgb, var(--bg-window) 40%, transparent);
+}
+:root[data-style='liquid'][data-theme='dark'] .sidebar .nav-item.active,
+:root[data-style='liquid'][data-theme='dark'] .list-col .conv-item.selected {
+  background: var(--lq-card);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lq-tone) 40%, transparent);
+}
+:root[data-style='liquid'][data-theme='dark'] :is(.unread-pill, .nav-badge):not(.dot) {
+  background: color-mix(in srgb, var(--lq-tone) 28%, var(--bg-window));
+  color: color-mix(in srgb, var(--lq-tone) 45%, white);
+}
+:root[data-style='liquid'][data-theme='dark'] .conv-item.muted .unread-pill:not(.dot) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+}
+:root[data-style='liquid'][data-theme='dark'] :is(.nav-item, .conv-item):hover :is(.unread-pill, .nav-badge):not(.dot) {
+  background: color-mix(in srgb, var(--lq-tone) 36%, var(--bg-window));
+}
+:root[data-style='liquid'][data-theme='dark'] .chat-col :is(.bubble.in, .typing-bubble) {
+  background: var(--lq-card);
+  box-shadow: inset 0 0 0 1px var(--lq-hair);
+}
+:root[data-style='liquid'][data-theme='dark'] .composer .composer-box,
+:root[data-style='liquid'][data-theme='dark'] .chat-col .reply-banner {
+  background: color-mix(in srgb, var(--bg-window), white 6%);
+  box-shadow: inset 0 0 0 1px var(--lq-hair);
+}
+:root[data-style='liquid'][data-theme='dark'] .list-col .conv-item:not(.selected):hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+:root[data-style='liquid'][data-theme='dark'] .search-field input {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ================================================================== the Liquid glass icon style
+   Settings › Appearance › Icon style. White glass tiles faintly tinted toward the tone, the glyph in its app's own
+   colour; a soft coloured lift on hover. The default in Liquid Glass; the picker's preview carries .icons-liquid. */
+:root[data-icons='liquid'] :is(.platform-icon.tile, .nav-item-icon.tile),
+.icons-liquid .platform-icon.tile {
+  background: linear-gradient(135deg, #ffffff, color-mix(in srgb, var(--lq-2, #8fa3ec) 30%, white));
+  color: var(--brand);
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(30, 34, 70, 0.06);
+  transition: box-shadow var(--duration-fast) ease;
+}
+:root[data-icons='liquid'] .nav-item:hover :is(.platform-icon.tile, .nav-item-icon.tile) {
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 6px 14px -6px color-mix(in srgb, var(--lq-tone, #5c6fe0) 55%, transparent);
+}
+:root[data-icons='liquid'][data-theme='dark'] :is(.platform-icon.tile, .nav-item-icon.tile),
+:root[data-theme='dark'] .icons-liquid .platform-icon.tile {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  color: color-mix(in srgb, var(--brand) 75%, white);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* the tone picker in Settings */
+.tone-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.tone-swatch {
+  position: relative;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(30, 34, 70, 0.06);
+  transition: box-shadow var(--duration-fast) ease;
+}
+.tone-swatch i {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+.tone-swatch span {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: #1d2033;
+}
+.tone-swatch.active,
+.tone-swatch:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--tone);
+}

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
 import type { BubbleAction, Language, SyncStatus, TextSize, ThemePreference } from '@shared/types'
-import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, MESHES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, stepZoom } from '@shared/types'
+import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, LIQUID_TONES, MESHES, MONO_CANVASES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, clampZoom, darkBaseHex, iconStyleOf, stepZoom } from '@shared/types'
 import { TagManager } from './TagEditor'
 import { CustomAccentRow } from './CustomAccents'
 import { TagChip } from './Tag'
 import { LogoMark } from './Logo'
 import { StyleBanners } from './StyleBanners'
+import { GummyIcon, useTileIcons } from './GummyIcon'
 import { Pal } from './Pals'
 import { castById, specOf } from '@shared/pals-art'
 import { LOGOS, LOGO_ORDER, PAL_LOGO_ORDER, type LogoId } from '@shared/logos'
@@ -66,6 +67,7 @@ function readLastPage(): SettingsPage {
 export function SettingsSheet({ initialPage }: { initialPage?: SettingsPage }): JSX.Element {
   const t = useT()
   const closeSheet = useStore((s) => s.closeSheet)
+  const tiles = useTileIcons()
   const [page, setPage] = useState<SettingsPage>(() => initialPage ?? readLastPage())
 
   useEffect(() => {
@@ -83,9 +85,13 @@ export function SettingsSheet({ initialPage }: { initialPage?: SettingsPage }): 
           <div className="settings-nav-title">{t('settings')}</div>
           {PAGES.map((p) => (
             <button key={p.id} className={`nav-item ${page === p.id ? 'active' : ''}`} onClick={() => setPage(p.id)} aria-current={page === p.id ? 'page' : undefined}>
-              <span className="nav-item-icon tile" style={{ ['--brand' as string]: p.tint } as React.CSSProperties}>
-                {p.icon}
-              </span>
+              {tiles ? (
+                <GummyIcon kind={tiles} name={p.id} size={26} radius={9} className="nav-item-icon" />
+              ) : (
+                <span className="nav-item-icon tile" style={{ ['--brand' as string]: p.tint } as React.CSSProperties}>
+                  {p.icon}
+                </span>
+              )}
               <span className="nav-item-label">{t(`settings_${p.id}`)}</span>
             </button>
           ))}
@@ -242,6 +248,29 @@ function PalsPaperPicker(): JSX.Element {
   )
 }
 
+const ICON_STYLE_NAMES = { classic: 'iconClassic', gummy: 'iconGummy', liquid: 'iconLiquid', pixel: 'iconPixel' } as const
+
+/** Icon style: the same five app icons drawn each way, side by side. */
+function IconStylePicker(): JSX.Element {
+  const t = useT()
+  const picked = useStore((s) => iconStyleOf(s.settings))
+  const setSettings = useStore((s) => s.setSettings)
+  return (
+    <div className="icon-style-picker" role="radiogroup" aria-label={t('iconStyle')}>
+      {(['classic', 'gummy', 'liquid', 'pixel'] as const).map((style) => (
+        <button key={style} className={`icon-style-card ${picked === style ? 'active' : ''}`} role="radio" aria-checked={picked === style} onClick={() => void setSettings({ iconStyle: style })}>
+          <span className={`icon-style-row ${style === 'liquid' ? 'icons-liquid' : ''}`} aria-hidden>
+            {PLATFORM_ORDER.map((p) => (
+              <PlatformIcon key={p} platform={p} size={28} variant={style === 'liquid' ? 'classic' : style} />
+            ))}
+          </span>
+          <span className="icon-style-name">{t(ICON_STYLE_NAMES[style])}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Logo tiles, one group at a time (the six Moshi characters, then the Pals). */
 function LogoGroup({ label, ids }: { label: string; ids: LogoId[] }): JSX.Element {
   const settings = useStore((s) => s.settings)
@@ -321,7 +350,46 @@ function AppearancePage(): JSX.Element {
             <PalsPaperPicker />
           </Row>
         )}
-        {settings.style !== 'pals' && (
+        {settings.style === 'liquid' && (
+          <Row title={t('liquidTone')} sub={t('liquidToneHint')} stack>
+            <div className="tone-picker" role="radiogroup" aria-label={t('liquidTone')}>
+              {LIQUID_TONES.map((tone) => {
+                const active = (settings.liquidTone ?? 'periwinkle') === tone.id
+                return (
+                  <button
+                    key={tone.id}
+                    className={`tone-swatch ${active ? 'active' : ''}`}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => void setSettings({ liquidTone: tone.id })}
+                    title={tone.name[language]}
+                    style={{ background: `radial-gradient(70% 70% at 15% 10%, ${tone.mesh[0]}, transparent 70%), radial-gradient(70% 70% at 90% 95%, ${tone.mesh[1]}, transparent 70%), ${tone.mesh[3]}`, ['--tone' as string]: tone.tone } as React.CSSProperties}
+                  >
+                    <i aria-hidden />
+                    <span>{tone.name[language]}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Row>
+        )}
+        {settings.style === 'mono' && !darkNow && (
+          <Row title={t('monoCanvas')} sub={t('monoCanvasHint')} stack>
+            <div className="canvas-picker" role="radiogroup" aria-label={t('monoCanvas')}>
+              {MONO_CANVASES.map((c) => {
+                const active = (settings.monoCanvas ?? 'light') === c.id
+                return (
+                  <button key={c.id} className={`canvas-swatch ${c.id} ${active ? 'active' : ''}`} role="radio" aria-checked={active} onClick={() => void setSettings({ monoCanvas: c.id })} style={{ background: c.canvas }}>
+                    <i aria-hidden />
+                    <b aria-hidden />
+                    <span>{c.name[language]}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Row>
+        )}
+        {(settings.style ?? 'moshi') === 'moshi' && (
           <Row title={t('background')} sub={t('backgroundHint')} stack>
             <div className="mesh-picker">
               {MESHES.map((mesh) => (
@@ -368,6 +436,9 @@ function AppearancePage(): JSX.Element {
         <Row title={t('logoPick')} sub={t('logoHint')} stack>
           <LogoGroup label="Moshi" ids={LOGO_ORDER} />
           <LogoGroup label="Pals" ids={PAL_LOGO_ORDER} />
+        </Row>
+        <Row title={t('iconStyle')} sub={t('iconStyleHint')} stack>
+          <IconStylePicker />
         </Row>
       </Group>
 

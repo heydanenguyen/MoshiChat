@@ -45,6 +45,11 @@ import { AccountFilters } from './AccountFilters'
 import { useAccountLabels } from '../accountLabels'
 import { isArchived, isChatMuted, isPendingRequest, maskCode } from '@shared/inbox'
 import { followState, formatLaterTime, isSnoozed, isWoken } from '@shared/later'
+import { Pal } from './Pals'
+import { castById, specOf } from '@shared/pals-art'
+
+/** In the Pals style, strangers knocking: the ghost, peeking in with a wink. */
+const KNOCKING = specOf(castById('ma'), 'wink')
 
 interface TagMenuState {
   conversationId: string
@@ -93,6 +98,7 @@ export function ConversationList(): JSX.Element {
   const overrides = useStore((s) => s.settings.contactOverrides)
   const prefetch = useStore((s) => s.prefetch)
   const drafts = useStore((s) => s.drafts)
+  const pals = useStore((s) => s.settings.style === 'pals')
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pins = useStore((s) => s.settings.pins)
   const togglePin = useStore((s) => s.togglePin)
@@ -277,7 +283,7 @@ export function ConversationList(): JSX.Element {
         {!searching && listView === 'inbox' && requestCount > 0 && (
           <button className="requests-row" onClick={() => setListView('requests')}>
             <span className="requests-row-icon" aria-hidden>
-              <UserRoundPlus size={18} strokeWidth={2.2} />
+              {pals ? <Pal spec={KNOCKING} size={40} /> : <UserRoundPlus size={18} strokeWidth={2.2} />}
             </span>
             <span className="requests-row-text">
               <span className="requests-row-title">{t('requestsTitle')}</span>

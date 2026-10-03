@@ -450,11 +450,12 @@ export const MESHES: Array<{ id: MeshId; name: { vi: string; en: string }; swatc
 ]
 
 /** Surface style: how panels, bubbles and sheets are drawn. The layout never changes with it. */
-export type StyleId = 'moshi' | 'liquid' | 'pals'
+export type StyleId = 'moshi' | 'liquid' | 'pals' | 'mono'
 export const STYLES: Array<{ id: StyleId; name: { vi: string; en: string }; sub: { vi: string; en: string } }> = [
   { id: 'moshi', name: { vi: 'Moshi', en: 'Moshi' }, sub: { vi: 'Pastel mềm, kính mờ nhẹ', en: 'Soft pastel, light frosted glass' } },
   { id: 'liquid', name: { vi: 'Liquid Glass', en: 'Liquid Glass' }, sub: { vi: 'Kính trong, viền sáng, bo tròn sâu', en: 'Clear glass, bright edges, deep rounding' } },
-  { id: 'pals', name: { vi: 'Pals', en: 'Pals' }, sub: { vi: 'Màu kẹo, nét mực đen, bạn blob', en: 'Candy colours, ink-black type, blob pals' } }
+  { id: 'pals', name: { vi: 'Pals', en: 'Pals' }, sub: { vi: 'Màu kẹo, nét mực đen, bạn blob', en: 'Candy colours, ink-black type, blob pals' } },
+  { id: 'mono', name: { vi: 'Mono', en: 'Mono' }, sub: { vi: 'Trắng, đen, xám và một màu nhấn', en: 'White, black, grey and one accent' } }
 ]
 
 /** Base tone behind everything in dark mode: a preset id, or any `#rrggbb` picked by the user. */
@@ -468,6 +469,33 @@ export const DARK_BASES: Array<{ id: DarkBaseId; name: { vi: string; en: string 
 ]
 /** The hex behind a dark-base setting (a preset id, a custom hex, or nothing = navy). */
 export const darkBaseHex = (value: string | undefined): string => DARK_BASES.find((d) => d.id === value)?.base ?? (value && /^#[0-9a-f]{6}$/i.test(value) ? value : DARK_BASES[0].base)
+
+/** Mono's canvas behind the cards in light mode: near-white, or graphite so the white chat stands out. */
+export type MonoCanvasId = 'light' | 'graphite'
+export const MONO_CANVASES: Array<{ id: MonoCanvasId; name: { vi: string; en: string }; canvas: string }> = [
+  { id: 'light', name: { vi: 'Sáng', en: 'Light' }, canvas: '#f0f0f1' },
+  { id: 'graphite', name: { vi: 'Graphite', en: 'Graphite' }, canvas: '#1c1c1e' }
+]
+
+export type IconStyle = 'classic' | 'gummy' | 'liquid' | 'pixel'
+/** The icon style in use: the one picked in Settings, else the one that belongs to the surface style. */
+export const iconStyleOf = (settings: { iconStyle?: IconStyle; style?: StyleId }): IconStyle =>
+  settings.iconStyle ?? (settings.style === 'liquid' ? 'liquid' : settings.style === 'mono' ? 'pixel' : 'classic')
+
+/**
+ * Liquid Glass tones: four soft, slightly greyed colours for the backdrop mesh, the tone colour that marks counts,
+ * the open chat and my bubbles, and a deep ink of the same family.
+ */
+export type LiquidToneId = 'periwinkle' | 'lavender' | 'aqua' | 'blush' | 'sage' | 'apricot'
+export const LIQUID_TONES: Array<{ id: LiquidToneId; name: { vi: string; en: string }; mesh: [string, string, string, string]; tone: string; ink: string }> = [
+  { id: 'periwinkle', name: { vi: 'Xanh dừa cạn', en: 'Periwinkle' }, mesh: ['#bccbea', '#8fa3ec', '#d3ddf6', '#e6ebf9'], tone: '#5c6fe0', ink: '#2e3b8f' },
+  { id: 'lavender', name: { vi: 'Oải hương khói', en: 'Lavender haze' }, mesh: ['#cfc6ea', '#a99ae8', '#e0daf5', '#efeaf9'], tone: '#7b61e6', ink: '#3b2a8c' },
+  { id: 'aqua', name: { vi: 'Ngọc lam', en: 'Aqua' }, mesh: ['#bfe1e4', '#8fd0d6', '#d6eef0', '#e8f6f7'], tone: '#1fa2b0', ink: '#0f5a63' },
+  { id: 'blush', name: { vi: 'Hồng phấn', en: 'Blush' }, mesh: ['#efcad4', '#e9a3b8', '#f6dde4', '#fbecf0'], tone: '#e05a85', ink: '#8c2547' },
+  { id: 'sage', name: { vi: 'Xô thơm', en: 'Sage' }, mesh: ['#cfdccb', '#a7c3a5', '#e0e9de', '#eef3ec'], tone: '#5b9a6a', ink: '#2d5a37' },
+  { id: 'apricot', name: { vi: 'Mơ chín', en: 'Apricot' }, mesh: ['#f2d6c4', '#f0b392', '#f8e5d9', '#fcf1ea'], tone: '#ef7d4f', ink: '#8a3a17' }
+]
+export const liquidTone = (id: string | undefined): (typeof LIQUID_TONES)[number] => LIQUID_TONES.find((t) => t.id === id) ?? LIQUID_TONES[0]
 
 /** Pals' paper in light mode: a candy tone with the pal it goes with (dark mode follows the dark base). */
 export type PalsPaperId = 'lilac' | 'pink' | 'peach' | 'butter' | 'cream' | 'mint' | 'sky' | 'cloud'
@@ -550,6 +578,12 @@ export interface Settings {
   darkBase?: DarkBaseId | string
   /** Pals' paper colour in light mode; absent = lilac. */
   palsPaper?: PalsPaperId
+  /** Icons for the apps, the sidebar and Settings: line icons, candy "gummy" tiles or glass tiles. Absent = the style's own (glass in Liquid Glass, else classic). */
+  iconStyle?: IconStyle
+  /** Liquid Glass tone; absent = periwinkle. */
+  liquidTone?: LiquidToneId
+  /** Mono's canvas in light mode; absent = light. */
+  monoCanvas?: MonoCanvasId
   accent: AccentId | CustomAccentId
   font: FontId
   muted: MuteRules

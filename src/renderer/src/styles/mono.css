@@ -1,0 +1,797 @@
+/* ================================================================== Mono style
+   After the radio references (and the Teenage Engineering way), set the modern way: white cards on a near-white
+   canvas, solid black type, solid greys for everything else, and one colour, the accent picked in Settings, for
+   what needs you (unread counts, the send button, the tuner's needle). No black or white outlines: a card stands
+   off the canvas by a grey hairline and a one-pixel lift; inside a card every level is a fill (soft grey, block
+   grey, black). Greys are solid, never see-through black, so text keeps its contrast on any surface. A grotesk
+   set tight and big carries the personality; counts sit as small grey superscripts, like "Georgia (3)".
+   Loaded after app.css. */
+
+:root[data-style='mono'] {
+  --font-pop: 'Inter', var(--font-display);
+  --mono-canvas: #f0f0f1;
+  --mono-card: #ffffff;
+  --mono-soft: #f3f3f4;
+  --mono-block: #e6e6e8;
+  --mono-ink: #0a0a0a;
+  --mono-on-ink: #ffffff;
+  /* the leading zeros of the dial and the quiet marks */
+  --mono-grey: #b8b8bc;
+  --mono-tick: #c9c9cd;
+  --mono-text-2: #5c5c62;
+  --mono-text-3: #8c8c92;
+  --mono-on-canvas: var(--mono-text-2);
+  /* how a card stands off the canvas: a grey hairline and a one-pixel lift */
+  --mono-lift: 0 0 0 1px rgba(10, 10, 20, 0.06), 0 1px 2px rgba(10, 10, 20, 0.05);
+
+  --mesh-base: var(--mono-canvas);
+  --bg-window: var(--mono-canvas);
+  --glass: var(--mono-card);
+  --glass-strong: var(--mono-card);
+  --glass-border: transparent;
+  --bg-chat: var(--mono-card);
+  --bg-elevated: var(--mono-card);
+  --bg-input: var(--mono-soft);
+  --bg-hover: var(--mono-soft);
+  --bg-active: var(--mono-block);
+  --bg-selected: var(--mono-soft);
+  --text-primary: var(--mono-ink);
+  --text-secondary: var(--mono-text-2);
+  --text-tertiary: var(--mono-text-3);
+  --separator: #ececee;
+  --separator-strong: #dcdce0;
+
+  --bubble-in: var(--mono-soft);
+  --bubble-in-ring: inset 0 0 0 0 transparent;
+  --bubble-in-text: var(--mono-ink);
+  --bubble-out: var(--mono-ink);
+  --bubble-out-solid: var(--mono-ink);
+  --bubble-out-text: var(--mono-on-ink);
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --bubble-out-ring: inset 0 0 0 0 transparent;
+
+  --radius-panel: 24px;
+  --radius-bubble: 20px;
+  --shadow-sm: 0 0 0 0 transparent;
+  --shadow-md: 0 0 0 0 transparent;
+  --shadow-panel: var(--mono-lift);
+  --shadow-lg: 0 0 0 1px rgba(10, 10, 20, 0.06), 0 24px 64px rgba(10, 10, 20, 0.16);
+}
+:root[data-style='mono'][data-theme='dark'] {
+  /* near-black, or the dark background picked in Settings */
+  --mono-canvas: var(--dark-base, #0a0a0a);
+  --mono-card: color-mix(in srgb, var(--mono-canvas), white 6%);
+  --mono-soft: color-mix(in srgb, var(--mono-canvas), white 11%);
+  --mono-block: color-mix(in srgb, var(--mono-canvas), white 17%);
+  --mono-ink: #fafafa;
+  --mono-on-ink: #0a0a0a;
+  --mono-grey: #4a4a4e;
+  --mono-tick: #3a3a3e;
+  --mono-text-2: #a8a8ae;
+  --mono-text-3: #76767c;
+  --mono-lift: 0 0 0 1px rgba(255, 255, 255, 0.07);
+
+  --separator: rgba(255, 255, 255, 0.07);
+  --separator-strong: rgba(255, 255, 255, 0.12);
+  --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+/* the pixel icons take Mono's own vivid palette (set per icon as --px-mono); other styles keep their pastels */
+:root[data-style='mono'] .pixel-tile {
+  --pixel-tile: var(--px-mono);
+}
+
+/* Settings in Mono: the four styles and four icon styles two by two, so each card keeps its room */
+:root[data-style='mono'] :is(.style-banners, .icon-style-picker) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* flat cards on a flat canvas */
+:root[data-style='mono'] .mesh-blob {
+  display: none;
+}
+:root[data-style='mono'] :is(.panel, .list-col, .chat-col, .details-col, .sheet) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-color: transparent;
+}
+
+/* ---- type: a tight grotesk for everything that names a place; messages keep the reading face */
+:root[data-style='mono'] :is(.brand-word, .list-title, .empty-title, .welcome-title, .sheet-title, .settings-page-title, .settings-nav-title, .pane-empty-title, .todo-empty-title, .tz-title, .chat-header-name, .details-name) {
+  font-family: var(--font-pop);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+:root[data-style='mono'] :is(.nav-item-label, .conv-name, .btn, .quick-chip, .settings-row-title, .sb-name, .tag-pill) {
+  font-family: var(--font-pop);
+  letter-spacing: -0.012em;
+}
+:root[data-style='mono'] .list-title {
+  font-size: 30px;
+  letter-spacing: -0.045em;
+}
+:root[data-style='mono'] .list-title-row .list-title {
+  font-size: 21px;
+}
+/* labels: sentence case, small and grey, never tracked capitals */
+:root[data-style='mono'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .todo-group-title, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
+  font-family: var(--font-pop);
+  text-transform: none;
+  letter-spacing: -0.005em;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+:root[data-style='mono'] .lucide {
+  stroke-width: 1.9;
+}
+
+/* ---- the sidebar sits on the canvas; the place you are lifts onto a white block. The icons keep their pastel
+   tiles: colour that names an app or a tag is information, not decoration */
+:root[data-style='mono'] .sidebar {
+  --text-secondary: var(--mono-on-canvas);
+  --text-tertiary: var(--mono-on-canvas);
+}
+:root[data-style='mono'] .nav-item {
+  border-radius: 14px;
+}
+:root[data-style='mono'] .nav-item:hover {
+  background: var(--mono-block);
+}
+:root[data-style='mono'] .nav-item.active {
+  background: var(--mono-card);
+  color: var(--mono-ink);
+  box-shadow: var(--mono-lift);
+}
+:root[data-style='mono'] .nav-item.active .nav-item-icon:not(.tile, .gummy-tile) {
+  color: var(--mono-ink);
+}
+/* ---- counts: one style everywhere, the sidebar's and the list's. A grey pill with the number in the text colour:
+   readable at a glance, but secondary, never a black block that pulls the eye */
+:root[data-style='mono'] {
+  --mono-count-bg: var(--mono-block);
+}
+:root[data-style='mono'] .sidebar {
+  --mono-count-bg: color-mix(in srgb, var(--mono-block), var(--mono-ink) 5%);
+}
+:root[data-style='mono'] :is(.nav-badge, .unread-pill, .requests-row-count, .fold-count) {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--mono-count-bg);
+  color: var(--text-primary);
+  font-family: var(--font-pop);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: none;
+}
+/* the open chat's row is already grey: its count steps one shade deeper so it still reads */
+:root[data-style='mono'] .conv-item.selected .unread-pill {
+  background: color-mix(in srgb, var(--mono-block), var(--mono-ink) 8%);
+}
+:root[data-style='mono'] .conv-item.muted .unread-pill {
+  background: var(--mono-soft);
+  color: var(--text-tertiary);
+}
+:root[data-style='mono'] .nav-item.active .nav-badge {
+  background: color-mix(in srgb, var(--mono-block), var(--mono-ink) 5%);
+  color: var(--mono-ink);
+}
+
+/* on the light canvas, whatever is picked turns black (the place you are, like a picked tag or chip) */
+:root[data-style='mono'][data-canvas='light']:not([data-theme='dark']) .nav-item.active {
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.62);
+  --mono-on-canvas: rgba(255, 255, 255, 0.62);
+  background: var(--mono-ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+:root[data-style='mono'][data-canvas='light']:not([data-theme='dark']) .nav-item.active .nav-badge {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+:root[data-style='mono'][data-canvas='light']:not([data-theme='dark']) .nav-item.active .nav-item-icon:not(.tile, .gummy-tile) {
+  color: #ffffff;
+}
+
+/* ---- the list: the open chat is a soft grey block */
+:root[data-style='mono'] .conv-item,
+:root[data-style='mono'] .requests-row {
+  border-radius: 18px;
+}
+:root[data-style='mono'] .conv-item {
+  /* the row's own fill, which the stacked marks below cut their ring from */
+  --mono-row: var(--mono-card);
+}
+:root[data-style='mono'] .conv-item:hover,
+:root[data-style='mono'] .requests-row:hover {
+  --mono-row: color-mix(in srgb, var(--mono-soft) 70%, var(--mono-card));
+  background: var(--mono-row);
+}
+:root[data-style='mono'] .conv-item.selected {
+  --mono-row: color-mix(in srgb, var(--mono-soft), var(--mono-block) 55%);
+  background: var(--mono-row);
+  box-shadow: none;
+}
+/* a busy name line gives its room back to the name: a merged person's apps stack into one small cluster, and
+   each tag is a dot in its colour (the names are in the tooltip), so the extras read as one quiet group */
+:root[data-style='mono'] .conv-apps {
+  gap: 0;
+  margin-left: 2px;
+  opacity: 1;
+}
+:root[data-style='mono'] .conv-apps > * + * {
+  margin-left: -3px;
+  box-shadow: 0 0 0 1.5px var(--mono-row);
+}
+:root[data-style='mono'] .conv-tags {
+  gap: 0;
+  margin-left: 1px;
+}
+:root[data-style='mono'] .conv-tags .tag-pill.icon-only {
+  width: 9px;
+  height: 9px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--tag-px, var(--mono-block));
+  /* a hair of ink inside, so the palest pastels (lime, lemon) still read on a white row */
+  box-shadow:
+    0 0 0 1.5px var(--mono-row),
+    inset 0 0 0 1px rgba(25, 9, 9, 0.22);
+}
+:root[data-style='mono'] .conv-tags .tag-pill.icon-only + .tag-pill.icon-only {
+  margin-left: -2px;
+}
+:root[data-style='mono'] .conv-tags .tag-pill.icon-only .tag-glyph {
+  display: none;
+}
+:root[data-style='mono'] .conv-tags-more {
+  margin-left: 3px;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+:root[data-style='mono'] :is(.draft, .conv-draft) {
+  color: var(--accent);
+}
+
+/* ---- fields: soft grey blocks, a shade deeper while you type, the caret in the accent */
+:root[data-style='mono'] :is(input, textarea, [contenteditable='true']) {
+  caret-color: var(--accent);
+}
+:root[data-style='mono'] .search-field input {
+  height: 38px;
+  border-radius: 14px;
+  background: var(--mono-soft);
+  border-color: transparent;
+}
+:root[data-style='mono'] .search-field input:focus {
+  border-color: transparent;
+  box-shadow: none;
+  background: var(--mono-block);
+}
+/* the field you type in is a white card of its own, held by a grey hairline and a soft lift; the hairline deepens
+   on hover and while you type. It stays white over a chat's wallpaper too */
+:root[data-style='mono'] .composer .composer-box {
+  border-radius: 20px;
+  border-color: transparent;
+  background: var(--mono-card);
+  box-shadow:
+    0 0 0 1px var(--separator-strong),
+    0 2px 8px -4px rgba(10, 10, 20, 0.08);
+  transition: box-shadow var(--duration-fast) ease;
+}
+:root[data-style='mono'] .composer .composer-box:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--separator-strong), var(--text-primary) 12%),
+    0 2px 8px -4px rgba(10, 10, 20, 0.1);
+}
+:root[data-style='mono'] .composer .composer-box:focus-within {
+  border-color: transparent;
+  background: var(--mono-card);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--separator-strong), var(--text-primary) 22%),
+    0 6px 18px -8px rgba(10, 10, 20, 0.16);
+}
+:root[data-style='mono'][data-theme='dark'] .composer .composer-box {
+  background: var(--mono-soft);
+}
+/* send is the record button. With nothing to send it is only an outline-less grey arrow; the moment there is
+   text it fills with the accent, pops, and glows in it, so the two states differ even with a quiet accent */
+:root[data-style='mono'] .composer-send {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+  transition:
+    transform var(--duration-base) var(--ease-spring),
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease;
+}
+:root[data-style='mono'] .composer-send:not(.idle) {
+  animation: mono-send-ready 360ms var(--ease-spring);
+}
+@keyframes mono-send-ready {
+  0% {
+    scale: 0.7;
+  }
+  60% {
+    scale: 1.12;
+  }
+}
+:root[data-style='mono'] .composer-send:not(.idle):hover {
+  box-shadow: 0 8px 22px -6px var(--accent);
+}
+:root[data-style='mono'] .composer-send.idle {
+  background: transparent;
+  color: var(--mono-grey);
+  box-shadow: none;
+}
+:root[data-style='mono'] .icon-btn {
+  border-radius: 12px;
+}
+:root[data-style='mono'] .chat-header {
+  height: 64px;
+  border-bottom-color: transparent;
+}
+
+/* ---- chips: the FM/AM switch, grey until picked, then black */
+:root[data-style='mono'] .quick-chip {
+  height: 30px;
+  padding: 0 12px;
+  background: var(--mono-soft);
+  box-shadow: none;
+}
+:root[data-style='mono'] .quick-chip:hover {
+  background: var(--mono-block);
+  color: var(--text-primary);
+}
+:root[data-style='mono'] .quick-chip.active {
+  background: var(--mono-ink);
+  color: var(--mono-on-ink);
+  box-shadow: none;
+}
+:root[data-style='mono'] .quick-chip-count.strong {
+  color: var(--text-primary);
+}
+:root[data-style='mono'] .quick-chip.active .quick-chip-count {
+  color: var(--mono-on-ink);
+}
+
+/* ---- my bubbles are black, even over a custom accent; a colour picked for one chat still wins */
+:root[data-style='mono'] .chat-col:not([style*='--bubble-out']) {
+  --bubble-out: var(--mono-ink);
+  --bubble-out-solid: var(--mono-ink);
+  --bubble-out-text: var(--mono-on-ink);
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --bubble-out-ring: inset 0 0 0 0 transparent;
+}
+:root[data-style='mono'] .chat-col:not([style*='--bubble-out']) .bubble.out a {
+  color: inherit;
+}
+
+/* ---- buttons: the Pause block (black) and the skip blocks (grey) */
+:root[data-style='mono'] .btn {
+  border-radius: 16px;
+  padding: 0 20px;
+  font-weight: 500;
+}
+:root[data-style='mono'] .btn.primary {
+  background: var(--mono-ink);
+  color: var(--mono-on-ink);
+  box-shadow: none;
+}
+:root[data-style='mono'] .btn.primary:hover {
+  box-shadow: none;
+  transform: none;
+  background: color-mix(in srgb, var(--mono-ink) 82%, var(--mono-grey));
+}
+:root[data-style='mono'] .btn.secondary {
+  background: var(--mono-block);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+:root[data-style='mono'] .btn.secondary:hover {
+  background: color-mix(in srgb, var(--mono-block), var(--mono-ink) 6%);
+}
+
+/* ---- tags: flat grey capsules in the type of the style; the tag's colour lives only in its little icon, the
+   count is a grey "(2)" like the sidebar's, and the picked tag turns black. No lip, no coloured shadow. */
+:root[data-style='mono'] .tag-pill {
+  --tag-ink: var(--text-primary);
+  height: 30px;
+  padding: 0 11px 0 9px;
+  border-radius: 10px;
+  font-family: var(--font-pop);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  text-shadow: none;
+  background: var(--mono-tag-bg, var(--mono-soft));
+  box-shadow: none;
+}
+:root[data-style='mono'] .sidebar {
+  --mono-tag-bg: var(--mono-block);
+}
+:root[data-style='mono'] .tag-pill.sm {
+  height: 27px;
+  padding: 0 9px 0 4px;
+  border-radius: 9px;
+  box-shadow: none;
+}
+/* the tag's icon sits on a pastel tile in ink, the same palette and drawing as the inbox icons */
+:root[data-style='mono'] .tag-pill {
+  gap: 7px;
+  padding-left: 4px;
+}
+:root[data-style='mono'] .tag-pill .tag-glyph {
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: 6px;
+  color: #190909;
+  background: var(--tag-px, var(--mono-block));
+  filter: none;
+}
+:root[data-style='mono'] .tag-pill .tag-glyph.emoji {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+}
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) .sidebar {
+  --mono-tag-bg: #2f2f33;
+}
+:root[data-style='mono'] .tag-pill.flat {
+  --tag-ink: var(--text-primary);
+  color: var(--text-primary);
+  background: var(--mono-tag-bg, var(--mono-soft));
+}
+:root[data-style='mono'] :is(.tag-pill.interactive:hover, .tag-pill.flat.interactive:hover) {
+  transform: none;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--mono-tag-bg, var(--mono-soft)), var(--text-primary) 7%);
+  box-shadow: none;
+}
+:root[data-style='mono'] .tag-pill.interactive:active {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+/* the tag's count is the same quiet pill as every other count: one shade deeper than the tag, number in the text colour */
+:root[data-style='mono'] .tag-pill-count {
+  min-width: 18px;
+  height: 17px;
+  padding: 0 5px;
+  margin-left: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mono-tag-bg, var(--mono-soft)), var(--text-primary) 9%);
+  color: var(--text-primary);
+  font-family: var(--font-pop);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+/* the picked tag (the one filtering the list, or one applied to the open chat) fills with its pastel, words in ink,
+   like a lit tile: the icon's tile melts into it */
+:root[data-style='mono'] :is(.tag-pill.selected, .tag-pill.interactive:not(.flat, .add)) {
+  --tag-ink: #190909;
+  color: #190909;
+  background: var(--tag-px, var(--mono-block));
+  box-shadow: none;
+}
+:root[data-style='mono'] .tag-pill.interactive:not(.flat, .add):hover {
+  color: #190909;
+  background: color-mix(in srgb, var(--tag-px, var(--mono-block)), #190909 7%);
+}
+:root[data-style='mono'] :is(.tag-pill.selected, .tag-pill.interactive:not(.flat, .add)) .tag-glyph {
+  background: transparent;
+}
+:root[data-style='mono'] :is(.tag-pill.selected, .tag-pill.interactive:not(.flat, .add)) .tag-pill-count {
+  background: rgba(25, 9, 9, 0.1);
+  color: #190909;
+}
+/* there is something unread under this tag: a small dot in the accent */
+:root[data-style='mono'] .tag-pill-dot {
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  box-shadow: none;
+}
+:root[data-style='mono'] .tag-pill::before,
+:root[data-style='mono'] .tag-pill::after {
+  display: none;
+}
+/* a tag's icon alone (the collapsed sidebar): just its pastel tile */
+:root[data-style='mono'] .tag-pill.icon-only {
+  padding: 0;
+  background: transparent;
+}
+
+/* ---- the details pane: its actions and marks stay in the greys; the accent is kept for what needs you */
+:root[data-style='mono'] .quick-action-icon {
+  color: var(--text-primary);
+  background: var(--mono-soft);
+}
+:root[data-style='mono'] .quick-action:hover .quick-action-icon {
+  background: var(--mono-block);
+  box-shadow: none;
+}
+:root[data-style='mono'] :is(.quick-action.on, .quick-action.on:hover) .quick-action-icon {
+  color: var(--mono-on-ink);
+  background: var(--mono-ink);
+}
+:root[data-style='mono'] .chat-header .icon-btn.active,
+:root[data-style='mono'] .details-tabs button.active {
+  background: var(--mono-soft);
+  color: var(--text-primary);
+}
+:root[data-style='mono'] .fact-icon {
+  color: var(--text-secondary);
+  background: var(--mono-soft);
+}
+:root[data-style='mono'] .details-chip.activity svg {
+  color: var(--text-tertiary);
+}
+
+/* ---- sheets and menus: white cards lifted by one soft grey shadow, no ring */
+:root[data-style='mono'] :is(.sheet, .context-menu, .notify-menu) {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ================================================================== the Graphite canvas (light mode)
+   The same white cards on a graphite canvas, so the chat stands right out. What sits on the canvas itself, the
+   sidebar and the title bar, turns to light greys; the place you are is a white pill with black words. */
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) {
+  --mono-canvas: #1c1c1e;
+}
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) :is(.sidebar, .titlebar) {
+  --text-primary: #f4f4f5;
+  --text-secondary: #a9a9b0;
+  --text-tertiary: #7c7c84;
+  --mono-on-canvas: #a9a9b0;
+  --mono-soft: #2a2a2d;
+  --mono-block: #333336;
+  --mono-ink: #fafafa;
+  --mono-on-ink: #0a0a0a;
+  --bg-hover: rgba(255, 255, 255, 0.07);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --separator: rgba(255, 255, 255, 0.08);
+  --fill-tertiary: rgba(255, 255, 255, 0.08);
+  --fill-secondary: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) .sidebar .nav-item:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.07);
+}
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) .sidebar .nav-item.active {
+  background: #ffffff;
+  box-shadow: none;
+  --text-primary: #0a0a0a;
+  --text-secondary: #5c5c62;
+  --mono-on-canvas: #5c5c62;
+  --mono-ink: #0a0a0a;
+  color: #0a0a0a;
+}
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) .sidebar .nav-item.active .nav-badge {
+  background: #e8e8ea;
+  color: #0a0a0a;
+}
+/* on graphite the cards need no hairline to stand off */
+:root[data-style='mono'][data-canvas='graphite']:not([data-theme='dark']) :is(.list-col, .chat-col, .details-col) {
+  box-shadow: none;
+}
+
+/* ---- the canvas picker in Settings: each swatch is the window in small, its canvas and two white cards */
+.canvas-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.canvas-swatch {
+  position: relative;
+  height: 84px;
+  padding: 0;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  text-align: left;
+  transition: box-shadow var(--duration-fast) ease;
+}
+.canvas-swatch i,
+.canvas-swatch b {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  border-radius: 9px;
+  background: #ffffff;
+}
+.canvas-swatch i {
+  left: 38%;
+  width: 18%;
+}
+.canvas-swatch b {
+  left: 59%;
+  right: 10px;
+}
+.canvas-swatch span {
+  position: absolute;
+  left: 12px;
+  bottom: 9px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: #0a0a0a;
+}
+.canvas-swatch.graphite span {
+  color: #f4f4f5;
+}
+.canvas-swatch.active,
+.canvas-swatch:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 4px var(--accent);
+}
+
+/* ================================================================== the tuner (empty chat and welcome) */
+.mono-dial {
+  width: 440px;
+  max-width: 100%;
+  margin-bottom: var(--space-5);
+  text-align: center;
+}
+.mono-num {
+  font-family: 'Inter', var(--font-display);
+  font-size: 104px;
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.065em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.mono-num-lead {
+  color: var(--mono-grey, #a6a6a6);
+}
+.mono-num-label {
+  margin-top: 10px;
+  font-family: 'Inter', var(--font-display);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.mono-ruler {
+  position: relative;
+  height: 86px;
+  margin-top: 30px;
+  background: repeating-linear-gradient(90deg, var(--mono-tick, rgba(0, 0, 0, 0.22)) 0 1px, transparent 1px 7px) 0 8px / 100% 18px no-repeat;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+.mono-station {
+  position: absolute;
+  top: 0;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.mono-station i {
+  width: 1.5px;
+  height: 34px;
+  background: var(--mono-grey, #a6a6a6);
+}
+.mono-station b {
+  font-family: 'Inter', var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.mono-station.on i {
+  background: var(--text-primary);
+}
+.mono-station.on b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.mono-needle {
+  position: absolute;
+  top: -14px;
+  /* stops above the names, so it never runs through one */
+  bottom: 44px;
+  left: var(--at);
+  width: 2.5px;
+  margin-left: -1.25px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: mono-tune 1300ms cubic-bezier(0.2, 0.8, 0.2, 1) 150ms both;
+}
+/* the needle tunes in from the left of the dial */
+@keyframes mono-tune {
+  from {
+    left: 6%;
+  }
+}
+:root[data-style='mono'] .empty-title {
+  font-size: 22px;
+}
+:root[data-style='mono'] .welcome-title {
+  font-size: 32px;
+  line-height: 1.1;
+  background: none;
+  color: var(--text-primary);
+}
+
+/* ---- the style banner: the tuner's face */
+.sb-mono {
+  --sb-ink: #0b0b0b;
+  --sb-sub: rgba(0, 0, 0, 0.5);
+  background: #ffffff;
+}
+.sb-mono .sb-name {
+  font-family: 'Inter', var(--font-display);
+  letter-spacing: -0.02em;
+}
+.sb-mono-num {
+  position: absolute;
+  right: 18px;
+  top: 6px;
+  font-family: 'Inter', var(--font-display);
+  font-size: 64px;
+  font-weight: 600;
+  letter-spacing: -0.065em;
+  color: #0b0b0b;
+}
+.sb-mono-num i {
+  font-style: normal;
+  color: #a6a6a6;
+}
+.sb-mono-ruler {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 82px;
+  height: 18px;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 6px);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.sb-mono-ruler::after {
+  content: '';
+  position: absolute;
+  left: 64%;
+  top: -14px;
+  bottom: -8px;
+  width: 2px;
+  background: var(--accent);
+}
+:root[data-theme='dark'] .sb-mono {
+  --sb-ink: #f1f1f1;
+  --sb-sub: rgba(255, 255, 255, 0.55);
+  background: #1d1d1d;
+}
+:root[data-theme='dark'] .sb-mono-num {
+  color: #f1f1f1;
+}
+:root[data-theme='dark'] .sb-mono-num i {
+  color: #5c5c5c;
+}
+:root[data-theme='dark'] .sb-mono-ruler {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 6px);
+}
+.style-banner.active .sb-mono-ruler::after {
+  animation: mono-tune 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style='mono'] .composer-send,
+  .mono-needle,
+  .style-banner.active .sb-mono-ruler::after {
+    animation: none;
+  }
+}

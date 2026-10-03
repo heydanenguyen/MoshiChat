@@ -1,20 +1,27 @@
 import type { CSSProperties } from 'react'
-import type { Platform } from '@shared/types'
-import { PLATFORMS } from '@shared/types'
+import type { IconStyle, Platform } from '@shared/types'
+import { PLATFORMS, iconStyleOf } from '@shared/types'
+import { useStore } from '../store'
+import { GummyIcon } from './GummyIcon'
 
 interface Props {
   platform: Platform
   size?: number
   className?: string
   style?: CSSProperties
+  /** Draw in this icon style instead of the one picked in Settings (previews). */
+  variant?: IconStyle
 }
 
 /**
  * The one platform icon used everywhere (sidebar, avatar badges, chips, sheets): a pastel rounded
  * tile with the glyph in the brand colour, matching the tag pills. Small sizes get a bolder glyph.
  */
-export function PlatformIcon({ platform, size = 16, className = '', style }: Props): JSX.Element {
+export function PlatformIcon({ platform, size = 16, className = '', style, variant }: Props): JSX.Element {
+  const picked = useStore((s) => iconStyleOf(s.settings))
   const meta = PLATFORMS[platform]
+  const drawn = variant ?? picked
+  if (drawn === 'gummy' || drawn === 'pixel') return <GummyIcon name={platform} kind={drawn} size={size} className={`platform-icon ${className}`} style={style} label={meta.name} />
   const glyph = size <= 20 ? size * 0.64 : size * 0.56
   return (
     <span

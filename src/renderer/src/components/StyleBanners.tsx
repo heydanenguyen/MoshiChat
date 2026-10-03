@@ -39,6 +39,16 @@ function Art({ id, hello }: { id: StyleId; hello: string }): JSX.Element {
         </span>
       </span>
     )
+  // Mono: a tuner's face, its numerals and dial in greys and the needle in the accent
+  if (id === 'mono')
+    return (
+      <span className="sb-art" aria-hidden>
+        <span className="sb-mono-num">
+          <i>0</i>94
+        </span>
+        <span className="sb-mono-ruler" />
+      </span>
+    )
   // Pals: one giant pal spilling out of the frame, saying hello in ink
   return (
     <span className="sb-art" aria-hidden>

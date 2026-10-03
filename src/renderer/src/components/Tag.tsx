@@ -37,6 +37,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import type { TagMeta } from '@shared/types'
+import { tagPastel } from '@shared/pixel-art'
 import { useStore } from '../store'
 
 /** Line icons offered for tags (name stored in settings). */
@@ -87,9 +88,9 @@ export function TagIcon({ tag, size = 15 }: { tag: TagMeta; size?: number }): JS
 
 type ChipSize = 'lg' | 'md' | 'sm' | 'xs'
 
-/** CSS variables for a tag: ink for label/icon, fill for the slab. */
-export function tagStyle(tag: Pick<TagMeta, 'color' | 'fill'>): React.CSSProperties {
-  return { ['--tag' as string]: tag.color, ...(tag.fill ? { ['--tag-fill' as string]: tag.fill } : {}) } as React.CSSProperties
+/** CSS variables for a tag: ink for label/icon, fill for the slab, and the pastel the Mono style draws it in. */
+export function tagStyle(tag: Pick<TagMeta, 'color' | 'fill'> & { id?: string }): React.CSSProperties {
+  return { ['--tag' as string]: tag.color, ['--tag-px' as string]: tagPastel(tag.color, tag.id), ...(tag.fill ? { ['--tag-fill' as string]: tag.fill } : {}) } as React.CSSProperties
 }
 
 /**

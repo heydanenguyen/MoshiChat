@@ -14,7 +14,7 @@ import { ForwardSheet } from './components/ForwardSheet'
 import { Lightbox } from './components/Lightbox'
 import { TitleBar } from './components/TitleBar'
 import { ACCENT_VAR_NAMES, DARK_BASE_VAR_NAMES, accentVars, darkBaseVars } from '@shared/accent'
-import { darkBaseHex, palsPaperHex, stepZoom } from '@shared/types'
+import { darkBaseHex, iconStyleOf, liquidTone, palsPaperHex, stepZoom } from '@shared/types'
 import { TodoSheet } from './components/TodoSheet'
 import { InsightsSheet } from './components/Insights'
 import { LaterPicker } from './components/LaterPicker'
@@ -158,6 +158,9 @@ export default function App(): JSX.Element {
   const mesh = useStore((s) => s.settings.mesh)
   const darkBase = useStore((s) => s.settings.darkBase)
   const palsPaper = useStore((s) => s.settings.palsPaper)
+  const toneId = useStore((s) => s.settings.liquidTone)
+  const monoCanvas = useStore((s) => s.settings.monoCanvas)
+  const iconStyle = useStore((s) => s.settings.iconStyle)
   const style = useStore((s) => s.settings.style)
   const accent = useStore((s) => s.settings.accent)
   const customAccents = useStore((s) => s.settings.customAccents)
@@ -275,10 +278,18 @@ export default function App(): JSX.Element {
     // Pals' paper in light mode (lilac, the default, sets nothing)
     if (palsPaper && palsPaper !== 'lilac') root.style.setProperty('--pals-pick', palsPaperHex(palsPaper))
     else root.style.removeProperty('--pals-pick')
+    // Liquid Glass: the picked tone, and the icons (glass by default in Liquid, line icons elsewhere)
+    const tone = liquidTone(toneId)
+    tone.mesh.forEach((c, i) => root.style.setProperty(`--lq-${i + 1}`, c))
+    root.style.setProperty('--lq-tone', tone.tone)
+    root.style.setProperty('--lq-ink', tone.ink)
+    root.dataset.icons = iconStyleOf({ iconStyle, style })
+    // Mono: the canvas behind the cards (light by default)
+    root.dataset.canvas = monoCanvas ?? 'light'
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
-  }, [mesh, style, darkBase, palsPaper, accent, customAccents, font, messageShadows, textSize])
+  }, [mesh, style, darkBase, palsPaper, toneId, monoCanvas, iconStyle, accent, customAccents, font, messageShadows, textSize])
 
   // The native menu bar (macOS) sends its shortcuts here.
   useEffect(() => {
@@ -478,11 +489,11 @@ export default function App(): JSX.Element {
               {sheet.kind === 'new-chat' && <NewChatSheet />}
               {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
               {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
-              </Suspense>
+              {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
+            </Suspense>
             {sheet.kind === 'command' && <CommandPalette />}
             {sheet.kind === 'todos' && <TodoSheet />}
             {sheet.kind === 'insights' && closeFriends && <InsightsSheet />}
-            {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
             <AiSetupSheet />
             <LaterPicker />
             {forwarding && <ForwardSheet message={forwarding} />}

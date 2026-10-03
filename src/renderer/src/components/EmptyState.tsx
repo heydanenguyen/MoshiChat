@@ -1,12 +1,15 @@
+import { PenSquare } from 'lucide-react'
 import { useStore, useT } from '../store'
+import { shortcutLabel } from '../utils'
 import { LogoHero, LogoMark } from './Logo'
 import { PalStage } from './Pals'
+import { MonoStage } from './MonoStage'
 
 export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.Element {
   const t = useT()
   const openSheet = useStore((s) => s.openSheet)
   const addDemo = useStore((s) => s.addDemo)
-  const pals = useStore((s) => s.settings.style === 'pals')
+  const style = useStore((s) => s.settings.style)
   const hello = useStore((s) => (s.settings.language === 'vi' ? 'Chào~' : 'Hello~'))
 
   if (kind === 'welcome') {
@@ -14,7 +17,7 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
       <section className="chat-col">
         <div className="drag" style={{ height: 'var(--titlebar-height)', flexShrink: 0 }} />
         <div className="welcome">
-          {pals ? <PalStage greeting={hello} /> : <LogoHero size={170} className="welcome-hero" />}
+          {style === 'pals' ? <PalStage greeting={hello} /> : style === 'mono' ? <MonoStage /> : <LogoHero size={170} className="welcome-hero" />}
           <h2 className="welcome-title">{t('welcomeTitle')}</h2>
           <p className="welcome-body">{t('welcomeBody')}</p>
           <div className="welcome-actions">
@@ -34,9 +37,14 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
     <section className="chat-col">
       <div className="drag" style={{ height: 'var(--titlebar-height)', flexShrink: 0 }} />
       <div className="empty-state">
-        {pals ? <PalStage greeting={hello} /> : <LogoMark size={92} mood="calm" className="empty-buddy" title="" />}
+        {style === 'pals' ? <PalStage greeting={hello} /> : style === 'mono' ? <MonoStage /> : <LogoMark size={92} mood="calm" className="empty-buddy" title="" />}
         <div className="empty-title">{t('selectConversation')}</div>
         <div className="empty-body">{t('selectConversationHint')}</div>
+        <button className="btn primary empty-cta" onClick={() => openSheet({ kind: 'new-chat' })}>
+          <PenSquare size={16} strokeWidth={2.4} />
+          {t('newChat')}
+          <kbd>{shortcutLabel('N')}</kbd>
+        </button>
       </div>
     </section>
   )

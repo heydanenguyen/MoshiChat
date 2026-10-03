@@ -57,6 +57,8 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const removeFile = useStore((s) => s.removeFile)
   const showToast = useStore((s) => s.showToast)
   const [text, setText] = useState('')
+  const [tall, setTall] = useState(false)
+  const tallAt = useRef(0)
   const [recording, setRecording] = useState<Recording | undefined>()
   const [elapsed, setElapsed] = useState(0)
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -168,7 +170,13 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
     // Windows draws a classic scrollbar for any overflow, even a rounding pixel; only scroll once the box is at its max height.
     el.style.overflowY = el.scrollHeight > 160 ? 'auto' : 'hidden'
-  }, [text])
+    // More than one line: the text takes the whole width and the tools move to a row underneath. It goes back only
+    // once the text is shorter than when it moved, so the layout never flips back and forth while typing.
+    if (!tall && (el.scrollHeight > 46 || text.includes('\n'))) {
+      tallAt.current = text.length
+      setTall(true)
+    } else if (tall && text.length < tallAt.current && !text.includes('\n')) setTall(false)
+  }, [text, tall])
 
   useEffect(() => {
     if (!recording) return
@@ -429,7 +437,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           </button>
         </div>
       ) : (
-        <div className="composer-box">
+        <div className={`composer-box ${tall ? 'tall' : ''}`}>
           {slash && <QuickReplyMenu items={slashItems} active={Math.min(slashIndex, Math.max(0, slashItems.length - 1))} onPick={insertQuickReply} onHover={setSlashIndex} />}
           {canAttach && (
             <button className="icon-btn composer-attach" onClick={() => void pick()} title={t('attach')} disabled={disabled}>

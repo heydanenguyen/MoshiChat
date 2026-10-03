@@ -338,6 +338,8 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
       prevHeight.current = el.scrollHeight
     })
     observer.observe(inner)
+    // the thread itself shrinks when the composer grows to several lines: keep the newest message in view then too
+    observer.observe(el)
     return () => observer.disconnect()
   }, [])
 

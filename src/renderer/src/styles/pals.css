@@ -53,7 +53,8 @@
   --pals-paper: var(--dark-base, #19181d);
   --pals-sheet: color-mix(in srgb, var(--pals-paper), white 7%);
   --pals-soft: color-mix(in srgb, var(--pals-paper), white 13%);
-  --pals-ink: #ffffff;
+  /* a soft white: pure white pills and bubbles were the loudest thing on a dark screen */
+  --pals-ink: #f2eff8;
   --pals-on-ink: #000000;
 
   --bg-elevated: color-mix(in srgb, var(--pals-paper), white 9%);
@@ -103,6 +104,10 @@
 }
 :root[data-style='pals'] .list-title {
   font-size: 24px;
+}
+/* beside a back button (Message requests, Archive, Snoozed) the wide face steps down to fit on one line */
+:root[data-style='pals'] .list-title-row .list-title {
+  font-size: 19px;
 }
 
 /* the place you are is an ink pill */
@@ -385,4 +390,133 @@
 }
 :root[data-style='pals'] .note-card.focused {
   box-shadow: 0 0 0 2px var(--pals-ink);
+}
+
+/* ================================================================== one language
+   Tags, icons, counts and labels speak Pals too, so the style is the whole app and not a coat of paint. */
+
+/* tags: ink-outlined capsules on white, the tag's own colour kept for its little icon */
+:root[data-style='pals'] .tag-pill {
+  border-radius: var(--radius-full);
+  background: var(--pals-sheet);
+  color: var(--pals-ink);
+  box-shadow: inset 0 0 0 1.5px var(--pals-ink);
+}
+:root[data-style='pals'] .tag-pill .tag-glyph {
+  color: var(--tag);
+}
+:root[data-style='pals'] .tag-pill.flat {
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
+  color: var(--text-secondary);
+}
+:root[data-style='pals'] .tag-pill.selected {
+  background: var(--pals-ink);
+  color: var(--pals-on-ink);
+}
+:root[data-style='pals'] .tag-pill.selected .tag-glyph {
+  color: var(--pals-on-ink);
+}
+:root[data-style='pals'] .tag-pill::before,
+:root[data-style='pals'] .tag-pill::after {
+  display: none;
+}
+
+/* icons: the thick ink line the pals are drawn with */
+:root[data-style='pals'] .lucide {
+  stroke-width: 2.4;
+}
+:root[data-style='pals'] .chat-header-actions .icon-btn,
+:root[data-style='pals'] .composer .icon-btn,
+:root[data-style='pals'] .details-tabs button {
+  color: var(--pals-ink);
+}
+
+/* the chat's quick actions keep their original soft circles; only their line stays the original weight */
+:root[data-style='pals'] .quick-action-icon .lucide {
+  stroke-width: 2.2;
+}
+
+/* counts: candy everywhere (the sidebar's followed the accent colour) */
+:root[data-style='pals'] .nav-badge {
+  background: var(--pals-candy);
+  color: #000;
+  font-weight: 800;
+}
+:root[data-style='pals'] .nav-item.active .nav-badge {
+  background: var(--pals-candy-2);
+  color: #000;
+}
+
+/* a busy row gives its room back to the name: one tag, and a merged person's apps stacked */
+:root[data-style='pals'] .conv-tags > :nth-child(n + 2) {
+  display: none;
+}
+:root[data-style='pals'] .conv-apps {
+  gap: 0;
+}
+:root[data-style='pals'] .conv-apps > * + * {
+  margin-left: -5px;
+  box-shadow: 0 0 0 1.5px var(--pals-paper);
+}
+:root[data-style='pals'] .conv-item.selected .conv-apps > * + * {
+  box-shadow: 0 0 0 1.5px var(--pals-sheet);
+}
+
+/* labels: sentence case in the display face instead of tracked capitals */
+:root[data-style='pals'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .todo-group-title, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-family: var(--font-pop);
+  font-weight: 700;
+}
+
+/* a draft is a candy-coral note, not an alarm */
+:root[data-style='pals'] .conv-draft {
+  color: #c2412f;
+}
+:root[data-style='pals'][data-theme='dark'] .conv-draft {
+  color: #ff9a8a;
+}
+
+/* the requests row: a pal knocking */
+:root[data-style='pals'] .requests-row-icon:has(.pal) {
+  background: var(--pals-sheet);
+  overflow: hidden;
+}
+:root[data-style='pals'] .requests-row-count {
+  background: var(--pals-candy);
+  color: #000;
+}
+:root[data-style='pals'] .requests-row-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+}
+
+:root[data-style='pals'] .notify-menu {
+  background: var(--pals-sheet);
+}
+:root[data-style='pals'] .notify-item.on .notify-item-icon {
+  background: var(--pals-candy);
+  color: #000;
+}
+:root[data-style='pals'] .notify-item-check {
+  color: var(--pals-ink);
+}
+
+/* the note on dark paper: butter stays in the fold, the edge and the icon instead of tinting the sheet olive */
+:root[data-style='pals'][data-theme='dark'] .note-card {
+  --note-paper: var(--pals-sheet);
+  --note-fold: var(--pals-candy-2);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--pals-candy-2) 50%, transparent);
+}
+:root[data-style='pals'][data-theme='dark'] .note-card .note-title > svg:first-child {
+  color: var(--pals-candy-2);
+}
+:root[data-style='pals'][data-theme='dark'] .note-prompts button {
+  background: var(--pals-soft);
+  color: var(--text-primary);
 }

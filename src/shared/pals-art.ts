@@ -293,11 +293,17 @@ function hash(seed: string): number {
   return h >>> 0
 }
 
-/** The pal a name gets: same name, same pal, face and backdrop. */
+/** Expressions an avatar can get by itself: open-eyed and friendly (no sleepy, grumpy or crying faces). */
+export const AVATAR_FACES: PalFace[] = ['smile', 'joy', 'laugh', 'wink', 'cheeky', 'love', 'kiss', 'wow']
+
+/**
+ * The pal a name gets: same name, same pal, face and backdrop. The face comes from every friendly expression (not just
+ * the pal's own three), so two people who share a pal still look apart in a list.
+ */
 export function palOf(seed: string): { member: CastMember; spec: PalSpec; backdrop: string } {
   const h = hash(seed || '?')
   const member = CAST[h % CAST.length]
-  const face = member.faces[(h >>> 8) % member.faces.length]
+  const face = AVATAR_FACES[(h >>> 8) % AVATAR_FACES.length]
   return { member, spec: specOf(member, face), backdrop: member.backdrops[(h >>> 16) % member.backdrops.length] }
 }
 

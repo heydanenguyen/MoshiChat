@@ -1,0 +1,703 @@
+/* ================================================================== to-dos: one look, one thing to do
+   A big title that says where you are and how much is left, a strip of the week to move between days, the next
+   to-do alone in a large soft card with a big check, the rest as a plain list with times on the right, and one
+   place to add at the bottom. Quiet everywhere else. Loaded after app.css. */
+/* the sheet is plain white in light mode, so the soft fills inside it read clearly */
+:root:not([data-theme='dark']) .tz-sheet {
+  background: #ffffff;
+}
+.tz-sheet {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  height: min(700px, calc(100vh - 64px));
+}
+
+/* ---- where you are */
+.tz-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 26px 22px 0 28px;
+}
+.tz-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+.tz-head h2::first-letter {
+  text-transform: uppercase;
+}
+.tz-head p {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.tz-close {
+  width: 40px;
+  height: 40px;
+  background: var(--fill-tertiary);
+}
+.tz-bar {
+  height: 6px;
+  margin: 14px 28px 0;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+  overflow: hidden;
+}
+.tz-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 600ms var(--ease-spring);
+}
+
+/* ---- the week */
+.tz-week {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  padding: 18px 24px 6px;
+}
+.tz-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 7px;
+  border-radius: 18px;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.tz-day:hover {
+  background: var(--fill-tertiary);
+}
+.tz-day-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.tz-day-name::first-letter {
+  text-transform: uppercase;
+}
+.tz-day b {
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.tz-day i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.tz-day i.has {
+  background: var(--accent);
+}
+.tz-day.someday b {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.tz-day.active {
+  background: var(--text-primary);
+}
+.tz-day.active .tz-day-name,
+.tz-day.active b {
+  color: var(--bg-elevated);
+}
+.tz-day.active i.has {
+  background: var(--bg-elevated);
+}
+
+/* ---- the list */
+.tz-body {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 24px 16px;
+}
+/* up next: the one thing to look at */
+.tz-next {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 6px;
+  padding: 18px 16px 18px 20px;
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg-elevated));
+  transition:
+    opacity 300ms ease,
+    scale 300ms var(--ease-out);
+}
+.tz-next.late {
+  background: color-mix(in srgb, #f59e0b 13%, var(--bg-elevated));
+}
+.tz-next.leaving {
+  opacity: 0;
+  scale: 0.97;
+  transition-delay: 150ms;
+}
+.tz-next-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tz-next-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--accent);
+}
+.tz-next.late .tz-next-label {
+  color: #b45309;
+}
+.tz-next-text {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.tz-next-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tz-section {
+  margin: 22px 0 4px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.tz-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tz-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--separator);
+  transition:
+    opacity 300ms ease,
+    translate 300ms var(--ease-out);
+}
+.tz-row:last-child {
+  border-bottom: 0;
+}
+.tz-row.leaving {
+  opacity: 0;
+  translate: 12px 0;
+  transition-delay: 150ms;
+}
+.tz-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.tz-row-text {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.tz-row.done .tz-row-text {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+.tz-edit {
+  outline: none;
+  border-bottom: 1.5px solid var(--accent) !important;
+}
+.tz-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.tz-source:hover {
+  color: var(--text-primary);
+}
+.tz-source span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tz-when {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--fill-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.tz-when:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.tz-when.late {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  color: #b45309;
+}
+.tz-when.unset {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.tz-next .tz-when {
+  background: var(--bg-elevated);
+}
+.tz-snooze {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--separator);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.tz-snooze:hover {
+  color: var(--text-primary);
+}
+.tz-del {
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+.tz-row:hover .tz-del,
+.tz-row:focus-within .tz-del {
+  opacity: 1;
+}
+.tz-del:hover {
+  color: var(--danger);
+}
+
+/* the check: a ring, filled when done; the big one is the next to-do's main button */
+.tz-check {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--separator-strong);
+  color: transparent;
+  transition:
+    background-color var(--duration-base) var(--ease-spring),
+    box-shadow var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    scale var(--duration-base) var(--ease-spring);
+}
+/* done is green: on hover the check turns green with a soft glow, done ones stay filled green */
+.tz-check:hover {
+  box-shadow:
+    inset 0 0 0 2px var(--success),
+    0 0 0 4px color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.tz-check.on {
+  background: var(--success);
+  box-shadow: none;
+  color: #ffffff;
+}
+.tz-check.big {
+  width: 56px;
+  height: 56px;
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--bg-elevated);
+}
+.tz-check.big:hover {
+  scale: 1.05;
+  background: var(--success);
+  color: #ffffff;
+  box-shadow: 0 10px 26px -8px color-mix(in srgb, var(--success) 75%, transparent);
+}
+.tz-check.big.on {
+  background: var(--success);
+  color: #ffffff;
+  scale: 1.1;
+}
+
+.tz-empty {
+  margin: 40px auto 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.tz-empty b {
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+}
+.tz-empty span {
+  max-width: 320px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.tz-done {
+  margin-top: 18px;
+}
+.tz-done-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 16px;
+  background: var(--fill-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.tz-done-toggle svg {
+  color: var(--success);
+}
+
+.tz-clear {
+  display: block;
+  margin: 8px auto 0;
+  font-size: var(--text-sm);
+}
+
+/* ---- one place to add: the chat's own composer box, so it hovers and focuses exactly like the chat's */
+.tz-add.composer {
+  padding: 12px 20px 18px;
+  border-top: 1px solid var(--separator);
+}
+.tz-box {
+  align-items: center;
+  padding: 4px 4px 4px 16px;
+  border-radius: 26px;
+}
+.tz-box input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+}
+.tz-box input::placeholder {
+  color: var(--text-tertiary);
+}
+.tz-add-go {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--text-primary);
+  color: var(--bg-elevated);
+  transition:
+    opacity var(--duration-fast) ease,
+    scale var(--duration-fast) var(--ease-spring),
+    background-color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease;
+}
+/* ready to add: on hover it takes the accent picked in Settings, with a glow of it */
+.tz-add-go:hover:not(:disabled),
+.tz-snooze:hover,
+.tz-when:not(.late):hover {
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.tz-add-go:hover:not(:disabled) {
+  scale: 1.06;
+}
+.tz-add-go:active:not(:disabled) {
+  scale: 0.92;
+}
+.tz-add-go:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.tz-snooze,
+.tz-when {
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease;
+}
+
+/* the time picker floats over the sheet, placed from the button that opened it */
+.tz-pop {
+  position: absolute;
+  z-index: 60;
+  width: 296px;
+  animation: tz-pop-in 220ms var(--ease-spring);
+}
+.tz-pop .schedule-picker {
+  position: static;
+  width: 100%;
+  max-width: none;
+}
+@keyframes tz-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+.tz-add-when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 4px 10px;
+}
+.tz-found {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft-2);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+.tz-found button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: inherit;
+}
+:root[data-theme='dark'] .tz-when.late,
+:root[data-theme='dark'] .tz-next.late .tz-next-label {
+  color: #fbbf5c;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tz-row,
+  .tz-next,
+  .tz-check,
+  .tz-bar i {
+    transition: none;
+  }
+}
+
+/* ================================================================== motion
+   Adding: the new to-do slides in and glows faintly in the accent; a day pill that received one bounces.
+   Finishing: the check fills green with a ripple, a line strikes the words, the row folds away, the next one rises
+   into Up next and the done count pops. */
+.tz-next {
+  animation: tz-rise 460ms var(--ease-spring);
+}
+@keyframes tz-rise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+    scale: 0.98;
+  }
+}
+.tz-next.leaving {
+  opacity: 0;
+  translate: 0 -10px;
+  scale: 0.97;
+  transition:
+    opacity 320ms ease 280ms,
+    translate 320ms var(--ease-out) 280ms,
+    scale 320ms ease 280ms;
+}
+.tz-next.entering,
+.tz-row.entering {
+  animation:
+    tz-enter 520ms var(--ease-spring),
+    tz-glow 1400ms ease;
+}
+@keyframes tz-enter {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+}
+@keyframes tz-glow {
+  0%,
+  30% {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent), 0 10px 26px -12px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+.tz-row {
+  border-radius: 14px;
+}
+.tz-row.leaving {
+  overflow: hidden;
+  animation: tz-fold 520ms var(--ease-out) 300ms forwards;
+}
+@keyframes tz-fold {
+  to {
+    opacity: 0;
+    translate: 14px 0;
+    max-height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+  }
+}
+.tz-row {
+  max-height: 160px;
+}
+/* the line through the words, drawn left to right */
+.tz-row.leaving .tz-row-text,
+.tz-next.leaving .tz-next-text {
+  color: var(--text-tertiary);
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 100% 1.5px;
+  animation: tz-strike 300ms var(--ease-out) both;
+  transition: color 300ms ease;
+}
+@keyframes tz-strike {
+  from {
+    background-size: 0 1.5px;
+  }
+}
+/* the check: a pop and a green ripple */
+.tz-check {
+  position: relative;
+}
+.tz-check.pop {
+  animation: tz-check-pop 420ms var(--ease-spring);
+}
+.tz-check.pop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: tz-ripple 620ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes tz-check-pop {
+  0% {
+    scale: 0.7;
+  }
+  60% {
+    scale: 1.18;
+  }
+}
+@keyframes tz-ripple {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--success) 0%, transparent);
+  }
+}
+.tz-check.big.pop::after {
+  animation-duration: 760ms;
+}
+.tz-done-count {
+  display: inline-block;
+  animation: tz-count 380ms var(--ease-spring);
+}
+@keyframes tz-count {
+  from {
+    scale: 0.6;
+    opacity: 0;
+  }
+}
+.tz-done-more {
+  margin-left: auto;
+  font-size: var(--text-xs);
+}
+.tz-day.bump {
+  animation: tz-bump 620ms var(--ease-spring);
+}
+.tz-day.bump i {
+  background: var(--accent);
+}
+@keyframes tz-bump {
+  30% {
+    translate: 0 -6px;
+    background: var(--accent-soft-2);
+  }
+  60% {
+    translate: 0 1px;
+  }
+}
+.tz-bar i {
+  transition: width 700ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tz-next,
+  .tz-next.entering,
+  .tz-row.entering,
+  .tz-row.leaving,
+  .tz-check.pop,
+  .tz-check.pop::after,
+  .tz-done-count,
+  .tz-day.bump,
+  .tz-pop {
+    animation: none;
+  }
+}
+
+/* opening Done today: the finished to-dos drop in one after another */
+.tz-done .tz-list .tz-row {
+  animation: tz-drop 420ms var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+.tz-done .tz-clear {
+  animation: tz-drop 420ms var(--ease-spring) both;
+  animation-delay: 160ms;
+}
+@keyframes tz-drop {
+  from {
+    opacity: 0;
+    translate: 0 -12px;
+    scale: 0.98;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tz-done .tz-list .tz-row,
+  .tz-done .tz-clear {
+    animation: none;
+  }
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlarmClock, CalendarClock, Check, ChevronDown, ChevronRight, ListTodo, MessageSquare, Moon, Plus, Sunrise, Trash2, X } from 'lucide-react'
+import { AlarmClock, CalendarClock, Check, ListTodo, Moon, Plus, Sunrise, Trash2, X } from 'lucide-react'
 import type { Message } from '@shared/types'
-import { TODO_GROUPS, dueInfo, groupTodos, quickTimes, type Todo, type TodoGroup } from '@shared/todos'
+import { dueInfo, parseDue, quickTimes, type Todo } from '@shared/todos'
 import { useStore, useT } from '../store'
 import { formatListTime, formatTime, tip } from '../utils'
 import { Avatar } from './Avatar'
@@ -9,13 +9,6 @@ import { LogoMark } from './Logo'
 import { SchedulePicker } from './ComposerExtras'
 
 const NO_TODOS: Todo[] = []
-const GROUP_KEY: Record<TodoGroup, 'todoOverdue' | 'todoToday' | 'todoUpcoming' | 'todoSomeday' | 'todoDone'> = {
-  overdue: 'todoOverdue',
-  today: 'todoToday',
-  upcoming: 'todoUpcoming',
-  someday: 'todoSomeday',
-  done: 'todoDone'
-}
 
 /** Sidebar counter: open to-dos, so the nav item can show a badge. */
 export function useOpenTodos(): number {
@@ -88,7 +81,16 @@ function useDueLabel(): (due: number) => { text: string; tone: string } {
   }
 }
 
-/** The to-do list: what came due, today, later, undated, then what is done. */
+const DAY = 86_400_000
+const startOfDay = (ts: number): number => new Date(ts).setHours(0, 0, 0, 0)
+type View = number | 'someday'
+
+/**
+ * To-dos, built to be read in one look. A big title says where you are (Today, a day, or Unscheduled) with how much
+ * is left; a strip of the week moves between days. On today, the next thing to do stands alone as a large card with
+ * a big check; the rest is a plain list with times on the right, overdue first in amber. What is done folds into one
+ * line. One place to add, at the bottom; a time written in ("mai 9h", "tối nay") is read out of it.
+ */
 export function TodoSheet(): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
@@ -99,29 +101,71 @@ export function TodoSheet(): JSX.Element {
   const updateTodo = useStore((s) => s.updateTodo)
   const removeTodo = useStore((s) => s.removeTodo)
   const setSettings = useStore((s) => s.setSettings)
+  const showToast = useStore((s) => s.showToast)
   const select = useStore((s) => s.select)
   const jumpTo = useStore((s) => s.jumpTo)
   const dueLabel = useDueLabel()
+  const now = Date.now()
+  const today = startOfDay(now)
+  const locale = language === 'vi' ? 'vi-VN' : 'en-GB'
+  const quick = quickTimes(now)
+  const [view, setView] = useState<View>(today)
   const [draft, setDraft] = useState('')
-  const [picking, setPicking] = useState<string | 'new' | undefined>()
+  const [skipParse, setSkipParse] = useState(false)
+  const [picking, setPicking] = useState<{ id: string; style: React.CSSProperties } | undefined>()
+  const [bumpDay, setBumpDay] = useState<number | undefined>()
+  const justAdded = useRef(0)
+  const sheetRef = useRef<HTMLDivElement>(null)
   const [editing, setEditing] = useState<{ id: string; text: string } | undefined>()
+  const [completing, setCompleting] = useState<string[]>([])
   const [showDone, setShowDone] = useState(false)
   const addInput = useRef<HTMLInputElement>(null)
-  const groups = groupTodos(todos)
-  const openCount = todos.length - groups.done.length
-  const quick = quickTimes()
+
+  const open = todos.filter((x) => !x.done)
+  const byDue = (a: Todo, b: Todo): number => (a.due ?? 0) - (b.due ?? 0)
+  /** Open to-dos for a day; today also carries everything overdue. */
+  const openOn = (day: number): Todo[] =>
+    open.filter((x) => x.due !== undefined && (day === today ? x.due < today + DAY : startOfDay(x.due) === day)).sort(byDue)
+  const someday = open.filter((x) => x.due === undefined).sort((a, b) => b.createdAt - a.createdAt)
+  const doneToday = todos.filter((x) => x.done && (x.doneAt ?? 0) >= today).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0))
+  const week = Array.from({ length: 7 }, (_, i) => today + i * DAY)
+
+  const list = view === 'someday' ? someday : openOn(view)
+  const isToday = view === today
+  const [next, ...rest] = isToday ? list : [undefined, ...list]
+  const total = list.length + (isToday ? doneToday.length : 0)
+  const progress = isToday && total ? doneToday.length / total : 0
+  const parsed = skipParse ? { text: draft.trim() } : parseDue(draft, now)
 
   useEffect(() => {
     addInput.current?.focus()
   }, [])
 
   const submit = (due?: number): void => {
-    const text = draft.trim()
+    const text = (due === undefined ? parsed.text : draft.trim()) || draft.trim()
     if (!text) return
+    // nothing typed for the time: the day being looked at; today means "some time today" (kept as 23:59), another day 9:00
+    const when = due ?? parsed.due ?? (view === 'someday' ? undefined : view === today ? today + DAY - 60_000 : view + 9 * 3_600_000)
     setDraft('')
+    setSkipParse(false)
     setPicking(undefined)
-    void addTodo({ text: text.slice(0, 200), due })
+    justAdded.current = Date.now()
+    void addTodo({ text: text.slice(0, 200), due: when })
+    const lands = when === undefined ? undefined : Math.max(startOfDay(when), today)
+    if (lands !== undefined && lands !== view) {
+      setBumpDay(lands)
+      setTimeout(() => setBumpDay(undefined), 700)
+    }
+    if (when === undefined && view !== today) setView('someday')
     addInput.current?.focus()
+  }
+  const complete = (todo: Todo): void => {
+    setCompleting((ids) => [...ids, todo.id])
+    setTimeout(() => {
+      void updateTodo(todo.id, { done: true })
+      setCompleting((ids) => ids.filter((x) => x !== todo.id))
+      showToast(t('todoCompleted'), 'info', { label: t('undo'), run: () => void updateTodo(todo.id, { done: false }) })
+    }, 760)
   }
   const openMessage = (todo: Todo): void => {
     if (!todo.conversationId) return
@@ -136,231 +180,261 @@ export function TodoSheet(): JSX.Element {
     if (text && current && text !== current.text) void updateTodo(editing.id, { text })
     setEditing(undefined)
   }
-  const clearDone = (): void => {
-    void setSettings({ todos: todos.filter((x) => !x.done) })
-    setShowDone(false)
+  const pickerPop = picking ? (
+    <div className="tz-pop" style={picking.style}>
+      <SchedulePicker
+        onPick={(nextDue) => (picking.id === 'new' ? submit(nextDue) : reschedule(picking.id, nextDue))}
+        onClose={() => setPicking(undefined)}
+        title={t('todoWhen')}
+        noneLabel={t('todoNoDue')}
+        onNone={() => (picking.id === 'new' ? submit(undefined) : reschedule(picking.id, undefined))}
+      />
+    </div>
+  ) : null
+  const reschedule = (id: string, due: number | undefined): void => {
+    setPicking(undefined)
+    void updateTodo(id, { due })
+  }
+  /** Opens the time picker next to the button, inside the sheet: above it when there is more room above. */
+  const openPicker = (id: string, button: HTMLElement): void => {
+    if (picking?.id === id) return setPicking(undefined)
+    const sheet = sheetRef.current?.getBoundingClientRect()
+    const at = button.getBoundingClientRect()
+    if (!sheet) return
+    const width = 296
+    const left = Math.min(Math.max(12, at.left - sheet.left), sheet.width - width - 12)
+    const up = at.top - sheet.top > sheet.bottom - at.bottom
+    setPicking({ id, style: up ? { left, bottom: sheet.bottom - at.top + 8 } : { left, top: at.bottom - sheet.top + 8 } })
   }
 
-  const quickChips = (onPick: (due: number) => void, extra?: JSX.Element): JSX.Element => (
-    <div className="todo-quick">
-      {quick.tonight && (
-        <button className="todo-chip action" onClick={() => onPick(quick.tonight!)}>
-          <Moon size={12} strokeWidth={2.4} /> {t('todoTonight', { time: formatTime(quick.tonight, language) })}
-        </button>
-      )}
-      <button className="todo-chip action" onClick={() => onPick(quick.tomorrow)}>
-        <Sunrise size={12} strokeWidth={2.4} /> {t('todoTomorrow', { time: formatTime(quick.tomorrow, language) })}
+  const textOf = (todo: Todo, cls: string): JSX.Element =>
+    editing?.id === todo.id ? (
+      <input
+        className={`${cls} tz-edit`}
+        value={editing.text}
+        autoFocus
+        maxLength={200}
+        onChange={(e) => setEditing({ id: todo.id, text: e.target.value })}
+        onBlur={commitEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commitEdit()
+          if (e.key === 'Escape') setEditing(undefined)
+        }}
+      />
+    ) : (
+      <button className={cls} onClick={() => !todo.done && setEditing({ id: todo.id, text: todo.text })} title={todo.done ? undefined : t('todoEditHint')}>
+        {todo.text}
       </button>
-      {extra}
-    </div>
+    )
+  const source = (todo: Todo): JSX.Element | null => {
+    const c = todo.conversationId ? conversations[todo.conversationId] : undefined
+    return c ? (
+      <button className="tz-source" onClick={() => openMessage(todo)} title={t('todoOpenChat')}>
+        <Avatar name={c.title} url={c.avatarUrl} size={18} />
+        <span>{c.title}</span>
+      </button>
+    ) : null
+  }
+  /** "09:30", or "Overdue 2 days" in amber; the time is the button to change it. */
+  const when = (todo: Todo): JSX.Element => {
+    const late = todo.due !== undefined && todo.due < now
+    const anytime = todo.due !== undefined && new Date(todo.due).getHours() === 23 && new Date(todo.due).getMinutes() === 59
+    const label = todo.due === undefined ? t('todoSetDue') : late ? dueLabel(todo.due).text : anytime && startOfDay(todo.due) === (view === 'someday' ? -1 : view) ? t('todoAnytime') : view === today || startOfDay(todo.due) === view ? formatTime(todo.due, language) : dueLabel(todo.due).text
+    return (
+      <span className="todo-add-when">
+        <button className={`tz-when ${late ? 'late' : ''} ${todo.due === undefined ? 'unset' : ''}`} onClick={(e) => openPicker(todo.id, e.currentTarget)} title={t('todoSetDue')}>
+          {label}
+        </button>
+      </span>
+    )
+  }
+  const check = (todo: Todo, big = false): JSX.Element => (
+    <button
+      className={`tz-check ${big ? 'big' : ''} ${todo.done || completing.includes(todo.id) ? 'on' : ''} ${completing.includes(todo.id) ? 'pop' : ''}`}
+      onClick={() => (todo.done ? void updateTodo(todo.id, { done: false }) : complete(todo))}
+      aria-label={todo.done ? t('todoReopen') : t('todoMarkDone')}
+    >
+      <Check size={big ? 22 : 13} strokeWidth={3} />
+    </button>
   )
+  const entering = (todo: Todo): boolean => todo.createdAt >= justAdded.current - 200 && Date.now() - todo.createdAt < 1500
+  const row = (todo: Todo, index = 0): JSX.Element => (
+    <li key={todo.id} style={{ ['--i' as string]: index } as React.CSSProperties} className={`tz-row ${todo.done ? 'done' : ''} ${completing.includes(todo.id) ? 'leaving' : ''} ${entering(todo) ? 'entering' : ''}`}>
+      {check(todo)}
+      <div className="tz-row-main">
+        {textOf(todo, 'tz-row-text')}
+        {source(todo)}
+      </div>
+      {!todo.done && when(todo)}
+      <button className="icon-btn small tz-del" title={t('todoDelete')} onClick={() => void removeTodo(todo.id)}>
+        <Trash2 size={13} strokeWidth={2.2} />
+      </button>
+    </li>
+  )
+
+  const title = view === 'someday' ? t('todoSomeday') : isToday ? t('todoToday') : view === today + DAY ? t('todoTomorrowDay') : new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'numeric' }).format(view)
+  const subtitle = isToday
+    ? list.length
+      ? t('todoLeftDone', { left: String(list.length), done: String(doneToday.length) })
+      : doneToday.length
+        ? t('todoAllClear')
+        : t('todoFreeDay')
+    : list.length
+      ? t('todoCountOnDay', { n: String(list.length) })
+      : t('todoNothingHere')
+  const nextLate = next?.due !== undefined && next.due < now
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && closeSheet()}>
-      <div className="sheet todo-sheet" role="dialog" aria-label={t('todos')}>
-        <div className="sheet-header">
-          <div className="sheet-title">
-            {t('todos')}
-            {openCount > 0 && <span className="todo-count">{openCount}</span>}
+      <div className="sheet tz-sheet" role="dialog" aria-label={t('todos')} ref={sheetRef}>
+        <header className="tz-head">
+          <div>
+            <h2>{title}</h2>
+            <p>{subtitle}</p>
           </div>
-          <button className="icon-btn" onClick={closeSheet} title={t('close')}>
-            <X size={16} strokeWidth={2.4} />
+          <button className="icon-btn tz-close" onClick={closeSheet} title={t('close')}>
+            <X size={18} strokeWidth={2.4} />
           </button>
-        </div>
-        <div className="sheet-body scroll">
-          <div className={`todo-add ${draft.trim() ? 'typing' : ''}`}>
-            <div className="todo-add-row">
-              <Plus size={16} strokeWidth={2.4} />
-              <input
-                ref={addInput}
-                className="todo-add-input"
-                placeholder={t('todoAddPlaceholder')}
-                value={draft}
-                maxLength={200}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submit()
-                  if (e.key === 'Escape') setDraft('')
-                }}
-              />
-              {draft.trim() && (
-                <button className="todo-add-go" onClick={() => submit()} title={t('todoEnterHint')}>
-                  <Check size={15} strokeWidth={2.8} />
-                </button>
-              )}
-            </div>
-            {draft.trim() &&
-              quickChips(
-                (due) => submit(due),
-                <span className="todo-add-when">
-                  <button className="todo-chip" onClick={() => setPicking(picking === 'new' ? undefined : 'new')}>
-                    <CalendarClock size={12} strokeWidth={2.4} /> {t('todoPickTime')}
-                  </button>
-                  {picking === 'new' && (
-                    <span className="todo-picker-anchor below">
-                      <SchedulePicker onPick={submit} onClose={() => setPicking(undefined)} title={t('todoWhen')} noneLabel={t('todoNoDue')} onNone={() => submit(undefined)} />
-                    </span>
-                  )}
-                  <span className="todo-add-hint">{t('todoEnterHint')}</span>
-                </span>
-              )}
+        </header>
+        {isToday && total > 0 && (
+          <div className="tz-bar" aria-hidden>
+            <i style={{ width: `${progress * 100}%` }} />
           </div>
+        )}
 
-          {todos.length === 0 && (
-            <div className="todo-empty">
-              <LogoMark size={72} mood="calm" title="" />
-              <div className="todo-empty-title">{t('todoEmptyTitle')}</div>
-              <div className="todo-empty-hint">{t('todoEmpty')}</div>
-            </div>
-          )}
+        <nav className="tz-week" aria-label={t('todos')}>
+          {week.map((day) => {
+            const n = openOn(day).length
+            const d = new Date(day)
+            return (
+              <button key={day} className={`tz-day ${view === day ? 'active' : ''} ${bumpDay === day ? 'bump' : ''}`} onClick={() => setView(day)} aria-pressed={view === day}>
+                <span className="tz-day-name">{day === today ? t('todoTodayShort') : new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(d)}</span>
+                <b>{d.getDate()}</b>
+                <i className={n ? 'has' : ''} />
+              </button>
+            )
+          })}
+          <button className={`tz-day someday ${view === 'someday' ? 'active' : ''}`} onClick={() => setView('someday')} aria-pressed={view === 'someday'}>
+            <span className="tz-day-name">{t('todoSomedayShort')}</span>
+            <b>{someday.length}</b>
+            <i />
+          </button>
+        </nav>
 
-          {TODO_GROUPS.map((group) => {
-            const list = groups[group]
-            if (!list.length) return null
-            if (group === 'done') {
-              return (
-                <div key={group} className="todo-group done">
-                  <button className="todo-done-toggle" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone}>
-                    {showDone ? <ChevronDown size={14} strokeWidth={2.6} /> : <ChevronRight size={14} strokeWidth={2.6} />}
-                    {t('todoDone')} · {list.length}
-                  </button>
-                  {showDone && (
+        <div className="tz-body scroll">
+          {next && (
+            <section key={next.id} className={`tz-next ${nextLate ? 'late' : ''} ${completing.includes(next.id) ? 'leaving' : ''} ${entering(next) ? 'entering' : ''}`}>
+              <div className="tz-next-main">
+                <span className="tz-next-label">{nextLate ? t('todoOverdue') : t('todoNext')}</span>
+                {textOf(next, 'tz-next-text')}
+                <div className="tz-next-meta">
+                  {when(next)}
+                  {source(next)}
+                  {nextLate && (
                     <>
-                      {list.map((todo) => (
-                        <div key={todo.id} className="todo-row done">
-                          <button className="todo-check on" onClick={() => void updateTodo(todo.id, { done: false })} aria-label={t('todoDone')}>
-                            <Check size={13} strokeWidth={3} />
-                          </button>
-                          <div className="todo-text">
-                            <div className="todo-title">{todo.text}</div>
-                          </div>
-                          <div className="todo-actions">
-                            <button className="icon-btn small danger" title={t('todoDelete')} onClick={() => void removeTodo(todo.id)}>
-                              <Trash2 size={14} strokeWidth={2.2} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <button className="link-btn todo-clear" onClick={clearDone}>
-                        {t('todoClearDone')}
+                      {quick.tonight && (
+                        <button className="tz-snooze" onClick={() => reschedule(next.id, quick.tonight)}>
+                          {t('todoTonightShort')}
+                        </button>
+                      )}
+                      <button className="tz-snooze" onClick={() => reschedule(next.id, quick.tomorrow)}>
+                        {t('todoTomorrowShort')}
                       </button>
                     </>
                   )}
                 </div>
-              )
-            }
-            return (
-              <div key={group} className={`todo-group ${group}`}>
-                <div className="todo-group-title">
-                  <span>
-                    {t(GROUP_KEY[group])} <span className="todo-group-count">{list.length}</span>
-                  </span>
-                </div>
-                {list.map((todo) => {
-                  const conversation = todo.conversationId ? conversations[todo.conversationId] : undefined
-                  const due = todo.due !== undefined ? dueLabel(todo.due) : undefined
-                  const isEditing = editing?.id === todo.id
-                  return (
-                    <div key={todo.id} className={`todo-row ${due?.tone ?? ''}`}>
-                      <button className="todo-check" onClick={() => void updateTodo(todo.id, { done: true })} aria-label={t('todoDone')}>
-                        <Check size={13} strokeWidth={3} />
-                      </button>
-                      <div className="todo-text">
-                        {isEditing ? (
-                          <input
-                            className="todo-title-edit"
-                            value={editing.text}
-                            autoFocus
-                            maxLength={200}
-                            onChange={(e) => setEditing({ id: todo.id, text: e.target.value })}
-                            onBlur={commitEdit}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitEdit()
-                              if (e.key === 'Escape') setEditing(undefined)
-                            }}
-                          />
-                        ) : (
-                          <button className="todo-title" onClick={() => setEditing({ id: todo.id, text: todo.text })} title={t('todoEditHint')}>
-                            {todo.text}
-                          </button>
-                        )}
-                        <div className="todo-meta">
-                          {conversation && (
-                            <button className="todo-chip chat" onClick={() => openMessage(todo)} title={t('todoOpenChat')}>
-                              <Avatar name={conversation.title} url={conversation.avatarUrl} size={16} />
-                              {conversation.title}
-                            </button>
-                          )}
-                          {due && (
-                            <span className="todo-add-when">
-                              <button className={`todo-chip due ${due.tone}`} onClick={() => setPicking(picking === todo.id ? undefined : todo.id)} title={t('todoSetDue')}>
-                                <AlarmClock size={11} strokeWidth={2.6} /> {due.text}
-                              </button>
-                              {picking === todo.id && (
-                                <span className="todo-picker-anchor below">
-                                  <SchedulePicker
-                                    onPick={(next) => {
-                                      setPicking(undefined)
-                                      void updateTodo(todo.id, { due: next })
-                                    }}
-                                    onClose={() => setPicking(undefined)}
-                                    title={t('todoWhen')}
-                                    noneLabel={t('todoNoDue')}
-                                    onNone={() => {
-                                      setPicking(undefined)
-                                      void updateTodo(todo.id, { due: undefined })
-                                    }}
-                                  />
-                                </span>
-                              )}
-                            </span>
-                          )}
-                        </div>
-                        {due?.tone === 'late' && (
-                          <div className="todo-snooze">
-                            <span className="todo-snooze-label">{t('todoSnooze')}</span>
-                            {quickChips((next) => void updateTodo(todo.id, { due: next }))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="todo-actions">
-                        {!due && (
-                          <span className="todo-add-when">
-                            <button className="icon-btn small" title={t('todoSetDue')} onClick={() => setPicking(picking === todo.id ? undefined : todo.id)}>
-                              <AlarmClock size={14} strokeWidth={2.2} />
-                            </button>
-                            {picking === todo.id && (
-                              <span className="todo-picker-anchor">
-                                <SchedulePicker
-                                  onPick={(next) => {
-                                    setPicking(undefined)
-                                    void updateTodo(todo.id, { due: next })
-                                  }}
-                                  onClose={() => setPicking(undefined)}
-                                  title={t('todoWhen')}
-                                  noneLabel={t('todoNoDue')}
-                                  onNone={() => setPicking(undefined)}
-                                />
-                              </span>
-                            )}
-                          </span>
-                        )}
-                        {todo.conversationId && (
-                          <button className="icon-btn small" title={t('todoOpenChat')} onClick={() => openMessage(todo)}>
-                            <MessageSquare size={14} strokeWidth={2.2} />
-                          </button>
-                        )}
-                        <button className="icon-btn small danger" title={t('todoDelete')} onClick={() => void removeTodo(todo.id)}>
-                          <Trash2 size={14} strokeWidth={2.2} />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
               </div>
-            )
-          })}
+              {check(next, true)}
+            </section>
+          )}
+
+          {rest.length > 0 && (
+            <>
+              {isToday && <h3 className="tz-section">{t('todoLater')}</h3>}
+              <ul className="tz-list">{(rest as Todo[]).map(row)}</ul>
+            </>
+          )}
+
+          {!list.length && (
+            <div className="tz-empty">
+              <LogoMark size={64} mood={isToday && doneToday.length ? 'happy' : 'calm'} title="" />
+              <b>{isToday && doneToday.length ? t('todoAllClear') : t('todoNothingHere')}</b>
+              <span>{todos.length ? t('todoAddBelow') : t('todoEmpty')}</span>
+            </div>
+          )}
+
+          {isToday && doneToday.length > 0 && (
+            <div className="tz-done">
+              <button className="tz-done-toggle" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone}>
+                <Check size={13} strokeWidth={3} />
+                <span key={doneToday.length} className="tz-done-count">
+                  {t('todoDoneTodayCount', { n: String(doneToday.length) })}
+                </span>
+                <span className="tz-done-more">{showDone ? t('todoCollapse') : t('todoShowAll')}</span>
+              </button>
+              {showDone && (
+                <>
+                  <ul className="tz-list">{doneToday.map(row)}</ul>
+                  <button className="link-btn tz-clear" onClick={() => void setSettings({ todos: todos.filter((x) => !x.done) })}>
+                    {t('todoClearDone')}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
+
+        {pickerPop}
+        <footer className="tz-add composer">
+          {draft.trim() && (
+            <div className="tz-add-when">
+              {parsed.due !== undefined ? (
+                <span className="tz-found">
+                  <AlarmClock size={13} strokeWidth={2.6} />
+                  {parsed.due < now ? t('todoTimePassed', { when: formatTime(parsed.due, language) }) : t('todoWillRemind', { when: dueLabel(parsed.due).text })}
+                  <button onClick={() => setSkipParse(true)} aria-label={t('todoNoDue')}>
+                    <X size={12} strokeWidth={2.8} />
+                  </button>
+                </span>
+              ) : (
+                <>
+                  {quick.tonight && (
+                    <button className="tz-snooze" onClick={() => submit(quick.tonight)}>
+                      <Moon size={12} strokeWidth={2.4} /> {t('todoTonight', { time: formatTime(quick.tonight, language) })}
+                    </button>
+                  )}
+                  <button className="tz-snooze" onClick={() => submit(quick.tomorrow)}>
+                    <Sunrise size={12} strokeWidth={2.4} /> {t('todoTomorrow', { time: formatTime(quick.tomorrow, language) })}
+                  </button>
+                  <span className="todo-add-when">
+                    <button className="tz-snooze" onClick={(e) => openPicker('new', e.currentTarget)}>
+                      <CalendarClock size={12} strokeWidth={2.4} /> {t('todoPickTime')}
+                    </button>
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          <div className="composer-box tz-box">
+            <input
+              ref={addInput}
+              placeholder={t('todoAddSmart')}
+              value={draft}
+              maxLength={200}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                if (!e.target.value) setSkipParse(false)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit()
+                if (e.key === 'Escape') setDraft('')
+              }}
+            />
+            <button className="tz-add-go" onClick={() => submit()} disabled={!draft.trim()} aria-label={t('todoAddButton')}>
+              <Plus size={20} strokeWidth={2.6} />
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   )

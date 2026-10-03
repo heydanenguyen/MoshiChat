@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAST, PAL_FACES, palAvatarUrl, palOf, palPickId, palPickUrl, palPicks, palSvg, parsePalPickId } from '../src/shared/pals-art'
+import { AVATAR_FACES, CAST, PAL_FACES, palAvatarUrl, palOf, palPickId, palPickUrl, palPicks, palSvg, parsePalPickId } from '../src/shared/pals-art'
 
 /** sRGB hex -> OKLCH (L 0..1, C, H degrees). */
 function oklch(hex: string): { L: number; C: number; H: number } {
@@ -35,6 +35,15 @@ describe('Pals cast colours', () => {
     expect(palAvatarUrl('Lan Phương')).toBe(palAvatarUrl('Lan Phương'))
     const used = new Set(Array.from({ length: 200 }, (_, i) => palOf(`person ${i}`).member.id))
     expect(used.size).toBe(CAST.length)
+  })
+
+  it('gives automatic avatars only friendly faces, and varies them within one pal', () => {
+    const people = Array.from({ length: 400 }, (_, i) => palOf(`person ${i}`))
+    for (const p of people) expect(AVATAR_FACES).toContain(p.spec.face)
+    for (const face of ['sleepy', 'grumpy', 'cry', 'meh']) expect(AVATAR_FACES).not.toContain(face)
+    // people who share a pal mostly differ in expression
+    const suns = people.filter((p) => p.member.id === 'nang').map((p) => p.spec.face)
+    expect(new Set(suns).size).toBeGreaterThanOrEqual(6)
   })
 
   it('only gives avatars faces with open eyes or a clear expression', () => {
