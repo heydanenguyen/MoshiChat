@@ -15290,3 +15290,13 @@ button.moment-card:hover {
   color: var(--text-secondary);
   background: var(--fill-tertiary);
 }
+
+/* the time rides at the bar's outer end: bubble, actions, time (mirrored for my messages) */
+.bubble-time.in-bar {
+  align-self: center;
+  padding: 0 6px;
+  order: 99;
+}
+.msg-group.out .bubble-time.in-bar {
+  order: -1;
+}

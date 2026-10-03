@@ -1075,6 +1075,14 @@ function BubbleView({
     moreItems.push({ key: 'save', icon: <Sparkles size={15} strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />, label: saved ? t('unsaveAction') : t('saveAction'), run: () => void toggleSaved(message) })
   if (message.isOutgoing && features.unsend && wants('unsend')) moreItems.push({ key: 'unsend', icon: <Undo2 size={15} strokeWidth={2} />, label: t('unsend'), run: () => setConfirmUnsend(true), danger: true })
 
+  // The time: after the actions when they show (bubble, actions, then time, like Instagram), else beside the bubble.
+  const time = (
+    <span className={`bubble-time ${showActions ? 'in-bar' : ''}`}>
+      {saved && <Sparkles className="saved-mark" size={11} strokeWidth={2.4} fill="currentColor" />}
+      {formatTime(message.sentAt, language)}
+    </span>
+  )
+
   // Zalo keeps one reaction per person and shows them as one pill; others get a chip per emoji.
   const reactionSlot =
     platform === 'zalo' ? (
@@ -1218,6 +1226,7 @@ function BubbleView({
             </span>
           )}
           {todoOpen && <TodoPicker message={message} onClose={() => setTodoOpen(false)} />}
+          {time}
           {confirmUnsend && (
             <div className="unsend-confirm" role="dialog" aria-label={t('unsend')}>
               <span>{t('unsendConfirm')}</span>
@@ -1290,10 +1299,7 @@ function BubbleView({
           )}
         </div>
       )}
-      <span className="bubble-time">
-        {saved && <Sparkles className="saved-mark" size={11} strokeWidth={2.4} fill="currentColor" />}
-        {formatTime(message.sentAt, language)}
-      </span>
+      {!showActions && time}
     </div>
   )
 }
