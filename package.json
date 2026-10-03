@@ -1,7 +1,7 @@
 {
   "name": "moshi",
   "productName": "Moshi",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "All your conversations, in one place. Messenger, Instagram and Telegram in a single Apple-grade inbox.",
   "main": "./out/main/index.js",
   "author": {
