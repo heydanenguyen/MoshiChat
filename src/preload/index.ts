@@ -44,6 +44,7 @@ const bridge: MoshiBridge = {
   },
   ai: {
     status: () => ipcRenderer.invoke(IPC.aiStatus),
+    hardware: () => ipcRenderer.invoke(IPC.aiHardware),
     prepare: (kind, speakLang) => ipcRenderer.invoke(IPC.aiPrepare, kind, speakLang),
     speak: (text, speakLang) => ipcRenderer.invoke(IPC.aiSpeak, text, speakLang),
     remove: (kind) => ipcRenderer.invoke(IPC.aiRemove, kind),
@@ -53,8 +54,13 @@ const bridge: MoshiBridge = {
     translateTo: (text, target) => ipcRenderer.invoke(IPC.aiTranslateTo, text, target),
     cached: () => ipcRenderer.invoke(IPC.aiCached),
     summarize: (key, lines) => ipcRenderer.invoke(IPC.aiSummarize, key, lines),
-    suggest: (lines) => ipcRenderer.invoke(IPC.aiSuggest, lines),
-    opener: (lines, silentDays, note) => ipcRenderer.invoke(IPC.aiOpener, lines, silentDays, note)
+    suggest: (lines, context) => ipcRenderer.invoke(IPC.aiSuggest, lines, context),
+    opener: (lines, silentDays, note, context) => ipcRenderer.invoke(IPC.aiOpener, lines, silentDays, note, context),
+    warm: () => ipcRenderer.invoke(IPC.aiWarm),
+    voiceInfo: () => ipcRenderer.invoke(IPC.aiVoiceInfo),
+    voiceExport: () => ipcRenderer.invoke(IPC.aiVoiceExport),
+    voiceInstall: () => ipcRenderer.invoke(IPC.aiVoiceInstall),
+    voiceRemove: () => ipcRenderer.invoke(IPC.aiVoiceRemove)
   },
   insights: {
     backfill: (days) => ipcRenderer.invoke(IPC.insightsBackfill, days),

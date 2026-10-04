@@ -1,4 +1,5 @@
-import type { AiKind, AiStatus, SpeakLang } from './ai'
+import type { ChatContext } from './ai-context'
+import type { AiKind, AiStatus, ChatAdvice, Hardware, SpeakLang, VoiceInfo } from './ai'
 import type { ChatLine } from './ai-prompts'
 import type { InsightRecord, ShareCardData } from './insights'
 
@@ -106,6 +107,8 @@ export interface MoshiBridge {
   }
   ai: {
     status(): Promise<AiStatus>
+    /** The machine's GPU and memory, and the two language models that suit it best. */
+    hardware(): Promise<{ hardware: Hardware; advice: ChatAdvice }>
     /** Download (first time) and load a model; progress arrives as ai:progress events. */
     prepare(kind: AiKind, speakLang?: SpeakLang): Promise<boolean>
     /** PCM audio for a text, from the on-device reading voice of that language. */
@@ -121,10 +124,19 @@ export interface MoshiBridge {
     cached(): Promise<{ transcripts: Record<string, string>; translations: Record<string, string>; summaries: Record<string, string> }>
     /** Bullet points about these lines (cached by `key`). */
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
-    /** Three short replies to the newest line. */
-    suggest(lines: ChatLine[]): Promise<string[]>
+    /** Three short replies to the newest line; `context` is who the chat is with (pronouns and style come from the lines). */
+    suggest(lines: ChatLine[], context?: ChatContext): Promise<string[]>
     /** Three openers for a chat that has been quiet for `silentDays`. */
-    opener(lines: ChatLine[], silentDays: number, note?: string): Promise<string[]>
+    opener(lines: ChatLine[], silentDays: number, note?: string, context?: ChatContext): Promise<string[]>
+    /** Load the language model in the background, so the first suggestion does not wait for it. */
+    warm(): Promise<void>
+    /** Your voice: replies found on this computer, and the personal voice for the chat model. */
+    voiceInfo(): Promise<VoiceInfo>
+    /** Export the training folder for a personal voice (asks where); null when cancelled. */
+    voiceExport(): Promise<{ folder: string; count: number } | null>
+    /** Pick a trained voice (.gguf) and use it for the chat model; null when cancelled. */
+    voiceInstall(): Promise<VoiceInfo | null>
+    voiceRemove(): Promise<VoiceInfo>
   }
   insights: {
     /** Walk the last `days` days of every active chat into the insight store (progress arrives as insights:progress events). */
@@ -284,6 +296,12 @@ export const IPC = {
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
   aiStatus: 'ai:status',
+  aiWarm: 'ai:warm',
+  aiVoiceInfo: 'ai:voiceInfo',
+  aiVoiceExport: 'ai:voiceExport',
+  aiVoiceInstall: 'ai:voiceInstall',
+  aiVoiceRemove: 'ai:voiceRemove',
+  aiHardware: 'ai:hardware',
   aiPrepare: 'ai:prepare',
   aiRemove: 'ai:remove',
   aiReadMedia: 'ai:readMedia',

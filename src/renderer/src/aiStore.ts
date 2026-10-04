@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { detectLanguage, type AiKind, type AiProgress, type AiStatus, type SpeakLang } from '@shared/ai'
 import { playPcm, speakWithSystem, stopSpeaking, systemVoice } from './tts'
-import type { Attachment, Message } from '@shared/types'
+import { tagDefsOf, type Attachment, type Message } from '@shared/types'
 import type { ChatLine } from '@shared/ai-prompts'
+import type { ChatContext } from '@shared/ai-context'
 import { personFor, shownConversation, threadOf, useStore } from './store'
 import { translate as tr } from './i18n'
 
@@ -138,6 +139,18 @@ function linesFor(conversationId: string, count: number): ChatLine[] {
     }))
 }
 
+/** Who the chat is with, for the language model: names, the user's tags and note (pronouns and style come from the lines). */
+function contextFor(conversationId: string): ChatContext {
+  const s = useStore.getState()
+  const c = shownConversation(s, conversationId)
+  const account = c ? s.accounts[c.accountId] : undefined
+  const defs = tagDefsOf(s.settings)
+  const lang = s.settings.language
+  const tags = (s.settings.tags?.[conversationId] ?? []).map((id) => defs.find((d) => d.id === id)?.name[lang]).filter((n): n is string => !!n)
+  const me = c?.participants.find((p) => p.isMe)?.name ?? (account && !account.demo ? account.displayName : undefined)
+  return { me, them: c?.title, isGroup: c?.isGroup, tags, note: s.settings.contactOverrides?.[conversationId]?.note, conversationId }
+}
+
 const clean = (err: unknown): string => ((err as Error)?.message ?? String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
 export const useAi = create<AiState>((set, get) => {
@@ -179,6 +192,8 @@ export const useAi = create<AiState>((set, get) => {
       // Remember how many messages were unread when a chat is opened, and offer replies as new ones arrive.
       useStore.subscribe((s, prev) => {
         if (s.selectedId && s.selectedId !== prev.selectedId) {
+          // A chat was opened: have the language model loaded by the time a suggestion is wanted.
+          if (s.settings.aiSuggest !== false && get().status?.chat.ready) void window.unison.ai.warm().catch(() => undefined)
           set({ unreadAtOpen: { ...get().unreadAtOpen, [s.selectedId]: shownConversation(prev, s.selectedId)?.unreadCount ?? 0 } })
         }
         const id = s.selectedId
@@ -351,7 +366,7 @@ export const useAi = create<AiState>((set, get) => {
       await withModel('chat', async () => {
         set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, forId: last.id } } })
         try {
-          const items = await window.unison.ai.suggest(linesFor(conversationId, 12))
+          const items = await window.unison.ai.suggest(linesFor(conversationId, 40), contextFor(conversationId))
           // The chat may have moved on while the model was thinking.
           const now = threadMessages(conversationId).at(-1)
           if (now && now.id !== last.id && now.isOutgoing) {
@@ -377,7 +392,7 @@ export const useAi = create<AiState>((set, get) => {
       set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, opener: true, silentDays, forId } } })
       try {
         const note = useStore.getState().settings.contactOverrides?.[conversationId]?.note
-        const items = await window.unison.ai.opener(linesFor(conversationId, 12), silentDays, note)
+        const items = await window.unison.ai.opener(linesFor(conversationId, 40), silentDays, note, contextFor(conversationId))
         if (threadMessages(conversationId).at(-1)?.id !== forId) return get().clearSuggestions(conversationId)
         set({ suggestions: { ...get().suggestions, [conversationId]: items.length ? { items, forId, opener: true, silentDays } : {} } })
       } catch {

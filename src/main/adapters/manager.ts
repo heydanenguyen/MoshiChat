@@ -27,6 +27,8 @@ import type { AdapterContext, PlatformAdapter } from './types'
 import type { Peer } from '@shared/types'
 import { isShared, matchesQuery, previewOf, statsOf } from './types'
 import { DemoAdapter } from './demo'
+import { GmailAdapter, type GmailSecret } from './gmail'
+import { SlackAdapter, type SlackSecret } from './slack'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
 import { ZaloAdapter, type ZaloSecret } from './zalo'
@@ -131,6 +133,10 @@ export class AccountManager {
       adapter = new TelegramAdapter(tempId, { apiId: input.apiId, apiHash: input.apiHash }, ctx)
     } else if (input.platform === 'zalo') {
       adapter = new ZaloAdapter(tempId, {}, ctx)
+    } else if (input.platform === 'gmail') {
+      adapter = new GmailAdapter(tempId, { email: input.email.trim(), appPassword: input.appPassword }, ctx)
+    } else if (input.platform === 'slack') {
+      adapter = new SlackAdapter(tempId, { token: input.token.trim(), appToken: input.appToken?.trim() || undefined }, ctx)
     } else {
       adapter = new WhatsAppAdapter(tempId, { authDir: `wa-${randomUUID().slice(0, 8)}` }, ctx)
     }
@@ -805,6 +811,12 @@ function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Sto
   } else if (stored.platform === 'whatsapp') {
     const secret = storage.readSecret<WhatsAppSecret>(stored.id)
     if (secret) adapter = new WhatsAppAdapter(stored.id, secret, ctx)
+  } else if (stored.platform === 'gmail') {
+    const secret = storage.readSecret<GmailSecret>(stored.id)
+    if (secret) adapter = new GmailAdapter(stored.id, secret, ctx)
+  } else if (stored.platform === 'slack') {
+    const secret = storage.readSecret<SlackSecret>(stored.id)
+    if (secret) adapter = new SlackAdapter(stored.id, secret, ctx)
   } else if (stored.id.startsWith('messenger:fb-')) {
     const secret = storage.readSecret<FacebookPersonalSecret>(stored.id)
     if (secret) adapter = new FacebookPersonalAdapter(stored.id, secret, ctx)

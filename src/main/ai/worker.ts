@@ -7,6 +7,7 @@
  */
 import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
 import type { ChatMessage } from '@shared/ai-prompts'
+import { chat as llmChat, download as llmDownload, hardware as llmHardware, load as llmLoad, voiceState, warm as llmWarm, type ChatOptions } from './llm'
 
 export type Device = 'dml' | 'cpu'
 
@@ -15,9 +16,12 @@ type Request =
   | { type: 'prepare'; id: number; kind: AiKind; voiceModel: VoiceModel; chatModel: ChatModel; speakLang: SpeakLang; device: Device }
   | { type: 'speak'; id: number; speakLang: SpeakLang; text: string }
   | { type: 'cutout'; id: number; image: Uint8Array }
-  | { type: 'chat'; id: number; chatModel: ChatModel; messages: ChatMessage[]; maxNewTokens: number }
+  | { type: 'chat'; id: number; chatModel: ChatModel; messages: ChatMessage[]; maxNewTokens: number; schema?: unknown; options?: ChatOptions }
+  | { type: 'warm'; id: number; chatModel: ChatModel; voice?: boolean }
+  | { type: 'voice'; id: number; chatModel: ChatModel }
   | { type: 'transcribe'; id: number; voiceModel: VoiceModel; device: Device; audio: Float32Array; language?: string }
   | { type: 'translate'; id: number; texts: string[]; src: string; tgt: string }
+  | { type: 'hardware'; id: number }
 
 type Pipe = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>
 
@@ -25,6 +29,8 @@ const port = (process as unknown as { parentPort: { on(e: 'message', cb: (e: { d
 const send = (message: unknown): void => port.postMessage(message)
 
 let transformers: typeof import('@huggingface/transformers') | undefined
+/** Where models live (<userData>/models); the language model's GGUF files go in its gguf folder. */
+let modelsDir = ''
 const pipes = new Map<string, Promise<Pipe>>()
 
 async function lib(cacheDir?: string): Promise<typeof import('@huggingface/transformers')> {
@@ -38,12 +44,12 @@ async function lib(cacheDir?: string): Promise<typeof import('@huggingface/trans
 }
 
 /** Build (or reuse) a pipeline, reporting download progress for this kind of model. */
-function pipe(kind: AiKind, voiceModel: VoiceModel, device: Device, chatModel: ChatModel = 'small', speakLang: SpeakLang = 'vi'): Promise<Pipe> {
-  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'chat' ? AI_MODELS.chat[chatModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : kind === 'cutout' ? AI_MODELS.cutout : AI_MODELS.translate
+function pipe(kind: Exclude<AiKind, 'chat'>, voiceModel: VoiceModel, device: Device, speakLang: SpeakLang = 'vi'): Promise<Pipe> {
+  const spec = kind === 'voice' ? AI_MODELS.voice[voiceModel] : kind === 'speak' ? AI_MODELS.speak[speakLang] : kind === 'cutout' ? AI_MODELS.cutout : AI_MODELS.translate
   const key = `${spec.repo}|${device}`
   const existing = pipes.get(key)
   if (existing) return existing
-  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'chat' ? 'text-generation' : kind === 'speak' ? 'text-to-speech' : kind === 'cutout' ? 'background-removal' : 'translation'
+  const task = kind === 'voice' ? 'automatic-speech-recognition' : kind === 'speak' ? 'text-to-speech' : kind === 'cutout' ? 'background-removal' : 'translation'
   const files = new Map<string, { loaded: number; total: number }>()
   const progress_callback = (p: { status: string; file?: string; loaded?: number; total?: number }): void => {
     if (p.status === 'progress' && p.file) {
@@ -79,12 +85,34 @@ port.on('message', async ({ data }) => {
   const request = data
   try {
     if (request.type === 'init') {
+      modelsDir = request.cacheDir
       await lib(request.cacheDir)
+      return
+    }
+    if (request.type === 'warm') {
+      await llmWarm(modelsDir, request.chatModel, request.voice)
+      send({ type: 'result', id: request.id, value: true })
+      return
+    }
+    if (request.type === 'voice') {
+      send({ type: 'result', id: request.id, value: await voiceState(modelsDir, request.chatModel) })
+      return
+    }
+    if (request.type === 'hardware') {
+      send({ type: 'result', id: request.id, value: await llmHardware() })
+      return
+    }
+    if (request.type === 'prepare' && request.kind === 'chat') {
+      await llmDownload(modelsDir, request.chatModel, (progress) => send({ type: 'progress', kind: 'chat', phase: 'downloading', progress }))
+      send({ type: 'progress', kind: 'chat', phase: 'loading' })
+      await llmLoad(modelsDir, request.chatModel)
+      send({ type: 'progress', kind: 'chat', phase: 'ready', progress: 1 })
+      send({ type: 'result', id: request.id, value: true })
       return
     }
     if (request.type === 'prepare') {
       send({ type: 'progress', kind: request.kind, phase: 'loading' })
-      await pipe(request.kind, request.voiceModel, request.kind === 'voice' ? request.device : 'cpu', request.chatModel, request.speakLang)
+      await pipe(request.kind as Exclude<AiKind, 'chat'>, request.voiceModel, request.kind === 'voice' ? request.device : 'cpu', request.speakLang)
       send({ type: 'result', id: request.id, value: true })
       return
     }
@@ -114,22 +142,13 @@ port.on('message', async ({ data }) => {
       return
     }
     if (request.type === 'speak') {
-      const tts = await pipe('speak', 'turbo', 'cpu', 'small', request.speakLang)
+      const tts = await pipe('speak', 'turbo', 'cpu', request.speakLang)
       const out = (await tts(request.text)) as { audio: Float32Array; sampling_rate: number }
       send({ type: 'result', id: request.id, value: { audio: out.audio, rate: out.sampling_rate } })
       return
     }
     if (request.type === 'chat') {
-      const generate = await pipe('chat', 'turbo', 'cpu', request.chatModel)
-      const output = (await generate(request.messages, {
-        max_new_tokens: request.maxNewTokens,
-        do_sample: false,
-        repetition_penalty: 1.1,
-        return_full_text: false
-      })) as Array<{ generated_text?: string | ChatMessage[] }>
-      const generated = output[0]?.generated_text
-      const text = typeof generated === 'string' ? generated : (generated?.at(-1)?.content ?? '')
-      send({ type: 'result', id: request.id, value: text.trim() })
+      send({ type: 'result', id: request.id, value: await llmChat(modelsDir, request.chatModel, request.messages, request.maxNewTokens, request.schema, request.options) })
       return
     }
     if (request.type === 'translate') {

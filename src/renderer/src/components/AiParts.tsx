@@ -1,6 +1,7 @@
-import { AlertCircle, AudioLines, Captions, Cpu, Languages, RefreshCw, ShieldCheck, Sparkles, Trash2, Volume2, X } from 'lucide-react'
-import { AI_MODELS, type AiKind, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
-import type { Attachment, Message } from '@shared/types'
+import { useEffect, useState } from 'react'
+import { AlertCircle, AudioLines, Captions, Cpu, FolderOutput, Languages, RefreshCw, ShieldCheck, Sparkles, Trash2, Upload, Volume2, X } from 'lucide-react'
+import { AI_MODELS, CHAT_MODELS, chatModelOf, type AiKind, type ChatAdvice, type ChatModel, type Hardware, type SpeakLang, type VoiceInfo, type VoiceModel } from '@shared/ai'
+import { tagDefsOf, type Attachment, type Message } from '@shared/types'
 import { textKey, useAi, voiceKey } from '../aiStore'
 import { useStore, useT, useThread } from '../store'
 import { formatBytes, tip } from '../utils'
@@ -120,7 +121,7 @@ export function AiSetupSheet(): JSX.Element | null {
   const prepare = useAi((s) => s.prepare)
   const close = useAi((s) => s.closeSetup)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
-  const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
+  const chatModel = useStore((s) => chatModelOf(s.settings.chatModel))
   const speakLang = useAi((s) => s.speakLang ?? 'vi')
   if (!setup) return null
   const busy = progress?.phase === 'downloading' || progress?.phase === 'loading'
@@ -184,6 +185,68 @@ export function AiSetupSheet(): JSX.Element | null {
   )
 }
 
+const MODEL_NAME: Record<ChatModel, string> = { 'qwen35-0.8b': 'Qwen3.5 0.8B', 'qwen35-2b': 'Qwen3.5 2B', 'qwen35-4b': 'Qwen3.5 4B', 'qwen35-9b': 'Qwen3.5 9B' }
+const MODEL_TONE: Record<ChatModel, 'aiModelTiny' | 'aiModelLight' | 'aiModelBalanced' | 'aiModelBest'> = {
+  'qwen35-0.8b': 'aiModelTiny',
+  'qwen35-2b': 'aiModelLight',
+  'qwen35-4b': 'aiModelBalanced',
+  'qwen35-9b': 'aiModelBest'
+}
+
+/**
+ * The language model: what this machine has (GPU, its memory, RAM), the two models that suit it, and the others
+ * on request. A model too big for the machine still shows, marked, for whoever wants to try.
+ */
+function ChatModelPicker({ current, onPick }: { current: ChatModel; onPick(model: ChatModel): void }): JSX.Element {
+  const t = useT()
+  const [info, setInfo] = useState<{ hardware: Hardware; advice: ChatAdvice } | undefined>()
+  const [all, setAll] = useState(false)
+  useEffect(() => {
+    let live = true
+    void window.unison.ai.hardware().then((v) => live && setInfo(v)).catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [])
+  const picks = info?.advice.picks ?? (['qwen35-4b', 'qwen35-2b'] as ChatModel[])
+  const shown = all ? [...CHAT_MODELS].reverse() : [...picks, ...(picks.includes(current) ? [] : [current])]
+  const hw = info?.hardware
+  const gb = (n: number): string => `${Math.round(n)} GB`
+  const tooBig = (m: ChatModel): boolean => !!hw && AI_MODELS.chat[m].needsGb > (hw.gpu ? Math.max(hw.vramGb, hw.ramGb * 0.5) : hw.ramGb * 0.5)
+  return (
+    <div className="ai-models">
+      <div className="ai-hw">
+        <Cpu size={13} strokeWidth={2.2} />
+        {hw
+          ? hw.gpu
+            ? hw.unified
+              ? t('aiHwApple', { ram: gb(hw.ramGb) })
+              : t('aiHwGpu', { gpu: hw.gpuName ?? 'GPU', vram: gb(hw.vramGb), ram: gb(hw.ramGb) })
+            : t('aiHwCpu', { ram: gb(hw.ramGb) })
+          : t('aiHwChecking')}
+      </div>
+      {shown.map((m) => {
+        const pick = picks.indexOf(m)
+        return (
+          <button key={m} className={`ai-model ${current === m ? 'active' : ''}`} onClick={() => onPick(m)} aria-pressed={current === m}>
+            <span className="ai-model-head">
+              <b>{MODEL_NAME[m]}</b>
+              {pick === 0 && <span className="ai-model-badge best">{t('aiModelRecommended')}</span>}
+              {pick === 1 && <span className="ai-model-badge">{t('aiModelLighter')}</span>}
+              {tooBig(m) && <span className="ai-model-badge warn">{t('aiModelTooBig')}</span>}
+              <span className="ai-model-size">{(AI_MODELS.chat[m].megabytes / 1024).toFixed(1)} GB</span>
+            </span>
+            <span className="ai-model-sub">{t(MODEL_TONE[m])}{pick === 0 && info?.advice.on === 'cpu' ? ` · ${t('aiModelOnCpu')}` : ''}</span>
+          </button>
+        )
+      })}
+      <button className="ai-models-more" onClick={() => setAll((a) => !a)}>
+        {all ? t('aiModelsFewer') : t('aiModelsAll')}
+      </button>
+    </div>
+  )
+}
+
 /** Settings: on-device AI models (status, quality, download, free the space). */
 export function AiSettings(): JSX.Element {
   const t = useT()
@@ -193,7 +256,7 @@ export function AiSettings(): JSX.Element {
   const remove = useAi((s) => s.remove)
   const refresh = useAi((s) => s.refresh)
   const voiceModel = useStore((s) => s.settings.voiceModel ?? 'turbo')
-  const chatModel = useStore((s) => s.settings.chatModel ?? 'small')
+  const chatModel = useStore((s) => chatModelOf(s.settings.chatModel))
   const suggestLanguage = useStore((s) => s.settings.suggestLanguage)
   const aiSuggest = useStore((s) => s.settings.aiSuggest !== false)
   const setSettings = useStore((s) => s.setSettings)
@@ -232,13 +295,7 @@ export function AiSettings(): JSX.Element {
           )}
           {kind === 'chat' && (
             <>
-              <div className="segmented ai-quality">
-                {(['small', 'better'] as ChatModel[]).map((m) => (
-                  <button key={m} className={chatModel === m ? 'active' : ''} onClick={() => void setSettings({ chatModel: m }).then(() => refresh())}>
-                    {m === 'small' ? t('aiQualityFast') : t('aiQualityBetter')} · {AI_MODELS.chat[m].megabytes} MB
-                  </button>
-                ))}
-              </div>
+              <ChatModelPicker current={chatModel} onPick={(m) => void setSettings({ chatModel: m }).then(() => refresh())} />
               <div className="ai-suggest-lang">
                 <span className="ai-suggest-lang-label">{t('suggestLanguage')}</span>
                 <div className="segmented">
@@ -287,6 +344,7 @@ export function AiSettings(): JSX.Element {
         </div>
         <button className={`switch ${aiSuggest ? 'on' : ''}`} role="switch" aria-checked={aiSuggest} onClick={() => void setSettings({ aiSuggest: !aiSuggest })} />
       </div>
+      <YourVoice />
       <div className="settings-row">
         <div className="settings-row-text">
           <div className="settings-row-sub">
@@ -294,6 +352,106 @@ export function AiSettings(): JSX.Element {
             {status && status.bytes > 0 ? ` · ${t('aiSpace', { size: formatBytes(status.bytes) })}` : ''}
           </div>
         </div>
+      </div>
+    </>
+  )
+}
+
+/**
+ * Settings: suggestions in the user's own voice. Examples from their earlier replies (on by default), the tags
+ * whose chats are left out, and the personal voice: export the training folder, use a trained file, remove it.
+ */
+function YourVoice(): JSX.Element {
+  const t = useT()
+  const settings = useStore((s) => s.settings)
+  const setSettings = useStore((s) => s.setSettings)
+  const examplesOn = settings.aiStyleExamples !== false
+  const loraOn = settings.aiLora !== false
+  const skip = settings.aiStyleSkipTags ?? []
+  const chatModel = chatModelOf(settings.chatModel)
+  const [info, setInfo] = useState<VoiceInfo>()
+  const [exported, setExported] = useState<{ folder: string; count: number }>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    let live = true
+    void window.unison.ai.voiceInfo().then((i) => live && setInfo(i)).catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [chatModel, skip.join(',')])
+
+  const run = async (task: () => Promise<void>): Promise<void> => {
+    setBusy(true)
+    setError(undefined)
+    try {
+      await task()
+    } catch (err) {
+      setError(((err as Error).message ?? String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const toggleTag = (id: string): void => void setSettings({ aiStyleSkipTags: skip.includes(id) ? skip.filter((x) => x !== id) : [...skip, id] })
+  const mac = navigator.userAgent.includes('Mac')
+
+  return (
+    <>
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <div className="settings-row-title">{t('voiceExamplesTitle')}</div>
+          <div className="settings-row-sub">{info ? t('voiceExamplesHint', { n: info.pairs.toLocaleString() }) : t('voiceExamplesHintShort')}</div>
+          {examplesOn && (
+            <div className="voice-skip">
+              <span className="voice-skip-label">{t('voiceSkipTags')}</span>
+              <div className="ai-langs">
+                {tagDefsOf(settings).map((tag) => (
+                  <button key={tag.id} className={`ai-lang voice-tag ${skip.includes(tag.id) ? 'off' : ''}`} aria-pressed={skip.includes(tag.id)} onClick={() => toggleTag(tag.id)}>
+                    {tag.name[settings.language]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <button className={`switch ${examplesOn ? 'on' : ''}`} role="switch" aria-checked={examplesOn} onClick={() => void setSettings({ aiStyleExamples: !examplesOn })} />
+      </div>
+      <div className="settings-row ai-row voice-lora">
+        <div className="settings-row-text">
+          <div className="settings-row-title">
+            {t('voiceLoraTitle')}
+            {info?.present ? (
+              <span className={`ai-status ${info.error ? 'error' : 'ready'}`}>{info.error ? t('voiceLoraMismatch') : t('voiceLoraOn', { model: MODEL_NAME[info.model] })}</span>
+            ) : (
+              <span className="ai-status">{t('voiceLoraNone')}</span>
+            )}
+          </div>
+          <div className="settings-row-sub">{t('voiceLoraHint', { model: MODEL_NAME[chatModel] })}</div>
+          <div className="voice-lora-actions">
+            <button className="btn" disabled={busy || !info?.pairs} onClick={() => void run(async () => {
+              const result = await window.unison.ai.voiceExport()
+              if (result) setExported(result)
+            })}>
+              <FolderOutput size={14} strokeWidth={2.3} /> {t('voiceExport')}
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={() => void run(async () => {
+              const next = await window.unison.ai.voiceInstall()
+              if (next) setInfo(next)
+            })}>
+              <Upload size={14} strokeWidth={2.3} /> {t('voiceInstall')}
+            </button>
+            {info?.present && (
+              <button className="icon-btn" title={t('voiceRemove')} disabled={busy} onClick={() => void run(async () => setInfo(await window.unison.ai.voiceRemove()))}>
+                <Trash2 size={15} strokeWidth={2.2} />
+              </button>
+            )}
+          </div>
+          {exported && <div className="voice-exported">{t(mac ? 'voiceExportedMac' : 'voiceExportedWin', { n: exported.count.toLocaleString() })}</div>}
+          {info?.error && <div className="field-error">{info.error}</div>}
+          {error && <div className="field-error">{error}</div>}
+        </div>
+        {info?.present && <button className={`switch ${loraOn ? 'on' : ''}`} role="switch" aria-checked={loraOn} title={t('voiceLoraUse')} onClick={() => void setSettings({ aiLora: !loraOn })} />}
       </div>
     </>
   )

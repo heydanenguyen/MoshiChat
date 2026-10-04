@@ -138,3 +138,145 @@ export function parseSuggestions(text: string): string[] {
   }
   return out
 }
+
+// ================================================================== replies with context (llama.cpp models)
+
+import { INTENTS, profileText, type Address, type ChatContext, type Intent, type Style } from './ai-context'
+
+/** "Name: text" lines without clocks, for writing replies: with "[09:41]" in front the model copies the format. */
+export function chatLines(lines: ChatLine[], language: string): string {
+  const me = language === 'vi' ? 'Tôi' : 'Me'
+  return lines
+    .slice(-MAX_LINES)
+    .map((l) => {
+      const text = l.text.replace(/\s+/g, ' ').trim()
+      return `${l.mine ? me : l.who}: ${text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS - 1)}…` : text}`
+    })
+    .join('\n')
+}
+
+/** The model's replies, one a line; when it ran them together on one line, one a sentence. */
+export function splitReplies(text: string): string[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  if (lines.length >= 3) return lines
+  return lines.flatMap((l) => l.split(/(?<=[.!?…])\s+(?=\p{Lu})/u)).map((l) => l.trim()).filter(Boolean)
+}
+
+/**
+ * The personal voice's prompt: one reply, the user's next message in the chat. The very same shape is used to
+ * train the LoRA (tools/voice-lora) and to ask it, so it sees exactly what it learned on.
+ */
+export const VOICE_SYSTEM = 'Bạn là Tôi. Viết tin nhắn tiếp theo Tôi gửi trong đoạn chat, đúng giọng của Tôi. Chỉ viết nội dung tin.'
+
+export function voiceMessages(lines: Array<{ mine?: boolean; text: string }>): ChatMessage[] {
+  const chat = lines
+    .slice(-6)
+    .map((l) => `${l.mine ? 'Tôi' : 'Họ'}: ${l.text.replace(/\s+/g, ' ').trim().slice(0, 300)}`)
+    .join('\n')
+  return [
+    { role: 'system', content: VOICE_SYSTEM },
+    { role: 'user', content: chat }
+  ]
+}
+
+/** Exactly three short replies, as JSON (llama.cpp keeps the model inside this shape). */
+export const REPLIES_SCHEMA = {
+  type: 'object',
+  properties: { replies: { type: 'array', items: { type: 'string', minLength: 2, maxLength: 110 }, minItems: 3, maxItems: 3 } }
+} as const
+
+/** One kind of message, as JSON. */
+export const INTENT_SCHEMA = { type: 'object', properties: { intent: { enum: INTENTS } } } as const
+
+const INTENT_RULE: Record<'vi' | 'en', Record<Intent, string>> = {
+  vi: {
+    good_news: 'Người kia vừa khoe tin vui. Cả 3 câu chúc mừng thật lòng và vui cùng họ; ít nhất 2 câu hỏi thêm về chuyện đó (chi tiết, cảm xúc, ăn mừng). Đừng lái sang chuyện khác.',
+    bad_news: 'Người kia đang buồn hoặc gặp chuyện. Hỏi han, an ủi nhẹ nhàng, đề nghị giúp; không khuyên dạy, không đùa.',
+    question: 'Đây là câu hỏi. Một câu trả lời có hoặc đồng ý, một câu trả lời không hoặc chưa, một câu hỏi lại cho rõ.',
+    request: 'Người kia nhờ việc. Một câu nhận làm ngay, một câu hẹn thời gian cụ thể, một câu hỏi thêm chi tiết cần thiết.',
+    invite: 'Người kia rủ đi đâu hoặc làm gì. Một câu nhận lời hào hứng, một câu hỏi giờ hoặc địa điểm, một câu từ chối khéo kèm hẹn dịp khác.',
+    thanks: 'Người kia cảm ơn. Đáp lại nhẹ nhàng, tự nhiên, có thể mời họ cứ nhờ tiếp.',
+    apology: 'Người kia xin lỗi. Bỏ qua nhẹ nhàng, cho họ yên tâm.',
+    greeting: 'Người kia chào hỏi. Chào lại tự nhiên và mở chuyện.',
+    info: 'Một câu xác nhận đã biết, một câu hỏi thêm, một câu nói tiếp chuyện.'
+  },
+  en: {
+    good_news: 'They just shared good news. All 3 replies congratulate them warmly; at least 2 ask more about it (details, how they feel, celebrating). Do not change the subject.',
+    bad_news: 'They are upset or going through something. Check in, comfort gently, offer help; no lecturing, no jokes.',
+    question: 'This is a question. One reply says yes or agrees, one says no or not yet, one asks back for a detail.',
+    request: 'They are asking for something. One reply agrees to do it now, one gives a concrete time, one asks for a needed detail.',
+    invite: 'They are inviting you. One reply accepts eagerly, one asks when or where, one declines kindly and suggests another time.',
+    thanks: 'They are thanking you. Answer lightly and naturally.',
+    apology: 'They are apologising. Let it go kindly and reassure them.',
+    greeting: 'They are saying hi. Greet back naturally and open a chat.',
+    info: 'One reply acknowledges it, one asks more, one keeps the conversation going.'
+  }
+}
+
+/** What kind of message is being answered, for when the words alone do not tell. */
+export function classifyMessages(text: string): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        'Classify the chat message by what it asks of the reader. good_news: sharing something happy that happened. bad_news: sharing something sad, a worry or a problem. question: asking for information. request: asking the reader to do something. invite: suggesting to meet or do something together. thanks: thanking. apology: apologising. greeting: only a hello with nothing else. info: telling something, a status update, a memory, anything else.'
+    },
+    { role: 'user', content: text.replace(/\s+/g, ' ').trim().slice(0, MAX_CHARS) }
+  ]
+}
+
+/**
+ * Three replies to the newest message, written as the user: told who they are talking to, how they address each
+ * other, how the user writes, and what kind of message it is. Returns JSON (REPLIES_SCHEMA).
+ */
+export function replyMessages(lines: ChatLine[], language: string, replyLanguage: 'vi' | 'en', context: ChatContext, address: Address, style: Style, intent: Intent): ChatMessage[] {
+  const vi = language === 'vi'
+  const writeIn = replyLanguage === 'vi' ? (vi ? 'Viết bằng tiếng Việt.' : 'Write in Vietnamese.') : vi ? 'Viết bằng tiếng Anh.' : 'Write in English.'
+  const system = vi
+    ? `Bạn viết sẵn câu trả lời tin nhắn giúp người dùng ("Tôi"), như chính Tôi đang gõ. Viết 3 câu ngắn (dưới 20 từ), tự nhiên như người Việt nhắn tin hằng ngày, đúng cách xưng hô và văn phong của Tôi trong hồ sơ. ${INTENT_RULE.vi[intent]} Ba câu phải khác hướng nhau. Mỗi câu chỉ là nội dung tin nhắn: không kèm tên người gửi, không kèm giờ, không giải thích. Không lặp lại tin của người kia. ${writeIn} Trả lời đúng 3 dòng, mỗi dòng một câu, không đánh số.`
+    : `You draft replies for the user ("Me"), as if Me were typing. Write 3 short replies (under 20 words), natural like everyday texting, matching how Me addresses them and Me's style in the profile. ${INTENT_RULE.en[intent]} The three must go in different directions. Each reply is only the message text: no sender name, no time, no explanation. Do not repeat their message. ${writeIn} Answer with exactly 3 lines, one reply per line, no numbering.`
+  const recent = lines.slice(-12)
+  const answering = [...recent].reverse().find((l) => !l.mine) ?? recent.at(-1)
+  const profile = profileText(context, address, style, vi ? 'vi' : 'en')
+  const label = vi ? 'Tin cần trả lời' : 'Message to answer'
+  const chatLabel = vi ? 'Đoạn chat' : 'Chat'
+  // who is writing to whom, said last: small models otherwise answer as the other person
+  const ask = answering && !answering.mine ? (vi ? `\n\nViết 3 tin Tôi nhắn lại cho ${answering.who}, mỗi tin một dòng:` : `\n\nWrite 3 messages Me sends back to ${answering.who}, one per line:`) : ''
+  const user = `${profile}\n\n${chatLabel}:\n${chatLines(recent, language)}${answering ? `\n\n${label}: ${answering.who}: ${answering.text.replace(/\s+/g, ' ').trim().slice(0, MAX_CHARS)}` : ''}${ask}`
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user }
+  ]
+}
+
+/** Openers with the same profile (pronouns, style, the user's note), as JSON (REPLIES_SCHEMA). */
+export function openerWithContext(lines: ChatLine[], language: string, silentDays: number, replyLanguage: 'vi' | 'en', context: ChatContext, address: Address, style: Style): ChatMessage[] {
+  const vi = language === 'vi'
+  const writeIn = replyLanguage === 'vi' ? (vi ? 'Viết bằng tiếng Việt.' : 'Write in Vietnamese.') : vi ? 'Viết bằng tiếng Anh.' : 'Write in English.'
+  const system = vi
+    ? `Bạn giúp người dùng ("Tôi") nhắn lại cho một người đã lâu không nói chuyện (${silentDays} ngày). Viết 3 tin mở lời ngắn (dưới 20 từ), như chính Tôi đang gõ: ấm áp, tự nhiên, không sến, đúng cách xưng hô và văn phong trong hồ sơ. Ba câu khác nhau: một câu hỏi thăm dạo này thế nào, một câu nhắc lại chuyện cụ thể (từ ghi chú hoặc lần nói chuyện trước), một câu rủ gặp hoặc đùa nhẹ. Chỉ viết nội dung tin, không kèm tên hay giờ. ${writeIn} Trả lời đúng 3 dòng, mỗi dòng một câu, không đánh số.`
+    : `You help the user ("Me") write to someone they have not talked to in ${silentDays} days. Write 3 short openers (under 20 words) as Me would type them: warm, natural, not cheesy, matching Me's pronouns and style in the profile. Make them differ: one asks how they have been, one picks up something specific (from the note or the last chat), one suggests meeting up or jokes lightly. Only the message text, no name or time. ${writeIn} Answer with exactly 3 lines, one per line, no numbering.`
+  const recent = lines.slice(-12)
+  const profile = profileText(context, address, style, vi ? 'vi' : 'en')
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: `${profile}${recent.length ? `\n\n${vi ? 'Lần nói chuyện trước' : 'Last time'}:\n${chatLines(recent, language)}` : ''}` }
+  ]
+}
+
+/**
+ * The model's JSON, read forgivingly: llama.cpp sometimes hands the text back without the opening brace the grammar
+ * made it write, or with stray text around it.
+ */
+export function parseJsonLoose<T>(text: string): T {
+  const t = text.trim()
+  const tries = [t, `{${t}`, t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)]
+  for (const candidate of tries) {
+    try {
+      return JSON.parse(candidate) as T
+    } catch {
+      /* next */
+    }
+  }
+  throw new Error('The model did not answer in JSON')
+}

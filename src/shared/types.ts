@@ -5,7 +5,7 @@ import type { LogoId } from './logos'
 import type { LaterEntry } from './later'
 /** Domain model shared between main, preload and renderer. */
 
-export type Platform = 'messenger' | 'instagram' | 'telegram' | 'zalo' | 'whatsapp'
+export type Platform = 'messenger' | 'instagram' | 'telegram' | 'zalo' | 'whatsapp' | 'gmail' | 'slack'
 
 export type AccountStatus = 'connecting' | 'connected' | 'disconnected' | 'needs_auth' | 'error'
 
@@ -424,6 +424,8 @@ export type AddAccountInput =
   | { platform: 'instagram'; pageId: string; accessToken: string }
   | { platform: 'zalo' }
   | { platform: 'whatsapp' }
+  | { platform: 'gmail'; email: string; appPassword: string }
+  | { platform: 'slack'; token: string; appToken?: string }
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type Language = 'vi' | 'en'
@@ -680,6 +682,12 @@ export interface Settings {
   askWhereToSave?: boolean
   /** Reply suggestions appear by themselves under new messages (once the chat model is installed). */
   aiSuggest?: boolean
+  /** Suggestions learn from how the user answered similar messages before (examples picked on this computer). Default on. */
+  aiStyleExamples?: boolean
+  /** Tag ids whose chats are never used as examples nor exported for training. */
+  aiStyleSkipTags?: string[]
+  /** Use the personal voice (a LoRA trained on this computer) when one is installed for the chat model. Default on. Per computer. */
+  aiLora?: boolean
   /** Sound for new messages; 'off' leaves Windows' own notification sound. Default 'bubbles'. */
   sound?: SoundId | 'off'
   /** 0..1, default 0.7. */
@@ -854,7 +862,7 @@ export interface PlatformMeta {
   method: string
 }
 
-export const PLATFORM_ORDER: Platform[] = ['messenger', 'instagram', 'telegram', 'zalo', 'whatsapp']
+export const PLATFORM_ORDER: Platform[] = ['messenger', 'instagram', 'telegram', 'zalo', 'whatsapp', 'gmail', 'slack']
 
 export const PLATFORMS: Record<Platform, PlatformMeta> = {
   messenger: {
@@ -891,5 +899,19 @@ export const PLATFORMS: Record<Platform, PlatformMeta> = {
     color: '#25D366',
     gradient: 'linear-gradient(135deg, #5DE68C 0%, #1FAF54 100%)',
     method: 'QR code'
+  },
+  gmail: {
+    id: 'gmail',
+    name: 'Gmail',
+    color: '#EA4335',
+    gradient: 'linear-gradient(135deg, #FF6B5E 0%, #D93025 100%)',
+    method: 'IMAP + app password'
+  },
+  slack: {
+    id: 'slack',
+    name: 'Slack',
+    color: '#A855B5',
+    gradient: 'linear-gradient(135deg, #7C3085 0%, #4A154B 100%)',
+    method: 'Slack API'
   }
 }

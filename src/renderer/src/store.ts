@@ -2128,7 +2128,7 @@ function computeUnread(
   // Settings of a merged person live under its anchor's id; so does whether it is still a request.
   const shownAs = (id: string): string => personIn(people, conversations, id)?.members[0] ?? id
   const folded = foldPeople(conversations, people)
-  const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0 }
+  const byPlatform: Record<Platform, number> = { messenger: 0, instagram: 0, telegram: 0, zalo: 0, whatsapp: 0, gmail: 0, slack: 0 }
   const byAccount: Record<string, number> = {}
   const byTag: Record<string, number> = {}
   let total = 0

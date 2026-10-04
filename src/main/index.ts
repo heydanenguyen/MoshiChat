@@ -34,7 +34,10 @@ import { freshPartition, legacyPartition, newPartition, partitionFor, sessionUse
 import { givenName } from '@shared/extras'
 import { addSticker, customStickerFile, describeSource, listStickers, pickStickerSource, removeSticker, renameSticker, sourceFromBytes, stickerSource, customStickerPath } from './stickers'
 import { AiService, readMedia } from './ai/service'
-import type { AiKind, SpeakLang } from '@shared/ai'
+import { StyleMemory } from './ai/style'
+import { exportVoiceTraining } from './ai/voice-export'
+import { chatModelOf, recommendChatModels, type AiKind, type SpeakLang, type VoiceInfo } from '@shared/ai'
+import type { ChatContext } from '@shared/ai-context'
 import type { ShareCardData } from '@shared/insights'
 import type { ChatLine } from '@shared/ai-prompts'
 import { createBackup, inspectBackup, pruneSafetyCopies, restoreBackup } from './backup'
@@ -117,12 +120,19 @@ const appLock = new AppLock(storage, emit, log)
 
 const ai = new AiService(
   () => storage.settings.voiceModel ?? 'turbo',
-  () => storage.settings.chatModel ?? 'small',
+  () => chatModelOf(storage.settings.chatModel),
   () => storage.settings.language,
   () => storage.settings.suggestLanguage ?? 'auto',
   (progress) => emit({ type: 'ai:progress', progress }),
   log
 )
+
+const style = new StyleMemory(() => manager.insightRecords(), () => manager.listConversations(), () => storage.settings)
+ai.examplesFor = (lines, context, language) => style.examples(lines, context, language)
+ai.voiceAllowed = () => storage.settings.aiLora !== false
+storage.onSettingsChanged((before, after) => {
+  if (before.aiStyleSkipTags !== after.aiStyleSkipTags || before.tags !== after.tags) style.invalidate()
+})
 
 const sync = new SyncService(storage, emit, log)
 
@@ -1436,6 +1446,10 @@ function registerIpc(): void {
   handle(IPC.updateDownload, () => updater.download())
   on(IPC.updateInstall, () => updater.install())
   handle(IPC.aiStatus, () => ai.status())
+  handle(IPC.aiHardware, async () => {
+    const hardware = await ai.hardware()
+    return { hardware, advice: recommendChatModels(hardware) }
+  })
   handle(IPC.aiPrepare, (_e, kind: AiKind, speakLang?: SpeakLang) => ai.prepare(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice', speakLang === 'en' ? 'en' : speakLang === 'vi' ? 'vi' : undefined))
   handle(IPC.aiRemove, (_e, kind: AiKind) => ai.remove(kind === 'translate' || kind === 'chat' || kind === 'speak' || kind === 'cutout' ? kind : 'voice'))
   handle(IPC.aiSpeak, (_e, text: string, speakLang: SpeakLang) => ai.speak(String(text ?? '').slice(0, 1200), speakLang === 'en' ? 'en' : 'vi'))
@@ -1447,15 +1461,67 @@ function registerIpc(): void {
   handle(IPC.aiTranslateTo, (_e, text: string, target: string) => ai.translateTo(String(text ?? '').slice(0, 5000), /^[a-z]{2}$/.test(String(target)) ? String(target) : 'en'))
   handle(IPC.aiCached, () => ai.cached())
   // Chat lines come from the renderer already trimmed; bound them again here.
+  /** The chat's context from the renderer, kept to plain short strings. */
+  const cleanContext = (input: unknown): ChatContext => {
+    const c = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+    const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.slice(0, max) : undefined)
+    return {
+      me: str(c.me, 80),
+      them: str(c.them, 120),
+      isGroup: c.isGroup === true,
+      tags: Array.isArray(c.tags) ? c.tags.filter((t): t is string => typeof t === 'string').slice(0, 6).map((t) => t.slice(0, 40)) : undefined,
+      note: str(c.note, 300),
+      closeFriend: c.closeFriend === true,
+      conversationId: str(c.conversationId, 300)
+    }
+  }
   const cleanLines = (lines: unknown): ChatLine[] =>
     (Array.isArray(lines) ? lines : [])
       .slice(-80)
       .map((l) => ({ who: String((l as ChatLine).who ?? '').slice(0, 60), text: String((l as ChatLine).text ?? '').slice(0, 500), at: Number((l as ChatLine).at) || 0, mine: !!(l as ChatLine).mine }))
   handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
-  handle(IPC.aiSuggest, (_e, lines: unknown) => ai.suggest(cleanLines(lines)))
-  handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown) =>
-    ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined)
+  handle(IPC.aiSuggest, (_e, lines: unknown, context: unknown) => ai.suggest(cleanLines(lines), cleanContext(context)))
+  handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown, context: unknown) =>
+    ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined, cleanContext(context))
   )
+  handle(IPC.aiWarm, () => ai.warm())
+  const voiceInfo = async (): Promise<VoiceInfo> => {
+    const [pairs, state, file] = await Promise.all([style.count().catch(() => 0), ai.voice().catch(() => ({ present: false, error: undefined })), stat(ai.voicePath()).catch(() => undefined)])
+    return { model: chatModelOf(storage.settings.chatModel), pairs, present: state.present, error: state.error, at: file?.mtimeMs }
+  }
+  handle(IPC.aiVoiceInfo, () => voiceInfo())
+  handle(IPC.aiVoiceExport, async () => {
+    const vi = storage.settings.language === 'vi'
+    const model = chatModelOf(storage.settings.chatModel)
+    // Development only: UNISON_VOICE_EXPORT_DIR skips the dialog (automated tests).
+    const testDir = !app.isPackaged ? process.env.UNISON_VOICE_EXPORT_DIR : undefined
+    const picked = testDir ? { canceled: false, filePaths: [testDir] } : await dialog.showOpenDialog(window!, {
+      title: vi ? 'Chọn nơi lưu dữ liệu luyện giọng' : 'Choose where to save the voice training folder',
+      defaultPath: app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const folder = join(picked.filePaths[0], `Moshi voice ${model} ${new Date().toLocaleDateString('sv')}`)
+    const result = await exportVoiceTraining(folder, await style.samples(), model, ai.voicePath())
+    if (!testDir) void shell.openPath(folder)
+    return result
+  })
+  handle(IPC.aiVoiceInstall, async () => {
+    const vi = storage.settings.language === 'vi'
+    const picked = await dialog.showOpenDialog(window!, {
+      title: vi ? 'Chọn file giọng riêng (.gguf)' : 'Choose your voice file (.gguf)',
+      filters: [{ name: 'GGUF', extensions: ['gguf'] }],
+      properties: ['openFile']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    await ai.installVoice(picked.filePaths[0])
+    await ai.warm()
+    return voiceInfo()
+  })
+  handle(IPC.aiVoiceRemove, async () => {
+    await ai.removeVoice()
+    return voiceInfo()
+  })
   handle(IPC.backupCreate, async (_e, input: { password: string; includeSessions: boolean }) => {
     const day = new Date().toISOString().slice(0, 10)
     const vi = storage.settings.language === 'vi'

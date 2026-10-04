@@ -63,6 +63,18 @@ function Glyph({ platform, size }: { platform: Platform; size: number }): JSX.El
           <path d="M4.5 5.5h13.2v2.6L9.4 17.1h8.6v2.4H4.2v-2.6l8.3-9H4.5z" />
         </svg>
       )
+    case 'gmail':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M3.5 5h17A1.5 1.5 0 0 1 22 6.5v11a1.5 1.5 0 0 1-1.5 1.5H18V9.6l-6 4.5-6-4.5V19H3.5A1.5 1.5 0 0 1 2 17.5v-11A1.5 1.5 0 0 1 3.5 5z" />
+        </svg>
+      )
+    case 'slack':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M9 2.5a2 2 0 0 0 0 4h2v-2a2 2 0 0 0-2-2zM9 8H4a2 2 0 0 0 0 4h5a2 2 0 0 0 0-4zM21.5 10a2 2 0 0 0-4 0v2h2a2 2 0 0 0 2-2zM16 10V5a2 2 0 0 0-4 0v5a2 2 0 0 0 4 0zM15 21.5a2 2 0 0 0 0-4h-2v2a2 2 0 0 0 2 2zM15 16h5a2 2 0 0 0 0-4h-5a2 2 0 0 0 0 4zM2.5 14a2 2 0 0 0 4 0v-2h-2a2 2 0 0 0-2 2zM8 14v5a2 2 0 0 0 4 0v-5a2 2 0 0 0-4 0z" />
+        </svg>
+      )
     case 'whatsapp':
       return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>

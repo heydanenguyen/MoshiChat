@@ -50,6 +50,22 @@ const GLYPHS: Record<GummyName, Glyph> = {
     shapes: <path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.7-1.2A9 9 0 1 0 12 3z" />,
     details: <path d="M9.1 7.4c.3 0 .5.1.6.4l.9 2c.1.2 0 .5-.1.7l-.7.8c.6 1.3 1.7 2.4 3 3l.8-.7c.2-.2.5-.2.7-.1l2 .9c.3.1.4.4.4.6-.1 1.1-1 1.9-2.1 1.9-3.9 0-7.1-3.2-7.1-7.1 0-1.1.8-2 1.9-2.1z" />
   },
+  gmail: {
+    color: '#ff8a7a',
+    shapes: <path d="M4 5.5h16A1.5 1.5 0 0 1 21.5 7v10a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 17V7A1.5 1.5 0 0 1 4 5.5z" />,
+    details: <path d="M4.2 7.4 12 13l7.8-5.6v2.3L12 15.4 4.2 9.7z" />
+  },
+  slack: {
+    color: '#c38be0',
+    shapes: (
+      <>
+        <rect x="9.3" y="2.5" width="3.6" height="9" rx="1.8" />
+        <rect x="11.1" y="12.5" width="3.6" height="9" rx="1.8" />
+        <rect x="2.5" y="11.1" width="9" height="3.6" rx="1.8" />
+        <rect x="12.5" y="9.3" width="9" height="3.6" rx="1.8" />
+      </>
+    )
+  },
   general: {
     color: '#b8b2d6',
     shapes: (

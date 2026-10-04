@@ -26,7 +26,10 @@ interface SeedThread {
 
 const ME = 'Bạn'
 
-const SEEDS: Record<Platform, { name: string; handle: string; threads: SeedThread[] }> = {
+/** The apps the sample data covers (mail and Slack have none). */
+type DemoPlatform = Exclude<Platform, 'gmail' | 'slack'>
+
+const SEEDS: Record<DemoPlatform, { name: string; handle: string; threads: SeedThread[] }> = {
   zalo: {
     name: 'Minh Anh',
     handle: 'minhanh',
@@ -338,7 +341,7 @@ const EXTRAS: SeedExtra[] = [
 ]
 
 /** People in the address book who have no thread yet. */
-const EXTRA_CONTACTS: Record<Platform, Array<{ id: string; name: string; handle?: string }>> = {
+const EXTRA_CONTACTS: Record<DemoPlatform, Array<{ id: string; name: string; handle?: string }>> = {
   messenger: [
     { id: 'bao', name: 'Quốc Bảo', handle: 'quocbao.design' },
     { id: 'ha', name: 'Thu Hà', handle: 'thuha.mkt' },
@@ -386,7 +389,7 @@ export class DemoAdapter implements PlatformAdapter {
     private readonly platform: Platform,
     private readonly ctx: AdapterContext
   ) {
-    const seed = SEEDS[platform]
+    const seed = SEEDS[platform as DemoPlatform]
     this.account = {
       id: `demo-${platform}`,
       platform,
@@ -400,7 +403,7 @@ export class DemoAdapter implements PlatformAdapter {
   }
 
   private buildSeed(): void {
-    const seed = SEEDS[this.platform]
+    const seed = SEEDS[this.platform as DemoPlatform]
     const now = Date.now()
     for (const thread of seed.threads) {
       const id = conversationId(this.account.id, thread.key)
@@ -541,7 +544,7 @@ export class DemoAdapter implements PlatformAdapter {
     return {
       id: peer?.id ?? id,
       name: conversation.title,
-      handle: SEEDS[this.platform].threads.find((t) => t.key === key)?.handle,
+      handle: SEEDS[this.platform as DemoPlatform].threads.find((t) => t.key === key)?.handle,
       avatarUrl: conversation.avatarUrl,
       ...facts,
       extra: conversation.isGroup ? [{ label: 'Members', value: String(conversation.participants.length) }, ...(facts.extra ?? [])] : facts.extra
@@ -553,14 +556,14 @@ export class DemoAdapter implements PlatformAdapter {
   }
 
   async listContacts(): Promise<Peer[]> {
-    return EXTRA_CONTACTS[this.platform].map((c) => ({ id: c.id, name: c.name, handle: c.handle }))
+    return EXTRA_CONTACTS[this.platform as DemoPlatform].map((c) => ({ id: c.id, name: c.name, handle: c.handle }))
   }
 
   async openConversation(peerId: string): Promise<Conversation> {
     const id = conversationId(this.account.id, `new-${peerId}`)
     const existing = this.conversations.get(id)
     if (existing) return existing
-    const contact = EXTRA_CONTACTS[this.platform].find((c) => c.id === peerId)
+    const contact = EXTRA_CONTACTS[this.platform as DemoPlatform].find((c) => c.id === peerId)
     const name = contact?.name ?? peerId
     const conversation: Conversation = {
       id,

@@ -1,11 +1,14 @@
 import { app, session, utilityProcess, type UtilityProcess } from 'electron'
-import { readFile, rm, stat, writeFile, readdir } from 'fs/promises'
-import { join } from 'path'
+import { copyFile, mkdir, readFile, rm, stat, writeFile, readdir } from 'fs/promises'
+import { dirname, join } from 'path'
 import { fileInside } from '../safety'
-import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type SpeakLang, type VoiceModel } from '@shared/ai'
+import { AI_MODELS, NLLB, aiErrorHint, detectLanguage, translationChunks, type AiKind, type AiModelSpec, type AiProgress, type AiStatus, type ChatModel, type Hardware, type SpeakLang, type VoiceModel } from '@shared/ai'
 import { nativeCutoutAvailable } from '../media/mac-cutout'
+import { ggufPresent, loraPath } from './llm'
 import { partitionFor } from '../web-partitions'
-import { openerMessages, parseSuggestions, parseSummary, suggestMessages, summaryMessages, type ChatLine } from '@shared/ai-prompts'
+import { openerWithContext, parseJsonLoose, parseSummary, splitReplies, summaryMessages, type ChatLine } from '@shared/ai-prompts'
+import { cleanReplies, detectAddress, styleOf, type ChatContext } from '@shared/ai-context'
+import { suggestReplies } from '@shared/ai-suggest'
 
 /** The worker goes away after this long without work, giving its memory back. */
 const IDLE_MS = 10 * 60 * 1000
@@ -51,6 +54,10 @@ export class AiService {
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   /** DirectML crashed this machine's worker once: voice stays on the CPU from then on. */
   private gpuBroken: boolean | undefined
+  /** The user's earlier replies to similar messages, for suggestions in their own voice (set by the app). */
+  examplesFor?: (lines: ChatLine[], context: ChatContext, language: 'vi' | 'en') => Promise<Array<{ them: string; me: string }>>
+  /** Whether the personal voice may be used (the setting; set by the app). */
+  voiceAllowed: () => boolean = () => true
 
   constructor(
     private voiceModel: () => VoiceModel,
@@ -115,7 +122,7 @@ export class AiService {
     return {
       voice: { model, ready: await present(AI_MODELS.voice[model]), gpu: (await this.voiceDevice()) === 'dml' },
       translate: { ready: await present(AI_MODELS.translate) },
-      chat: { model: this.chatModel(), ready: await present(AI_MODELS.chat[this.chatModel()]) },
+      chat: { model: this.chatModel(), ready: await ggufPresent(modelsDir(), this.chatModel()) },
       speak: { vi: await present(AI_MODELS.speak.vi), en: await present(AI_MODELS.speak.en) },
       cutout: { ready: await present(AI_MODELS.cutout), native: nativeCutoutAvailable() },
       bytes: await folderSize(modelsDir())
@@ -193,13 +200,23 @@ export class AiService {
       kind === 'voice'
         ? Object.values(AI_MODELS.voice).map((m) => m.repo)
         : kind === 'chat'
-          ? Object.values(AI_MODELS.chat).map((m) => m.repo)
+          ? // the GGUF folder, and the ONNX models earlier versions downloaded
+            ['gguf', 'onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/Qwen2.5-1.5B-Instruct']
           : kind === 'speak'
             ? Object.values(AI_MODELS.speak).map((m) => m.repo)
             : kind === 'cutout'
               ? [AI_MODELS.cutout.repo]
               : [AI_MODELS.translate.repo]
     for (const repo of repos) await rm(join(modelsDir(), ...repo.split('/')), { recursive: true, force: true })
+  }
+
+  private hardwareInfo: Promise<Hardware> | undefined
+
+  /** GPU, its memory and the RAM, as llama.cpp sees them (asked once per run). */
+  hardware(): Promise<Hardware> {
+    this.hardwareInfo ??= this.request<Hardware>({ type: 'hardware' })
+    this.hardwareInfo.catch(() => (this.hardwareInfo = undefined))
+    return this.hardwareInfo
   }
 
   async transcribe(key: string, pcm: Float32Array, language?: string): Promise<string> {
@@ -216,8 +233,46 @@ export class AiService {
     return text
   }
 
-  chat(messages: ReturnType<typeof summaryMessages>, maxNewTokens: number): Promise<string> {
-    return this.request<string>({ type: 'chat', chatModel: this.chatModel(), messages, maxNewTokens })
+  chat(messages: ReturnType<typeof summaryMessages>, maxNewTokens: number, schema?: unknown, options?: { voice?: boolean; temperature?: number }): Promise<string> {
+    return this.request<string>({ type: 'chat', chatModel: this.chatModel(), messages, maxNewTokens, schema, options })
+  }
+
+  /** Where the personal voice for the current model lives (the training tool copies its result here). */
+  voicePath(): string {
+    return loraPath(modelsDir(), this.chatModel())
+  }
+
+  /** Use this trained voice for the current model. */
+  async installVoice(file: string): Promise<void> {
+    await mkdir(dirname(this.voicePath()), { recursive: true })
+    await copyFile(file, this.voicePath())
+  }
+
+  async removeVoice(): Promise<void> {
+    await rm(this.voicePath(), { force: true })
+  }
+
+  /** The personal voice for the current model: is there one, and did it load (an error when it did not fit). */
+  voice(): Promise<{ present: boolean; error?: string }> {
+    return this.request<{ present: boolean; error?: string }>({ type: 'voice', chatModel: this.chatModel() })
+  }
+
+  /** The model's answer as JSON, in the shape of the schema. */
+  private async chatJson<T>(messages: ReturnType<typeof summaryMessages>, schema: unknown, maxNewTokens: number): Promise<T> {
+    return parseJsonLoose<T>(await this.chat(messages, maxNewTokens, schema))
+  }
+
+  /** Load the language model in the background (a chat was opened), so the first suggestion is quick. */
+  async warm(): Promise<void> {
+    if ((await this.status()).chat.ready) await this.request({ type: 'warm', chatModel: this.chatModel(), voice: this.voiceAllowed() }).catch(() => undefined)
+  }
+
+  /** What the replies are written in: the setting, or the language of the message being answered. */
+  private replyLanguage(text: string): 'vi' | 'en' {
+    const set = this.suggestLanguage()
+    if (set !== 'auto') return set
+    const found = detectLanguage(text)
+    return found === 'vi' ? 'vi' : found === 'en' ? 'en' : this.language() === 'en' ? 'en' : 'vi'
   }
 
   /** A few bullet points about these messages, cached by the newest one so reopening a chat is instant. */
@@ -247,15 +302,28 @@ export class AiService {
   }
 
   /** Three short ways to answer the newest message. Not cached: the chat moves on. */
-  async suggest(lines: ChatLine[]): Promise<string[]> {
-    const text = await askChat(this, suggestMessages(lines, this.language(), this.suggestLanguage()), 60)
-    return parseSuggestions(text)
+  async suggest(lines: ChatLine[], context: ChatContext = {}): Promise<string[]> {
+    const answering = [...lines].reverse().find((l) => !l.mine)
+    if (!answering) return []
+    const replyLanguage = this.replyLanguage(answering.text)
+    const examples = context.examples ?? (await this.examplesFor?.(lines, context, replyLanguage).catch((err: Error) => (this.log('[ai] examples failed:', err.message), []))) ?? []
+    if (examples.length) this.log(`[ai] suggestions with ${examples.length} of the user's earlier replies as examples`)
+    const result = await suggestReplies(
+      lines,
+      { context: { ...context, examples }, appLanguage: this.language(), replyLanguage, model: this.chatModel(), voice: this.voiceAllowed() && (await this.voice().catch(() => ({ present: false }))).present },
+      (messages, schema, maxTokens, options) => this.chat(messages, maxTokens, schema, options),
+      (...args) => this.log('[ai]', ...args)
+    )
+    return result.replies
   }
 
   /** Three ways to pick a quiet chat back up. Not cached either. */
-  async opener(lines: ChatLine[], silentDays: number, note?: string): Promise<string[]> {
-    const text = await askChat(this, openerMessages(lines, this.language(), silentDays, this.suggestLanguage(), note), 70)
-    return parseSuggestions(text)
+  async opener(lines: ChatLine[], silentDays: number, note?: string, context: ChatContext = {}): Promise<string[]> {
+    const language = this.replyLanguage(lines.map((l) => l.text).join(' ') || (this.language() === 'en' ? 'hello' : 'chào'))
+    const ctx = { ...context, note: note ?? context.note }
+    const address = detectAddress(lines)
+    const text = await this.chat(openerWithContext(lines, this.language(), silentDays, language, ctx, address, styleOf(lines)), 160)
+    return cleanReplies(splitReplies(text), { language, names: [ctx.me ?? ''], address })
   }
 
   /** Translate what the user typed into another language (for chatting with someone who reads it). */

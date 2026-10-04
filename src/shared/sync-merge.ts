@@ -40,6 +40,8 @@ const VALUE_KEYS = [
   'actionLabels',
   'suggestLanguage',
   'aiSuggest',
+  'aiStyleExamples',
+  'aiStyleSkipTags',
   'effects',
   'closeFriends',
   'birthdayReminders',

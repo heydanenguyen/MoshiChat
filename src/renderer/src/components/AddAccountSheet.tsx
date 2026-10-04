@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Building2, ChevronLeft, ExternalLink, KeyRound, ShieldAlert, User, X } from 'lucide-react'
+import { Building2, Check, ChevronLeft, Copy, ExternalLink, KeyRound, ShieldAlert, User, X } from 'lucide-react'
 import type { PageOption, Platform } from '@shared/types'
 import { PLATFORMS, PLATFORM_ORDER } from '@shared/types'
 import { useStore, useT, type LegalDoc } from '../store'
@@ -11,8 +11,13 @@ import { BuddyLoader } from './BuddyLoader'
 const DOCS: Partial<Record<Platform, string>> = {
   telegram: 'https://my.telegram.org/apps',
   messenger: 'https://developers.facebook.com/docs/messenger-platform/get-started',
-  instagram: 'https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/messaging'
+  instagram: 'https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/messaging',
+  gmail: 'https://myaccount.google.com/apppasswords',
+  slack: 'https://api.slack.com/apps?new_app=1'
 }
+
+/** The Slack app the user creates in their own workspace ("From an app manifest"): the scopes Moshi reads and writes with, and Socket Mode for live updates. */
+const SLACK_MANIFEST = JSON.stringify({"display_information":{"name":"Moshi","description":"Read and answer my Slack messages in Moshi"},"oauth_config":{"scopes":{"user":["channels:history","channels:read","channels:write","groups:history","groups:read","groups:write","im:history","im:read","im:write","mpim:history","mpim:read","mpim:write","users:read","chat:write","reactions:read","reactions:write","files:read"]}},"settings":{"event_subscriptions":{"user_events":["message.channels","message.groups","message.im","message.mpim","reaction_added","reaction_removed"]},"socket_mode_enabled":true}}, null, 2)
 
 type MetaMode = 'personal' | 'pages' | 'manual'
 
@@ -30,6 +35,11 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
   const [apiHash, setApiHash] = useState('')
   const [pageId, setPageId] = useState('')
   const [accessToken, setAccessToken] = useState('')
+  const [email, setEmail] = useState('')
+  const [appPassword, setAppPassword] = useState('')
+  const [slackToken, setSlackToken] = useState('')
+  const [slackAppToken, setSlackAppToken] = useState('')
+  const [copied, setCopied] = useState(false)
   const [appId, setAppId] = useState(() => {
     try {
       return localStorage.getItem(APP_ID_KEY) ?? ''
@@ -170,7 +180,7 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
                 <button key={p} className="platform-card" onClick={() => setPlatform(p)}>
                   <PlatformIcon platform={p} size={52} />
                   <span className="platform-card-name">{PLATFORMS[p].name}</span>
-                  <span className="platform-card-sub">{p === 'telegram' ? t('methodPhone') : p === 'zalo' || p === 'whatsapp' ? t('methodQr') : t('methodLogin')}</span>
+                  <span className="platform-card-sub">{p === 'telegram' ? t('methodPhone') : p === 'zalo' || p === 'whatsapp' ? t('methodQr') : p === 'gmail' ? t('methodAppPassword') : p === 'slack' ? t('methodToken') : t('methodLogin')}</span>
                 </button>
               ))}
             </div>
@@ -413,6 +423,116 @@ export function AddAccountSheet({ initialPlatform }: { initialPlatform?: Platfor
                 className="btn primary"
                 disabled={!(/^\d+$/.test(apiId.trim()) && apiHash.trim().length >= 16) || busy}
                 onClick={() => void run(() => addAccount({ platform, apiId: Number(apiId.trim()), apiHash: apiHash.trim() }))}
+              >
+                {t('connect')}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ------------------------------------------------ Gmail */}
+        {platform === 'gmail' && (
+          <>
+            <div className="sheet-body">
+              <p className="sheet-intro" style={{ margin: 0 }}>
+                {t('gmailIntro')}
+              </p>
+              <ol className="connect-steps">
+                <li>{t('gmailStep1')}</li>
+                <li>
+                  {t('gmailStep2')}{' '}
+                  <a href={DOCS.gmail} onClick={openDocs(DOCS.gmail)}>
+                    {t('gmailOpenAppPasswords')} <ExternalLink size={10} />
+                  </a>
+                </li>
+                <li>{t('gmailStep3')}</li>
+              </ol>
+              <div className="field">
+                <label className="field-label">{t('gmailAddress')}</label>
+                <input className="field-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@gmail.com" disabled={busy} spellCheck={false} />
+              </div>
+              <div className="field">
+                <label className="field-label">{t('gmailAppPassword')}</label>
+                <input className="field-input mono" type="password" value={appPassword} onChange={(e) => setAppPassword(e.target.value)} placeholder="abcd efgh ijkl mnop" disabled={busy} spellCheck={false} />
+                <span className="field-hint">{t('gmailAppPasswordHint')}</span>
+              </div>
+              {error && <div className="error-banner">{error}</div>}
+              {busy && (
+                <div className="progress-row">
+                  <BuddyLoader size={22} inline /> {t('connectingAccount')}
+                </div>
+              )}
+            </div>
+            <div className="sheet-footer">
+              <button className="btn secondary" onClick={closeSheet} disabled={busy}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn primary"
+                disabled={!(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) && appPassword.replace(/\s+/g, '').length >= 16) || busy}
+                onClick={() => void run(() => addAccount({ platform, email: email.trim(), appPassword }))}
+              >
+                {t('connect')}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ------------------------------------------------ Slack */}
+        {platform === 'slack' && (
+          <>
+            <div className="sheet-body">
+              <p className="sheet-intro" style={{ margin: 0 }}>
+                {t('slackIntro')}
+              </p>
+              <ol className="connect-steps">
+                <li>
+                  {t('slackStep1')}{' '}
+                  <a href={DOCS.slack} onClick={openDocs(DOCS.slack)}>
+                    {t('slackCreateApp')} <ExternalLink size={10} />
+                  </a>
+                </li>
+                <li>
+                  {t('slackStep2')}{' '}
+                  <button
+                    className="btn secondary small"
+                    onClick={() =>
+                      void navigator.clipboard.writeText(SLACK_MANIFEST).then(() => {
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 2000)
+                      })
+                    }
+                  >
+                    {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('textCopied') : t('slackCopyManifest')}
+                  </button>
+                </li>
+                <li>{t('slackStep3')}</li>
+                <li>{t('slackStep4')}</li>
+              </ol>
+              <div className="field">
+                <label className="field-label">{t('slackUserToken')}</label>
+                <input className="field-input mono" type="password" value={slackToken} onChange={(e) => setSlackToken(e.target.value)} placeholder="xoxp-…" disabled={busy} spellCheck={false} />
+              </div>
+              <div className="field">
+                <label className="field-label">{t('slackAppToken')}</label>
+                <input className="field-input mono" type="password" value={slackAppToken} onChange={(e) => setSlackAppToken(e.target.value)} placeholder="xapp-…" disabled={busy} spellCheck={false} />
+                <span className="field-hint">{t('slackAppTokenHint')}</span>
+              </div>
+              {error && <div className="error-banner">{error}</div>}
+              {busy && (
+                <div className="progress-row">
+                  <BuddyLoader size={22} inline /> {t('connectingAccount')}
+                </div>
+              )}
+            </div>
+            <div className="sheet-footer">
+              <button className="btn secondary" onClick={closeSheet} disabled={busy}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn primary"
+                disabled={!slackToken.trim().startsWith('xoxp-') || (!!slackAppToken.trim() && !slackAppToken.trim().startsWith('xapp-')) || busy}
+                onClick={() => void run(() => addAccount({ platform, token: slackToken.trim(), appToken: slackAppToken.trim() || undefined }))}
               >
                 {t('connect')}
               </button>

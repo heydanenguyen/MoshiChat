@@ -15300,3 +15300,133 @@ button.moment-card:hover {
 .msg-group.out .bubble-time.in-bar {
   order: -1;
 }
+
+/* step-by-step setup for Gmail and Slack in the add-account sheet */
+.connect-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.connect-steps a {
+  white-space: nowrap;
+}
+.connect-steps .btn.small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 10px;
+  vertical-align: middle;
+}
+
+/* Settings > On-device AI: the machine, the two models that suit it, the rest on request */
+.ai-models {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ai-hw {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+.ai-model {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fill-tertiary);
+  text-align: left;
+  transition: box-shadow var(--duration-fast) ease, background-color var(--duration-fast) ease;
+}
+.ai-model:hover {
+  background: var(--fill-secondary);
+}
+.ai-model.active {
+  box-shadow:
+    0 0 0 2px var(--bg-elevated),
+    0 0 0 3.5px var(--accent);
+}
+.ai-model-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+.ai-model-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--fill-secondary);
+  color: var(--text-secondary);
+}
+.ai-model-badge.best {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.ai-model-badge.warn {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.ai-model-size {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.ai-model-sub {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.ai-models-more {
+  justify-self: start;
+  font-size: var(--text-xs);
+  color: var(--accent);
+  padding: 2px 0;
+}
+
+/* ================================================================== your voice (AI settings) */
+.voice-skip {
+  margin-top: 10px;
+}
+.voice-skip-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.voice-skip .ai-langs {
+  margin-top: 6px;
+}
+.ai-lang.voice-tag.off {
+  color: var(--text-tertiary, var(--text-secondary));
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+.voice-lora-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.voice-lora-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-exported {
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.ai-status.error {
+  color: var(--danger, #ff3b30);
+}
