@@ -187,11 +187,10 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     )
     const attachment = paths.map((path) => createReadStream(path))
     const payload = attachment.length ? { body: text, attachment } : { body: text }
-    const result = (await new Promise<{ messageID?: string; timestamp?: number | string }>((resolve, reject) => {
-      const cb = (err: unknown, info?: { messageID?: string; timestamp?: number | string }): void => (err ? reject(err instanceof Error ? err : new Error(String(err))) : resolve(info ?? {}))
-      const send = api.sendMessage as unknown as (m: unknown, t: string, c: typeof cb, r?: string) => void
-      send(payload, threadId, cb, options.replyToId)
-    })) ?? {}
+    // ws3-fca's sendMessage returns a promise and takes the replied-to message third: a callback in that place
+    // made it throw outside our reach, so the send never finished ("reply was never sent").
+    const send = api.sendMessage as unknown as (m: unknown, t: string, replyTo?: string) => Promise<{ messageID?: string; timestamp?: number | string } | null>
+    const result = (await send(payload, threadId, options.replyToId ? String(options.replyToId) : undefined)) ?? {}
     const message: Message = {
       id: result.messageID ?? `local-${Date.now()}`,
       conversationId: id,

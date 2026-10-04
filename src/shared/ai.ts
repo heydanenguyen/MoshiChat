@@ -5,7 +5,7 @@ export type AiKind = 'voice' | 'translate' | 'chat' | 'speak' | 'cutout'
 export type SpeakLang = 'vi' | 'en'
 export type VoiceModel = 'turbo' | 'small'
 /** The language model behind summaries, reply suggestions and openers: Qwen3.5 (Apache-2.0) at four sizes, run by llama.cpp. */
-export type ChatModel = 'qwen35-0.8b' | 'qwen35-2b' | 'qwen35-4b' | 'qwen35-9b'
+export type ChatModel = 'qwen35-0.8b' | 'qwen35-2b' | 'qwen35-4b' | 'qwen35-9b' | 'gemma4-12b'
 
 /** A GGUF model llama.cpp runs, on the GPU when there is one. */
 export interface LlmSpec {
@@ -40,7 +40,10 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
     'qwen35-0.8b': { repo: 'unsloth/Qwen3.5-0.8B-GGUF', file: 'Qwen3.5-0.8B-Q4_K_M.gguf', megabytes: 510, needsGb: 1.2 },
     'qwen35-2b': { repo: 'unsloth/Qwen3.5-2B-GGUF', file: 'Qwen3.5-2B-Q4_K_M.gguf', megabytes: 1220, needsGb: 2.2 },
     'qwen35-4b': { repo: 'unsloth/Qwen3.5-4B-GGUF', file: 'Qwen3.5-4B-Q4_K_M.gguf', megabytes: 2610, needsGb: 3.6 },
-    'qwen35-9b': { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', megabytes: 5420, needsGb: 6.8 }
+    'qwen35-9b': { repo: 'unsloth/Qwen3.5-9B-GGUF', file: 'Qwen3.5-9B-Q4_K_M.gguf', megabytes: 5420, needsGb: 6.8 },
+    // Google's Gemma 4 12B (Apache-2.0, May 2026): the most natural Vietnamese and the fewest mix-ups of who is
+    // speaking in our tests, at about twice the time per suggestion. For GPUs with 10 GB or more.
+    'gemma4-12b': { repo: 'unsloth/gemma-4-12b-it-GGUF', file: 'gemma-4-12b-it-Q4_K_M.gguf', megabytes: 6792, needsGb: 8.8 }
   },
   // Meta's MMS text-to-speech (VITS), one small model per language. CC BY-NC 4.0: non-commercial use.
   speak: {
@@ -54,7 +57,7 @@ export const AI_MODELS: { voice: Record<VoiceModel, AiModelSpec>; translate: AiM
 }
 
 /** Smallest to largest. */
-export const CHAT_MODELS: ChatModel[] = ['qwen35-0.8b', 'qwen35-2b', 'qwen35-4b', 'qwen35-9b']
+export const CHAT_MODELS: ChatModel[] = ['qwen35-0.8b', 'qwen35-2b', 'qwen35-4b', 'qwen35-9b', 'gemma4-12b']
 
 /** The model in use: the setting when it is one of these, older settings mapped onto the new sizes. */
 export function chatModelOf(value: string | undefined): ChatModel {
@@ -85,6 +88,8 @@ export interface VoiceInfo {
   error?: string
   /** When it was installed (ms). */
   at?: number
+  /** A voice is being trained on this computer right now. */
+  training?: boolean
 }
 
 export interface ChatAdvice {

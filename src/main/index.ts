@@ -1480,14 +1480,15 @@ function registerIpc(): void {
       .slice(-80)
       .map((l) => ({ who: String((l as ChatLine).who ?? '').slice(0, 60), text: String((l as ChatLine).text ?? '').slice(0, 500), at: Number((l as ChatLine).at) || 0, mine: !!(l as ChatLine).mine }))
   handle(IPC.aiSummarize, (_e, key: string, lines: unknown) => ai.summarize(String(key).slice(0, 200), cleanLines(lines)))
-  handle(IPC.aiSuggest, (_e, lines: unknown, context: unknown) => ai.suggest(cleanLines(lines), cleanContext(context)))
-  handle(IPC.aiOpener, (_e, lines: unknown, silentDays: unknown, note: unknown, context: unknown) =>
-    ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined, cleanContext(context))
+  // Suggestions that come by themselves wait while a personal voice trains (it has the GPU); asking still works.
+  handle(IPC.aiSuggest, async (_e, lines: unknown, context: unknown, auto: unknown) => (auto === true && (await ai.training()) ? [] : ai.suggest(cleanLines(lines), cleanContext(context))))
+  handle(IPC.aiOpener, async (_e, lines: unknown, silentDays: unknown, note: unknown, context: unknown) =>
+    (await ai.training()) ? [] : ai.opener(cleanLines(lines), Math.max(0, Math.round(Number(silentDays) || 0)), typeof note === 'string' ? note.slice(0, 300) : undefined, cleanContext(context))
   )
   handle(IPC.aiWarm, () => ai.warm())
   const voiceInfo = async (): Promise<VoiceInfo> => {
     const [pairs, state, file] = await Promise.all([style.count().catch(() => 0), ai.voice().catch(() => ({ present: false, error: undefined })), stat(ai.voicePath()).catch(() => undefined)])
-    return { model: chatModelOf(storage.settings.chatModel), pairs, present: state.present, error: state.error, at: file?.mtimeMs }
+    return { model: chatModelOf(storage.settings.chatModel), pairs, present: state.present, error: state.error, at: file?.mtimeMs, training: await ai.training() }
   }
   handle(IPC.aiVoiceInfo, () => voiceInfo())
   handle(IPC.aiVoiceExport, async () => {

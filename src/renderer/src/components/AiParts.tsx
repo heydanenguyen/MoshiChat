@@ -185,12 +185,13 @@ export function AiSetupSheet(): JSX.Element | null {
   )
 }
 
-const MODEL_NAME: Record<ChatModel, string> = { 'qwen35-0.8b': 'Qwen3.5 0.8B', 'qwen35-2b': 'Qwen3.5 2B', 'qwen35-4b': 'Qwen3.5 4B', 'qwen35-9b': 'Qwen3.5 9B' }
-const MODEL_TONE: Record<ChatModel, 'aiModelTiny' | 'aiModelLight' | 'aiModelBalanced' | 'aiModelBest'> = {
+const MODEL_NAME: Record<ChatModel, string> = { 'qwen35-0.8b': 'Qwen3.5 0.8B', 'qwen35-2b': 'Qwen3.5 2B', 'qwen35-4b': 'Qwen3.5 4B', 'qwen35-9b': 'Qwen3.5 9B', 'gemma4-12b': 'Gemma 4 12B' }
+const MODEL_TONE: Record<ChatModel, 'aiModelTiny' | 'aiModelLight' | 'aiModelBalanced' | 'aiModelBest' | 'aiModelTop'> = {
   'qwen35-0.8b': 'aiModelTiny',
   'qwen35-2b': 'aiModelLight',
   'qwen35-4b': 'aiModelBalanced',
-  'qwen35-9b': 'aiModelBest'
+  'qwen35-9b': 'aiModelBest',
+  'gemma4-12b': 'aiModelTop'
 }
 
 /**
@@ -421,6 +422,7 @@ function YourVoice(): JSX.Element {
         <div className="settings-row-text">
           <div className="settings-row-title">
             {t('voiceLoraTitle')}
+            {info?.training && <span className="ai-status">{t('voiceTraining')}</span>}
             {info?.present ? (
               <span className={`ai-status ${info.error ? 'error' : 'ready'}`}>{info.error ? t('voiceLoraMismatch') : t('voiceLoraOn', { model: MODEL_NAME[info.model] })}</span>
             ) : (

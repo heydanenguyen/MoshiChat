@@ -248,6 +248,27 @@ export class AiService {
     await copyFile(file, this.voicePath())
   }
 
+  /**
+   * A personal voice is being trained on this computer (the tool leaves <model>.training beside the voices while it
+   * runs). The GPU is then taken: the model is not loaded ahead and suggestions only come when asked for.
+   */
+  async training(): Promise<boolean> {
+    const dir = dirname(this.voicePath())
+    const files = await readdir(dir).catch(() => [] as string[])
+    for (const name of files.filter((f) => f.endsWith('.training'))) {
+      try {
+        const { pid } = JSON.parse(await readFile(join(dir, name), 'utf8')) as { pid?: number }
+        if (!pid) continue
+        process.kill(pid, 0)
+        return true
+      } catch (err) {
+        // EPERM: running, just not ours to signal; anything else: a lock left by a run that died
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') return true
+      }
+    }
+    return false
+  }
+
   async removeVoice(): Promise<void> {
     await rm(this.voicePath(), { force: true })
   }
@@ -264,6 +285,7 @@ export class AiService {
 
   /** Load the language model in the background (a chat was opened), so the first suggestion is quick. */
   async warm(): Promise<void> {
+    if (await this.training()) return
     if ((await this.status()).chat.ready) await this.request({ type: 'warm', chatModel: this.chatModel(), voice: this.voiceAllowed() }).catch(() => undefined)
   }
 

@@ -125,7 +125,7 @@ export interface MoshiBridge {
     /** Bullet points about these lines (cached by `key`). */
     summarize(key: string, lines: ChatLine[]): Promise<string[]>
     /** Three short replies to the newest line; `context` is who the chat is with (pronouns and style come from the lines). */
-    suggest(lines: ChatLine[], context?: ChatContext): Promise<string[]>
+    suggest(lines: ChatLine[], context?: ChatContext, auto?: boolean): Promise<string[]>
     /** Three openers for a chat that has been quiet for `silentDays`. */
     opener(lines: ChatLine[], silentDays: number, note?: string, context?: ChatContext): Promise<string[]>
     /** Load the language model in the background, so the first suggestion does not wait for it. */

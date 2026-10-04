@@ -18,7 +18,8 @@ export const VOICE_BASE: Record<ChatModel, string> = {
   'qwen35-0.8b': 'Qwen/Qwen3.5-0.8B',
   'qwen35-2b': 'Qwen/Qwen3.5-2B',
   'qwen35-4b': 'Qwen/Qwen3.5-4B',
-  'qwen35-9b': 'Qwen/Qwen3.5-9B'
+  'qwen35-9b': 'Qwen/Qwen3.5-9B',
+  'gemma4-12b': 'google/gemma-4-12B-it'
 }
 
 export async function exportVoiceTraining(folder: string, samples: TrainingSample[], model: ChatModel, installTo: string): Promise<{ folder: string; count: number }> {

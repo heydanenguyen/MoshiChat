@@ -27,3 +27,25 @@ describe('a ws3-fca copy per Facebook account', () => {
     expect(second.userAgent).toBe(browserUserAgent())
   })
 })
+
+describe('ws3-fca sendMessage, as the adapter calls it', () => {
+  // The adapter awaits sendMessage(message, threadID, replyToMessageID). A callback in the third place is taken
+  // for the replied-to message and refused, outside any promise of ours ("reply was never sent" in the app).
+  const make = req(join(root, 'src/deltas/apis/messaging/sendMessage.js')) as (f: object, api: object, ctx: object) => (m: unknown, t: unknown, r?: unknown) => Promise<{ messageID?: string }>
+  const sent: Array<Record<string, unknown>> = []
+  const defaultFuncs = {
+    post: async (_url: string, _jar: unknown, form: Record<string, unknown>) => {
+      sent.push(form)
+      return { body: JSON.stringify({ payload: { actions: [{ thread_fbid: '42', message_id: 'mid.1', timestamp: 1 }] } }) }
+    }
+  }
+  const send = make(defaultFuncs, {}, { userID: '7', jar: {}, globalOptions: {} })
+
+  it('refuses a callback where the replied-to message goes', async () => {
+    await expect(send({ body: 'hi' }, '42', () => undefined)).rejects.toThrow(/MessageID/)
+  })
+  it('takes the replied-to message id as a string', async () => {
+    await send({ body: 'hi' }, '42', 'mid.0').catch(() => undefined)
+    expect(sent.at(-1)?.replied_to_message_id).toBe('mid.0')
+  })
+})

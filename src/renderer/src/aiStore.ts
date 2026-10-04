@@ -366,7 +366,7 @@ export const useAi = create<AiState>((set, get) => {
       await withModel('chat', async () => {
         set({ suggestions: { ...get().suggestions, [conversationId]: { busy: true, forId: last.id } } })
         try {
-          const items = await window.unison.ai.suggest(linesFor(conversationId, 40), contextFor(conversationId))
+          const items = await window.unison.ai.suggest(linesFor(conversationId, 40), contextFor(conversationId), !manual)
           // The chat may have moved on while the model was thinking.
           const now = threadMessages(conversationId).at(-1)
           if (now && now.id !== last.id && now.isOutgoing) {

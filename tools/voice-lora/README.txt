@@ -14,9 +14,12 @@ Cài đặt > AI > Giọng của bạn.
 
 Cần gì
   - Card NVIDIA (từ GTX 10xx) hoặc Mac chip Apple M. Không có thì vẫn chạy bằng CPU nhưng rất lâu.
-  - Khoảng 15 GB trống cho mô hình gốc và thư viện (nằm trong work; xoá thư mục này là sạch).
+  - Chỗ trống cho mô hình gốc và thư viện (nằm trong work; xoá thư mục này là sạch): khoảng 15 GB,
+    riêng Gemma 4 12B khoảng 30 GB.
   - Ít nhất 50 lần trả lời; vài trăm trở lên thì tốt hơn.
-  - Thời gian: mô hình 4B trên GTX 1080 Ti khoảng 30–90 phút cho 1.000 mẫu.
+  - Thời gian (GTX 1080 Ti, 1.000 mẫu): 4B khoảng 30–60 phút, 9B và Gemma 12B khoảng 1,5–3 giờ.
+  - Trong lúc luyện GPU bận hết: máy chậm hơn, Moshi tạm ngưng tự gợi ý (bấm gợi ý vẫn được).
+    Nên chạy lúc không dùng máy, ví dụ buổi tối.
 
 Lưu ý
   - Dữ liệu đã bỏ các tin trông như số tài khoản, số điện thoại, mã OTP, mật khẩu, email, đường link.
@@ -37,7 +40,8 @@ write like you. Everything runs on this computer; your messages go nowhere.
 It sets up a private Python inside "work", downloads the base model (a few GB), trains, and copies the result
 into Moshi, which uses it from the next suggestion. Turn it off or remove it in Settings > AI > Your voice.
 
-Needs an NVIDIA card (GTX 10xx or newer) or an Apple-silicon Mac (a CPU works, very slowly), about 15 GB free,
-and at least 50 replies. Lines that look like account numbers, phone numbers, codes, passwords, emails or links
-were left out; open data/train.jsonl to check or delete lines first. Keep this folder private, or delete it
+Needs an NVIDIA card (GTX 10xx or newer) or an Apple-silicon Mac (a CPU works, very slowly), about 15 GB free
+(30 GB for Gemma 4 12B), and at least 50 replies. While it trains the GPU is fully busy: the computer is slower
+and Moshi pauses automatic suggestions, so run it when you are not using the computer. Lines that look like
+account numbers, phone numbers, codes, passwords, emails or links were left out; open data/train.jsonl to check or delete lines first. Keep this folder private, or delete it
 when done.

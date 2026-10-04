@@ -26,8 +26,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LLAMA_CPP_TAG = "v0.5.0"
-# Only the MLP: enough to learn a voice, light to train, and simple to carry over to llama.cpp.
-TARGET = r".*layers\.\d+\.mlp\.(gate_proj|up_proj|down_proj)$"
+# Only the text model's MLP: enough to learn a voice, light to train, and simple to carry over to llama.cpp.
+# (Not the vision or audio towers, whose layers can have the same names.)
+TARGET = r"(?:.*\.)?(?:language_model\.|model\.)layers\.\d+\.mlp\.(?:gate_proj|up_proj|down_proj)$"
 
 
 def say(vi: str, en: str) -> None:
@@ -102,6 +103,42 @@ def encode(tokenizer, sample: dict, max_len: int):
     return f, labels
 
 
+def prepare_quantized(model):
+    """
+    Ready a 4-bit model for LoRA training without peft's prepare_model_for_kbit_training, which turns every 16-bit
+    weight into 32-bit: for these models' 250,000-word vocabularies that is 4 GB more for the embedding table alone,
+    the difference between a 12B model fitting an 11 GB card or not. Only the small norm weights go to 32-bit.
+    """
+    import torch
+
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for p in model.parameters():
+        if p.ndim == 1 and p.dtype in (torch.float16, torch.bfloat16):
+            p.data = p.data.float()
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.enable_input_require_grads()
+    return model
+
+
+class TrainingLock:
+    """A file beside the installed voice while training runs: Moshi sees it and keeps its own model off the GPU."""
+
+    def __init__(self, install_to: str | None):
+        self.path = Path(install_to).with_suffix(".training") if install_to else None
+
+    def __enter__(self):
+        if self.path:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps({"pid": os.getpid(), "started": time.time()}), encoding="utf-8")
+        return self
+
+    def __exit__(self, *exc):
+        if self.path:
+            self.path.unlink(missing_ok=True)
+        return False
+
+
 def fetch_converter(work: Path) -> Path:
     """llama.cpp's LoRA converter (convert_lora_to_gguf.py, conversion/, gguf-py/) from its release on GitHub."""
     dest = work / f"llama.cpp-{LLAMA_CPP_TAG}"
@@ -141,8 +178,13 @@ def main() -> None:
             f"Only {len(samples)} samples; at least 50 are needed. Chat a while longer and export again.")
         sys.exit(1)
 
+    with TrainingLock(None if args.no_install else meta.get("installTo")):
+        train(args, meta, base, samples)
+
+
+def train(args, meta: dict, base: str, samples: list[dict]) -> None:
     import torch
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, get_peft_model
 
     device, compute, label, vram = pick_device()
     say(f"Máy: {label}. Mô hình gốc: {base}. Số mẫu: {len(samples)}.",
@@ -153,7 +195,7 @@ def main() -> None:
     say("Tải và nạp mô hình gốc (lần đầu tải vài GB)…", "Downloading and loading the base model (a few GB the first time)…")
     model, tokenizer = load_model(base, device, compute, vram)
     if device == "cuda":
-        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+        model = prepare_quantized(model)
     else:
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
