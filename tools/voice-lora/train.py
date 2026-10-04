@@ -87,8 +87,13 @@ def encode(tokenizer, sample: dict, max_len: int):
     kw = {"enable_thinking": False}
     prompt = tokenizer.apply_chat_template(messages[:-1], tokenize=False, add_generation_prompt=True, **kw)
     full = tokenizer.apply_chat_template(messages, tokenize=False, **kw)
-    if not full.startswith(prompt):
+    # The prompt exactly as it is when asking (Gemma adds an empty thought block there that a finished chat leaves
+    # out), then the reply and whatever closes the turn.
+    reply = messages[-1]["content"]
+    at = full.rfind(reply)
+    if at < 0:
         return None
+    full = prompt + full[at:]
     p = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     f = tokenizer(full, add_special_tokens=False)["input_ids"]
     if len(f) <= len(p):
