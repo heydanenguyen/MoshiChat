@@ -297,12 +297,29 @@ export class AiService {
     return found === 'vi' ? 'vi' : found === 'en' ? 'en' : this.language() === 'en' ? 'en' : 'vi'
   }
 
+  /** The language most of these messages are in (vi or en), or the setting when it fixes one. */
+  private chatLanguage(lines: ChatLine[]): 'vi' | 'en' {
+    const set = this.suggestLanguage()
+    if (set !== 'auto') return set
+    let vi = 0
+    let en = 0
+    for (const l of lines) {
+      const found = detectLanguage(l.text)
+      if (found === 'vi') vi++
+      else if (found === 'en') en++
+    }
+    return vi === en ? (this.language() === 'en' ? 'en' : 'vi') : vi > en ? 'vi' : 'en'
+  }
+
   /** A few bullet points about these messages, cached by the newest one so reopening a chat is instant. */
   async summarize(key: string, lines: ChatLine[]): Promise<string[]> {
     const cache = await this.cached()
-    const cacheKey = `${key}|${this.language()}|${this.chatModel()}`
+    // In the chat's own language (a Vietnamese chat summed up in English loses names, pronouns and detail), unless
+    // the suggestions setting fixes one.
+    const language = this.chatLanguage(lines)
+    const cacheKey = `${key}|${language}|${this.chatModel()}`
     if (cache.summaries[cacheKey] !== undefined) return JSON.parse(cache.summaries[cacheKey]) as string[]
-    const text = await askChat(this, summaryMessages(lines, this.language()), 220)
+    const text = await askChat(this, summaryMessages(lines, language), 220)
     const bullets = parseSummary(text)
     if (bullets.length) this.remember('summaries', cacheKey, JSON.stringify(bullets))
     return bullets

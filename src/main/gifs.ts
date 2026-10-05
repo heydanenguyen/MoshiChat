@@ -138,6 +138,22 @@ export async function searchStickers(key: string, query: string, page: number, l
   return { items, hasNext, page }
 }
 
+/**
+ * Stickers found in Instagram's own tray, as a page of GIPHY stickers: pictures straight from GIPHY's public CDN,
+ * remembered with the search that found them so the tray finds them again when one is sent.
+ */
+export function trayStickerPage(ids: string[], query: string): GifPage {
+  const items: GifItem[] = ids.map((id) => {
+    const gif = { url: giphyMediaUrl(id, 'giphy.gif'), width: 0, height: 0 }
+    const item: GifItem = { id: `giphy:${id}`, title: '', provider: 'giphy', preview: { url: giphyMediaUrl(id, '200.webp'), width: 0, height: 0 }, gif }
+    listed.delete(item.id)
+    listed.set(item.id, { title: '', query: query.trim(), gif })
+    return item
+  })
+  while (listed.size > 600) listed.delete(listed.keys().next().value as string)
+  return { items, hasNext: false, page: 1 }
+}
+
 /** A sticker's title, asked of GIPHY when Moshi has not listed it itself (one a friend sent). */
 async function giphyTitle(id: string, key: string): Promise<string | undefined> {
   if (!key.trim()) return undefined

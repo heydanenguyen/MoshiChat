@@ -211,7 +211,8 @@ export function PictureArt({ id, size = 72, play = 'none' }: { id: PictureSticke
 }
 
 /** Moshi sticker pack: one tab per logo character, twelve expressions each. */
-export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; onClose(): void }): JSX.Element {
+/** `tray`: an Instagram chat, whose own sticker tray can stand in for a GIPHY key. */
+export function StickerPicker({ onPick, onClose, tray }: { onPick(id: string): void; onClose(): void; tray?: string }): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const [recent, setRecent] = useState<PackSticker[]>(loadRecent)
@@ -280,7 +281,7 @@ export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; o
           </button>
         ))}
       </div>
-      {tab === 'giphy' && <GiphyStickers onPick={onPick} />}
+      {tab === 'giphy' && <GiphyStickers onPick={onPick} tray={tray} />}
       {tab !== 'giphy' && (
         <div className="sticker-title">{tab === 'recent' ? t('recent') : tab === 'mine' ? t('stickerMine') : tab === 'mito' || tab === 'pals' ? PICTURE_TABS.find((p) => p.pack === tab)!.name : LOGOS[tab].name[language]}</div>
       )}

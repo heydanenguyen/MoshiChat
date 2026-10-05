@@ -110,3 +110,14 @@ describe('image header sizes (Zalo uploads)', () => {
     expect(items[0].mp4).toBeUndefined()
   })
 })
+
+describe('stickers from Instagram’s own tray', () => {
+  it('become GIPHY stickers with pictures from GIPHY’s public CDN', async () => {
+    const { trayStickerPage } = await import('../src/main/gifs')
+    const page = trayStickerPage(['abc123XYZ', 'def456'], ' hello ')
+    expect(page.hasNext).toBe(false)
+    expect(page.items.map((i) => i.id)).toEqual(['giphy:abc123XYZ', 'giphy:def456'])
+    expect(page.items[0].preview.url).toBe('https://media.giphy.com/media/abc123XYZ/200.webp')
+    expect(page.items[0].gif.url).toBe('https://media.giphy.com/media/abc123XYZ/giphy.gif')
+  })
+})

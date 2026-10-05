@@ -478,6 +478,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
       <div className="chat-scroll scroll edge-fade" ref={scrollRef}>
         <div className="chat-scroll-inner">
           {loading && !messages && <BuddyLoader size={56} label={t('loadingMessages')} className="chat-loading" />}
+          {!hasMore && !loading && messages && messages.length > 0 && conversation.platform === 'zalo' && <div className="history-start">{t('zaloOlderOnPhone')}</div>}
           {hasMore && messages && (
             <button className="load-more" onClick={() => loadMore(conversation.id)} disabled={loading}>
               {loading ? <BuddyLoader size={20} inline /> : t('loadMore')}

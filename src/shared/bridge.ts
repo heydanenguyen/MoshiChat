@@ -56,6 +56,8 @@ export interface MoshiBridge {
     add(input: AddAccountInput): Promise<Account>
     remove(accountId: string): Promise<void>
     reconnect(accountId: string): Promise<void>
+    /** Fetch an account's older history as far back as the platform keeps it (Zalo); progress comes as history:progress. */
+    syncHistory(accountId: string): Promise<{ pages: number; added: number; reachedEnd: boolean }>
     addDemo(): Promise<Account[]>
     /**
      * Open the platform's own login page in an app window and turn the
@@ -251,6 +253,8 @@ export interface MoshiBridge {
     gifSearch(query: string, page: number): Promise<GifPage>
     /** GIPHY sticker search (trending when empty); rejects with GIF_KEY when there is no GIPHY key. Pick one with sticker('giphy:<id>'). */
     stickerSearch(query: string, page: number): Promise<GifPage>
+    /** Instagram's own sticker tray for this chat (no GIPHY key needed); pick one with sticker('giphy:<id>'). */
+    stickerTray(conversationId: string, query: string): Promise<GifPage>
     /** Download a picked GIF as a ready-to-send file. */
     gif(item: GifItem): Promise<OutgoingAttachment>
     /** The GIF library whose key is built into this release, or null when users must bring their own. */
@@ -271,6 +275,7 @@ export const IPC = {
   accountsAdd: 'accounts:add',
   accountsRemove: 'accounts:remove',
   accountsReconnect: 'accounts:reconnect',
+  accountsSyncHistory: 'accounts:syncHistory',
   accountsAddDemo: 'accounts:addDemo',
   accountsConnectWeb: 'accounts:connectWeb',
   accountsListPages: 'accounts:listPages',
@@ -369,6 +374,7 @@ export const IPC = {
   appGrantFile: 'app:grantFile',
   appGifSearch: 'app:gifSearch',
   appStickerSearch: 'app:stickerSearch',
+  appStickerTray: 'app:stickerTray',
   appGif: 'app:gif',
   appGifDefault: 'app:gifDefault',
   appWeather: 'app:weather',

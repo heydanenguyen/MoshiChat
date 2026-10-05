@@ -28,11 +28,14 @@ function useGiphyKey(): boolean {
 /**
  * The GIPHY sticker tab: the same library as Instagram's sticker tray, so a pick reaches Instagram as a real sticker
  * (and other apps as a moving, see-through GIF). Also lists the GIPHY stickers friends sent, to send back.
+ * In an Instagram chat without a GIPHY key, the search runs in Instagram's own tray instead (`tray`: the chat).
  */
-export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Element {
+export function GiphyStickers({ onPick, tray }: { onPick(id: string): void; tray?: string }): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const hasKey = useGiphyKey()
+  const viaTray = !hasKey && !!tray
+  const canSearch = hasKey || viaTray
   const [recent, setRecent] = useState<SavedGiphySticker[]>(() => loadGiphyStickers('recent'))
   const [received] = useState<SavedGiphySticker[]>(() => loadGiphyStickers('received'))
   const [view, setView] = useState<View>('search')
@@ -52,7 +55,7 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
       if (nextPage === 1) setStatus('loading')
       else setLoadingMore(true)
       try {
-        const result = await window.unison.app.stickerSearch(q, nextPage)
+        const result = viaTray ? await window.unison.app.stickerTray(tray!, q) : await window.unison.app.stickerSearch(q, nextPage)
         if (id !== request.n) return
         setItems((prev) => {
           if (nextPage === 1) return result.items
@@ -70,17 +73,18 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
         if (id === request.n) setLoadingMore(false)
       }
     },
-    [request]
+    [request, viaTray, tray]
   )
 
   useEffect(() => {
-    if (!hasKey) {
+    if (!canSearch) {
       setStatus('nokey')
       return
     }
-    const timer = setTimeout(() => void load(effective, 1), effective ? 320 : 0)
+    // Instagram's tray is searched in a hidden page: wait for a pause in typing
+    const timer = setTimeout(() => void load(effective, 1), effective ? (viaTray ? 700 : 320) : 0)
     return () => clearTimeout(timer)
-  }, [effective, hasKey, load])
+  }, [effective, canSearch, viaTray, load])
 
   const pick = (sticker: SavedGiphySticker): void => {
     setRecent(rememberGiphySticker('recent', sticker))
@@ -117,7 +121,7 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
             }}
             placeholder={t('giphySearch')}
             spellCheck={false}
-            disabled={!hasKey}
+            disabled={!canSearch}
           />
           {query && (
             <button className="search-clear" onClick={() => setQuery('')} aria-label={t('close')}>
@@ -148,7 +152,7 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
               <Inbox size={13} strokeWidth={2.4} /> {t('giphyReceived')}
             </button>
           )}
-          {hasKey && (
+          {canSearch && (
             <button
               role="tab"
               aria-selected={view === 'search' && !effective}
@@ -163,7 +167,7 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
               <TrendingUp size={14} strokeWidth={2.4} />
             </button>
           )}
-          {hasKey &&
+          {canSearch &&
             MOODS.map((m) => {
               const active = view === 'search' && !query.trim() && mood === m.q
               return (
@@ -212,7 +216,7 @@ export function GiphyStickers({ onPick }: { onPick(id: string): void }): JSX.Ele
           {loadingMore && <BuddyLoader size={22} inline className="gif-more giphy-wide" />}
         </div>
       )}
-      <div className="gif-footer">{t('gifPoweredBy', { provider: 'GIPHY' })}</div>
+      <div className="gif-footer">{viaTray ? t('giphyFromInstagram') : t('gifPoweredBy', { provider: 'GIPHY' })}</div>
     </>
   )
 }

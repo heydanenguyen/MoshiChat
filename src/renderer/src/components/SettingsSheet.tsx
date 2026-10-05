@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
+import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, History, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
 import type { BubbleAction, Language, ReactionPlacement, SyncStatus, TextSize, ThemePreference } from '@shared/types'
 import { ACCENTS, BUBBLE_ACTIONS, DARK_BASES, FONTS, LIQUID_TONES, MESHES, MONO_CANVASES, PALS_PAPERS, PLATFORMS, PLATFORM_ORDER, ZOOM_STEPS, REACTION_PLACEMENTS, clampZoom, darkBaseHex, iconStyleOf, stepZoom } from '@shared/types'
@@ -498,6 +498,11 @@ function AccountsPage(): JSX.Element {
   const reconnect = useStore((s) => s.reconnect)
   const toggleMute = useStore((s) => s.toggleMute)
   const openSheet = useStore((s) => s.openSheet)
+  const historySync = useStore((s) => s.historySync)
+  const showToast = useStore((s) => s.showToast)
+  const syncHistory = (accountId: string): void => {
+    void window.unison.accounts.syncHistory(accountId).catch((err: Error) => showToast(err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error'))
+  }
 
   const statusLabel = (status: string): string => {
     switch (status) {
@@ -536,11 +541,26 @@ function AccountsPage(): JSX.Element {
                 {PLATFORMS[account.platform].name} · {statusLabel(account.status)}
                 {account.error && account.status === 'error' && ` — ${account.error}`}
               </div>
+              {account.platform === 'zalo' && historySync[account.id] && (() => {
+                const h = historySync[account.id]
+                return (
+                  <div className="settings-row-sub history-sync">
+                    {!h.done
+                      ? t('zaloHistoryRunning', { pages: h.pages.toLocaleString(), added: h.added.toLocaleString() })
+                      : `${t('zaloHistoryDone', { added: h.added.toLocaleString() })} ${h.reachedEnd ? t('zaloHistoryEnd') : t('zaloHistoryStopped')}`}
+                  </div>
+                )
+              })()}
             </div>
             <div className="settings-row-actions">
               <button className={`icon-btn ${muted ? 'active' : ''}`} title={muted ? t('unmute') : t('mute')} onClick={() => void toggleMute('accounts', account.id)}>
                 <BellOff size={15} />
               </button>
+              {account.platform === 'zalo' && account.status === 'connected' && (
+                <button className="icon-btn" title={t('zaloHistorySync')} disabled={historySync[account.id] && !historySync[account.id].done} onClick={() => syncHistory(account.id)}>
+                  <History size={15} />
+                </button>
+              )}
               <button className="icon-btn" title={t('reconnect')} onClick={() => void reconnect(account.id)}>
                 <RefreshCw size={15} />
               </button>

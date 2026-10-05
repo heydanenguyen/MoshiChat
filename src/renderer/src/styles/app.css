@@ -15430,3 +15430,20 @@ button.moment-card:hover {
 .ai-status.error {
   color: var(--danger, #ff3b30);
 }
+
+/* ================================================================== Zalo history sync */
+.settings-row-sub.history-sync {
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.history-start {
+  margin: 14px auto 10px;
+  max-width: 420px;
+  padding: 8px 14px;
+  border-radius: var(--radius-lg, 14px);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  text-align: center;
+}

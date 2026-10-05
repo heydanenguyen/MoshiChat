@@ -10,6 +10,7 @@ import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { sendPhotoSticker } from './zalo-photo-sticker'
 import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
+import { ZaloArchive } from './zalo-archive'
 import { VIDEO_FILE } from '@shared/media'
 
 export interface ZaloSecret {
@@ -20,6 +21,19 @@ type ZcaModule = typeof import('zca-js')
 
 /** Messages kept per chat (memory and the cache on disk). */
 const HISTORY_LIMIT = 1000
+
+/** Pages one "Sync Zalo history" may walk per kind of chat (a start walks 60); about 0.6 s each. */
+const DEEP_SYNC_PAGES = 1500
+
+type DeepSync = {
+  pages: number
+  added: number
+  stopped: Map<0 | 1, string>
+  listeners: Array<(progress: { pages: number; added: number }) => void>
+  finish: (result: { pages: number; added: number; reachedEnd: boolean }) => void
+  done: Promise<{ pages: number; added: number; reachedEnd: boolean }>
+  lastAt: number
+}
 
 /** My own reactions are kept under this key (Zalo marks them isSelf; uidFrom can be "0"). */
 const ME = 'me'
@@ -58,6 +72,14 @@ export class ZaloAdapter implements PlatformAdapter {
   private syncWalks: Record<0 | 1, SyncWalk> = { 0: { rounds: 0, jumped: false }, 1: { rounds: 0, jumped: false } }
   private syncCursors: Record<0 | 1, SyncCursor> = { 0: {}, 1: {} }
   private cacheFile = ''
+  /** History imported from Zalo PC, older than the cache keeps. */
+  private archive?: ZaloArchive
+  /** Ids already in the archive, per chat. */
+  private archivedIds = new Map<string, Set<string>>()
+  private archiveQueue = new Map<string, TMessage[]>()
+  private archiveTimer?: NodeJS.Timeout
+  /** A history sync the user asked for, while it runs. */
+  private deepSync?: DeepSync
   private groupHistoryGone = false
   private saveTimer?: NodeJS.Timeout
   /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
@@ -130,6 +152,10 @@ export class ZaloAdapter implements PlatformAdapter {
     await this.ctx.saveSecret(this.secret)
     // Messages synced earlier, so chats are not empty after a restart.
     this.cacheFile = join(this.ctx.dataDir(), `zalo-cache-${this.meId}.json`)
+    this.archive = new ZaloArchive(join(this.ctx.dataDir(), `zalo-archive-${this.meId}`))
+    void this.archive.ids().then((ids) => {
+      for (const [threadId, known] of ids) for (const msgId of known) (this.archivedIds.get(threadId) ?? this.archivedIds.set(threadId, new Set()).get(threadId)!).add(msgId)
+    })
     await this.loadCache()
     this.wireListener(api, zca)
     api.listener.start({ retryOnClose: true })
@@ -169,6 +195,14 @@ export class ZaloAdapter implements PlatformAdapter {
     this.setStatus('disconnected')
     // Whatever was waiting to be saved goes now (quitting, removing the account).
     if (this.saveTimer) this.saveCache()
+    if (this.archiveTimer) {
+      clearTimeout(this.archiveTimer)
+      await this.flushArchive()
+    }
+    // A history sync cannot go on without the session.
+    const deep = this.deepSync
+    this.deepSync = undefined
+    deep?.finish({ pages: deep.pages, added: deep.added, reachedEnd: false })
   }
 
   async listConversations(): Promise<Conversation[]> {
@@ -280,8 +314,13 @@ export class ZaloAdapter implements PlatformAdapter {
     }
     const all = this.messagesFor(id, true)
     const end = beforeId ? all.findIndex((m) => m.id === beforeId) : all.length
-    if (end < 0) return []
-    return all.slice(Math.max(0, end - limit), end)
+    if (end > 0) return all.slice(Math.max(0, end - limit), end)
+    // Scrolled past the cache (or further into the archive): the older history the walk brought in.
+    if (!this.archive) return []
+    if (this.archiveQueue.has(threadId)) await this.flushArchive()
+    const cutoff = !beforeId ? (all[0]?.sentAt ?? Number.MAX_SAFE_INTEGER) : end === 0 ? all[0].sentAt : await this.archive.timeOf(threadId, beforeId)
+    if (cutoff === undefined) return []
+    return (await this.archive.before(threadId, cutoff, limit)).map((raw) => this.toMessage(raw, id))
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
@@ -475,7 +514,10 @@ export class ZaloAdapter implements PlatformAdapter {
 
   async searchInConversation(id: string, query: string, limit: number): Promise<Message[]> {
     const needle = query.toLowerCase()
-    return this.messagesFor(id).filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
+    const recent = this.messagesFor(id)
+    const seen = new Set(recent.map((m) => m.id))
+    const archived = this.archive ? (await this.archive.get(externalIdOf(id))).filter((raw) => !seen.has(raw.msgId)).map((raw) => this.toMessage(raw, id)) : []
+    return [...recent, ...archived].filter((m) => matchesQuery(m, needle)).sort((a, b) => b.sentAt - a.sentAt).slice(0, limit)
   }
 
   async react(id: string, messageId: string, emoji: string): Promise<void> {
@@ -581,8 +623,16 @@ export class ZaloAdapter implements PlatformAdapter {
       }
     })
     api.listener.on('old_messages', (messages: ZMessage[], threadType: 0 | 1) => {
-      const fresh = messages.filter((m) => !this.rawMessage(m.threadId, m.data.msgId)).length
+      const fresh = messages.filter((m) => !this.has(m.threadId, m.data.msgId)).length
       this.continueSync(api, messages, fresh, threadType)
+      // Messages newer than anything this computer had for the chat: written while it was signed out (Zalo keeps one
+      // web session, so using Moshi on another computer signs this one out). Shown in an open chat right away.
+      const newestBefore = new Map<string, number>()
+      const missed: ZMessage[] = []
+      for (const message of messages) {
+        if (!newestBefore.has(message.threadId)) newestBefore.set(message.threadId, Number(this.raw.get(message.threadId)?.at(-1)?.ts ?? 0))
+        if (!this.rawMessage(message.threadId, message.data.msgId) && Number(message.data.ts) > newestBefore.get(message.threadId)!) missed.push(message)
+      }
       const touched = new Set<string>()
       for (const message of messages) {
         this.threadTypes.set(message.threadId, message.type)
@@ -598,6 +648,12 @@ export class ZaloAdapter implements PlatformAdapter {
       if (touched.size) {
         this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: this.buildConversations() })
         this.scheduleSave()
+      }
+      // As updates, not new messages: no sound, no unread count (they may well have been read on the other computer).
+      for (const message of missed) {
+        const id = conversationId(this.account.id, message.threadId)
+        const converted = this.messagesFor(id).find((m) => m.id === message.data.msgId)
+        if (converted) this.ctx.emit({ type: 'message:updated', message: converted })
       }
     })
     api.listener.on('typing', (typing) => {
@@ -770,7 +826,66 @@ export class ZaloAdapter implements PlatformAdapter {
       else list.push(message)
     }
     list.sort((a, b) => Number(a.ts) - Number(b.ts))
-    this.raw.set(threadId, list.slice(-HISTORY_LIMIT))
+    const overflow = list.length - HISTORY_LIMIT
+    if (overflow > 0) this.toArchive(threadId, list.slice(0, overflow))
+    this.raw.set(threadId, overflow > 0 ? list.slice(overflow) : list)
+  }
+
+  /** Messages too old for the cache go to the archive (written in batches: the history walk brings them by the page). */
+  private toArchive(threadId: string, messages: TMessage[]): void {
+    if (!this.archive) return
+    const known = this.archivedIds.get(threadId) ?? new Set<string>()
+    this.archivedIds.set(threadId, known)
+    const queued = this.archiveQueue.get(threadId) ?? []
+    for (const m of messages) {
+      if (known.has(m.msgId)) continue
+      known.add(m.msgId)
+      queued.push(m)
+    }
+    if (!queued.length) return
+    this.archiveQueue.set(threadId, queued)
+    this.archiveTimer ??= setTimeout(() => void this.flushArchive(), 2_000)
+  }
+
+  private async flushArchive(): Promise<void> {
+    if (this.archiveTimer) clearTimeout(this.archiveTimer)
+    this.archiveTimer = undefined
+    const batches = [...this.archiveQueue]
+    this.archiveQueue.clear()
+    for (const [threadId, messages] of batches) {
+      await this.archive?.add(threadId, messages).catch((err: Error) => this.ctx.log('zalo archive write failed', err.message))
+    }
+  }
+
+  /** Whether this computer already has the message: in the cache or the archive. */
+  private has(threadId: string, msgId: string): boolean {
+    return !!this.rawMessage(threadId, msgId) || !!this.archivedIds.get(threadId)?.has(msgId)
+  }
+
+  /**
+   * Walk Zalo's history feed as deep as it goes (not just the few dozen pages a start does), reporting each page.
+   * Resolves when both feeds (direct chats and groups) stop; `end` means Zalo has nothing older for this session.
+   */
+  async syncHistory(onProgress: (progress: { pages: number; added: number }) => void): Promise<{ pages: number; added: number; reachedEnd: boolean }> {
+    const api = this.requireApi()
+    if (this.deepSync) {
+      this.deepSync.listeners.push(onProgress)
+      return this.deepSync.done
+    }
+    let finish!: (result: { pages: number; added: number; reachedEnd: boolean }) => void
+    const done = new Promise<{ pages: number; added: number; reachedEnd: boolean }>((resolve) => (finish = resolve))
+    const deep: DeepSync = { pages: 0, added: 0, stopped: new Map(), listeners: [onProgress], finish, done, lastAt: Date.now() }
+    this.deepSync = deep
+    // Zalo can go quiet mid-walk (a dropped socket): give up after half a minute without a page.
+    const watchdog = setInterval(() => {
+      if (this.deepSync !== deep) return clearInterval(watchdog)
+      if (Date.now() - deep.lastAt < 30_000) return
+      clearInterval(watchdog)
+      this.deepSync = undefined
+      deep.finish({ pages: deep.pages, added: deep.added, reachedEnd: false })
+    }, 5_000)
+    this.startSync(api)
+    return done
   }
 
   private startSync(api: API): void {
@@ -792,11 +907,26 @@ export class ZaloAdapter implements PlatformAdapter {
     const walk = this.syncWalks[type]
     walk.rounds += 1
     const oldest = messages.length ? messages.reduce((a, b) => (Number(a.data.ts) <= Number(b.data.ts) ? a : b)) : undefined
-    const { step, cursor } = nextSyncStep(walk, { size: messages.length, fresh, oldestId: oldest?.data.msgId, oldestTs: oldest ? Number(oldest.data.ts) : undefined }, this.syncCursors[type])
+    const deep = this.deepSync
+    const { step, cursor } = nextSyncStep(walk, { size: messages.length, fresh, oldestId: oldest?.data.msgId, oldestTs: oldest ? Number(oldest.data.ts) : undefined }, this.syncCursors[type], deep ? DEEP_SYNC_PAGES : undefined)
     this.syncCursors[type] = cursor
     this.scheduleSave()
+    if (deep) {
+      deep.lastAt = Date.now()
+      deep.pages += 1
+      deep.added += fresh
+      for (const listener of deep.listeners) listener({ pages: deep.pages, added: deep.added })
+    }
     if (step.kind === 'stop') {
       this.ctx.log(`zalo: ${type ? 'group' : 'direct'} sync stopped (${step.reason}) after ${walk.rounds} pages`)
+      if (deep) {
+        deep.stopped.set(type, step.reason)
+        if (deep.stopped.size === 2) {
+          this.deepSync = undefined
+          const reachedEnd = [...deep.stopped.values()].every((reason) => reason === 'end' || reason === 'caught-up')
+          deep.finish({ pages: deep.pages, added: deep.added, reachedEnd })
+        }
+      }
       return
     }
     if (step.below !== oldest?.data.msgId) walk.jumped = true

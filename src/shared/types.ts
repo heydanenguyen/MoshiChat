@@ -842,6 +842,8 @@ export type BridgeEvent =
   /** Reactions on a message changed (someone reacted or took it back); nothing else about it did. */
   | { type: 'message:reactions'; conversationId: string; messageId: string; reactions: Reaction[] }
   | { type: 'typing'; typing: TypingEvent }
+  /** An account's history sync (Zalo): pages walked and messages found so far; `reachedEnd` once Zalo has nothing older. */
+  | { type: 'history:progress'; accountId: string; pages: number; added: number; done: boolean; reachedEnd?: boolean }
   | { type: 'auth:prompt'; prompt: AuthPrompt }
   | { type: 'auth:cleared'; requestId: string }
   | { type: 'focus-conversation'; conversationId: string; messageId?: string }

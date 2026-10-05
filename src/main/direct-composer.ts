@@ -104,6 +104,21 @@ export class DirectComposer {
   }
 
   /**
+   * What Instagram's own sticker tray shows for `query` (its picks when empty): the GIPHY ids, in its order.
+   * Opens the tray, searches, reads the results and closes it again; nothing is sent. Needs no GIPHY key.
+   */
+  searchStickers(threadUrls: string | string[], query: string): Promise<string[]> {
+    const run = this.queue.then(() => {
+      let found: string[] = []
+      return this.idleAfter(async () => {
+        found = await this.searchStickersNow(threadUrls, query)
+      }).then(() => found)
+    })
+    this.queue = run.catch(() => undefined)
+    return run
+  }
+
+  /**
    * Run one send and then (re)arm the idle close, whatever happened. open() stops the timer while a send is
    * busy; a send that throws (no text box, logged out, picker failed) must not leave a hidden instagram.com
    * page running for good.
@@ -386,6 +401,75 @@ export class DirectComposer {
           ? 'Could not open Instagram’s GIF and sticker tray'
           : `Instagram sticker send failed (${outcome})`
     )
+  }
+
+  private async searchStickersNow(threadUrls: string | string[], query: string): Promise<string[]> {
+    const win = await this.open(threadUrls)
+    const outcome = (await win.webContents.executeJavaScript(
+      `(async () => {
+        ${HELPERS}
+        let box = null;
+        for (let i = 0; i < 80 && !box; i++) { box = findBox(); if (!box) await wait(250); }
+        if (!box) return { error: /accounts\\/login/.test(location.pathname) ? 'LOGGED_OUT' : 'NO_TEXTBOX' };
+        const before = new Set(document.querySelectorAll('img, video'));
+        const inputsBefore = new Set(document.querySelectorAll('input'));
+        const row = box.getBoundingClientRect();
+        const near = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && Math.abs(r.top + r.height / 2 - (row.top + row.height / 2)) < 120; };
+        const trayLabel = new RegExp(${JSON.stringify(TRAY_LABEL)}, 'i');
+        const opener = [...document.querySelectorAll('svg[aria-label], [role="button"][aria-label], button[aria-label]')].filter((el) => trayLabel.test(el.getAttribute('aria-label') || '')).find(near);
+        if (!opener) return { error: 'NO_TRAY_BUTTON' };
+        (opener.closest('[role="button"], button') || opener).click();
+        let search = null;
+        for (let i = 0; i < 40 && !search; i++) {
+          search = [...document.querySelectorAll('input')].find((el) => !inputsBefore.has(el) && el.type !== 'file' && el.getBoundingClientRect().width > 0);
+          if (!search) await wait(200);
+        }
+        if (!search) return { error: 'NO_TRAY' };
+        const tab = [...document.querySelectorAll('[role="tab"], [role="button"], button')].find((el) => new RegExp(${JSON.stringify(STICKER_TAB)}, 'i').test((el.textContent || '').trim()) && el.getBoundingClientRect().width > 0);
+        if (tab) { tab.click(); await wait(500); }
+        const q = ${JSON.stringify(query.trim().slice(0, 60))};
+        if (q) {
+          search.focus();
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, q);
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const srcOf = (el) => [el.currentSrc, el.src, el.getAttribute('srcset'), el.poster, ...[...el.querySelectorAll('source')].map((s) => s.src || s.srcset)].filter(Boolean).join(' ');
+        // GIPHY ids in the tray's pictures (giphy.com/media/<id>/…, sometimes with a v1.<token>/ segment)
+        const ids = () => {
+          const out = [];
+          for (const el of document.querySelectorAll('img, video')) {
+            if (before.has(el) || el.getBoundingClientRect().width === 0) continue;
+            const m = /\\/media\\/(?:v1\\.[^/\\s]+\\/)?([A-Za-z0-9]{6,})\\//.exec(srcOf(el));
+            if (m && !out.includes(m[1])) out.push(m[1]);
+          }
+          return out;
+        };
+        // Wait for the results to arrive and settle (they stream in as the search runs).
+        let last = [];
+        let steady = 0;
+        await wait(q ? 900 : 400);
+        for (let i = 0; i < 40 && steady < 3; i++) {
+          const now = ids();
+          steady = now.length > 0 && now.length === last.length ? steady + 1 : 0;
+          last = now;
+          await wait(250);
+        }
+        const seen = last.length ? [] : [...document.querySelectorAll('img, video')].filter((el) => !before.has(el)).slice(0, 4).map((el) => { try { const u = new URL(srcOf(el).split(' ')[0]); return u.hostname + u.pathname.slice(0, 40); } catch { return '?'; } });
+        // Close the tray without picking anything.
+        if (q) { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, ''); search.dispatchEvent(new Event('input', { bubbles: true })); }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        return { ids: last.slice(0, 48), tab: !!tab, seen };
+      })()`,
+      true
+    )) as { error?: string; ids?: string[]; tab?: boolean; seen?: string[] }
+    if (outcome.error === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
+    if (outcome.error) {
+      this.log('[instagram composer] sticker search', outcome.error, await this.describe(win))
+      throw new Error('Could not open Instagram’s GIF and sticker tray')
+    }
+    this.log('[instagram composer] sticker search', JSON.stringify({ query: query.slice(0, 30), found: outcome.ids?.length ?? 0, tab: outcome.tab, seen: outcome.seen }))
+    return outcome.ids ?? []
   }
 
   /** Hand the files to Instagram's hidden <input type=file>, exactly as the OS file dialog would. */

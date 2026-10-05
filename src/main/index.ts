@@ -19,7 +19,7 @@ import { AccountManager } from './adapters/manager'
 import { mimeOf } from './adapters/types'
 import { webmToOgg } from './media/webm-to-ogg'
 import { getWeather } from './weather'
-import { gifFile, giphyStickerFile, searchGifs, searchStickers } from './gifs'
+import { gifFile, giphyStickerFile, searchGifs, searchStickers, trayStickerPage } from './gifs'
 import { isGiphyStickerId } from '@shared/giphy'
 import { Scheduler } from './scheduler'
 import { Reminders } from './reminders'
@@ -1378,6 +1378,7 @@ function registerIpc(): void {
     await manager.remove(id)
     await pruneOrphanedSettings()
   })
+  handle(IPC.accountsSyncHistory, (_e, id: string) => manager.syncHistory(String(id)))
   handle(IPC.accountsReconnect, async (_e, id: string) => {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
@@ -1681,6 +1682,10 @@ function registerIpc(): void {
   handle(IPC.appStickerSearch, (_e, query: string, page: number) =>
     searchStickers(giphyKey(), String(query ?? '').slice(0, 100), Math.max(1, Math.min(50, Number(page) || 1)), storage.settings.language)
   )
+  handle(IPC.appStickerTray, async (_e, conversationId: string, query: string) => {
+    const q = String(query ?? '').slice(0, 60)
+    return trayStickerPage(await manager.trayStickers(String(conversationId), q), q)
+  })
   handle(IPC.appGifDefault, () => (BUILT_IN_GIF.key ? BUILT_IN_GIF.provider : null))
   handle(IPC.appGif, (_e, item: GifItem) => gifFile(item))
   handle(IPC.appSaveVoice, (_e, bytes: Uint8Array, duration: number, aac?: Uint8Array) => saveVoice(bytes, duration, aac))

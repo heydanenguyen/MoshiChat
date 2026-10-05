@@ -60,6 +60,10 @@ export interface PlatformAdapter {
   searchInConversation?(conversationId: string, query: string, limit: number): Promise<Message[]>
   /** Oldest message, total count and latest activity. */
   getConversationStats?(conversationId: string): Promise<ConversationStats>
+  /** Walk the platform's history as deep as it goes (Zalo), reporting progress; `reachedEnd`: nothing older is left. */
+  syncHistory?(onProgress: (progress: { pages: number; added: number }) => void): Promise<{ pages: number; added: number; reachedEnd: boolean }>
+  /** GIPHY ids of the stickers the platform's own sticker tray shows for `query` (Instagram), its picks when empty. */
+  searchTrayStickers?(conversationId: string, query: string): Promise<string[]>
   /** Everything cached in memory, for insights and memories (no network). */
   cachedMessages?(): Message[]
   /**

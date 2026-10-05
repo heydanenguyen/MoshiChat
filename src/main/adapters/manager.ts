@@ -442,6 +442,22 @@ export class AccountManager {
     return [...(this.messages.get(conversationId)?.values() ?? [])].filter((m) => isShared(m, kind)).sort((a, b) => b.sentAt - a.sentAt)
   }
 
+  /** The platform's own sticker tray (Instagram), as GIPHY ids; empty for platforms without one. */
+  /** Sync an account's older history (Zalo), with history:progress events while it runs. */
+  async syncHistory(accountId: string): Promise<{ pages: number; added: number; reachedEnd: boolean }> {
+    const adapter = this.adapters.get(accountId)
+    if (!adapter?.syncHistory) throw new Error('This account has no history to sync')
+    if (adapter.account.status !== 'connected') throw new Error('Sign in to this account first')
+    const result = await adapter.syncHistory((progress) => this.emit({ type: 'history:progress', accountId, ...progress, done: false }))
+    this.emit({ type: 'history:progress', accountId, pages: result.pages, added: result.added, done: true, reachedEnd: result.reachedEnd })
+    return result
+  }
+
+  async trayStickers(conversationId: string, query: string): Promise<string[]> {
+    const adapter = this.adapterFor(conversationId)
+    return adapter.searchTrayStickers ? adapter.searchTrayStickers(conversationId, query) : []
+  }
+
   async searchIn(conversationId: string, query: string): Promise<Message[]> {
     const needle = query.trim().toLowerCase()
     if (!needle) return []

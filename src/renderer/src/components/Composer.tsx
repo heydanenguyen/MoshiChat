@@ -79,6 +79,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const translateTarget = override?.translateTo
   const translateAuto = !!override?.translateAuto && !!translateTarget
   const partnerName = useStore((s) => s.conversations[conversationId]?.title)
+  const onInstagram = useStore((s) => s.conversations[conversationId]?.platform === 'instagram')
   const quickReplies = useQuickReplies()
   // "/query" right before the caret opens the quick replies menu.
   const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null)
@@ -483,6 +484,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 </button>
                 {stickersOpen && (
                   <StickerPicker
+                    tray={onInstagram ? conversationId : undefined}
                     onClose={() => setStickersOpen(false)}
                     onPick={(id) => {
                       setStickersOpen(false)

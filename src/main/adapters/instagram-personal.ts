@@ -502,6 +502,13 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
    * (`u<pk>`), and that link is only in memory, so look the thread up in the inbox before sending:
    * instagram.com only shows a composer for a real thread address (ig.me landing pages have none).
    */
+  /** Search Instagram's own GIF and sticker tray in this thread (nothing is sent): GIPHY ids, no GIPHY key needed. */
+  async searchTrayStickers(id: string, query: string): Promise<string[]> {
+    const threadId = await this.resolveThread(id)
+    if (!threadId) throw new Error('Send a first message to this person, then stickers can be searched here')
+    return this.composer.searchStickers(this.threadUrls(threadId), query)
+  }
+
   private async resolveThread(id: string): Promise<string | undefined> {
     const known = this.threadIdFor(id)
     if (known) return known

@@ -109,6 +109,8 @@ interface State {
   messages: Record<string, Message[]>
   loading: Record<string, boolean>
   hasMore: Record<string, boolean>
+  /** A history sync per account (Zalo), while it runs and its outcome after. */
+  historySync: Record<string, { pages: number; added: number; done: boolean; reachedEnd?: boolean }>
   typing: Record<string, { name: string; until: number }>
   /** The chat in the active pane (kept in step with `layout` for everything that means "the open chat"). */
   selectedId?: string
@@ -434,6 +436,7 @@ export const useStore = create<State>((set, get) => ({
   messages: {},
   loading: {},
   hasMore: {},
+  historySync: {},
   typing: {},
   layout: { panes: [undefined], active: 0 },
   recent: [],
@@ -555,6 +558,16 @@ export const useStore = create<State>((set, get) => ({
         case 'lock:state':
           set({ lock: event.state, ...(event.state.locked ? { laterPicker: undefined } : {}) })
           break
+        case 'history:progress': {
+          const historySync = { ...state.historySync, [event.accountId]: { pages: event.pages, added: event.added, done: event.done, reachedEnd: event.reachedEnd } }
+          // Older messages may be there now: chats that had reached their start can be scrolled up again.
+          if (event.done && event.added > 0) {
+            const hasMore = { ...state.hasMore }
+            for (const c of Object.values(state.conversations)) if (c.accountId === event.accountId && state.messages[c.id]) hasMore[c.id] = true
+            set({ historySync, hasMore })
+          } else set({ historySync })
+          break
+        }
         case 'typing': {
           const { conversationId, peerName, isTyping } = event.typing
           const existing = typingTimers.get(conversationId)
