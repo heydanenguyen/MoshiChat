@@ -13,6 +13,21 @@ const fixes = [
     files: ['node_modules/ws3-fca/src/deltas/apis/threads/getThreadList.js', 'node_modules/ws3-fca/src/deltas/apis/threads/getThreadInfo.js'],
     from: 'messaging_actor.big_image_src.uri',
     to: 'messaging_actor.big_image_src?.uri'
+  },
+  {
+    // On a 5xx from Facebook, ws3-fca retries the request, reading the "content-type" header to know how. The
+    // header is "Content-Type" (axios), so the retry itself threw "Cannot read properties of undefined (reading
+    // 'split')" and the message was never sent, nor retried.
+    files: ['node_modules/ws3-fca/src/utils/clients.js', 'node_modules/ws3-fca/src/utils/formatters.js'],
+    from: 'data.request.headers["content-type"].split(";")[0]',
+    to: 'String(data.request.headers["content-type"] ?? data.request.headers["Content-Type"] ?? "").split(";")[0]'
+  },
+  {
+    // ...and the retry posted the form as axios had already encoded it (a string), which ws3-fca's post() walks
+    // key by key: one key per character. Turned back into fields, the retry sends the same request again.
+    files: ['node_modules/ws3-fca/src/utils/clients.js'],
+    from: 'data.request.form,',
+    to: '(typeof data.request.form === "string" ? Object.fromEntries(new URLSearchParams(data.request.form)) : data.request.form),'
   }
 ]
 

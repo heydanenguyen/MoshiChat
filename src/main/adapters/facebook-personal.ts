@@ -190,7 +190,15 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     // ws3-fca's sendMessage returns a promise and takes the replied-to message third: a callback in that place
     // made it throw outside our reach, so the send never finished ("reply was never sent").
     const send = api.sendMessage as unknown as (m: unknown, t: string, replyTo?: string) => Promise<{ messageID?: string; timestamp?: number | string } | null>
-    const result = (await send(payload, threadId, options.replyToId ? String(options.replyToId) : undefined)) ?? {}
+    const result =
+      (await send(payload, threadId, options.replyToId ? String(options.replyToId) : undefined).catch((err: Error & { statusCode?: number }) => {
+        // ws3-fca retries a server error from Facebook five times, then gives up with a technical message.
+        if (err.statusCode && err.statusCode >= 500) {
+          this.ctx.log('facebook send failed after retries', err.statusCode)
+          throw new Error(`Facebook could not take this message right now (server error ${err.statusCode}). Try again in a moment.`, { cause: err })
+        }
+        throw err
+      })) ?? {}
     const message: Message = {
       id: result.messageID ?? `local-${Date.now()}`,
       conversationId: id,

@@ -41,3 +41,25 @@ describe('photoStickerFiles', () => {
     expect((await sharp(files.png).metadata()).pages ?? 1).toBe(1)
   })
 })
+
+describe('framesAt', async () => {
+  const { framesAt } = await import('../src/main/adapters/zalo-photo-sticker')
+  it('keeps about 10 of 60 frames a second without changing the loop length', () => {
+    const delays = Array.from({ length: 144 }, (_, i) => (i % 3 === 0 ? 17 : i % 3 === 1 ? 16 : 17))
+    const kept = framesAt(delays, 10)
+    expect(kept.pages.length).toBe(24)
+    expect(kept.pages.slice(0, 3)).toEqual([0, 6, 12])
+    expect(kept.delays.reduce((a, b) => a + b, 0)).toBe(delays.reduce((a, b) => a + b, 0))
+  })
+  it('takes 40 of 60 frames a second at even moments, keeping the loop length', () => {
+    const delays = Array.from({ length: 144 }, (_, i) => (i % 3 === 1 ? 16 : 17))
+    const kept = framesAt(delays, 40)
+    expect(kept.pages.length).toBe(96)
+    expect(kept.pages.slice(0, 4)).toEqual([0, 1, 3, 4])
+    expect(new Set(kept.delays)).toEqual(new Set([25]))
+    expect(kept.delays.reduce((a, b) => a + b, 0)).toBe(delays.reduce((a, b) => a + b, 0))
+  })
+  it('leaves a slow animation alone', () => {
+    expect(framesAt([100, 100, 100], 10)).toEqual({ pages: [0, 1, 2], delays: [100, 100, 100] })
+  })
+})

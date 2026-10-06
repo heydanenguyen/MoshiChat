@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BirthdayDemo, FeatureCard, FeatureGrid, FriendsDemo, LaterDemo, NoteDemo, ScheduleDemo, TodosDemo } from './FeatureCards'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, History, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
 import type { BubbleAction, Language, ReactionPlacement, SyncStatus, TextSize, ThemePreference } from '@shared/types'
@@ -680,29 +681,19 @@ function ChatPage(): JSX.Element {
       </Group>
       <Group label={t('featuresTitle')}>
         <Row title={t('featuresTitle')} sub={t('featuresHint')} />
-        <Row title={t('noteCardSetting')} sub={t('noteCardSettingHint')}>
-          <Switch on={settings.noteCard !== false} onChange={(on) => void setSettings({ noteCard: on })} />
-        </Row>
-        <Row title={t('scheduleSendSetting')} sub={t('scheduleSendSettingHint')}>
-          <Switch on={settings.scheduleSend !== false} onChange={(on) => void setSettings({ scheduleSend: on })} />
-        </Row>
-        <Row title={t('laterToolsSetting')} sub={t('laterToolsSettingHint')}>
-          <Switch on={settings.laterTools !== false} onChange={(on) => void setSettings({ laterTools: on })} />
-        </Row>
-        <Row title={t('todosOnSetting')} sub={t('todosOnSettingHint')}>
-          <Switch on={settings.todosOn !== false} onChange={(on) => void setSettings({ todosOn: on })} />
-        </Row>
-        <Row title={t('closeFriendsSetting')} sub={t('closeFriendsSettingHint')}>
-          <Switch on={settings.closeFriends !== false} onChange={(on) => void setSettings({ closeFriends: on })} />
-        </Row>
+        <FeatureGrid>
+          <FeatureCard title={t('noteCardSetting')} sub={t('noteCardSettingHint')} on={settings.noteCard !== false} onChange={(on) => void setSettings({ noteCard: on })} demo={<NoteDemo />} />
+          <FeatureCard title={t('scheduleSendSetting')} sub={t('scheduleSendSettingHint')} on={settings.scheduleSend !== false} onChange={(on) => void setSettings({ scheduleSend: on })} demo={<ScheduleDemo />} />
+          <FeatureCard title={t('laterToolsSetting')} sub={t('laterToolsSettingHint')} on={settings.laterTools !== false} onChange={(on) => void setSettings({ laterTools: on })} demo={<LaterDemo />} />
+          <FeatureCard title={t('todosOnSetting')} sub={t('todosOnSettingHint')} on={settings.todosOn !== false} onChange={(on) => void setSettings({ todosOn: on })} demo={<TodosDemo />} />
+          <FeatureCard title={t('closeFriendsSetting')} sub={t('closeFriendsSettingHint')} on={settings.closeFriends !== false} onChange={(on) => void setSettings({ closeFriends: on })} demo={<FriendsDemo />} />
+          <FeatureCard title={t('birthdaySetting')} sub={t('birthdaySettingHint')} on={settings.birthdayReminders !== false} onChange={(on) => void setSettings({ birthdayReminders: on })} demo={<BirthdayDemo />} />
+        </FeatureGrid>
         {settings.closeFriends !== false && (
           <Row title={t('reconnectSetting')} sub={t('reconnectSettingHint')}>
             <Switch on={settings.reconnectNudge !== false} onChange={(on) => void setSettings({ reconnectNudge: on })} />
           </Row>
         )}
-        <Row title={t('birthdaySetting')} sub={t('birthdaySettingHint')}>
-          <Switch on={settings.birthdayReminders !== false} onChange={(on) => void setSettings({ birthdayReminders: on })} />
-        </Row>
       </Group>
       <Group label={t('reactionPlacement')}>
         <Row title={t('reactionPlacement')} sub={t('reactionPlacementHint')} stack>
