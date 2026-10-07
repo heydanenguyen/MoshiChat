@@ -1445,7 +1445,17 @@ function registerIpc(): void {
   handle(IPC.updateState, () => updater.current())
   handle(IPC.updateCheck, () => updater.check(false))
   handle(IPC.updateDownload, () => updater.download())
-  on(IPC.updateInstall, () => updater.install())
+  // Everything that could outlive the windows goes first, and is waited for: the installer refuses to run while any
+  // Moshi process is left (the AI worker with a model on the GPU took longest).
+  on(IPC.updateInstall, () =>
+    void updater.install(async () => {
+      quitting = true
+      log('[update] closing Moshi down for the installer')
+      // Hidden, not closed: closing the last window would quit before the installer is started.
+      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.isVisible()) w.hide()
+      await Promise.all([ai.stopAndWait(), Promise.race([manager.shutdown(), new Promise((r) => setTimeout(r, 4_000))])])
+    })
+  )
   handle(IPC.aiStatus, () => ai.status())
   handle(IPC.aiHardware, async () => {
     const hardware = await ai.hardware()
@@ -1757,7 +1767,17 @@ if (!gotLock) {
     if (!isMac) app.quit()
   })
 
-  app.on('before-quit', () => {
+  // The AI worker is waited for once before quitting: a pending update installs on quit, and its installer gives up
+  // while a worker that still holds a model on the GPU is shutting down.
+  let workerStopped = false
+  app.on('before-quit', (event) => {
+    if (!workerStopped && ai.running()) {
+      event.preventDefault()
+      workerStopped = true
+      quitting = true
+      void ai.stopAndWait(4_000).finally(() => app.quit())
+      return
+    }
     quitting = true
     updater.stop()
     scheduler.stop()

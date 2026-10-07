@@ -6,6 +6,39 @@
   StrCpy $isForceCurrentInstall "1"
 !macroend
 
+; Is Moshi still running? By program name, the current user's "Moshi.exe" only. electron-builder 26 asks instead
+; whether any process runs from inside the install folder, and updates kept stopping at "Moshi cannot be closed"
+; with no Moshi window or process left. Asks Moshi to close, then ends it, and only asks the user after ~15 s.
+!macro customCheckAppRunning
+  ; this installer's own process id, never to be ended
+  System::Call "kernel32::GetCurrentProcessId() i .R2"
+  StrCpy $R1 0
+  moshiCheckRunning:
+    nsExec::Exec `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    Pop $R0
+    ${if} $R0 == 0
+      IntOp $R1 $R1 + 1
+      ${if} $R1 == 1
+        DetailPrint "$(appClosing)"
+        nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $R2" /FI "USERNAME eq %USERNAME%"`
+        Sleep 2500
+      ${else}
+        nsExec::Exec `"$CmdPath" /C taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}" /FI "PID ne $R2" /FI "USERNAME eq %USERNAME%"`
+        Sleep 1500
+      ${endif}
+      ${if} $R1 < 9
+        Goto moshiCheckRunning
+      ${endif}
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY moshiCheckAgain
+      Quit
+      moshiCheckAgain:
+        StrCpy $R1 1
+        Goto moshiCheckRunning
+    ${endif}
+    ; files a closed Moshi held are free a moment later
+    Sleep 300
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 
 ; ---------------------------------------------------------------- welcome

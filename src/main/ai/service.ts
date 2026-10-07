@@ -177,9 +177,36 @@ export class AiService {
     })
   }
 
+  /** Whether the worker process is up. */
+  running(): boolean {
+    return !!this.worker
+  }
+
   stop(): void {
     this.worker?.kill()
     this.worker = undefined
+  }
+
+  /**
+   * Stop the worker and wait until it has really exited (an installer replacing Moshi finds it otherwise: a worker
+   * with a model on the GPU takes a few seconds to let go of it). Forced after `timeoutMs`.
+   */
+  async stopAndWait(timeoutMs = 6_000): Promise<void> {
+    const worker = this.worker
+    this.worker = undefined
+    if (!worker) return
+    const pid = worker.pid
+    const exited = new Promise<void>((resolve) => worker.once('exit', () => resolve()))
+    worker.kill()
+    const inTime = await Promise.race([exited.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs))])
+    if (inTime || !pid) return
+    this.log('[ai] the worker did not exit in time; ending it')
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      /* gone meanwhile */
+    }
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 2_000))])
   }
 
   /** Download (first time) and load a model. */

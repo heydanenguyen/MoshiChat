@@ -23,6 +23,8 @@ export class Updater {
   private started = false
   /** The current download was started by Moshi itself, not by a click. */
   private background = false
+  /** quitAndInstall was asked for (a second click must not start it twice). */
+  private installing = false
 
   constructor(
     private readonly emit: (state: UpdateState) => void,
@@ -137,8 +139,16 @@ export class Updater {
     }
   }
 
-  install(): void {
-    if (this.state.phase !== 'ready') return
+  /**
+   * Close Moshi down completely, then hand over to the installer. `prepare` stops what could outlive the windows
+   * (the AI worker above all); without it the installer found Moshi still running and asked to close it by hand.
+   */
+  async install(prepare?: () => Promise<void>): Promise<void> {
+    if (this.state.phase !== 'ready' || this.installing) return
+    this.installing = true
+    if (prepare) {
+      await Promise.race([prepare().catch((err: Error) => this.log('[update] preparing to install:', err.message)), new Promise((r) => setTimeout(r, 10_000))])
+    }
     setImmediate(() => autoUpdater.quitAndInstall(false, true))
   }
 
