@@ -15,7 +15,12 @@ const KIND_RE = /SlideUQPP(NewMessage|NewRavenMessage|ReadReceipt|CreateReaction
 const TYPING_RE = /\/direct_v2\/threads\/(\d+)\/activity_indicator_id[^"]*"[\s\S]{0,60}?"value"\s*:\s*"((?:[^"\\]|\\.)*)"/g
 const RELOAD_EVERY = 30 * 60_000
 /** Last seen persisted query ids, used when the module registry lookup fails. */
-const KNOWN_DOC_IDS: Record<string, string> = { IGDThreadDetailQuery: '28288012930891325' }
+/** Last ids seen on instagram.com (October 2026), used only when the page's module registry does not name them. */
+const KNOWN_DOC_IDS: Record<string, string> = {
+  IGDThreadDetailQuery: '29619996517588618',
+  PolarisDirectInboxQuery: '27909866362025854',
+  IGDThreadListOffMsysPaginationQuery: '28774058922187457'
+}
 /** Anything that looks typing-related; used to log key names (never values) once per shape. */
 const DIAG_RE = /activity_indicator|typing_indicator|is_typing|"typing"|TypingIndicator/i
 /** Nothing shorter can hold any of the markers above (`"typing"` is the shortest), even base64 encoded. */
@@ -103,6 +108,20 @@ export class InstagramRealtime {
    * falling back to the last id we saw.
    */
   async graphql(operation: string, variables: Record<string, unknown>): Promise<unknown> {
+    // The page reloads on a timer; caught mid-reload it has no tokens for a moment. The inbox and every chat come
+    // through here now, so wait for it rather than fail.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.graphqlOnce(operation, variables)
+      } catch (err) {
+        const retryable = /no token|not running|Execution context|destroyed/i.test((err as Error).message)
+        if (!retryable || attempt >= 3) throw err
+        await new Promise((r) => setTimeout(r, 2_500))
+      }
+    }
+  }
+
+  private async graphqlOnce(operation: string, variables: Record<string, unknown>): Promise<unknown> {
     const win = this.window
     if (!win || win.isDestroyed()) throw new Error('Instagram web client is not running')
     if (win.webContents.isLoading()) {
@@ -125,6 +144,12 @@ export class InstagramRealtime {
         if (!dtsg) return { error: 'no token' };
         const docId = need(req.operation + '_instagramRelayOperation') || req.fallback;
         if (!docId) return { error: 'unknown query' };
+        // Gatekeeper values a query declares (__relay_internal__pv__<Name>relayprovider): the page's own, as it sends them.
+        for (const arg of need(req.operation + '.graphql')?.operation?.argumentDefinitions || []) {
+          const gk = /^__relay_internal__pv__(.+)relayprovider$/.exec(arg.name);
+          if (!gk || req.variables[arg.name] !== undefined) continue;
+          try { req.variables[arg.name] = need(gk[1] + '.relayprovider')?.get?.() ?? null } catch (e) { req.variables[arg.name] = null }
+        }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 25000);
         try {

@@ -7,6 +7,7 @@ import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './ty
 import { conversationId, externalIdOf, isShared, matchesQuery, unsentCopy } from './types'
 import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
 import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
+import { INBOX_QUERY, MESSAGE_PAGE_QUERY, THREAD_DETAIL_QUERY, THREAD_LIST_PAGE_QUERY, convertThread, messagePageOf, slideItem, threadDetailOf, threadListOf, type GqlThread } from './instagram-graphql'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { legacyPartition } from '../web-partitions'
@@ -46,11 +47,6 @@ interface IgThread {
   last_seen_at?: Record<string, { item_id?: string; timestamp?: string }>
   /** In the message requests folder (not accepted yet). */
   pending?: boolean
-}
-
-interface InboxResponse {
-  inbox: { threads: IgThread[]; has_older?: boolean; oldest_cursor?: string }
-  viewer?: IgUser
 }
 
 /** Walking whole histories for counts/"talking since" is paused: too slow for what it shows. */
@@ -123,6 +119,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private slideResolved = new Map<string, MappedItem>()
   private slideCache = new Map<string, { at: number; nodes: Map<string, SlideNode> }>()
   private v2Ids = new Map<string, string>()
+  /** The GraphQL mailbox (inbox) id, for its later pages and the requests folder. */
+  private mailboxId?: string
+  /** Messaging ids (fbid) -> Instagram user ids, from the threads seen. */
+  private fbidPk = new Map<string, string>()
   private slideFailures = 0
   private users = new Map<string, IgUser>()
   private history = new Map<string, Message[]>()
@@ -336,13 +336,37 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   /** One page of a thread, newest first. */
+  /**
+   * One page of a chat, newest first: the newest 20 from the thread query, older ones from the message list query
+   * with the cursor it gave. Both are the web client's own GraphQL (direct_v2's thread endpoint answers 404).
+   */
   private async page(threadId: string, cursor?: string): Promise<{ items: IgItem[]; cursor?: string; hasOlder: boolean }> {
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
-    if (cursor) params.set('cursor', cursor)
-    const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?${params}`, { headers: APP_HEADERS })
-    this.absorbUsers(res.thread.users)
-    if (res.thread.thread_v2_id) this.v2Ids.set(threadId, res.thread.thread_v2_id)
-    return { items: res.thread.items ?? [], cursor: res.thread.oldest_cursor, hasOlder: !!res.thread.has_older }
+    const v2 = this.threads.get(threadId)?.thread_v2_id ?? this.v2Ids.get(threadId)
+    if (!v2) throw new Error('Instagram chat not found in the inbox yet')
+    let nodes: SlideNode[]
+    let next: { cursor?: string; hasOlder: boolean }
+    if (!cursor) {
+      const detail = threadDetailOf(await this.realtime.graphql(THREAD_DETAIL_QUERY, { thread_fbid: v2, min_uq_seq_id: null }))
+      if (detail) {
+        const thread = this.absorbGraphqlThread(detail)
+        this.absorbUsers(thread.users)
+        const known = this.threads.get(threadId)
+        if (known) known.last_seen_at = thread.last_seen_at
+      }
+      const page = messagePageOf(detail?.slide_messages ?? {})
+      nodes = page.nodes
+      next = page
+    } else {
+      const page = messagePageOf(await this.realtime.graphql(MESSAGE_PAGE_QUERY, { id: v2, after: cursor, first: PAGE_SIZE }))
+      nodes = page.nodes
+      next = page
+    }
+    const items = nodes.map((node) => {
+      const item = slideItem(node, this.fbidPk)
+      this.slideResolved.set(item.item_id, mapSlideNode(node, item.item_id))
+      return item
+    })
+    return { items, cursor: next.cursor, hasOlder: next.hasOlder }
   }
 
   async sendMessage(id: string, text: string, options: SendOptions = {}): Promise<Message> {
@@ -370,8 +394,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     if (resolvedThread) {
       if (!threadId) this.aliases.set(external, resolvedThread)
       try {
-        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${resolvedThread}/?limit=5`, { headers: APP_HEADERS })
-        const mine = (res.thread.items ?? []).find((item) => String(item.user_id) === this.mePk && (item.text ?? '') === text)
+        const res = { thread: { items: (await this.page(resolvedThread)).items } }
+        const mine = (res.thread.items ?? []).find((item) => String(item.user_id) === this.mePk && this.mapped(item).text === text)
         itemId = mine?.item_id
       } catch {
         /* the next poll will reconcile */
@@ -470,7 +494,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     for (let attempt = 0; attempt < 12 && !sent; attempt++) {
       await sleep(attempt ? 2500 : 1200)
       try {
-        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${threadId}/?limit=8`, { headers: APP_HEADERS })
+        const res = { thread: { items: (await this.page(threadId)).items } }
         sent = (res.thread.items ?? [])
           .filter((item) => String(item.user_id) === this.mePk && Number(item.timestamp) / 1000 >= sentAt - 5000 && item.item_type !== 'text')
           .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))[0]
@@ -864,13 +888,40 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
   }
 
-  private async inbox(): Promise<IgThread[]> {
-    const res = await this.web.json<InboxResponse>('/api/v1/direct_v2/inbox/?persistentBadging=true&folder=&limit=40&thread_message_limit=1', { headers: APP_HEADERS })
-    const threads = res.inbox?.threads ?? []
-    if (res.viewer?.profile_pic_url && this.account.avatarUrl !== res.viewer.profile_pic_url) {
-      this.account.avatarUrl = res.viewer.profile_pic_url
+  /**
+   * A thread from the web client's GraphQL, kept in the direct_v2 shape the rest of the adapter uses; its messages
+   * come mapped from their Slide nodes, and its people's messaging ids are remembered for later senders.
+   */
+  private absorbGraphqlThread(t: GqlThread): IgThread {
+    const converted = convertThread(t, this.mePk)
+    for (const [fbid, pk] of converted.fbids) this.fbidPk.set(fbid, pk)
+    for (const [itemId, node] of converted.nodes) this.slideResolved.set(itemId, mapSlideNode(node, itemId))
+    const thread = converted.thread as IgThread
+    if (thread.thread_v2_id) this.v2Ids.set(thread.thread_id, thread.thread_v2_id)
+    return thread
+  }
+
+  /**
+   * Inbox threads: the first page (PolarisDirectInboxQuery) and, for the chat list, two more (the 40 or so direct_v2
+   * gave). The poll every 45 s only needs the newest page.
+   */
+  private async inbox(pages = 3): Promise<IgThread[]> {
+    const first = threadListOf(await this.realtime.graphql(INBOX_QUERY, { device_id_for_iris_subscription: randomUUID() }))
+    this.mailboxId = first.mailboxId ?? this.mailboxId
+    const raw = [...first.threads]
+    let cursor = first.hasMore ? first.cursor : undefined
+    for (let pageNo = 1; pageNo < pages && cursor && this.mailboxId; pageNo++) {
+      const next = threadListOf(await this.realtime.graphql(THREAD_LIST_PAGE_QUERY, { id: this.mailboxId, cursor, count: 15, folder: 'INBOX', newer_than_timestamp_ms: null }))
+      raw.push(...next.threads)
+      cursor = next.hasMore ? next.cursor : undefined
+    }
+    const viewerPic = raw.find((t) => t.viewer?.profile_pic_url)?.viewer?.profile_pic_url
+    if (viewerPic && this.account.avatarUrl !== viewerPic) {
+      this.account.avatarUrl = viewerPic
       this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
     }
+    const seen = new Set<string>()
+    const threads = raw.filter((t) => !seen.has(String(t.thread_id)) && seen.add(String(t.thread_id))).map((t) => this.absorbGraphqlThread(t))
     for (const thread of threads) {
       this.threads.set(thread.thread_id, thread)
       this.absorbUsers(thread.users)
@@ -890,8 +941,9 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private async requestsFolder(): Promise<IgThread[]> {
     // Counted as checked even if it fails, so a rate limit is not hit again on every poll.
     this.requestsCheckedAt = Date.now()
-    const res = await this.web.json<InboxResponse>('/api/v1/direct_v2/pending_inbox/?persistentBadging=true&limit=20&thread_message_limit=1', { headers: APP_HEADERS })
-    const threads = res.inbox?.threads ?? []
+    if (!this.mailboxId) return []
+    const res = threadListOf(await this.realtime.graphql(THREAD_LIST_PAGE_QUERY, { id: this.mailboxId, cursor: null, count: 20, folder: 'PENDING', newer_than_timestamp_ms: null }))
+    const threads = res.threads.map((t) => this.absorbGraphqlThread(t))
     for (const thread of threads) {
       if (this.threads.get(thread.thread_id)?.pending === false && !this.requestIds.has(thread.thread_id)) continue
       this.requestIds.add(thread.thread_id)
@@ -937,7 +989,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     try {
       const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
       const activity = new Map([...this.threads].map(([k, t]) => [k, String(t.last_activity_at ?? '')]))
-      const threads = await this.inbox()
+      const threads = await this.inbox(1)
       const sweep = this.reactionSweep
       this.reactionSweep = false
       const refreshed = new Set<string>()
@@ -948,7 +1000,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
           // No new message, but something happened (a reaction, taken back, an edit): refresh what is on screen.
           const moved = activity.has(thread.thread_id) && activity.get(thread.thread_id) !== String(thread.last_activity_at ?? '')
           if (moved && this.history.get(id)?.length) {
-            const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=${PAGE_SIZE}`, { headers: APP_HEADERS })
+            const res = { thread: { items: (await this.page(thread.thread_id)).items } }
             this.syncReactions(id, res.thread.items ?? [])
             refreshed.add(thread.thread_id)
           }
@@ -957,7 +1009,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
         const known = this.history.get(id)
         if (!known || !lastId || known.some((m) => m.id === lastId)) continue
-        const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=10`, { headers: APP_HEADERS })
+        const res = { thread: { items: (await this.page(thread.thread_id)).items } }
         await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
         this.syncReactions(id, res.thread.items ?? [])
         refreshed.add(thread.thread_id)
@@ -981,7 +1033,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
           .sort((a, b) => Number(b.last_activity_at ?? 0) - Number(a.last_activity_at ?? 0))
           .slice(0, 3)
         for (const thread of recent) {
-          const res = await this.web.json<{ thread: IgThread }>(`/api/v1/direct_v2/threads/${thread.thread_id}/?limit=${PAGE_SIZE}`, { headers: APP_HEADERS })
+          const res = { thread: { items: (await this.page(thread.thread_id)).items } }
           this.syncReactions(conversationId(this.account.id, thread.thread_id), res.thread.items ?? [])
         }
       }
@@ -1157,6 +1209,8 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
 
   /** Start the Slide lookup early, alongside the page request (opening a chat is then one round trip). */
   private async warmSlides(threadId: string): Promise<void> {
+    // Pages come from the thread query itself now, already mapped: a second lookup would only repeat it.
+    if (this.threads.get(threadId)?.items?.every((item) => this.slideResolved.has(item.item_id))) return
     const v2 = this.threads.get(threadId)?.thread_v2_id ?? this.v2Ids.get(threadId)
     if (!v2 || this.slideFailures >= 5) return
     const cached = this.slideCache.get(threadId)
@@ -1179,7 +1233,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   }
 
   private async loadThreadCache(): Promise<void> {
-    this.threadCacheFile = join(this.ctx.dataDir(), `threads-${this.mePk}.json`)
+    this.threadCacheFile = join(this.ctx.dataDir(), `threads-v2-${this.mePk}.json`)
     try {
       const raw = JSON.parse(await readFileAsync(this.threadCacheFile, 'utf8')) as Record<string, Message[]>
       for (const [id, list] of Object.entries(raw)) if (!this.history.has(id) && Array.isArray(list)) this.history.set(id, list)
