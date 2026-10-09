@@ -11,10 +11,10 @@ vi.mock('electron', () => ({
   powerMonitor: { on: () => undefined, getSystemIdleTime: () => 0 }
 }))
 
-// Real fs, but with rename watched: the lock file has to be written as tmp + rename.
+// Real fs, but with rename and readFile watched: the lock file has to be written as tmp + rename.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const real = await importOriginal<typeof import('node:fs/promises')>()
-  return { ...real, rename: vi.fn(real.rename) }
+  return { ...real, rename: vi.fn(real.rename), readFile: vi.fn(real.readFile) }
 })
 
 const { AppLock, validPasscode } = await import('../src/main/lock')
@@ -139,6 +139,31 @@ describe('AppLock', () => {
     } finally {
       await rm(file, { recursive: true, force: true })
     }
+  })
+
+  it('a lock file that is busy for a moment is read again, not mistaken for a lost lock', async () => {
+    const first = setup()
+    await first.lock.enable('2468')
+    vi.mocked(readFile).mockClear()
+    vi.mocked(readFile).mockRejectedValueOnce(Object.assign(new Error('EBUSY: busy'), { code: 'EBUSY' }))
+    const next = setup(first.store.settings)
+    await next.lock.load()
+    expect(vi.mocked(readFile).mock.calls.filter(([p]) => String(p) === join(dir, 'lock.json'))).toHaveLength(2)
+    expect(next.lock.state()).toMatchObject({ enabled: true, locked: true })
+    expect((await next.lock.unlock('2468')).ok).toBe(true)
+  })
+
+  it('forgot the code still works when the lock file cannot be read at all', async () => {
+    const first = setup()
+    await first.lock.enable('2468')
+    const file = join(dir, 'lock.json')
+    await rm(file)
+    await mkdir(file)
+    const next = setup(first.store.settings)
+    await next.lock.load()
+    await next.lock.reset(async () => undefined)
+    expect(next.store.settings.appLock).toBeUndefined()
+    expect(next.lock.isLocked()).toBe(false)
   })
 
   it('a lock file with no secret in it is damaged, not "no lock"', async () => {

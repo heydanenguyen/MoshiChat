@@ -31,7 +31,7 @@ const LOCKED = new Set(['EPERM', 'EBUSY', 'EACCES'])
 const errorCode = (err: unknown): string | undefined => (err as NodeJS.ErrnoException | undefined)?.code
 
 /** Windows: antivirus or the indexer may hold the file for a moment, so a locked-file error gets a few tries, 100 ms apart. */
-async function retryLocked<T>(op: () => Promise<T>): Promise<T> {
+export async function retryLocked<T>(op: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await op()

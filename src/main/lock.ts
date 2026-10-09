@@ -3,7 +3,7 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:cry
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BridgeEvent, LockState } from '@shared/types'
-import type { Storage } from './storage'
+import { retryLocked, type Storage } from './storage'
 
 const scrypt = (code: string, salt: Buffer): Promise<Buffer> =>
   new Promise((resolve, reject) => scryptCallback(code, salt, 32, { N: 16384, r: 8, p: 1 }, (err, key) => (err ? reject(err) : resolve(key))))
@@ -61,7 +61,7 @@ export class AppLock {
   /** Read the secret; a lock that is on starts locked. A setting without its secret (copied from elsewhere) is dropped. */
   async load(): Promise<void> {
     try {
-      const raw = JSON.parse(await readFile(this.file, 'utf8')) as { salt?: string; hash?: string; failures?: number; blockedUntil?: number }
+      const raw = JSON.parse(await retryLocked(() => readFile(this.file, 'utf8'))) as { salt?: string; hash?: string; failures?: number; blockedUntil?: number }
       if (raw.salt && raw.hash) this.secret = { salt: raw.salt, hash: raw.hash }
       else this.unreadable = true // a file without a secret in it is damaged, not "no lock"
       this.failures = Math.max(0, Number(raw.failures) || 0)
@@ -157,7 +157,7 @@ export class AppLock {
     this.unreadable = false
     this.failures = 0
     this.blockedUntil = 0
-    await rm(this.file, { force: true })
+    await rm(this.file, { force: true, recursive: true })
   }
 
   /** Turn the lock on with a new code (only when it is off; changing needs the old code). */
