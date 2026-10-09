@@ -37,6 +37,9 @@ import { isSplit, type PaneIndex } from '../panes'
 import { CONVERSATION_DRAG } from './ConversationList'
 import { modKey } from '../utils'
 import { useScrollFade } from '../scrollFade'
+import { Presence } from './Presence'
+import { usePresence } from '../usePresence'
+import { withViewTransition } from '../viewTransition'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -220,6 +223,9 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   const scrollRef = useRef<HTMLDivElement>(null)
   useScrollFade(scrollRef)
   const stickToBottom = useRef(true)
+  // Messages that arrived while the thread was scrolled up (the "N new messages" pill), and where the thread ended.
+  const [unseen, setUnseen] = useState(0)
+  const lastSeen = useRef<{ conversationId: string; id?: string }>({ conversationId: conversation.id })
   const prevHeight = useRef(0)
   const prevFirstId = useRef<string | undefined>(undefined)
   const [dragging, setDragging] = useState(0)
@@ -298,6 +304,30 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
     const first = virtualizer.getVirtualItems().find((item) => item.end > top)
     anchor.current = first ? { key: first.key, within: top - first.start } : undefined
   }, [virtualizer])
+
+  // New messages at the end while the person reads further up: count them for the pill (and start over in another chat).
+  useEffect(() => {
+    const last = messages?.[messages.length - 1]
+    const before = lastSeen.current
+    lastSeen.current = { conversationId: conversation.id, id: last?.id }
+    if (before.conversationId !== conversation.id) return setUnseen(0)
+    if (!messages || !last || !before.id || last.id === before.id || stickToBottom.current) return
+    const at = messages.findIndex((m) => m.id === before.id)
+    // Older messages loading above, or the old end gone, is not news.
+    if (at < 0) return
+    const fresh = messages.slice(at + 1).filter((m) => !m.isOutgoing).length
+    if (fresh) setUnseen((n) => n + fresh)
+  }, [messages, conversation.id])
+  const jumpToLatest = (): void => {
+    stickToBottom.current = true
+    setUnseen(0)
+    if (rows.length) virtualizer.scrollToIndex(rows.length - 1, { align: 'end' })
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
+  const pill = usePresence(unseen > 0)
+  const pillCount = useRef(unseen)
+  if (unseen > 0) pillCount.current = unseen
 
   // Keep the viewport pinned to the newest message unless the user scrolled up.
   useLayoutEffect(() => {
@@ -389,8 +419,10 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
     const onScroll = (): void => {
       rememberAnchor()
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-      if (nearBottom) stickToBottom.current = true
-      else if (held || Date.now() - lastInput < 600) stickToBottom.current = false
+      if (nearBottom) {
+        stickToBottom.current = true
+        setUnseen((n) => (n ? 0 : n))
+      } else if (held || Date.now() - lastInput < 600) stickToBottom.current = false
       if (el.scrollTop < 60 && hasMore && !loading) void loadMore(conversation.id)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -451,11 +483,11 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
       {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
       <header className="chat-header drag">
         {narrow && (
-          <button className="icon-btn no-drag" onClick={() => select(undefined)} title={t('back')}>
+          <button className="icon-btn no-drag" onClick={() => withViewTransition('to-list', () => select(undefined))} title={t('back')}>
             <ChevronLeft size={20} strokeWidth={2.4} />
           </button>
         )}
-        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} onClick={() => toggleDetails('info')} />
+        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} onClick={() => withViewTransition('details', () => toggleDetails('info'))} />
         <div className="chat-header-info">
           <div className="chat-header-title">
             {conversation.title}
@@ -471,7 +503,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
           )}
           {laterOn && <LaterButton conversationId={conversation.id} />}
           <SummaryButton conversationId={conversation.id} />
-          <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => toggleDetails()} title={t('details')}>
+          <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => withViewTransition('details', () => toggleDetails())} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
           {split && (
@@ -535,6 +567,14 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
         </div>
       </div>
 
+      {pill.mounted && (
+        <div className="jump-anchor">
+          <button className="jump-pill" data-state={pill.state} onClick={jumpToLatest} aria-live="polite">
+            <ChevronDown size={14} strokeWidth={2.6} aria-hidden />
+            {pillCount.current === 1 ? t('jumpNewMessageOne') : t('jumpNewMessages', { count: pillCount.current })}
+          </button>
+        </div>
+      )}
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
       {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
@@ -1247,53 +1287,55 @@ function BubbleView({
               <MoreHorizontal size={16} strokeWidth={2} />
             </button>
           )}
-          {moreOpen && (
-            <span className="bubble-more-anchor" ref={fitInChat}>
-              <div className="context-menu bubble-more-menu" role="menu">
-                {canReact && (
-                  <div className="bubble-more-reacts">
-                    {(platform === 'zalo' ? ZALO_QUICK : QUICK_REACTIONS).map((emoji) => (
+          <Presence modal={false}>
+            {moreOpen && (
+              <span className="bubble-more-anchor" ref={fitInChat}>
+                <div className="context-menu bubble-more-menu" role="menu">
+                  {canReact && (
+                    <div className="bubble-more-reacts">
+                      {(platform === 'zalo' ? ZALO_QUICK : QUICK_REACTIONS).map((emoji) => (
+                        <button
+                          key={emoji}
+                          className={mine === emoji ? 'active' : ''}
+                          title={mine === emoji ? t('removeReaction') : undefined}
+                          onClick={() => {
+                            setMoreOpen(false)
+                            void react(message.conversationId, message.id, emoji)
+                          }}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
                       <button
-                        key={emoji}
-                        className={mine === emoji ? 'active' : ''}
-                        title={mine === emoji ? t('removeReaction') : undefined}
+                        className="reaction-more"
+                        title={t('moreReactions')}
                         onClick={() => {
                           setMoreOpen(false)
-                          void react(message.conversationId, message.id, emoji)
+                          setMoreEmoji(true)
                         }}
                       >
-                        {emoji}
+                        <Plus size={15} strokeWidth={2.4} />
                       </button>
-                    ))}
+                    </div>
+                  )}
+                  {moreItems.map((item) => (
                     <button
-                      className="reaction-more"
-                      title={t('moreReactions')}
+                      key={item.key}
+                      className={`context-menu-item ${item.danger ? 'danger' : ''}`}
+                      role="menuitem"
                       onClick={() => {
                         setMoreOpen(false)
-                        setMoreEmoji(true)
+                        item.run()
                       }}
                     >
-                      <Plus size={15} strokeWidth={2.4} />
+                      {item.icon}
+                      <span>{item.label}</span>
                     </button>
-                  </div>
-                )}
-                {moreItems.map((item) => (
-                  <button
-                    key={item.key}
-                    className={`context-menu-item ${item.danger ? 'danger' : ''}`}
-                    role="menuitem"
-                    onClick={() => {
-                      setMoreOpen(false)
-                      item.run()
-                    }}
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            </span>
-          )}
+                  ))}
+                </div>
+              </span>
+            )}
+          </Presence>
           {todoOpen && <TodoPicker message={message} onClose={() => setTodoOpen(false)} />}
           {time}
           {confirmUnsend && (
@@ -1342,30 +1384,32 @@ function BubbleView({
               </button>
             </div>
           )}
-          {moreEmoji && (
-            <span className="reaction-emoji-anchor" ref={fitInChat}>
-              {platform === 'zalo' ? (
-                // Zalo only takes its own reactions: offer those, never an emoji it would refuse.
-                <ReactionGrid
-                  emojis={ZALO_ALL}
-                  current={mine}
-                  onPick={(emoji) => {
-                    setMoreEmoji(false)
-                    void react(message.conversationId, message.id, emoji)
-                  }}
-                  onClose={() => setMoreEmoji(false)}
-                />
-              ) : (
-                <EmojiPicker
-                  onPick={(emoji) => {
-                    setMoreEmoji(false)
-                    void react(message.conversationId, message.id, emoji)
-                  }}
-                  onClose={() => setMoreEmoji(false)}
-                />
-              )}
-            </span>
-          )}
+          <Presence modal={false}>
+            {moreEmoji && (
+              <span className="reaction-emoji-anchor" ref={fitInChat}>
+                {platform === 'zalo' ? (
+                  // Zalo only takes its own reactions: offer those, never an emoji it would refuse.
+                  <ReactionGrid
+                    emojis={ZALO_ALL}
+                    current={mine}
+                    onPick={(emoji) => {
+                      setMoreEmoji(false)
+                      void react(message.conversationId, message.id, emoji)
+                    }}
+                    onClose={() => setMoreEmoji(false)}
+                  />
+                ) : (
+                  <EmojiPicker
+                    onPick={(emoji) => {
+                      setMoreEmoji(false)
+                      void react(message.conversationId, message.id, emoji)
+                    }}
+                    onClose={() => setMoreEmoji(false)}
+                  />
+                )}
+              </span>
+            )}
+          </Presence>
         </div>
       )}
       {!showActions && time}

@@ -6,6 +6,7 @@ import { useStore, useT } from '../store'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
+import { isComposingEnter } from '../imeGuard'
 
 /** Start a conversation with anyone from any connected account. */
 export function NewChatSheet(): JSX.Element {
@@ -62,6 +63,7 @@ export function NewChatSheet(): JSX.Element {
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (isComposingEnter(e)) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setIndex((i) => Math.min(i + 1, results.length - 1))

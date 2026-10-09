@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { CustomSticker, StickerSource } from '@shared/bridge'
 import { shareSettings } from '@shared/settings-share'
+import { pushToast } from './toasts'
 import type { SettingsPage } from './components/SettingsSheet'
 import type {
   Account,
@@ -151,7 +152,8 @@ interface State {
   profiles: Record<string, PeerProfile | null>
   stats: Record<string, ConversationStats>
   shared: Record<string, Message[]>
-  toast?: Toast
+  /** Up to two at once, oldest first (see toasts.ts). */
+  toasts: Toast[]
   /** Per chat: the message being replied to. */
   replyTos: Record<string, Message | undefined>
   /** Per chat: files staged in the composer. */
@@ -312,6 +314,7 @@ interface State {
   toggleDetails(tab?: DetailsTab): void
   notifyTyping(conversationId: string): void
   showToast(text: string, kind?: Toast['kind'], action?: Toast['action']): void
+  dismissToast(id: number): void
   t(key: TKey, params?: Record<string, string | number>): string
 }
 
@@ -319,6 +322,15 @@ interface State {
 const IN_CHAT_RESULTS = 60
 let toastCounter = 0
 let unsubscribeEvents: (() => void) | undefined
+
+/** The prompts with this one added, or put in place of its earlier copy (same requestId). */
+function withPrompt(prompts: AuthPrompt[], prompt: AuthPrompt): AuthPrompt[] {
+  const index = prompts.findIndex((p) => p.requestId === prompt.requestId)
+  const next = prompts.slice()
+  if (index >= 0) next[index] = prompt
+  else next.push(prompt)
+  return next
+}
 let sendCounter = 0
 let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -470,6 +482,7 @@ export const useStore = create<State>((set, get) => ({
   searchHits: [],
   authPrompts: [],
   sheet: { kind: 'none' },
+  toasts: [],
   detailsOpen: false,
   detailsTab: 'info',
   profiles: {},
@@ -486,6 +499,12 @@ export const useStore = create<State>((set, get) => ({
 
   async init() {
     const bridge = window.unison
+    // Listen first: an event that fires while the lists are still on their way is kept and applied right after them,
+    // not lost. StrictMode runs init() twice in dev: drop the previous subscription so each event is handled once.
+    const early: BridgeEvent[] = []
+    let handle: (event: BridgeEvent) => void = (event) => early.push(event)
+    unsubscribeEvents?.()
+    unsubscribeEvents = bridge.onEvent((event: BridgeEvent) => handle(event))
     const [settings, accounts, conversations, lock] = await Promise.all([
       bridge.settings.get(),
       bridge.accounts.list(),
@@ -506,9 +525,7 @@ export const useStore = create<State>((set, get) => ({
     set({ layout, selectedId: activeId(layout), recent: openIds(layout) })
     for (const id of openIds(layout)) void get().prefetch(id, true)
 
-    // StrictMode runs init() twice in dev: drop the previous subscription so each event is handled once.
-    unsubscribeEvents?.()
-    unsubscribeEvents = bridge.onEvent((event: BridgeEvent) => {
+    handle = (event: BridgeEvent): void => {
       const state = get()
       switch (event.type) {
         case 'app:notice':
@@ -612,14 +629,9 @@ export const useStore = create<State>((set, get) => ({
           set({ typing })
           break
         }
-        case 'auth:prompt': {
-          const index = state.authPrompts.findIndex((p) => p.requestId === event.prompt.requestId)
-          const authPrompts = state.authPrompts.slice()
-          if (index >= 0) authPrompts[index] = event.prompt
-          else authPrompts.push(event.prompt)
-          set({ authPrompts })
+        case 'auth:prompt':
+          set({ authPrompts: withPrompt(state.authPrompts, event.prompt) })
           break
-        }
         case 'auth:cleared':
           set({ authPrompts: state.authPrompts.filter((p) => p.requestId !== event.requestId) })
           break
@@ -628,7 +640,19 @@ export const useStore = create<State>((set, get) => ({
           if (event.messageId) setTimeout(() => void get().jumpTo(event.messageId!, { from: event.conversationId }), 400)
           break
       }
-    })
+    }
+    // One handler throwing must not drop the events after it, nor the pending prompts below.
+    for (const event of early) {
+      try {
+        handle(event)
+      } catch (err) {
+        console.error('event replay failed:', (err as Error).message)
+      }
+    }
+    // Sign-in prompts that appeared before this window listened (a QR code waiting for a scan). A prompt replaces its
+    // own earlier copy by requestId, so one that also arrived as an event is not shown twice.
+    const pending = await bridge.auth.pending().catch(() => [])
+    for (const prompt of pending) handle({ type: 'auth:prompt', prompt })
   },
 
   select(rawId, highlightId) {
@@ -1487,7 +1511,16 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async toggleSidebar() {
-    await get().setSettings({ sidebarCollapsed: !get().settings.sidebarCollapsed })
+    // Applied at once (the layout animates from it), saved after; a failed save puts it back.
+    const before = get().settings
+    const sidebarCollapsed = !before.sidebarCollapsed
+    set({ settings: { ...before, sidebarCollapsed } })
+    try {
+      await get().setSettings({ sidebarCollapsed })
+    } catch (err) {
+      set({ settings: { ...get().settings, sidebarCollapsed: before.sidebarCollapsed } })
+      get().showToast(cleanError(err), 'error')
+    }
   },
 
   setDetailsTab(tab) {
@@ -1621,11 +1654,14 @@ export const useStore = create<State>((set, get) => ({
 
   showToast(text, kind = 'info', action) {
     const id = ++toastCounter
-    set({ toast: { id, text, kind, action } })
+    // A plain notice never replaces one that carries a button (Undo): see pushToast.
+    set({ toasts: pushToast(get().toasts, { id, text, kind, action }) })
     // A toast with a button stays a little longer, so there is time to reach it.
-    setTimeout(() => {
-      if (get().toast?.id === id) set({ toast: undefined })
-    }, action ? 6000 : 4000)
+    setTimeout(() => get().dismissToast(id), action ? 6000 : 4000)
+  },
+
+  dismissToast(id) {
+    if (get().toasts.some((t) => t.id === id)) set({ toasts: get().toasts.filter((t) => t.id !== id) })
   },
 
   t(key, params) {

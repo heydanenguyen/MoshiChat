@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { BellOff, ChartNoAxesColumn, ChevronDown, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { SidebarSection } from '@shared/types'
 import { ReconnectCard } from './Insights'
@@ -14,6 +15,7 @@ import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { GummyIcon, useTileIcons } from './GummyIcon'
 import { useScrollFade } from '../scrollFade'
+import { withViewTransition } from '../viewTransition'
 
 type MuteTarget = { kind: 'platforms'; id: Platform } | { kind: 'accounts'; id: string } | { kind: 'tags'; id: TagId }
 
@@ -163,7 +165,7 @@ export function Sidebar(): JSX.Element {
             <span className="brand-word">{t('appName')}</span>
           </div>
         )}
-        <button className="icon-btn sidebar-toggle" onClick={() => void toggleSidebar()} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}>
+        <button className="icon-btn sidebar-toggle" onClick={() => withViewTransition('sidebar', () => void toggleSidebar())} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}>
           {collapsed ? <PanelLeftOpen size={17} strokeWidth={2} /> : <PanelLeftClose size={17} strokeWidth={2} />}
         </button>
       </div>
@@ -331,44 +333,50 @@ export function Sidebar(): JSX.Element {
         </button>
       </div>
 
-      {menu && (
-        <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
-          <div className="context-menu-title">{menu.label}</div>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              void toggleMute(menu.target.kind, menu.target.id)
-              setMenu(undefined)
-            }}
-          >
-            <BellOff size={15} />
-            <span>{isMuted(menu.target) ? t('unmute') : t('mute')}</span>
-          </button>
-          {menu.target.kind === 'tags' && (
+      {/* Both floating panels render at the document root: this column has a backdrop-filter, which would make a fixed child
+          position against the column instead of the window (Liquid Glass). */}
+      {menu &&
+        createPortal(
+          <div className="context-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="context-menu-title">{menu.label}</div>
             <button
-              className={`context-menu-item danger ${menu.confirmDelete ? 'confirm' : ''}`}
+              className="context-menu-item"
               onClick={() => {
-                if (!menu.confirmDelete) {
-                  setMenu({ ...menu, confirmDelete: true })
-                  return
-                }
-                void deleteTag(menu.target.id)
+                void toggleMute(menu.target.kind, menu.target.id)
                 setMenu(undefined)
               }}
             >
-              <Trash2 size={15} />
-              <span>{menu.confirmDelete ? t('tagDeleteSure') : t('tagDelete')}</span>
+              <BellOff size={15} />
+              <span>{isMuted(menu.target) ? t('unmute') : t('mute')}</span>
             </button>
-          )}
-        </div>
-      )}
+            {menu.target.kind === 'tags' && (
+              <button
+                className={`context-menu-item danger ${menu.confirmDelete ? 'confirm' : ''}`}
+                onClick={() => {
+                  if (!menu.confirmDelete) {
+                    setMenu({ ...menu, confirmDelete: true })
+                    return
+                  }
+                  void deleteTag(menu.target.id)
+                  setMenu(undefined)
+                }}
+              >
+                <Trash2 size={15} />
+                <span>{menu.confirmDelete ? t('tagDeleteSure') : t('tagDelete')}</span>
+              </button>
+            )}
+          </div>,
+          document.body
+        )}
 
-      {creator && (
-        <div className="tag-popover" style={{ left: creator.x, top: creator.y }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={t('tagNew')}>
-          <div className="tag-popover-title">{t('tagNew')}</div>
-          <TagCreator onCreated={() => setCreator(undefined)} onCancel={() => setCreator(undefined)} />
-        </div>
-      )}
+      {creator &&
+        createPortal(
+          <div className="tag-popover" style={{ left: creator.x, top: creator.y }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={t('tagNew')}>
+            <div className="tag-popover-title">{t('tagNew')}</div>
+            <TagCreator onCreated={() => setCreator(undefined)} onCancel={() => setCreator(undefined)} />
+          </div>,
+          document.body
+        )}
     </aside>
   )
 }

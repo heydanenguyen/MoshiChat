@@ -3,6 +3,7 @@ import { Check, Plus, Trash2, X } from 'lucide-react'
 import { TAG_PALETTE, type TagMeta } from '@shared/types'
 import { useStore, useT, useTagDefs } from '../store'
 import { TAG_ICONS, TagChip, tagStyle } from './Tag'
+import { isComposingEnter } from '../imeGuard'
 
 const ICON_CHOICES = Object.keys(TAG_ICONS)
 
@@ -45,8 +46,12 @@ export function TagCreator({ onCreated, onCancel, autoFocus = true }: { onCreate
           placeholder={t('tagNamePlaceholder')}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
+            if (isComposingEnter(e)) return
             if (e.key === 'Enter') void save()
-            if (e.key === 'Escape') onCancel?.()
+            if (e.key === 'Escape' && onCancel) {
+              e.preventDefault()
+              onCancel()
+            }
           }}
           maxLength={24}
           autoFocus={autoFocus}

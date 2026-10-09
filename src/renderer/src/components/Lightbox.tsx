@@ -42,8 +42,8 @@ export function Lightbox({ url, name, video, poster, externalUrl, externalLabel,
   useEffect(() => {
     if (editing) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') openLightbox(undefined)
-      else if (e.key === 'ArrowRight') step(1)
+      // Escape is handled by App (one layer per press).
+      if (e.key === 'ArrowRight') step(1)
       else if (e.key === 'ArrowLeft') step(-1)
       else if (e.key.toLowerCase() === 'e' && !item.video && !e.metaKey && !e.ctrlKey && !e.altKey) setEditing(true)
     }

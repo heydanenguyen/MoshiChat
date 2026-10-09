@@ -1701,8 +1701,9 @@ mark {
   transition: transform var(--duration-base) var(--ease-spring);
 }
 
+/* A ring, not a scale: scaling a layer-promoted control makes its text jump on Windows. */
 .avatar.clickable:hover {
-  transform: scale(1.05);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .avatar-img {
@@ -2078,9 +2079,7 @@ mark {
   height: 30px;
   border-radius: 50%;
   color: var(--text-primary);
-  transition:
-    background-color 120ms ease,
-    transform 200ms var(--ease-spring);
+  transition: background-color 120ms ease;
 }
 /* :root lifts it over the styles' own line weights (Mono thins every icon, Pals thickens them) */
 :root .bubble-actions .icon-btn svg.lucide {
@@ -2090,12 +2089,6 @@ mark {
 }
 .bubble-actions .icon-btn:hover {
   background: var(--fill-secondary);
-  transform: scale(1.1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .bubble-actions .icon-btn:hover {
-    transform: none;
-  }
 }
 
 /* The small name of each button, shown when the pointer rests on it (Settings > Chat > Message actions). */
@@ -2197,13 +2190,13 @@ mark {
   display: grid;
   place-items: center;
   transition:
-    transform var(--duration-fast) var(--ease-spring),
-    background var(--duration-fast) ease;
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 .emoji-picker button:hover {
-  transform: scale(1.25);
   background: var(--bg-hover);
+  box-shadow: 0 0 0 2px var(--bg-hover);
 }
 
 .emoji-picker button.active {
@@ -3038,12 +3031,13 @@ button.reaction-chip.mine:hover {
 
 /* ================================================================== quick pin on hover */
 
-/* In the time's corner, same size as the line: hovering swaps the time for it, nothing floats over the row. */
+/* A button next to the row (not inside it), laid over the time's corner: hovering or focusing swaps the time for it. */
 .conv-more {
-  /* 24px square target; the negative margins keep the row height unchanged */
+  position: absolute;
+  top: 9px;
+  right: 6px;
   width: 24px;
   height: 24px;
-  margin: -1px -4px -1px 0;
   border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
@@ -3055,10 +3049,15 @@ button.reaction-chip.mine:hover {
     color var(--duration-fast) ease,
     background var(--duration-fast) ease;
 }
-.conv-item:hover .conv-more,
+.conv-row:hover .conv-more,
+.conv-more:focus-visible,
 .conv-more.open {
   opacity: 1;
   pointer-events: auto;
+}
+.conv-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .conv-more:hover {
   color: var(--text-primary);
@@ -3068,8 +3067,9 @@ button.reaction-chip.mine:hover {
   color: var(--on-accent);
   background: var(--accent-gradient);
 }
-.conv-item:hover .conv-time,
-.conv-item:has(.conv-more.open) .conv-time {
+.conv-row:hover .conv-time,
+.conv-row:has(.conv-more:focus-visible) .conv-time,
+.conv-row:has(.conv-more.open) .conv-time {
   opacity: 0;
 }
 .conv-time {
@@ -3325,13 +3325,13 @@ button.reaction-chip.mine:hover {
   display: grid;
   place-items: center;
   transition:
-    transform var(--duration-fast) var(--ease-spring),
-    background var(--duration-fast) ease;
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 .emoji-grid button:hover {
   background: var(--bg-hover);
-  transform: scale(1.2);
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
 }
 
 .emoji-grid .conv-empty {
@@ -3940,8 +3940,10 @@ button.reaction-chip.mine:hover {
   box-shadow: var(--accent-shadow, 0 8px 20px rgba(91, 140, 255, 0.3));
 }
 .btn.primary:hover {
-  box-shadow: var(--accent-shadow-strong, 0 10px 26px rgba(91, 140, 255, 0.42));
-  transform: translateY(-1px);
+  /* A stronger glow and a faint light wash instead of lifting the button */
+  box-shadow:
+    var(--accent-shadow-strong, 0 10px 26px rgba(91, 140, 255, 0.42)),
+    inset 0 0 0 999px rgba(255, 255, 255, 0.08);
 }
 
 .btn.secondary {
@@ -4523,11 +4525,24 @@ button.reaction-chip.mine:hover {
   font-size: var(--text-sm);
 }
 
-.toast {
+/* Above the photo viewer (80) so a notice made there (saved, failed) is never hidden behind it. */
+.toast-stack {
   position: fixed;
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.toast {
+  position: relative;
+  pointer-events: auto;
   padding: 10px 16px;
   border-radius: var(--radius-full);
   background: var(--bg-elevated);
@@ -4535,7 +4550,6 @@ button.reaction-chip.mine:hover {
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow-md);
   font-weight: 600;
-  z-index: 60;
   animation: toast-in var(--duration-slow) var(--ease-spring);
   display: flex;
   align-items: center;
@@ -4569,11 +4583,23 @@ button.reaction-chip.mine:hover {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 12px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: none;
+  }
+}
+
+.toast[data-state='closing'] {
+  pointer-events: none;
+  animation: toast-out var(--duration-fast) var(--ease-out) forwards;
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 
@@ -7619,7 +7645,7 @@ kbd {
   transform: scale(1.06);
 }
 .avatar.clickable:hover {
-  transform: scale(1.03);
+  transform: none;
 }
 
 /* list rows and nav: colour only */
@@ -14137,13 +14163,13 @@ button.moment-card:hover {
   display: grid;
   place-items: center;
   transition:
-    transform var(--duration-fast) var(--ease-spring),
-    background var(--duration-fast) ease;
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 .zreact-quick button:hover,
 .reaction-grid-cells button:hover {
-  transform: scale(1.18);
   background: var(--fill-tertiary);
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
 }
 .zreact-quick button.on,
 .reaction-grid-cells button.on {
@@ -14858,11 +14884,11 @@ button.moment-card:hover {
   border-radius: 50%;
   font-size: 18px;
   line-height: 1;
-  transition: transform var(--duration-fast) var(--ease-spring), background-color var(--duration-fast) ease;
+  transition: background-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
 }
 .bubble-more-reacts button:hover {
-  transform: scale(1.18);
   background: var(--fill-tertiary);
+  box-shadow: inset 0 0 0 1.5px var(--separator-strong);
 }
 .bubble-more-reacts button.active {
   background: var(--accent-soft-2, var(--fill-secondary));
@@ -15356,4 +15382,247 @@ button.moment-card:hover {
 .zalo-share-form .field-input {
   flex: 1;
   min-width: 0;
+}
+
+/* ================================================================== exit animations, view transitions */
+/*
+ * Every layer that opens with an -in animation leaves with an -out one: its component stays mounted for ~180 ms
+ * (usePresence / <Presence>) with data-state="closing", and the keyframes below play on opacity and transform only.
+ * Under prefers-reduced-motion the global rule at the top of this file cuts them to one frame, and the hold is 0 ms.
+ */
+.presence {
+  display: contents;
+}
+.presence[data-state='closing'] {
+  pointer-events: none;
+}
+
+/* sheets and the pickers that use a backdrop: the dim fades, the card drops away */
+.presence[data-state='closing'] .backdrop {
+  animation: fade-out calc(var(--duration-fast) + 20ms) var(--ease-out) forwards;
+}
+.presence[data-state='closing'] .backdrop > * {
+  animation: sheet-out calc(var(--duration-fast) + 20ms) var(--ease-out) forwards;
+}
+.presence[data-state='closing'] .lightbox {
+  animation: fade-out calc(var(--duration-fast) + 20ms) var(--ease-out) forwards;
+}
+
+/* popovers without a backdrop: composer pickers, the bubble's More menu, the list's context menu */
+.presence.pop[data-state='closing'] > *,
+.context-menu[data-state='closing'] {
+  animation: pop-out calc(var(--duration-fast) + 20ms) var(--ease-out) forwards;
+}
+.context-menu[data-state='closing'] {
+  pointer-events: none;
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes sheet-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+/* keyboard focus in the list's context menu looks like the pointer hover */
+.context-menu:focus {
+  outline: none;
+}
+.context-menu-item:focus-visible {
+  outline: none;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+}
+
+/* The reply banner and the translation strip fold open and shut (grid rows 0fr to 1fr: no height measuring). */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 220ms var(--ease-out);
+}
+.collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+  transition: opacity var(--duration-fast) ease;
+}
+@starting-style {
+  .collapse[data-state='open'] {
+    grid-template-rows: 0fr;
+  }
+  .collapse[data-state='open'] .collapse-inner {
+    opacity: 0;
+  }
+}
+.collapse[data-state='closing'] {
+  grid-template-rows: 0fr;
+}
+.collapse[data-state='closing'] .collapse-inner {
+  opacity: 0;
+}
+
+/* "N new messages": sits on the bottom edge of the thread, just above the composer */
+.jump-anchor {
+  position: relative;
+  height: 0;
+  flex-shrink: 0;
+  z-index: 8;
+}
+.jump-pill {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  animation: jump-pill-in var(--duration-base) var(--ease-spring);
+}
+.jump-pill:hover {
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 999px rgba(255, 255, 255, 0.1);
+}
+.jump-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.jump-pill[data-state='closing'] {
+  pointer-events: none;
+  animation: jump-pill-out calc(var(--duration-fast) + 20ms) var(--ease-out) forwards;
+}
+@keyframes jump-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+@keyframes jump-pill-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/*
+ * View transitions (viewTransition.ts sets html[data-vt] while one runs and names the parts that move). The page
+ * itself does not cross-fade: only the named parts animate, in under 260 ms, on opacity and transform.
+ */
+html[data-vt]::view-transition-old(root) {
+  display: none;
+}
+html[data-vt]::view-transition-new(root) {
+  animation: none;
+}
+html[data-vt]::view-transition-group(*) {
+  animation-duration: var(--duration-base);
+  animation-timing-function: var(--ease-out);
+}
+
+/* phone-sized window: the list and the chat slide past each other */
+html[data-vt='to-chat'] .list-col,
+html[data-vt='to-list'] .list-col {
+  view-transition-name: vt-list;
+}
+html[data-vt='to-chat'] .chat-area,
+html[data-vt='to-list'] .chat-area {
+  view-transition-name: vt-chat;
+}
+html[data-vt='to-chat']::view-transition-old(vt-list) {
+  animation: vt-out-left var(--duration-base) var(--ease-out) both;
+}
+html[data-vt='to-chat']::view-transition-new(vt-chat) {
+  animation: vt-in-right var(--duration-base) var(--ease-out) both;
+}
+html[data-vt='to-list']::view-transition-old(vt-chat) {
+  animation: vt-out-right var(--duration-base) var(--ease-out) both;
+}
+html[data-vt='to-list']::view-transition-new(vt-list) {
+  animation: vt-in-left var(--duration-base) var(--ease-out) both;
+}
+
+/* sidebar fold / unfold and the details pane: the columns glide to their new width */
+html[data-vt='sidebar'] .sidebar {
+  view-transition-name: vt-sidebar;
+}
+html[data-vt='sidebar'] .list-col,
+html[data-vt='details'] .list-col {
+  view-transition-name: vt-list;
+}
+html[data-vt='sidebar'] .chat-area,
+html[data-vt='details'] .chat-area {
+  view-transition-name: vt-chat;
+}
+html[data-vt='details'] .details-col {
+  view-transition-name: vt-details;
+}
+html[data-vt='details']::view-transition-new(vt-details) {
+  animation: vt-in-right var(--duration-base) var(--ease-out) both;
+}
+html[data-vt='details']::view-transition-old(vt-details) {
+  animation: vt-out-right var(--duration-base) var(--ease-out) both;
+}
+/* a column that changes size shows its old and new picture cross-fading, not stretched */
+html[data-vt='sidebar']::view-transition-old(vt-chat),
+html[data-vt='sidebar']::view-transition-new(vt-chat),
+html[data-vt='details']::view-transition-old(vt-chat),
+html[data-vt='details']::view-transition-new(vt-chat) {
+  height: 100%;
+  object-fit: cover;
+  object-position: left top;
+}
+
+@keyframes vt-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+@keyframes vt-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes vt-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes vt-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
+  .collapse {
+    transition-duration: 0.01ms;
+  }
 }

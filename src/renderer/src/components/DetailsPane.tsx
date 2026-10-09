@@ -16,6 +16,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { BuddyLoader } from './BuddyLoader'
 import { MomentsPreviewCard, MomentsTab } from './Moments'
 import { Highlight } from './ConversationList'
+import { withViewTransition } from '../viewTransition'
 
 const TABS: Array<{ id: DetailsTab; icon: JSX.Element; label: 'tabInfo' | 'tabMoments' | 'tabSearch' | 'tabMedia' | 'tabLinks' | 'tabFiles' }> = [
   { id: 'info', icon: <Info size={16} strokeWidth={2.2} />, label: 'tabInfo' },
@@ -44,7 +45,7 @@ export function DetailsPane(): JSX.Element | null {
   return (
     <aside className="details-col">
       <div className="details-top drag">
-        <button className="icon-btn no-drag" onClick={() => toggleDetails()} title={t('close')}>
+        <button className="icon-btn no-drag" onClick={() => withViewTransition('details', () => toggleDetails())} title={t('close')}>
           <X size={16} strokeWidth={2.4} />
         </button>
       </div>

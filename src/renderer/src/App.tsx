@@ -1,4 +1,4 @@
-import { Suspense, lazy, memo, useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, memo, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { isArchivedNow, useStore, useUnreadCounts } from './store'
 import { translate } from './i18n'
@@ -26,6 +26,9 @@ import { PaneBoundary } from './components/PaneBoundary'
 import { cleanError } from './store'
 import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
+import { usePresenceList } from './usePresence'
+import { withViewTransition } from './viewTransition'
+import { Presence } from './components/Presence'
 
 /*
  * Sheets opened now and then load when first opened, so they are not part of what has to load at launch.
@@ -70,25 +73,34 @@ function SplashPrefsSync(): null {
   return null
 }
 
-function Toast(): JSX.Element | null {
-  const toast = useStore((s) => s.toast)
-  if (!toast) return null
+const toastKey = (t: { id: number }): number => t.id
+
+/** Up to two toasts, newest at the bottom; each plays its exit before it goes. */
+function ToastStack(): JSX.Element | null {
+  const toasts = useStore((s) => s.toasts)
+  const dismissToast = useStore((s) => s.dismissToast)
+  const entries = usePresenceList(toasts, toastKey)
+  if (!entries.length) return null
   return (
-    <div key={toast.id} className={`toast ${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
-      {toast.kind === 'error' && <AlertCircle size={16} />}
-      {toast.text}
-      {toast.action && (
-        <button
-          type="button"
-          className="toast-action"
-          onClick={() => {
-            toast.action?.run()
-            useStore.setState({ toast: undefined })
-          }}
-        >
-          {toast.action.label}
-        </button>
-      )}
+    <div className="toast-stack">
+      {entries.map(({ item: toast, closing }) => (
+        <div key={toast.id} className={`toast ${toast.kind}`} data-state={closing ? 'closing' : 'open'} role={toast.kind === 'error' ? 'alert' : 'status'}>
+          {toast.kind === 'error' && <AlertCircle size={16} />}
+          {toast.text}
+          {toast.action && (
+            <button
+              type="button"
+              className="toast-action"
+              onClick={() => {
+                toast.action?.run()
+                dismissToast(toast.id)
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -145,7 +157,6 @@ export default function App(): JSX.Element {
   const language = useStore((s) => s.settings.language)
   const sheet = useStore((s) => s.sheet)
   const openSheet = useStore((s) => s.openSheet)
-  const closeSheet = useStore((s) => s.closeSheet)
   const authPrompts = useStore((s) => s.authPrompts)
   const hasAccounts = useStore((s) => Object.keys(s.accounts).length > 0)
   const detailsOpen = useStore((s) => s.detailsOpen)
@@ -454,13 +465,21 @@ export default function App(): JSX.Element {
       } else if (mod && (e.key === '1' || e.key === '2') && useStore.getState().layout.panes.length > 1) {
         e.preventDefault()
         useStore.getState().activatePane(e.key === '1' ? 0 : 1, true)
-      } else if (e.key === 'Escape' && (sheet.kind !== 'none' || useStore.getState().forwarding || useStore.getState().lightbox)) {
-        closeSheet()
+      } else if (e.key === 'Escape' && !e.isComposing) {
+        // One layer per press: photo viewer, then the forward picker, then the sheet. Decided after the other
+        // handlers have run, so a menu or editor that used this Escape (and said so) keeps the layers behind it.
+        setTimeout(() => {
+          if (e.defaultPrevented) return
+          const state = useStore.getState()
+          if (state.lightbox) state.openLightbox(undefined)
+          else if (state.forwarding) state.startForward(undefined)
+          else if (state.sheet.kind !== 'none') state.closeSheet()
+        }, 0)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sheet.kind, openSheet, closeSheet])
+  }, [sheet.kind, openSheet])
 
   // Locked: everything behind the lock screen is out of reach (no focus, no clicks, not read aloud), and any open
   // sheet closes so it is not waiting there afterwards.
@@ -477,6 +496,38 @@ export default function App(): JSX.Element {
     watcher.observe(document.body, { childList: true })
     return () => watcher.disconnect()
   }, [locked, ready])
+
+  // The open sheet, if any. Switching straight from one sheet to another swaps them (no exit in between).
+  let sheetNode: ReactNode = null
+  switch (sheet.kind) {
+    case 'settings':
+      sheetNode = <Suspense fallback={null}><SettingsSheet initialPage={sheet.page} /></Suspense>
+      break
+    case 'add-account':
+      sheetNode = <Suspense fallback={null}><AddAccountSheet initialPlatform={sheet.platform} /></Suspense>
+      break
+    case 'new-chat':
+      sheetNode = <Suspense fallback={null}><NewChatSheet /></Suspense>
+      break
+    case 'backup':
+      sheetNode = <Suspense fallback={null}><BackupSheet key={sheet.mode} mode={sheet.mode} /></Suspense>
+      break
+    case 'legal':
+      sheetNode = <Suspense fallback={null}><LegalSheet doc={sheet.doc} /></Suspense>
+      break
+    case 'merge':
+      sheetNode = <Suspense fallback={null}><MergeSheet conversationId={sheet.conversationId} /></Suspense>
+      break
+    case 'command':
+      sheetNode = <CommandPalette />
+      break
+    case 'todos':
+      if (todosOn) sheetNode = <TodoSheet />
+      break
+    case 'insights':
+      if (closeFriends) sheetNode = <InsightsSheet />
+      break
+  }
 
   // One tree for both phases so the launch screen stays mounted while the app appears beneath it.
   return (
@@ -517,26 +568,17 @@ export default function App(): JSX.Element {
               <div />
             )}
             {/* Mid-width windows float the details over the chat; the scrim closes them (see the responsive rules). */}
-            {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => toggleDetails()} />}
+            {detailsOpen && selectedId && <div className="details-scrim" aria-hidden onClick={() => withViewTransition('details', () => toggleDetails())} />}
 
-            <Suspense fallback={null}>
-              {sheet.kind === 'settings' && <SettingsSheet initialPage={sheet.page} />}
-              {sheet.kind === 'add-account' && <AddAccountSheet initialPlatform={sheet.platform} />}
-              {sheet.kind === 'new-chat' && <NewChatSheet />}
-              {sheet.kind === 'backup' && <BackupSheet key={sheet.mode} mode={sheet.mode} />}
-              {sheet.kind === 'legal' && <LegalSheet doc={sheet.doc} />}
-              {sheet.kind === 'merge' && <MergeSheet conversationId={sheet.conversationId} />}
-            </Suspense>
-            {sheet.kind === 'command' && <CommandPalette />}
-            {sheet.kind === 'todos' && todosOn && <TodoSheet />}
-            {sheet.kind === 'insights' && closeFriends && <InsightsSheet />}
+            {/* Each modal layer keeps its last content mounted while it plays its exit, and traps focus meanwhile. */}
+            <Presence key="sheet" focusKey={sheet.kind}>{sheetNode}</Presence>
             <AiSetupSheet />
             <LaterPicker />
-            {forwarding && <ForwardSheet message={forwarding} />}
-            {lightbox && <Lightbox {...lightbox} />}
-            {authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}
+            <Presence key="forward">{forwarding && <ForwardSheet message={forwarding} />}</Presence>
+            <Presence key="lightbox">{lightbox && <Lightbox {...lightbox} />}</Presence>
+            <Presence key="auth">{authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}</Presence>
 
-            <Toast />
+            <ToastStack />
           </div>
         </>
       )}

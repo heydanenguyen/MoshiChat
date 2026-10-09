@@ -4,6 +4,7 @@ import type { Message } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
 import { Avatar } from './Avatar'
+import { isComposingEnter } from '../imeGuard'
 
 export function ForwardSheet({ message }: { message: Message }): JSX.Element {
   const t = useT()
@@ -31,6 +32,7 @@ export function ForwardSheet({ message }: { message: Message }): JSX.Element {
   }, [conversations, accounts, query, message.conversationId, sourceAccount])
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (isComposingEnter(e)) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setIndex((i) => Math.min(i + 1, results.length - 1))

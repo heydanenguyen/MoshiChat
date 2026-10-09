@@ -35,6 +35,8 @@ import { isUnread } from '../quickFilter'
 import { isMac, shortcutLabel } from '../utils'
 import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
+import { isComposingEnter } from '../imeGuard'
+import { withViewTransition } from '../viewTransition'
 
 interface Command {
   id: string
@@ -100,6 +102,7 @@ export function CommandPalette(): JSX.Element {
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (isComposingEnter(e)) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setIndex((i) => Math.min(i + 1, rows.length - 1))
@@ -176,7 +179,8 @@ function useCommands(): Command[] {
       const pinned = isPinned(conversation, settings.pins)
       const muted = settings.muted.conversations.includes(id)
       // Opens the details on that tab (never closes them, unlike the header button).
-      const details = (tab: 'info' | 'search') => (): void => (useStore.getState().detailsOpen ? state.setDetailsTab(tab) : state.toggleDetails(tab))
+      const details = (tab: 'info' | 'search') => (): void =>
+        useStore.getState().detailsOpen ? state.setDetailsTab(tab) : withViewTransition('details', () => state.toggleDetails(tab))
       add('chat-info', 'commandChatInfo', 'info details profile thong tin', <Info {...ICON} />, details('info'))
       add('chat-search', 'commandSearchChat', 'search find tim kiem', <Search {...ICON} />, details('search'))
       if (archived) add('chat-unarchive', 'unarchive', 'inbox restore archive', <ArchiveRestore {...ICON} />, () => void state.unarchive(id), shortcutLabel('E'))
@@ -196,7 +200,7 @@ function useCommands(): Command[] {
     const liquid = settings.style === 'liquid'
     add('style', liquid ? 'commandMoshiLook' : 'commandLiquidGlass', 'liquid glass style moshi kinh', <Sparkles {...ICON} />, () => void state.setSettings({ style: liquid ? 'moshi' : 'liquid' }))
     if (wide) add('split', 'splitView', 'split two panes chia doi', <Columns2 {...ICON} />, () => state.toggleSplit(), shortcutLabel('\\'))
-    add('sidebar', settings.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar', 'sidebar thanh ben', settings.sidebarCollapsed ? <PanelLeftOpen {...ICON} /> : <PanelLeftClose {...ICON} />, () => void state.toggleSidebar())
+    add('sidebar', settings.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar', 'sidebar thanh ben', settings.sidebarCollapsed ? <PanelLeftOpen {...ICON} /> : <PanelLeftClose {...ICON} />, () => withViewTransition('sidebar', () => void state.toggleSidebar()))
     if (settings.todosOn !== false) add('todos', 'todos', 'todo tasks reminders viec can lam', <ListTodo {...ICON} />, () => state.openSheet({ kind: 'todos' }))
     if (settings.closeFriends !== false) add('insights', 'insights', 'close friends insights than thiet', <Users {...ICON} />, () => state.openSheet({ kind: 'insights' }))
     if (state.lock?.enabled) add('lock', 'lockNow', 'lock passcode khoa ma bao mat', <Lock {...ICON} />, () => void window.unison.lock.lockNow(), isMac ? '⌃⌘L' : undefined)

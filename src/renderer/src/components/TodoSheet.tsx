@@ -7,6 +7,7 @@ import { formatListTime, formatTime, tip } from '../utils'
 import { Avatar } from './Avatar'
 import { LogoMark } from './Logo'
 import { SchedulePicker } from './ComposerExtras'
+import { isComposingEnter } from '../imeGuard'
 
 const NO_TODOS: Todo[] = []
 
@@ -223,8 +224,13 @@ export function TodoSheet(): JSX.Element {
         onChange={(e) => setEditing({ id: todo.id, text: e.target.value })}
         onBlur={commitEdit}
         onKeyDown={(e) => {
+          if (isComposingEnter(e)) return
           if (e.key === 'Enter') commitEdit()
-          if (e.key === 'Escape') setEditing(undefined)
+          if (e.key === 'Escape') {
+            // Only this edit, not the sheet behind it.
+            e.preventDefault()
+            setEditing(undefined)
+          }
         }}
       />
     ) : (
@@ -432,8 +438,13 @@ export function TodoSheet(): JSX.Element {
                 if (!e.target.value) setSkipParse(false)
               }}
               onKeyDown={(e) => {
+                if (isComposingEnter(e)) return
                 if (e.key === 'Enter') submit()
-                if (e.key === 'Escape') setDraft('')
+                if (e.key === 'Escape' && draft) {
+                  // The first Escape clears the line, the next one closes the sheet.
+                  e.preventDefault()
+                  setDraft('')
+                }
               }}
             />
             <button className="tz-add-go" onClick={() => submit()} disabled={!draft.trim()} aria-label={t('todoAddButton')}>

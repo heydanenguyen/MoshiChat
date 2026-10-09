@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AlarmClock, ArrowUp, File, Languages, Mic, Paperclip, Reply, Smile, Sticker, Trash2, Undo2, X } from 'lucide-react'
 import { useAi } from '../aiStore'
 import { TranslatePicker, languageName } from './TranslatePicker'
@@ -11,6 +11,9 @@ import { QuickReplyMenu, SchedulePicker, matchQuickReplies, useQuickReplies } fr
 import { SuggestionChips } from './AiParts'
 import { fillQuickReply, givenName } from '@shared/extras'
 import type { QuickReply } from '@shared/types'
+import { isComposingEnter } from '../imeGuard'
+import { Presence } from './Presence'
+import { Collapse } from './Collapse'
 
 interface Props {
   /** The chat this composer writes to (each pane of a split view has its own). */
@@ -65,6 +68,27 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const [text, setText] = useState('')
   const [tall, setTall] = useState(false)
   const tallAt = useRef(0)
+  // The box changes height when the layout flips to two rows: it slides from the old height to the new one.
+  const boxRef = useRef<HTMLDivElement>(null)
+  const tallFrom = useRef(0)
+  const changeTall = useCallback((next: boolean): void => {
+    tallFrom.current = boxRef.current?.offsetHeight ?? 0
+    setTall(next)
+  }, [])
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    const from = tallFrom.current
+    tallFrom.current = 0
+    if (!el || !from || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const to = el.offsetHeight
+    if (Math.abs(from - to) < 2) return
+    // Clipped only while it slides, so the content (laid out at its new size) does not hang out of the box.
+    el.style.overflow = 'hidden'
+    const slide = el.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: 180, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+    slide.onfinish = slide.oncancel = () => {
+      el.style.overflow = ''
+    }
+  }, [tall])
   const [recording, setRecording] = useState<Recording | undefined>()
   const [elapsed, setElapsed] = useState(0)
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -177,9 +201,9 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   useEffect(() => {
     if (!tall && text.includes('\n')) {
       tallAt.current = text.length
-      setTall(true)
-    } else if (tall && text.length < tallAt.current && !text.includes('\n')) setTall(false)
-  }, [text, tall])
+      changeTall(true)
+    } else if (tall && text.length < tallAt.current && !text.includes('\n')) changeTall(false)
+  }, [text, tall, changeTall])
   // A line that wraps is only known once the box is laid out: the observer reads its height then (after layout, so no
   // forced reflow). It also looks again when the box comes back (a voice note ended) or the layout un-flips.
   const isRecording = !!recording
@@ -189,11 +213,11 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     const observer = new ResizeObserver(() => {
       if (el.scrollHeight <= 46) return
       tallAt.current = el.value.length
-      setTall(true)
+      changeTall(true)
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [tall, isRecording])
+  }, [tall, isRecording, changeTall])
 
   useEffect(() => {
     if (!recording) return
@@ -294,7 +318,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
         setSlashIndex((i) => (i + step + slashItems.length) % slashItems.length)
         return
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
+      if ((e.key === 'Enter' && !isComposingEnter(e)) || e.key === 'Tab') {
         e.preventDefault()
         insertQuickReply(slashItems[Math.min(slashIndex, slashItems.length - 1)])
         return
@@ -311,7 +335,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     if (e.key !== 'Enter') return
     const wantsSend = sendOnEnter ? !e.shiftKey : e.ctrlKey || e.metaKey
     if (!wantsSend) return
-    if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) {
+    if (composing.current || isComposingEnter(e)) {
       sendWhenComposed.current = true
       return
     }
@@ -432,38 +456,42 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
 
   return (
     <div className="composer">
-      {replyTo && (
-        <div className="reply-banner">
-          <Reply size={14} strokeWidth={2.4} />
-          <div className="reply-banner-text">
-            <strong>{t('replyingTo', { name: replyTo.senderName })}</strong>
-            <span>{replyTo.text || t('attachment')}</span>
+      <Collapse>
+        {replyTo && (
+          <div className="reply-banner">
+            <Reply size={14} strokeWidth={2.4} />
+            <div className="reply-banner-text">
+              <strong>{t('replyingTo', { name: replyTo.senderName })}</strong>
+              <span>{replyTo.text || t('attachment')}</span>
+            </div>
+            <button className="icon-btn" onClick={() => setReplyTo(conversationId, undefined)} title={t('cancelReply')}>
+              <X size={14} strokeWidth={2.4} />
+            </button>
           </div>
-          <button className="icon-btn" onClick={() => setReplyTo(conversationId, undefined)} title={t('cancelReply')}>
-            <X size={14} strokeWidth={2.4} />
-          </button>
-        </div>
-      )}
-      {translated && (
-        <div className="reply-banner translate-strip">
-          <Languages size={14} strokeWidth={2.4} />
-          <div className="reply-banner-text">
-            <strong>{t('translatedTo', { lang: languageName(translated.to, language) })}</strong>
-            <span>{translated.original}</span>
+        )}
+      </Collapse>
+      <Collapse>
+        {translated && (
+          <div className="reply-banner translate-strip">
+            <Languages size={14} strokeWidth={2.4} />
+            <div className="reply-banner-text">
+              <strong>{t('translatedTo', { lang: languageName(translated.to, language) })}</strong>
+              <span>{translated.original}</span>
+            </div>
+            <button
+              className="icon-btn"
+              title={t('translateUndo')}
+              onClick={() => {
+                setText(translated.original)
+                setTranslated(undefined)
+                focusInput()
+              }}
+            >
+              <Undo2 size={14} strokeWidth={2.4} />
+            </button>
           </div>
-          <button
-            className="icon-btn"
-            title={t('translateUndo')}
-            onClick={() => {
-              setText(translated.original)
-              setTranslated(undefined)
-              focusInput()
-            }}
-          >
-            <Undo2 size={14} strokeWidth={2.4} />
-          </button>
-        </div>
-      )}
+        )}
+      </Collapse>
       {pendingFiles.length > 0 && (
         <div className="pending-files">
           {pendingFiles.map((file) => (
@@ -500,7 +528,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           </button>
         </div>
       ) : (
-        <div className={`composer-box ${tall ? 'tall' : ''}`}>
+        <div ref={boxRef} className={`composer-box ${tall ? 'tall' : ''}`}>
           {slash && <QuickReplyMenu items={slashItems} active={Math.min(slashIndex, Math.max(0, slashItems.length - 1))} onPick={insertQuickReply} onHover={setSlashIndex} />}
           {canAttach && (
             <button className="icon-btn composer-attach" onClick={() => void pick()} title={t('attach')} disabled={disabled}>
@@ -530,7 +558,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
               <button className={`icon-btn ${emojiOpen ? 'active' : ''}`} onClick={() => setEmojiOpen((o) => !o)} title={t('emoji')} disabled={disabled}>
                 <Smile size={18} strokeWidth={2} />
               </button>
-              {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+              <Presence modal={false}>{emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}</Presence>
             </span>
             {canAttach && (
               <span className="emoji-anchor">
@@ -543,22 +571,24 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 >
                   <Sticker size={18} strokeWidth={2} />
                 </button>
-                {stickersOpen && (
-                  <StickerPicker
-                    tray={onInstagram ? conversationId : undefined}
-                    onClose={() => setStickersOpen(false)}
-                    onPick={(id) => {
-                      setStickersOpen(false)
-                      void (async () => {
-                        try {
-                          await send(conversationId, '', [await window.unison.app.sticker(id)])
-                        } catch (err) {
-                          showToast((err as Error).message, 'error')
-                        }
-                      })()
-                    }}
-                  />
-                )}
+                <Presence modal={false}>
+                  {stickersOpen && (
+                    <StickerPicker
+                      tray={onInstagram ? conversationId : undefined}
+                      onClose={() => setStickersOpen(false)}
+                      onPick={(id) => {
+                        setStickersOpen(false)
+                        void (async () => {
+                          try {
+                            await send(conversationId, '', [await window.unison.app.sticker(id)])
+                          } catch (err) {
+                            showToast((err as Error).message, 'error')
+                          }
+                        })()
+                      }}
+                    />
+                  )}
+                </Presence>
               </span>
             )}
             {canAttach && (
@@ -573,16 +603,18 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 >
                   <span className="gif-glyph">GIF</span>
                 </button>
-                {gifsOpen && (
-                  <GifPicker
-                    onClose={() => setGifsOpen(false)}
-                    onPick={(item) => {
-                      setGifsOpen(false)
-                      void sendGif(conversationId, item)
-                      focusInput()
-                    }}
-                  />
-                )}
+                <Presence modal={false}>
+                  {gifsOpen && (
+                    <GifPicker
+                      onClose={() => setGifsOpen(false)}
+                      onPick={(item) => {
+                        setGifsOpen(false)
+                        void sendGif(conversationId, item)
+                        focusInput()
+                      }}
+                    />
+                  )}
+                </Presence>
               </span>
             )}
             {canVoice && (
@@ -602,17 +634,19 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                   <Languages size={18} strokeWidth={2} />
                   {translateAuto && translateTarget && <span className="translate-badge">{translateTarget.toUpperCase()}</span>}
                 </button>
-                {translateOpen && (
-                  <TranslatePicker
-                    target={translateTarget}
-                    auto={translateAuto}
-                    busy={translating}
-                    onTarget={(code) => void setContactOverride(conversationId, { ...override, translateTo: code })}
-                    onAuto={(on) => void setContactOverride(conversationId, { ...override, translateTo: translateTarget, translateAuto: on })}
-                    onTranslate={() => void translateDraft()}
-                    onClose={() => setTranslateOpen(false)}
-                  />
-                )}
+                <Presence modal={false}>
+                  {translateOpen && (
+                    <TranslatePicker
+                      target={translateTarget}
+                      auto={translateAuto}
+                      busy={translating}
+                      onTarget={(code) => void setContactOverride(conversationId, { ...override, translateTo: code })}
+                      onAuto={(on) => void setContactOverride(conversationId, { ...override, translateTo: translateTarget, translateAuto: on })}
+                      onTranslate={() => void translateDraft()}
+                      onClose={() => setTranslateOpen(false)}
+                    />
+                  )}
+                </Presence>
               </span>
             )}
             {scheduleOn && text.trim() && !pendingFiles.length && (
@@ -626,7 +660,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 >
                   <AlarmClock size={18} strokeWidth={2} />
                 </button>
-                {scheduleOpen && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}
+                <Presence modal={false}>{scheduleOpen && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}</Presence>
               </span>
             )}
             <button

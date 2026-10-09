@@ -32,6 +32,9 @@ import { formatBadge, isUnread } from '../quickFilter'
 import { formatListTime, modKey, shortcutLabel } from '../utils'
 import { openIds } from '../panes'
 import { popoverShift } from '../popover'
+import { usePresence } from '../usePresence'
+import { withViewTransition } from '../viewTransition'
+import { flipMoves, reordered } from '../flip'
 
 /** Drag payload type for a chat row (dropped onto a pane of the chat area). */
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
@@ -55,6 +58,8 @@ interface TagMenuState {
   conversationId: string
   x: number
   y: number
+  /** Opened from the keyboard: the first item takes focus (otherwise the menu itself does). */
+  keyboard?: boolean
 }
 
 interface ConversationRowProps {
@@ -90,8 +95,9 @@ interface ConversationRowProps {
   onOpen: (id: string, beside: boolean) => void
   onHover: (id: string) => void
   onLeave: () => void
-  onContext: (id: string, x: number, y: number) => void
-  onMore: (el: HTMLElement, id: string) => void
+  /** `keyboard`: opened with the ContextMenu key (focus goes into the menu). */
+  onContext: (id: string, x: number, y: number, keyboard?: boolean) => void
+  onMore: (el: HTMLElement, id: string, keyboard?: boolean) => void
 }
 
 /**
@@ -137,129 +143,142 @@ const ConversationRow = memo(function ConversationRow({
   const convTags = (tagIds ?? []).filter((tag) => tagById[tag])
   const apps = appsKey?.split(',') as Platform[] | undefined
   return (
-    <button
-      className={`conv-item ${selected ? 'selected' : ''} ${beside ? 'beside' : ''} ${unread ? 'unread' : ''} ${muted ? 'muted' : ''}`}
-      onClick={(e) => onOpen(c.id, canSplit && (e.metaKey || e.ctrlKey))}
-      draggable={canSplit}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(CONVERSATION_DRAG, c.id)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-      // Resting on a chat for a moment starts loading it, so opening feels instant.
-      onMouseEnter={() => onHover(c.id)}
-      onMouseLeave={onLeave}
-      onContextMenu={(e) => {
-        e.preventDefault()
-        onContext(c.id, e.clientX, e.clientY)
-      }}
-    >
-      <Avatar name={c.title} url={c.avatarUrl} size={44} platform={badge} />
-      <span className="conv-body">
-        <span className="conv-top">
-          <span className="conv-title">
-            <span className="conv-name">{c.title}</span>
-            {apps && (
-              <span className="conv-apps" title={apps.map((p) => PLATFORMS[p].name).join(' · ')}>
-                {[...new Set(apps)].map((p) => (
-                  <PlatformIcon key={p} platform={p} size={12} />
-                ))}
-              </span>
-            )}
-            {birthday && (
-              <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
-                🎂
-              </span>
-            )}
-            {convTags.length > 0 && (
-              <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
-                {convTags.slice(0, 2).map((tag) => (
-                  <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
-                ))}
-                {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
-              </span>
-            )}
-          </span>
-          {accountLabel && (
-            <span className="conv-account" title={t('viaAccount', { account: accountLabel })}>
-              {accountLabel}
+    <>
+      <button
+        className={`conv-item ${selected ? 'selected' : ''} ${beside ? 'beside' : ''} ${unread ? 'unread' : ''} ${muted ? 'muted' : ''}`}
+        data-id={c.id}
+        aria-haspopup="menu"
+        onClick={(e) => onOpen(c.id, canSplit && (e.metaKey || e.ctrlKey))}
+        draggable={canSplit}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(CONVERSATION_DRAG, c.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+        // Resting on a chat for a moment starts loading it, so opening feels instant.
+        onMouseEnter={() => onHover(c.id)}
+        onMouseLeave={onLeave}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onContext(c.id, e.clientX, e.clientY)
+        }}
+        onKeyDown={(e) => {
+          // The ContextMenu key and Shift+F10 open the same menu as a right-click.
+          if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+            e.preventDefault()
+            onMore(e.currentTarget, c.id, true)
+          }
+        }}
+      >
+        <Avatar name={c.title} url={c.avatarUrl} size={44} platform={badge} />
+        <span className="conv-body">
+          <span className="conv-top">
+            <span className="conv-title">
+              <span className="conv-name">{c.title}</span>
+              {apps && (
+                <span className="conv-apps" title={apps.map((p) => PLATFORMS[p].name).join(' · ')}>
+                  {[...new Set(apps)].map((p) => (
+                    <PlatformIcon key={p} platform={p} size={12} />
+                  ))}
+                </span>
+              )}
+              {birthday && (
+                <span className="conv-birthday" title={t('birthdayToday', { name: c.title })}>
+                  🎂
+                </span>
+              )}
+              {convTags.length > 0 && (
+                <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
+                  {convTags.slice(0, 2).map((tag) => (
+                    <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
+                  ))}
+                  {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
+                </span>
+              )}
             </span>
-          )}
-          <span className="conv-corner">
-            <span className="conv-time">{timeLabel}</span>
-            <span
-              className={`conv-more ${menuOpen ? 'open' : ''}`}
-              role="button"
-              tabIndex={-1}
-              title={t('moreActions')}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation()
-                onMore(e.currentTarget, c.id)
-              }}
-            >
-              <MoreHorizontal size={15} strokeWidth={2.4} />
+            {accountLabel && (
+              <span className="conv-account" title={t('viaAccount', { account: accountLabel })}>
+                {accountLabel}
+              </span>
+            )}
+            <span className="conv-corner">
+              <span className="conv-time">{timeLabel}</span>
             </span>
           </span>
-        </span>
-        <span className="conv-bottom">
-          {later === 'snoozed' ? (
-            <span className="later-chip snoozed" title={t('laterSnoozedUntil', { time: formatLaterTime(snoozeUntil!, language) })}>
-              <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
-              {formatLaterTime(snoozeUntil!, language)}
-            </span>
-          ) : later === 'back' ? (
-            <span className="later-chip back">
-              <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
-              {t('laterBack')}
-            </span>
-          ) : later === 'due' ? (
-            <span className="later-chip due">
-              <BellRing size={11} strokeWidth={2.6} aria-hidden />
-              {t('laterNoReply')}
-            </span>
-          ) : null}
-          <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
-            {!isTyping && draft && !selected ? (
-              <>
-                <span className="conv-draft">{t('draft')}</span> {draft}
-              </>
-            ) : isTyping ? (
-              c.isGroup ? (
-                t('typingIn', { name: typingName ?? '' })
+          <span className="conv-bottom">
+            {later === 'snoozed' ? (
+              <span className="later-chip snoozed" title={t('laterSnoozedUntil', { time: formatLaterTime(snoozeUntil!, language) })}>
+                <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                {formatLaterTime(snoozeUntil!, language)}
+              </span>
+            ) : later === 'back' ? (
+              <span className="later-chip back">
+                <AlarmClock size={11} strokeWidth={2.6} aria-hidden />
+                {t('laterBack')}
+              </span>
+            ) : later === 'due' ? (
+              <span className="later-chip due">
+                <BellRing size={11} strokeWidth={2.6} aria-hidden />
+                {t('laterNoReply')}
+              </span>
+            ) : null}
+            <span className={`conv-preview ${isTyping ? 'typing' : ''}`}>
+              {!isTyping && draft && !selected ? (
+                <>
+                  <span className="conv-draft">{t('draft')}</span> {draft}
+                </>
+              ) : isTyping ? (
+                c.isGroup ? (
+                  t('typingIn', { name: typingName ?? '' })
+                ) : (
+                  t('typing')
+                )
               ) : (
-                t('typing')
-              )
-            ) : (
-              <>
-                {prefix}
-                <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
-              </>
-            )}
-          </span>
-          <span className="conv-meta">
-            {follow === 'waiting' && (
-              <span
-                className="conv-follow-mark"
-                role="img"
-                title={t('laterFollowingUntil', { time: formatLaterTime(followUntil!, language) })}
-                aria-label={t('laterFollowingUntil', { time: formatLaterTime(followUntil!, language) })}
-              >
-                <BellRing size={12} strokeWidth={2.2} />
-              </span>
-            )}
-            {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
-            {muted ? <BellOff size={12} strokeWidth={2.2} /> : mentionsOnly && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />}
-            {archivedMark && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
-            {requestMark && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
-            {c.unreadCount > 0 ? (
-              <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
-            ) : (
-              unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
-            )}
+                <>
+                  {prefix}
+                  <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
+                </>
+              )}
+            </span>
+            <span className="conv-meta">
+              {follow === 'waiting' && (
+                <span
+                  className="conv-follow-mark"
+                  role="img"
+                  title={t('laterFollowingUntil', { time: formatLaterTime(followUntil!, language) })}
+                  aria-label={t('laterFollowingUntil', { time: formatLaterTime(followUntil!, language) })}
+                >
+                  <BellRing size={12} strokeWidth={2.2} />
+                </span>
+              )}
+              {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
+              {muted ? <BellOff size={12} strokeWidth={2.2} /> : mentionsOnly && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />}
+              {archivedMark && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
+              {requestMark && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
+              {c.unreadCount > 0 ? (
+                <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
+              ) : (
+                unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
+              )}
+            </span>
           </span>
         </span>
-      </span>
-    </button>
+      </button>
+      {/* A sibling of the row, not inside it: a button in a button is not valid and a screen reader cannot reach it. */}
+      <button
+        type="button"
+        className={`conv-more ${menuOpen ? 'open' : ''}`}
+        // Only the open chat's button is a tab stop (every row would add one); the other rows use the ContextMenu key.
+        tabIndex={selected || menuOpen ? 0 : -1}
+        title={t('moreActions')}
+        aria-label={t('moreActions')}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => onMore(e.currentTarget, c.id, e.detail === 0)}
+      >
+        <MoreHorizontal size={15} strokeWidth={2.4} />
+      </button>
+    </>
   )
 })
 
@@ -330,12 +349,20 @@ export function ConversationList(): JSX.Element {
    * The "…" button opens the same menu as a right-click, hanging under the button and kept inside the window. Only
    * a click opens it (resting the pointer on it does not); a second click closes it.
    */
-  const openMenuAt = useCallback((el: HTMLElement, conversationId: string): void => {
+  const openMenuAt = useCallback((el: HTMLElement, conversationId: string, keyboard = false): void => {
     const r = el.getBoundingClientRect()
-    setMenu((m) => (m?.conversationId === conversationId ? undefined : { conversationId, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4 }))
+    setMenu((m) => (m?.conversationId === conversationId ? undefined : { conversationId, keyboard, x: Math.max(8, Math.min(r.right - 210, window.innerWidth - 226)), y: r.bottom + 4 }))
   }, [])
   // Handlers the memoised rows are given: they stay the same function while the store's actions do.
-  const openRow = useCallback((id: string, besideIt: boolean): void => (besideIt ? openBeside(id) : select(id)), [openBeside, select])
+  const openRow = useCallback(
+    (id: string, besideIt: boolean): void => {
+      if (besideIt) return openBeside(id)
+      // On a phone-sized window the list slides away to the chat.
+      if (useStore.getState().narrow) withViewTransition('to-chat', () => select(id))
+      else select(id)
+    },
+    [openBeside, select]
+  )
   const hoverRow = useCallback(
     (id: string): void => {
       if (hoverTimer.current) clearTimeout(hoverTimer.current)
@@ -346,7 +373,7 @@ export function ConversationList(): JSX.Element {
   const leaveRow = useCallback((): void => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current)
   }, [])
-  const menuRow = useCallback((id: string, x: number, y: number): void => setMenu({ conversationId: id, x, y }), [])
+  const menuRow = useCallback((id: string, x: number, y: number, keyboard = false): void => setMenu({ conversationId: id, x, y, keyboard }), [])
   const virtualizer = useVirtualizer({
     count: conversations.length,
     getScrollElement: () => listRef.current,
@@ -361,27 +388,95 @@ export function ConversationList(): JSX.Element {
     const top = rowsTop.current?.offsetTop ?? 0
     if (top !== rowsOffset) setRowsOffset(top)
   }, [rowsOffset, requestCount, listView, quickFilter, search, conversations.length])
+  // A chat that a new message moves up slides there (FLIP) instead of jumping: only the rows on screen both before and
+  // after, only when the order changed (not when a height was measured), and not under reduced motion.
+  const lastRows = useRef<{ ids: string[]; pos: Map<string, number> }>({ ids: [], pos: new Map() })
+  useLayoutEffect(() => {
+    const rows = virtualizer.getVirtualItems().map((v) => ({ id: conversations[v.index]?.id ?? '', y: v.start - virtualizer.options.scrollMargin, size: v.size }))
+    const before = lastRows.current
+    const ids = rows.map((row) => row.id)
+    lastRows.current = { ids, pos: new Map(rows.map((row) => [row.id, row.y])) }
+    const list = listRef.current
+    const container = rowsTop.current
+    if (!list || !container || !before.ids.length || !reordered(before.ids, ids)) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const top = list.scrollTop - rowsOffset
+    for (const move of flipMoves(before.pos, rows, { top, bottom: top + list.clientHeight })) {
+      const el = container.querySelector<HTMLElement>(`:scope > [data-id="${CSS.escape(move.id)}"]`)
+      if (!el) continue
+      // Promoted for the slide only (a text layer kept promoted renders its text differently on Windows).
+      el.style.willChange = 'transform'
+      const slide = el.animate([{ transform: `translateY(${move.from}px)` }, { transform: `translateY(${move.to}px)` }], { duration: 220, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+      slide.onfinish = slide.oncancel = () => {
+        el.style.willChange = ''
+      }
+    }
+  })
   const hasAccounts = Object.keys(accounts).length > 0
   const searching = search.trim().length > 0
   // One clock reading for the whole list render (snooze and follow-up states, typing).
   const now = Date.now()
   const mutedChat = (c: Conversation): boolean => isChatMuted({ muted, tags }, c)
   const archivedChat = (c: Conversation): boolean => isArchived(c, archived?.[c.id], mutedChat(c))
+  // The menu stays mounted while it fades out, with what it showed.
+  const lastMenu = useRef<TagMenuState | undefined>(undefined)
+  if (menu) lastMenu.current = menu
+  const shown = menu ?? lastMenu.current
+  const { mounted: menuMounted, state: menuState } = usePresence(!!menu)
   // From the store, not the list: a chat can leave the filtered list while its menu is open (untagging it).
-  const menuConversation = menu ? allConversations[menu.conversationId] : undefined
+  const menuConversation = shown ? allConversations[shown.conversationId] : undefined
   const menuUnread = !!menuConversation && isUnread(menuConversation, markedUnread)
   const menuArchived = !!menuConversation && archivedChat(menuConversation)
 
   useEffect(() => {
     if (!menu) return
     const close = (): void => setMenu(undefined)
+    // A key pressed anywhere but in the menu closes it (the menu handles its own keys).
+    const onKey = (e: KeyboardEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) close()
+    }
     window.addEventListener('mousedown', close)
-    window.addEventListener('keydown', close)
+    window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('mousedown', close)
-      window.removeEventListener('keydown', close)
+      window.removeEventListener('keydown', onKey)
     }
   }, [menu])
+
+  // Focus goes into the menu when it opens (the first item from the keyboard) and back to the chat's row when it
+  // closes, unless the person has already moved on to something else.
+  const menuChat = menu?.conversationId
+  useEffect(() => {
+    if (!menuChat) return
+    const el = menuRef.current
+    const list = listRef.current
+    if (el) {
+      const first = el.querySelector<HTMLElement>('[role^="menuitem"]')
+      ;(lastMenu.current?.keyboard && first ? first : el).focus({ preventScroll: true })
+    }
+    return () => {
+      const at = document.activeElement
+      if (at && at !== document.body && !el?.contains(at)) return
+      list?.querySelector<HTMLElement>(`.conv-item[data-id="${CSS.escape(menuChat)}"]`)?.focus({ preventScroll: true })
+    }
+  }, [menuChat])
+
+  // Arrow keys walk the items (wrapping), Home and End jump, Escape and Tab close.
+  const onMenuKey = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault()
+      setMenu(undefined)
+      return
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])]
+    if (!items.length) return
+    e.preventDefault()
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const from = at < 0 ? (e.key === 'ArrowDown' ? -1 : 0) : at
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (from + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next].focus()
+  }
 
   // A right-click low in the list, or near the window's right edge, used to open the menu past the window: move
   // it back inside. offsetWidth/Height ignore the open animation's scale, so this is the size the menu settles at.
@@ -541,6 +636,7 @@ export function ConversationList(): JSX.Element {
             return (
               <div
                 key={v.key}
+                data-id={c.id}
                 data-index={v.index}
                 ref={virtualizer.measureElement}
                 className="conv-row"
@@ -610,17 +706,25 @@ export function ConversationList(): JSX.Element {
       </div>
 
       {/* Rendered at the document root: the glass column would otherwise clip a fixed menu. */}
-      {menu &&
+      {menuMounted &&
+        shown &&
         createPortal(
           <div
             ref={menuRef}
             className="context-menu"
-            style={{ left: menu.x, top: menu.y, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
+            role="menu"
+            data-focus-return={`.conv-item[data-id="${CSS.escape(shown.conversationId)}"]`}
+            aria-label={t('moreActions')}
+            tabIndex={-1}
+            data-state={menuState}
+            {...(menuState === 'closing' ? { inert: '' } : undefined)}
+            style={{ left: shown.x, top: shown.y, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
+            onKeyDown={onMenuKey}
             onMouseDown={(e) => e.stopPropagation()}
           >
             {menuConversation && (
               <button
-                className="context-menu-item"
+                className="context-menu-item" role="menuitem"
                 onClick={() => {
                   void (menuUnread ? markRead : markUnread)(menuConversation.id)
                   setMenu(undefined)
@@ -633,7 +737,7 @@ export function ConversationList(): JSX.Element {
             )}
             {menuConversation && !menuConversation.isGroup && (
               <button
-                className="context-menu-item"
+                className="context-menu-item" role="menuitem"
                 onClick={() => {
                   openSheet({ kind: 'merge', conversationId: menuConversation.id })
                   setMenu(undefined)
@@ -645,7 +749,7 @@ export function ConversationList(): JSX.Element {
             )}
             {menuConversation && (
               <button
-                className="context-menu-item"
+                className="context-menu-item" role="menuitem"
                 onClick={() => {
                   void (menuArchived ? unarchive : archive)(menuConversation.id)
                   setMenu(undefined)
@@ -660,7 +764,7 @@ export function ConversationList(): JSX.Element {
               laterOn &&
               (isSnoozed(snoozed?.[menuConversation.id]) ? (
                 <button
-                  className="context-menu-item"
+                  className="context-menu-item" role="menuitem"
                   onClick={() => {
                     void unsnooze(menuConversation.id)
                     setMenu(undefined)
@@ -672,9 +776,9 @@ export function ConversationList(): JSX.Element {
                 </button>
               ) : (
                 <button
-                  className="context-menu-item"
+                  className="context-menu-item" role="menuitem"
                   onClick={() => {
-                    openLaterPicker({ conversationId: menuConversation.id, mode: 'snooze', x: menu.x, y: menu.y })
+                    openLaterPicker({ conversationId: menuConversation.id, mode: 'snooze', x: shown.x, y: shown.y })
                     setMenu(undefined)
                   }}
                 >
@@ -687,7 +791,7 @@ export function ConversationList(): JSX.Element {
               laterOn &&
               (followState(followUps?.[menuConversation.id]) === 'waiting' ? (
                 <button
-                  className="context-menu-item"
+                  className="context-menu-item" role="menuitem"
                   onClick={() => {
                     void cancelFollowUp(menuConversation.id)
                     setMenu(undefined)
@@ -699,9 +803,9 @@ export function ConversationList(): JSX.Element {
                 </button>
               ) : (
                 <button
-                  className="context-menu-item"
+                  className="context-menu-item" role="menuitem"
                   onClick={() => {
-                    openLaterPicker({ conversationId: menuConversation.id, mode: 'follow', x: menu.x, y: menu.y })
+                    openLaterPicker({ conversationId: menuConversation.id, mode: 'follow', x: shown.x, y: shown.y })
                     setMenu(undefined)
                   }}
                 >
@@ -709,11 +813,11 @@ export function ConversationList(): JSX.Element {
                   <span>{t('followAction')}</span>
                 </button>
               ))}
-            {canSplit && menu.conversationId !== selectedId && (
+            {canSplit && shown.conversationId !== selectedId && (
               <button
-                className="context-menu-item"
+                className="context-menu-item" role="menuitem"
                 onClick={() => {
-                  openBeside(menu.conversationId)
+                  openBeside(shown.conversationId)
                   setMenu(undefined)
                 }}
               >
@@ -723,9 +827,9 @@ export function ConversationList(): JSX.Element {
               </button>
             )}
             <button
-              className="context-menu-item"
+              className="context-menu-item" role="menuitem"
               onClick={() => {
-                void togglePin(menu.conversationId)
+                void togglePin(shown.conversationId)
                 setMenu(undefined)
               }}
             >
@@ -733,14 +837,14 @@ export function ConversationList(): JSX.Element {
               <span>{isPinned(menuConversation, pins) ? t('unpin') : t('pin')}</span>
             </button>
             <button
-              className="context-menu-item"
+              className="context-menu-item" role="menuitem"
               onClick={() => {
-                void toggleMute('conversations', menu.conversationId)
+                void toggleMute('conversations', shown.conversationId)
                 setMenu(undefined)
               }}
             >
               <BellOff size={15} />
-              <span>{muted.conversations.includes(menu.conversationId) ? t('unmute') : t('mute')}</span>
+              <span>{muted.conversations.includes(shown.conversationId) ? t('unmute') : t('mute')}</span>
             </button>
             {menuConversation?.isGroup && (
               <button
@@ -758,20 +862,20 @@ export function ConversationList(): JSX.Element {
               </button>
             )}
             <button
-              className="context-menu-item"
+              className="context-menu-item" role="menuitem"
               onClick={() => {
-                void hideConversation(menu.conversationId)
+                void hideConversation(shown.conversationId)
                 setMenu(undefined)
               }}
             >
               <EyeOff size={15} />
               <span>{t('hide')}</span>
             </button>
-            <div className="context-menu-title">{t('tags')}</div>
+            <div className="context-menu-title" role="presentation">{t('tags')}</div>
             {tagList.map((tag) => {
-              const active = (tags[menu.conversationId] ?? []).includes(tag.id)
+              const active = (tags[shown.conversationId] ?? []).includes(tag.id)
               return (
-                <button key={tag.id} className={`context-menu-item tag-row ${active ? 'active' : ''}`} onClick={() => void toggleTag(menu.conversationId, tag.id)}>
+                <button key={tag.id} className={`context-menu-item tag-row ${active ? 'active' : ''}`} role="menuitemcheckbox" aria-checked={active} onClick={() => void toggleTag(shown.conversationId, tag.id)}>
                   <TagChip tag={tag} size="sm" flat={!active} />
                   {active && <span className="context-menu-check">✓</span>}
                 </button>
