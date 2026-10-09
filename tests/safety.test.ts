@@ -51,3 +51,39 @@ describe('the image proxy', () => {
     expect(ok('https://evil.example/a.png')).toBe(false)
   })
 })
+
+describe('what the app window may navigate to', () => {
+  const file = pathToFileURL(join(process.cwd(), 'out', 'renderer', 'index.html')).href
+
+  it('stays on the app page: a dropped file or a link never replaces it (file: URLs all have the origin "null")', async () => {
+    const { isAppNavigation } = await import('../src/main/safety')
+    expect(isAppNavigation(file, file)).toBe(true)
+    expect(isAppNavigation(file + '#/inbox', file)).toBe(true)
+    expect(isAppNavigation(file + '.evil.html', file)).toBe(false)
+    expect(isAppNavigation(pathToFileURL(join(process.cwd(), 'secret.html')).href, file)).toBe(false)
+    expect(isAppNavigation('file:///C:/Windows/System32/calc.exe', file)).toBe(false)
+    expect(isAppNavigation('https://evil.example/', file)).toBe(false)
+    expect(isAppNavigation('not a url', file)).toBe(false)
+  })
+
+  it('in development the dev server origin is the app, and only that origin', async () => {
+    const { isAppNavigation } = await import('../src/main/safety')
+    const dev = 'http://localhost:5173'
+    expect(isAppNavigation('http://localhost:5173/', dev)).toBe(true)
+    expect(isAppNavigation('http://localhost:5173/#x', dev)).toBe(true)
+    expect(isAppNavigation('http://localhost:51730/', dev)).toBe(false)
+    expect(isAppNavigation('http://localhost:5173.evil.example/', dev)).toBe(false)
+  })
+})
+
+describe('attachments that would run', () => {
+  it('are shown in their folder instead of opened', async () => {
+    const { isExecutableName } = await import('../src/main/safety')
+    for (const name of ['setup.exe', 'a.BAT', 'x.cmd', 'y.scr', 'z.msi', 'link.lnk', 'a.js', 'a.vbs', 'a.ps1', 'a.reg', 'a.jar', 'Mac.app', 'a.dmg', 'a.pkg', 'run.sh', 'photo.jpg.exe', 'a.exe ']) {
+      expect(isExecutableName(name), name).toBe(true)
+    }
+    for (const name of ['photo.jpg', 'notes.txt', 'report.pdf', 'archive.zip', 'voice.ogg', 'noext', 'exe', '.hidden', 'a.exe.txt', 'script.json']) {
+      expect(isExecutableName(name), name).toBe(false)
+    }
+  })
+})

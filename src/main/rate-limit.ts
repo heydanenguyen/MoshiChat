@@ -24,6 +24,11 @@ export class SendLimiter {
     this.sends.set(accountId, recent)
   }
 
+  /** Gives back the slot of a send that did not happen, so a failed send does not count towards the limit. */
+  release(accountId: string): void {
+    this.sends.get(accountId)?.pop()
+  }
+
   /** Throws when the same message is being forwarded to too many different chats; otherwise records it. */
   takeForward(accountId: string, messageId: string, toConversationId: string): void {
     const t = this.now()

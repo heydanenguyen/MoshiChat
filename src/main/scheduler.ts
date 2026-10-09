@@ -1,13 +1,17 @@
 import { randomUUID } from 'crypto'
 import type { BridgeEvent, ScheduledMessage, Settings } from '@shared/types'
 import type { AccountManager } from './adapters/manager'
+import { RATE_LIMIT_FORWARD, RATE_LIMIT_SEND } from './rate-limit'
 import type { Storage } from './storage'
 
 /** A message that was due while Moshi was closed is only sent late if it is still this fresh. */
 const LATE_GRACE_MS = 60 * 60 * 1000
-/** Accounts that are still connecting get this long before a scheduled message counts as failed. */
+/** Accounts that are still connecting (or were sending too fast) get this long before a scheduled message counts as failed. */
 const RETRY_WINDOW_MS = 10 * 60 * 1000
 const TICK_MS = 15_000
+
+/** A send that failed only because the account is still connecting or was sending too fast: worth another try soon. */
+export const isRetryableSend = (error: string): boolean => /connecting/i.test(error) || error.includes(RATE_LIMIT_SEND) || error.includes(RATE_LIMIT_FORWARD)
 
 /**
  * "Send later": messages wait in settings.scheduled and are sent from here when their time comes.
@@ -36,11 +40,16 @@ export class Scheduler {
     return settings
   }
 
-  async start(): Promise<void> {
-    // Anything that fell due long ago while the app was closed waits for the user to decide.
+  /** Anything that fell due long ago (the app was closed, or the computer slept) waits for the user to decide; returns those. */
+  private async markMissed(): Promise<ScheduledMessage[]> {
     const now = Date.now()
-    const list = this.list.map((m) => (m.status === 'pending' && m.sendAt < now - LATE_GRACE_MS ? { ...m, status: 'missed' as const } : m))
-    if (list.some((m, i) => m !== this.list[i])) await this.save(list)
+    const missed = this.list.filter((m) => m.status === 'pending' && m.sendAt < now - LATE_GRACE_MS).map((m) => ({ ...m, status: 'missed' as const }))
+    if (missed.length) await this.save(this.list.map((m) => missed.find((x) => x.id === m.id) ?? m))
+    return missed
+  }
+
+  async start(): Promise<void> {
+    await this.markMissed()
     this.timer = setInterval(() => void this.tick(), TICK_MS)
     setTimeout(() => void this.tick(), 5_000)
   }
@@ -86,6 +95,8 @@ export class Scheduler {
     if (this.running) return
     this.running = true
     try {
+      // The timer does not run while the computer sleeps: on waking, old items are missed, not sent hours late.
+      for (const item of await this.markMissed()) this.onFailed(item)
       const due = this.list.filter((m) => m.status === 'pending' && m.sendAt <= Date.now())
       for (const item of due) await this.deliver(item, false)
     } finally {
@@ -100,8 +111,8 @@ export class Scheduler {
       await this.save(this.list.filter((m) => m.id !== item.id))
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
-      // Still connecting: try again on the next tick for a while before giving up.
-      const retry = !manual && /connecting/i.test(error) && Date.now() - item.sendAt < RETRY_WINDOW_MS
+      // Still connecting, or sending too fast: try again on the next tick for a while before giving up.
+      const retry = !manual && isRetryableSend(error) && Date.now() - item.sendAt < RETRY_WINDOW_MS
       if (retry) return
       this.log('scheduled message failed:', error)
       const failed = { ...item, status: 'failed' as const, error }

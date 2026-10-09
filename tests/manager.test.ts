@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tmpdir } from 'os'
 
+const cookiesCleared: string[] = []
 vi.mock('electron', () => ({
   app: { getPath: () => tmpdir() },
+  session: { fromPartition: (name: string) => ({ clearStorageData: async (options?: { storages?: string[] }) => void (options?.storages?.join() === 'cookies' && cookiesCleared.push(name)) }) },
   safeStorage: { isEncryptionAvailable: () => false, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() }
 }))
 
@@ -11,6 +13,7 @@ import { ALL_FEATURES } from '../src/shared/types'
 import { AccountManager, isTransientConnectError } from '../src/main/adapters/manager'
 import type { AdapterContext, PlatformAdapter } from '../src/main/adapters/types'
 import type { Storage, StoredAccount } from '../src/main/storage'
+import { forgetPartition, legacyPartition, rememberPartition } from '../src/main/web-partitions'
 
 /** Minimal in-memory stand-in for the encrypted store. */
 function fakeStorage(initial: StoredAccount[] = []): Storage {
@@ -461,5 +464,138 @@ describe('isTransientConnectError', () => {
     expect(isTransientConnectError(new Error('Slack did not accept this token'), false)).toBe(true)
     expect(isTransientConnectError('Gmail did not accept this email and app password', false)).toBe(true)
     expect(isTransientConnectError(new Error('Sign-in cancelled'), false)).toBe(false)
+  })
+})
+
+/** Facebook web-session accounts (their cookies live in a browser partition) on a manager, as restore() would set them up. */
+async function managerWithWebAccounts(ids: string[], partition: string) {
+  const storage = fakeStorage()
+  for (const id of ids) await storage.upsertAccount({ id, platform: 'messenger', displayName: id } as Account, { cookies: [], partition })
+  const manager = new AccountManager(storage, () => undefined, () => undefined, (s, ctx) => new FakeAdapter(s.id, ctx))
+  await manager.restore()
+  await flush()
+  return { manager, storage }
+}
+
+describe('AccountManager.remove', () => {
+  const legacy = legacyPartition('messenger')
+  afterEach(() => {
+    cookiesCleared.length = 0
+    for (const id of ['messenger:fb-1', 'messenger:fb-2']) forgetPartition(id)
+  })
+
+  it('signs the shared Facebook session out when its last account goes', async () => {
+    const { manager } = await managerWithWebAccounts(['messenger:fb-1'], legacy)
+    rememberPartition('messenger:fb-1', 'messenger', legacy)
+    await manager.remove('messenger:fb-1')
+    expect(cookiesCleared).toEqual([legacy])
+  })
+
+  it('leaves the shared session alone while another account still uses it', async () => {
+    const { manager } = await managerWithWebAccounts(['messenger:fb-1', 'messenger:fb-2'], legacy)
+    rememberPartition('messenger:fb-1', 'messenger', legacy)
+    rememberPartition('messenger:fb-2', 'messenger', legacy)
+    await manager.remove('messenger:fb-1')
+    expect(cookiesCleared).toEqual([])
+    await manager.remove('messenger:fb-2')
+    expect(cookiesCleared).toEqual([legacy])
+  })
+
+  it('still removes the account when clearing its cookies fails', async () => {
+    const { manager, storage } = await managerWithWebAccounts(['messenger:fb-1'], legacy)
+    const log = vi.fn()
+    manager['log'] = log
+    rememberPartition('messenger:fb-1', 'messenger', legacy)
+    const { session } = await import('electron')
+    vi.spyOn(session, 'fromPartition').mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    await expect(manager.remove('messenger:fb-1')).resolves.toBeUndefined()
+    expect(storage.accounts).toEqual([])
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('cookies'), 'boom')
+  })
+
+  it('forgets the insight records and the contact list of the removed account only', async () => {
+    const stored = (id: string): StoredAccount => ({ id, platform: 'telegram', displayName: id })
+    const manager = new AccountManager(fakeStorage([stored('telegram:1'), stored('telegram:2')]), () => undefined, () => undefined, (s, ctx) => new FakeAdapter(s.id, ctx))
+    await manager.restore()
+    await flush()
+    await flush()
+    const insights = { load: vi.fn(async () => undefined), forget: vi.fn(), flush: async () => undefined }
+    manager['insightStore'] = insights as never
+    manager['contactCache'].set('telegram:1', { at: 1, list: [] })
+    manager['contactCache'].set('telegram:2', { at: 1, list: [] })
+    await manager.remove('telegram:1')
+    expect(insights.forget.mock.calls.map((c) => c[0]).sort()).toEqual(['telegram:1/c1', 'telegram:1/c2'])
+    // loaded first: forgetting in a store that never read its file would later save an empty one over it
+    expect(insights.load.mock.invocationCallOrder[0]).toBeLessThan(insights.forget.mock.invocationCallOrder[0])
+    expect([...manager['contactCache'].keys()]).toEqual(['telegram:2'])
+  })
+})
+
+describe('AccountManager conversations', () => {
+  const chat = (id: string, accountId: string): Conversation => ({ id, accountId, platform: 'telegram', title: id, isGroup: false, participants: [], unreadCount: 0, updatedAt: 2 })
+
+  it('drops chats the platform no longer lists when the list is loaded again', async () => {
+    const manager = new AccountManager(fakeStorage(), () => undefined, () => undefined)
+    const adapter = new FakeAdapter('telegram:a', manager['contextFor']('telegram:a'))
+    await manager.adoptPending('telegram:a', adapter)
+    await manager.adoptPending('telegram:b', new FakeAdapter('telegram:b', manager['contextFor']('telegram:b')))
+    expect(manager.listConversations()).toHaveLength(4)
+    adapter.listConversations = async () => [chat('telegram:a/c1', 'telegram:a')]
+    await manager['loadConversations'](adapter)
+    expect(manager.listConversations().map((c) => c.id).sort()).toEqual(['telegram:a/c1', 'telegram:b/c1', 'telegram:b/c2'])
+  })
+
+  it('keeps what it has when the list cannot be loaded', async () => {
+    const manager = new AccountManager(fakeStorage(), () => undefined, () => undefined)
+    const adapter = new FakeAdapter('telegram:a', manager['contextFor']('telegram:a'))
+    await manager.adoptPending('telegram:a', adapter)
+    adapter.listConversations = async () => {
+      throw new Error('offline')
+    }
+    await manager['loadConversations'](adapter)
+    expect(manager.listConversations()).toHaveLength(2)
+  })
+})
+
+describe('AccountManager.pendingPrompts', () => {
+  it('lists the sign-in prompts still waiting, with the latest code and note, for a window that reloaded', async () => {
+    const manager = new AccountManager(fakeStorage(), () => undefined, () => undefined)
+    const ctx = manager['contextFor']('whatsapp:w')
+    manager['adapters'].set('whatsapp:w', new FakeAdapter('whatsapp:w', ctx))
+    expect(manager.pendingPrompts()).toEqual([])
+    const code = ctx.requestAuth('code', 'Enter the code')
+    const qr = ctx.presentQr('data:image/png;base64,AAA')
+    ctx.noteAuth(qr, 'scanned')
+    expect(manager.pendingPrompts().find((p) => p.requestId === qr)).toMatchObject({ qrDataUrl: 'data:image/png;base64,AAA', note: 'scanned' })
+    ctx.presentQr('data:image/png;base64,BBB', undefined, qr)
+    const prompts = manager.pendingPrompts()
+    expect(prompts).toHaveLength(2)
+    expect(prompts.find((p) => p.kind === 'code')).toMatchObject({ accountId: 'whatsapp:w', message: 'Enter the code' })
+    expect(prompts.find((p) => p.requestId === qr)).toMatchObject({ kind: 'qr', qrDataUrl: 'data:image/png;base64,BBB' })
+    manager.respondAuth(prompts.find((p) => p.kind === 'code')!.requestId, '1')
+    await code
+    manager.cancelAuth(qr)
+    expect(manager.pendingPrompts()).toEqual([])
+  })
+})
+
+describe('AccountManager send limit', () => {
+  class FailingSend extends FakeAdapter {
+    fail = true
+    async sendMessage(conversationId: string, text: string): Promise<Message> {
+      if (this.fail) throw new Error('network down')
+      return super.sendMessage(conversationId, text)
+    }
+  }
+
+  it('does not count a send that failed against the account’s limit', async () => {
+    const manager = new AccountManager(fakeStorage(), () => undefined, () => undefined)
+    const adapter = new FailingSend('telegram:a', manager['contextFor']('telegram:a'))
+    await manager.adoptPending('telegram:a', adapter)
+    for (let i = 0; i < 30; i++) await expect(manager.sendMessage('telegram:a/c1', 'hi')).rejects.toThrow('network down')
+    adapter.fail = false
+    await expect(manager.sendMessage('telegram:a/c1', 'hi')).resolves.toMatchObject({ text: 'hi' })
   })
 })

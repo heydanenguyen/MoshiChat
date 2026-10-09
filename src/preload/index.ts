@@ -41,7 +41,8 @@ const bridge: MoshiBridge = {
   },
   auth: {
     respond: (requestId, value) => ipcRenderer.invoke(IPC.authRespond, requestId, value),
-    cancel: (requestId) => ipcRenderer.invoke(IPC.authCancel, requestId)
+    cancel: (requestId) => ipcRenderer.invoke(IPC.authCancel, requestId),
+    pending: () => ipcRenderer.invoke(IPC.authPending)
   },
   ai: {
     status: () => ipcRenderer.invoke(IPC.aiStatus),

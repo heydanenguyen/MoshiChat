@@ -52,3 +52,9 @@ export async function wipePartition(platform: WebPlatform, partition: string): P
   if (partition === legacyPartition(platform) || [...inUse.values()].some((u) => u.partition === partition)) return
   await session.fromPartition(partition).clearStorageData().catch(() => undefined)
 }
+
+/** Once no account uses the shared session, its sign-in cookies go too, so the next account to be added starts signed out. */
+export async function clearSharedCookies(platform: WebPlatform, partition: string): Promise<void> {
+  if (partition !== legacyPartition(platform) || [...inUse.values()].some((u) => u.partition === partition)) return
+  await session.fromPartition(partition).clearStorageData({ storages: ['cookies'] })
+}

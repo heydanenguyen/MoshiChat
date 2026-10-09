@@ -57,3 +57,28 @@ export function proxyAllowed(target: URL, hosts: RegExp): boolean {
   if (!/(^|\.)(facebook|instagram)\.com$/i.test(target.hostname)) return true
   return /^\/(images|static|rsrc\.php|emoji\.php)\//i.test(target.pathname) || /\.(png|jpe?g|gif|webp|svg|ico)$/i.test(target.pathname)
 }
+
+/**
+ * Whether the app window may navigate to `url`: only its own page (a file: URL's origin is always "null", so origins
+ * cannot tell a dropped file from the app) or, in development, the dev server's origin.
+ */
+export function isAppNavigation(url: string, appPage: string): boolean {
+  if (!appPage.startsWith('file:')) {
+    try {
+      return new URL(url).origin === appPage
+    } catch {
+      return false
+    }
+  }
+  // The page itself (with a query or fragment), not a sibling file that merely starts with its name.
+  return url.startsWith(appPage) && (url.length === appPage.length || /^[?#]/.test(url.slice(appPage.length)))
+}
+
+/** Files that run when opened (or install something): shown in their folder instead of being opened. */
+const EXECUTABLE = new Set('exe bat cmd com scr pif msi msp lnk hta js jse vbs vbe wsf wsh ps1 reg cpl jar app dmg pkg sh'.split(' '))
+
+export function isExecutableName(name: string): boolean {
+  // Windows ignores trailing dots and spaces ("a.exe " is still a.exe).
+  const ext = /\.([a-z0-9]+)$/i.exec(name.trim().replace(/[. ]+$/, ''))?.[1]
+  return !!ext && EXECUTABLE.has(ext.toLowerCase())
+}

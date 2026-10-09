@@ -464,44 +464,12 @@ function giphyKey(): string {
   return BUILT_IN_GIF.provider === 'giphy' ? BUILT_IN_GIF.key : ''
 }
 
-/**
- * Drop per-chat settings (tags, pins, hidden, marked-unread, archived, mentions-only and accepted-request chats, nicknames, saved messages, mutes) that belong to accounts
- * which no longer exist, so counts and lists never include chats that are gone.
- */
+/** Drops per-chat settings of accounts that no longer exist (see orphanedSettingsPatch). */
 async function pruneOrphanedSettings(): Promise<void> {
-  const accounts = new Set(storage.accounts.map((a) => a.id))
-  const owned = (conversationId: string): boolean => {
-    const slash = conversationId.indexOf('/')
-    return slash > 0 && accounts.has(conversationId.slice(0, slash))
-  }
-  const settings = storage.settings
-  const keep = <T>(record: Record<string, T> | undefined): Record<string, T> | undefined =>
-    record ? Object.fromEntries(Object.entries(record).filter(([id]) => owned(id))) : record
-  const patch: Partial<Settings> = {}
-  const tags = keep(settings.tags) ?? {}
-  if (Object.keys(tags).length !== Object.keys(settings.tags ?? {}).length) patch.tags = tags
-  const pins = keep(settings.pins)
-  if (pins && Object.keys(pins).length !== Object.keys(settings.pins ?? {}).length) patch.pins = pins
-  const hidden = keep(settings.hidden)
-  if (hidden && Object.keys(hidden).length !== Object.keys(settings.hidden ?? {}).length) patch.hidden = hidden
-  // People are left as they are: another computer may have the accounts of the chats missing here (a person
-  // with one chat around simply shows as that chat).
-  for (const key of ['markedUnread', 'archived', 'mentionsOnly', 'acceptedRequests'] as const) {
-    const kept = keep<number | boolean>(settings[key])
-    if (kept && Object.keys(kept).length !== Object.keys(settings[key] ?? {}).length) Object.assign(patch, { [key]: kept })
-  }
-  const overrides = keep(settings.contactOverrides)
-  if (overrides && Object.keys(overrides).length !== Object.keys(settings.contactOverrides ?? {}).length) patch.contactOverrides = overrides
-  const saved = settings.savedMessages?.filter((m) => owned(m.conversationId))
-  if (saved && saved.length !== settings.savedMessages?.length) patch.savedMessages = saved
-  const mutedChats = settings.muted?.conversations.filter(owned)
-  const mutedAccounts = settings.muted?.accounts.filter((id) => accounts.has(id))
-  if (settings.muted && (mutedChats?.length !== settings.muted.conversations.length || mutedAccounts?.length !== settings.muted.accounts.length)) {
-    patch.muted = { ...settings.muted, conversations: mutedChats ?? [], accounts: mutedAccounts ?? [] }
-  }
+  const patch = orphanedSettingsPatch(storage.settings, new Set(storage.accounts.map((a) => a.id)))
   if (Object.keys(patch).length) {
     // Not a deletion to sync: another computer may still have these accounts.
-    await storage.setSettings(patch, 'tidy')
+    emit({ type: 'settings:updated', settings: await storage.setSettings(patch, 'tidy') })
     log('pruned settings of removed accounts:', Object.keys(patch).join(', '))
   }
 }
@@ -634,6 +602,11 @@ function applyBackdrop(): void {
   window.setBackgroundColor(windowColorFor())
 }
 
+/** Moshi's own page: the dev server's origin, or the built page's file URL. */
+const APP_PAGE = process.env.ELECTRON_RENDERER_URL
+  ? new URL(process.env.ELECTRON_RENDERER_URL).origin
+  : pathToFileURL(join(__dirname, '../renderer/index.html')).href
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1240,
@@ -666,6 +639,8 @@ function createWindow(): void {
   // Interface zoom from Settings (large/4K screens); re-applied after every load.
   window.webContents.on('did-finish-load', () => {
     window?.webContents.setZoomFactor(clampZoom(storage.settings.zoom))
+    // Statuses that changed before the page was listening (the window starts, or reloads, while accounts connect).
+    for (const account of manager.listAccounts()) emit({ type: 'account:updated', account })
     // No keyring (some Linux desktops): sessions would be stored merely encoded, so say so rather than stay quiet.
     if (storage.accounts.length && !secretsProtected()) setTimeout(() => emit({ type: 'app:notice', notice: 'insecure-secrets' }), 4000)
   })
@@ -731,8 +706,7 @@ function createWindow(): void {
   // would then hold the full window.unison bridge.
   const contents = window.webContents
   contents.on('will-navigate', (event, url) => {
-    const own = contents.getURL()
-    if (!own || new URL(url).origin !== new URL(own).origin) event.preventDefault()
+    if (!isAppNavigation(url, APP_PAGE)) event.preventDefault()
   })
 
   if (!app.isPackaged && process.env.MOSHI_UI_SCRIPT) installUiScript(window)
@@ -815,7 +789,8 @@ function registerMediaProxy(): void {
 }
 
 import { IMAGE_HOSTS } from '@shared/media'
-import { externalUrl, fileInside, isPrivateHost, proxyAllowed } from './safety'
+import { externalUrl, fileInside, isAppNavigation, isExecutableName, isPrivateHost, proxyAllowed } from './safety'
+import { orphanedSettingsPatch, stripMainOwned } from './settings-guard'
 
 /**
  * A sticker's background taken away: macOS lifts the subject itself when it can (fast and light); otherwise, or for
@@ -1228,6 +1203,11 @@ async function openAttachment(conversationId: string, messageId: string, attachm
   const path = join(app.getPath('temp'), 'unison-open', `${Date.now()}-${name.replace(/[\\/:*?"<>|]/g, '_')}${ext}`)
   await mkdir(join(app.getPath('temp'), 'unison-open'), { recursive: true })
   await writeFile(path, Buffer.from(match[2], 'base64'))
+  // An executable a stranger sent must never run from a click: it is shown in its folder instead.
+  if (isExecutableName(path)) {
+    shell.showItemInFolder(path)
+    return
+  }
   const error = await shell.openPath(path)
   if (error) throw new Error(error)
 }
@@ -1419,8 +1399,7 @@ async function listPages(appId: string): Promise<PageOption[]> {
 function registerIpc(): void {
   // Every channel answers only Moshi's own page (the main window and the share picture window). Login windows and
   // the hidden Instagram pages have no preload, but a frame that is not the app must never reach these either.
-  const appPage = process.env.ELECTRON_RENDERER_URL ? new URL(process.env.ELECTRON_RENDERER_URL).origin : pathToFileURL(join(__dirname, '../renderer/index.html')).href
-  const fromApp = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => !!event.senderFrame?.url.startsWith(appPage)
+  const fromApp = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => !!event.senderFrame?.url.startsWith(APP_PAGE)
   type Handler = Parameters<typeof ipcMain.handle>[1]
   type Listener = Parameters<typeof ipcMain.on>[1]
   const handle = (channel: string, fn: Handler): void =>
@@ -1443,7 +1422,8 @@ function registerIpc(): void {
   handle(IPC.accountsReconnect, async (_e, id: string) => {
     const web = id.startsWith('instagram:ig-') ? 'instagram' : id.startsWith('messenger:fb-') ? 'messenger' : undefined
     const account = manager.listAccounts().find((a) => a.id === id)
-    if (web && account && account.status !== 'connected') {
+    // Only a signed-out account needs the login window; one that is still connecting or failed just tries again.
+    if (web && account?.status === 'needs_auth') {
       await signInAgain(id, web)
       return
     }
@@ -1489,8 +1469,12 @@ function registerIpc(): void {
   handle(IPC.messagesTyping, (_e, id: string) => manager.setTyping(id))
   handle(IPC.authRespond, (_e, requestId: string, value: string) => manager.respondAuth(requestId, value))
   handle(IPC.authCancel, (_e, requestId: string) => manager.cancelAuth(requestId))
+  handle(IPC.authPending, () => manager.pendingPrompts())
   handle(IPC.settingsGet, () => storage.settings)
-  handle(IPC.settingsSet, async (_e, patch: Partial<Settings>) => {
+  handle(IPC.settingsSet, async (_e, requested: Partial<Settings>) => {
+    // What only the main process writes (the lock, scheduled and Later lists) is not the window's to change.
+    const { clean: patch, dropped } = stripMainOwned(requested)
+    if (dropped.length) log('settings:set ignored main-owned keys:', dropped.join(', '))
     const settings = await storage.setSettings(patch)
     if (patch.theme) applyTheme(settings.theme)
     if ('style' in patch) applyBackdrop()

@@ -48,6 +48,74 @@ describe('Zalo messages written on another computer', () => {
   })
 })
 
+describe('Zalo messages that reached another computer first', () => {
+  type Chat = { id: string; unreadCount: number }
+  // [thread, unread count] of the last chat list sent (setup() hands the adapter an object as its id, so only the part after the slash is compared)
+  const chatsOf = (emitted: Array<Emitted & { conversations?: Chat[] }>): Array<[string, number]> =>
+    (emitted.filter((e) => e.type === 'conversations:reset').at(-1)?.conversations ?? []).map((c) => [c.id.split('/')[1], c.unreadCount])
+
+  it('count as unread for the messages from the other person, in the list that follows', () => {
+    const { emitted, listener } = setup()
+    const internals = lastAdapter as unknown as { friends: Map<string, unknown>; unread: Map<string, number> }
+    internals.friends.set('lan', { userId: 'lan', displayName: 'Lan' })
+    listener.emit('old_messages', [
+      { threadId: 'lan', type: 0, data: raw('2', 5_000, 'me-uid') },
+      { threadId: 'lan', type: 0, data: raw('3', 6_000) },
+      { threadId: 'lan', type: 0, data: raw('4', 7_000) },
+      { threadId: 'lan', type: 0, data: raw('1', 1_000) }
+    ], 0)
+    expect(chatsOf(emitted as never)).toEqual([['lan', 2]])
+    // the same feed again brings nothing new: nothing is counted twice
+    listener.emit('old_messages', [{ threadId: 'lan', type: 0, data: raw('3', 6_000) }], 0)
+    expect(internals.unread.get('lan')).toBe(2)
+  })
+
+  it('are not unread in a chat this computer had nothing of (a first sign-in would count a whole history)', () => {
+    const { emitted, listener } = setup()
+    const internals = lastAdapter as unknown as { friends: Map<string, unknown> }
+    internals.friends.set('new', { userId: 'new', displayName: 'New' })
+    listener.emit('old_messages', [{ threadId: 'new', type: 0, data: raw('7', 9_000) }], 0)
+    expect(chatsOf(emitted as never)).toEqual([['new', 0]])
+  })
+})
+
+describe('Zalo messages that are not text or media', () => {
+  const show = (msgType: string, content: unknown, extra: Record<string, unknown> = {}) => {
+    setup()
+    const adapter = lastAdapter as unknown as { toMessage(raw: unknown, id: string): { text: string; attachments: Array<{ kind: string; url?: string; name?: string }> } }
+    return adapter.toMessage({ ...raw('9', 9_000), msgType, content, ...extra }, 'zalo:me/lan')
+  }
+
+  it('shows a location as its place with a map link when it has coordinates', () => {
+    const shown = show('chat.location.new', { title: 'Cafe Moshi', description: '12 Nguyen Hue', params: JSON.stringify({ latitude: '10.7769', longitude: '106.7009' }) })
+    expect(shown.text).toBe('📍 Cafe Moshi')
+    expect(shown.attachments).toEqual([expect.objectContaining({ kind: 'link', name: 'Cafe Moshi', url: 'https://www.google.com/maps?q=10.7769,106.7009' })])
+    expect(show('chat.location.new', { description: '12 Nguyen Hue' }).text).toBe('📍 12 Nguyen Hue')
+    expect(show('chat.location.new', { description: '12 Nguyen Hue' }).attachments).toEqual([])
+  })
+
+  it('shows a contact card as the name and phone, and a poll and a to-do as text', () => {
+    const contact = show('chat.recommended', { action: 'recommened.user', title: 'Minh', description: '0901234567' })
+    expect(contact.text).toBe('👤 Minh · 0901234567')
+    expect(contact.attachments).toEqual([])
+    // with a link too: still a contact card, not a link
+    const withHref = show('chat.recommended', { action: 'recommened.user', title: 'Minh', description: '0901234567', href: 'https://zalo.me/0901234567' })
+    expect(withHref.text).toBe('👤 Minh · 0901234567')
+    expect(withHref.attachments).toEqual([])
+    expect(show('group.poll', { title: 'Where to eat?', params: '{}' }).text).toBe('Poll: Where to eat?')
+    expect(show('group.poll', { params: JSON.stringify({ question: 'Friday?' }) }).text).toBe('Poll: Friday?')
+    expect(show('chat.todo', { params: JSON.stringify({ item: { content: 'Book the room' } }) }).text).toBe('To-do: Book the room')
+  })
+
+  it('names the type of anything else rather than showing an empty bubble, and leaves real links and media alone', () => {
+    expect(show('chat.mystery', { params: '{}' }).text).toBe('[chat.mystery]')
+    const link = show('chat.recommended', { href: 'https://example.com', title: 'Example' })
+    expect(link.attachments).toEqual([expect.objectContaining({ kind: 'link', url: 'https://example.com' })])
+    expect(link.text).toBe('Example')
+    expect(show('chat.photo', { href: 'https://cdn/x.jpg' }).text).toBe('')
+  })
+})
+
 describe('Zalo history beyond the cache', () => {
   it('is kept in the archive and read when the chat is scrolled past the cache', async () => {
     const { mkdtemp } = await import('node:fs/promises')

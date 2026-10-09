@@ -26,6 +26,7 @@ export interface CustomSticker {
 import type {
   Account,
   AddAccountInput,
+  AuthPrompt,
   BridgeEvent,
   Contact,
   Conversation,
@@ -106,6 +107,8 @@ export interface MoshiBridge {
   auth: {
     respond(requestId: string, value: string): Promise<void>
     cancel(requestId: string): Promise<void>
+    /** Sign-in prompts (QR codes, codes) still waiting for an answer, for events missed before the window was listening. */
+    pending(): Promise<AuthPrompt[]>
   }
   ai: {
     status(): Promise<AiStatus>
@@ -307,6 +310,7 @@ export const IPC = {
   messagesTyping: 'messages:typing',
   authRespond: 'auth:respond',
   authCancel: 'auth:cancel',
+  authPending: 'auth:pending',
   aiStatus: 'ai:status',
   aiWarm: 'ai:warm',
   aiVoiceInfo: 'ai:voiceInfo',

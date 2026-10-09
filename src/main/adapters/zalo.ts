@@ -718,6 +718,12 @@ export class ZaloAdapter implements PlatformAdapter {
         if (!newestBefore.has(message.threadId)) newestBefore.set(message.threadId, Number(this.raw.get(message.threadId)?.at(-1)?.ts ?? 0))
         if (!this.rawMessage(message.threadId, message.data.msgId) && Number(message.data.ts) > newestBefore.get(message.threadId)!) missed.push(message)
       }
+      // Zalo gives no read state, so what the other person wrote counts as unread (until the chat is opened), but only in
+      // chats this computer already had something of: for a chat it knows nothing about, every old message would count.
+      for (const message of missed) {
+        const own = message.isSelf ?? (message.data.uidFrom === '0' || message.data.uidFrom === this.meId)
+        if (!own && newestBefore.get(message.threadId)) this.unread.set(message.threadId, (this.unread.get(message.threadId) ?? 0) + 1)
+      }
       const touched = new Set<string>()
       for (const message of messages) {
         this.threadTypes.set(message.threadId, message.type)
@@ -734,7 +740,7 @@ export class ZaloAdapter implements PlatformAdapter {
         this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: this.buildConversations() })
         this.scheduleSave()
       }
-      // As updates, not new messages: no sound, no unread count (they may well have been read on the other computer).
+      // As updates, not new messages: no sound (they may well have been read on the other computer); the count is in the list above.
       for (const message of missed) {
         const id = conversationId(this.account.id, message.threadId)
         const converted = this.messagesFor(id).find((m) => m.id === message.data.msgId)
@@ -1264,13 +1270,44 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 }
 
+/** Messages with their own card (media and files): the card says what they are. */
+const CARD_TYPES = ['chat.photo', 'chat.video.msg', 'chat.sticker', 'chat.voice', 'chat.gif', 'share.file', 'chat.file']
+
+/**
+ * A location, contact card, poll or to-do has no picture to show: it reads as a line of text (a location also links to
+ * its map when Zalo sent coordinates).
+ */
+function lineOf(raw: TMessage): { text: string; link?: { url: string; name: string } } | undefined {
+  if (typeof raw.content !== 'object' || !raw.content) return undefined
+  const c = raw.content as { title?: string; description?: string; href?: string; action?: string; params?: string }
+  const p = paramsOf(c.params)
+  if (raw.msgType.startsWith('chat.location')) {
+    const place = c.title || c.description || ''
+    const text = `📍 ${place}`.trim()
+    const lat = Number(p.latitude)
+    const lng = Number(p.longitude)
+    const mapped = Number.isFinite(lat) && Number.isFinite(lng) && (lat || lng)
+    return { text, link: mapped ? { url: `https://www.google.com/maps?q=${lat},${lng}`, name: place || 'Map' } : undefined }
+  }
+  // "recommened" is Zalo's own spelling. A recommended item with no link is a contact card.
+  if (raw.msgType === 'chat.recommended' && (/recommen\w*\.user/.test(c.action ?? '') || !c.href)) {
+    return { text: `👤 ${[c.title, c.description].filter(Boolean).join(' · ')}`.trim() }
+  }
+  if (raw.msgType === 'group.poll') return { text: `Poll: ${(p.question as string | undefined) ?? c.title ?? ''}`.trim() }
+  if (raw.msgType === 'chat.todo') return { text: `To-do: ${(p.item as { content?: string } | undefined)?.content ?? c.title ?? ''}`.trim() }
+  return undefined
+}
+
 function textOf(raw: TMessage): string {
   if (typeof raw.content === 'string') return raw.content
   if (raw.content && typeof raw.content === 'object') {
-    const c = raw.content as { title?: string; description?: string; text?: string }
+    const c = raw.content as { title?: string; description?: string; text?: string; href?: string }
     // Media and files say what they are in their own card; their title is the file name, not words to show twice.
-    if (['chat.photo', 'chat.video.msg', 'chat.sticker', 'chat.voice', 'chat.gif', 'share.file', 'chat.file'].includes(raw.msgType)) return ''
-    return c.text ?? c.title ?? ''
+    if (CARD_TYPES.includes(raw.msgType)) return ''
+    const line = lineOf(raw)
+    if (line) return line.text
+    // Something this app does not know: its type, rather than an empty bubble.
+    return c.text ?? c.title ?? (c.href ? '' : `[${raw.msgType}]`)
   }
   return ''
 }
@@ -1307,6 +1344,8 @@ function isPhotoSticker(raw: TMessage): boolean {
 
 function attachmentsOf(raw: TMessage, sticker?: StickerPicture): Attachment[] {
   if (typeof raw.content !== 'object' || !raw.content) return []
+  const line = lineOf(raw)
+  if (line) return line.link ? [{ id: `${raw.msgId}-a`, kind: 'link', url: line.link.url, name: line.link.name }] : []
   const c = raw.content as { href?: string; thumb?: string; title?: string; description?: string; params?: string; type?: string }
   const id = `${raw.msgId}-a`
   const p = paramsOf(c.params)

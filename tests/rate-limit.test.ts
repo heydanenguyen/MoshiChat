@@ -29,3 +29,16 @@ describe('SendLimiter', () => {
     expect(() => limiter.takeForward('a', 'm1', 'chat-new')).not.toThrow()
   })
 })
+
+describe('SendLimiter.release', () => {
+  it('gives the slot back when the send did not happen', () => {
+    const limiter = new SendLimiter(() => 0)
+    for (let i = 0; i < SEND_LIMIT.count; i++) limiter.take('a')
+    expect(() => limiter.take('a')).toThrow(/RATE_LIMIT_SEND/)
+    limiter.release('a')
+    expect(() => limiter.take('a')).not.toThrow()
+    expect(() => limiter.take('a')).toThrow(/RATE_LIMIT_SEND/)
+    // nothing taken: nothing to give back
+    expect(() => limiter.release('never-sent')).not.toThrow()
+  })
+})

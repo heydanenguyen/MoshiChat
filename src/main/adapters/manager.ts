@@ -9,6 +9,7 @@ import { mkdirSync } from 'fs'
 import type {
   Account,
   AddAccountInput,
+  AuthPrompt,
   AuthPromptKind,
   BridgeEvent,
   Contact,
@@ -36,13 +37,13 @@ import { ZaloAdapter, type ZaloSecret } from './zalo'
 import { WhatsAppAdapter, type WhatsAppSecret } from './whatsapp'
 import { FacebookPersonalAdapter, type FacebookPersonalSecret, type WebCookie } from './facebook-personal'
 import { InstagramPersonalAdapter, type InstagramPersonalSecret } from './instagram-personal'
-import { forgetPartition, legacyPartition, rememberPartition, wipePartition, type WebPlatform } from '../web-partitions'
+import { clearSharedCookies, forgetPartition, legacyPartition, rememberPartition, wipePartition, type WebPlatform } from '../web-partitions'
 
 interface PendingAuth {
   resolve(value: string): void
   reject(reason: Error): void
-  /** Last QR payload so the note can be updated without a new code. */
-  qrDataUrl?: string
+  /** What the window was last shown for this request (latest QR code and note), so it can be shown again after a reload. */
+  prompt: AuthPrompt
 }
 
 const SEARCH_LIMIT = 60
@@ -318,16 +319,24 @@ export class AccountManager {
       await adapter.disconnect().catch(() => undefined)
       this.adapters.delete(accountId)
     }
+    // Loaded before forgetting: a store that never read its file would later save an empty one over it.
+    await this.insightStore.load()
     for (const [id, conversation] of this.conversations) {
       if (conversation.accountId === accountId) {
         this.conversations.delete(id)
         this.messages.delete(id)
+        this.insightStore.forget(id)
       }
     }
+    this.contactCache.delete(accountId)
     await this.storage.removeAccount(accountId)
     if (web) {
       forgetPartition(accountId)
       if (partition) await wipePartition(web, partition)
+      // The shared session is never wiped as a whole, but the last account to use it takes its sign-in with it.
+      await clearSharedCookies(web, partition ?? legacyPartition(web)).catch((err) =>
+        this.log('clearing the shared session cookies failed:', (err as Error).message)
+      )
     }
     this.emit({ type: 'account:removed', accountId })
   }
@@ -356,8 +365,16 @@ export class AccountManager {
     const adapter = this.adapterFor(conversationId)
     if (adapter.account.status === 'needs_auth') throw new Error('This account needs you to sign in again before sending')
     if (adapter.account.status === 'connecting') throw new Error('Still connecting, try again in a moment')
-    if (!adapter.account.demo) this.limiter.take(adapter.account.id)
-    const message = await adapter.sendMessage(conversationId, text, options)
+    const limited = !adapter.account.demo
+    if (limited) this.limiter.take(adapter.account.id)
+    let message: Message
+    try {
+      message = await adapter.sendMessage(conversationId, text, options)
+    } catch (err) {
+      // A send that did not happen is not "too fast".
+      if (limited) this.limiter.release(adapter.account.id)
+      throw err
+    }
     this.trackSent(message)
     return message
   }
@@ -584,6 +601,11 @@ export class AccountManager {
     pending.resolve(value)
   }
 
+  /** Sign-in prompts still waiting for an answer, for a window that missed their events (it started late or reloaded). */
+  pendingPrompts(): AuthPrompt[] {
+    return [...this.pendingAuth.values()].map((p) => ({ ...p.prompt }))
+  }
+
   cancelAuth(requestId: string): void {
     const pending = this.pendingAuth.get(requestId)
     if (!pending) return
@@ -691,12 +713,18 @@ export class AccountManager {
   private async loadConversations(adapter: PlatformAdapter): Promise<void> {
     try {
       const list = await adapter.listConversations()
-      for (const conversation of list) this.conversations.set(conversation.id, conversation)
+      this.replaceConversations(adapter.account.id, list)
       this.emit({ type: 'conversations:reset', accountId: adapter.account.id, conversations: list })
       void this.warmCache(adapter, list)
     } catch (err) {
       this.log(`listConversations failed for ${adapter.account.id}:`, (err as Error).message)
     }
+  }
+
+  /** The account's chats become exactly `list`: chats the platform no longer lists go (a reconnect or sign-in again must not keep them). */
+  private replaceConversations(accountId: string, list: Conversation[]): void {
+    for (const [id, c] of this.conversations) if (c.accountId === accountId) this.conversations.delete(id)
+    for (const c of list) this.conversations.set(c.id, c)
   }
 
   /**
@@ -854,8 +882,7 @@ export class AccountManager {
         if (event.type === 'conversation:upserted') {
           this.conversations.set(event.conversation.id, event.conversation)
         } else if (event.type === 'conversations:reset') {
-          for (const [id, c] of this.conversations) if (c.accountId === event.accountId) this.conversations.delete(id)
-          for (const c of event.conversations) this.conversations.set(c.id, c)
+          this.replaceConversations(event.accountId, event.conversations)
         } else if (event.type === 'message:updated') {
           this.cache([event.message])
           // An unsent last message: the chat list shows "message unsent" instead of what it said.
@@ -886,33 +913,24 @@ export class AccountManager {
       requestAuth: (kind: AuthPromptKind, message?: string) =>
         new Promise<string>((resolve, reject) => {
           const requestId = randomUUID()
-          this.pendingAuth.set(requestId, { resolve, reject })
-          this.emit({
-            type: 'auth:prompt',
-            prompt: { requestId, accountId: currentId(), platform: adapterOf()?.account.platform ?? 'telegram', kind, message }
-          })
+          const prompt: AuthPrompt = { requestId, accountId: currentId(), platform: adapterOf()?.account.platform ?? 'telegram', kind, message }
+          this.pendingAuth.set(requestId, { resolve, reject, prompt })
+          this.emit({ type: 'auth:prompt', prompt })
         }),
       presentQr: (dataUrl, note, requestId, onCancel) => {
         const id = requestId ?? randomUUID()
         const existing = this.pendingAuth.get(id)
-        this.pendingAuth.set(id, {
-          resolve: () => undefined,
-          reject: existing?.reject ?? (() => onCancel?.()),
-          qrDataUrl: dataUrl
-        })
-        this.emit({
-          type: 'auth:prompt',
-          prompt: { requestId: id, accountId: currentId(), platform: adapterOf()?.account.platform ?? 'whatsapp', kind: 'qr', qrDataUrl: dataUrl, note }
-        })
+        const platform = adapterOf()?.account.platform ?? 'whatsapp'
+        const prompt: AuthPrompt = { requestId: id, accountId: currentId(), platform, kind: 'qr', qrDataUrl: dataUrl, note }
+        this.pendingAuth.set(id, { resolve: () => undefined, reject: existing?.reject ?? (() => onCancel?.()), prompt })
+        this.emit({ type: 'auth:prompt', prompt })
         return id
       },
       noteAuth: (requestId, note) => {
         const pending = this.pendingAuth.get(requestId)
         if (!pending) return
-        this.emit({
-          type: 'auth:prompt',
-          prompt: { requestId, accountId: currentId(), platform: adapterOf()?.account.platform ?? 'whatsapp', kind: 'qr', qrDataUrl: pending.qrDataUrl, note }
-        })
+        pending.prompt = { ...pending.prompt, note }
+        this.emit({ type: 'auth:prompt', prompt: pending.prompt })
       },
       dismissAuth: (requestId) => {
         if (!this.pendingAuth.delete(requestId)) return

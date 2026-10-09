@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const cleared: string[] = []
+const cookiesCleared: string[] = []
 // Who each session is signed in to: c_user / ds_user_id cookies by partition.
 const signedIn: Record<string, string> = { 'persist:login-messenger': '111' }
 vi.mock('electron', () => ({
   session: {
     fromPartition: (name: string) => ({
-      clearStorageData: async () => void cleared.push(name),
+      clearStorageData: async (options?: { storages?: string[] }) => void (options?.storages?.join() === 'cookies' ? cookiesCleared : cleared).push(name),
       cookies: { get: async ({ name: cookie }: { name: string }) => (signedIn[name] && cookie === 'c_user' ? [{ value: signedIn[name] }] : []) }
     })
   }
 }))
 
-const { forgetPartition, freshPartition, legacyPartition, newPartition, partitionFor, rememberPartition, sessionUser, wipePartition } = await import('../src/main/web-partitions')
+const { clearSharedCookies, forgetPartition, freshPartition, legacyPartition, newPartition, partitionFor, rememberPartition, sessionUser, wipePartition } = await import('../src/main/web-partitions')
 
 describe('a browser session per Facebook / Instagram account', () => {
   it('gives the first account the shared session and every further one its own', async () => {
@@ -40,5 +41,22 @@ describe('a browser session per Facebook / Instagram account', () => {
     expect(await sessionUser('messenger', 'persist:login-messenger-abcd1234')).toBeUndefined()
     expect(newPartition('messenger')).toMatch(/^persist:login-messenger-[0-9a-f]{8}$/)
     expect(newPartition('messenger')).not.toBe(newPartition('messenger'))
+  })
+})
+
+describe('the shared session of a removed account', () => {
+  it('keeps no sign-in behind once no other account uses it, and is left alone while one does', async () => {
+    const legacy = legacyPartition('messenger')
+    rememberPartition('messenger:fb-1', 'messenger', legacy)
+    rememberPartition('messenger:fb-2', 'messenger', legacy)
+    forgetPartition('messenger:fb-1')
+    await clearSharedCookies('messenger', legacy)
+    expect(cookiesCleared).toEqual([])
+    forgetPartition('messenger:fb-2')
+    await clearSharedCookies('messenger', legacy)
+    expect(cookiesCleared).toEqual([legacy])
+    // an account’s own session goes through wipePartition, never this
+    await clearSharedCookies('messenger', 'persist:login-messenger-abcd1234')
+    expect(cookiesCleared).toEqual([legacy])
   })
 })
