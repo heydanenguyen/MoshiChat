@@ -1,6 +1,6 @@
 import { app, safeStorage } from 'electron'
 import { promises as fs } from 'fs'
-import { join } from 'path'
+import { basename, join } from 'path'
 import type { Account, Platform, Settings } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 
@@ -65,11 +65,14 @@ export class Storage {
 
   /** How the last load() went: untouched, rebuilt from the backup, or (the file was unusable) started empty. */
   recovered: 'none' | 'backup' | 'empty' = 'none'
+  /** The set-aside copy of the unreadable file (its name, not path), when there is one: what the person can be pointed at. */
+  recoveredFrom?: string
   /** unison.json is still on disk but could not be trusted (set-aside failed): the next save must not copy it over the good .bak. */
   private fileUntrusted = false
 
   async load(): Promise<void> {
     this.recovered = 'none'
+    this.recoveredFrom = undefined
     let raw: string
     try {
       raw = await retryLocked(() => fs.readFile(this.file, 'utf8'))
@@ -109,10 +112,15 @@ export class Storage {
   private async recover(err: unknown): Promise<void> {
     console.error('[storage] unison.json is unreadable, setting it aside', err)
     const aside = `${this.file}.corrupt-${new Date().toISOString().replace(/:/g, '-')}`
-    await fs.rename(this.file, aside).catch((e) => {
-      this.fileUntrusted = true
-      console.error('[storage] could not set the broken file aside', e)
-    })
+    await fs
+      .rename(this.file, aside)
+      .then(() => {
+        this.recoveredFrom = basename(aside)
+      })
+      .catch((e) => {
+        this.fileUntrusted = true
+        console.error('[storage] could not set the broken file aside', e)
+      })
     try {
       this.data = this.parse(await fs.readFile(this.file + '.bak', 'utf8'))
       this.recovered = 'backup'

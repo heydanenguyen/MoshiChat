@@ -31,9 +31,10 @@ function setup(): { send: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn
   const ctx = { emit: () => undefined, log } as unknown as AdapterContext
   const adapter = new WhatsAppAdapter('whatsapp:1', { authDir: 'x' }, ctx)
   const send = vi.fn(async (jid: string) => ({ key: { remoteJid: jid, id: String(send.mock.calls.length), fromMe: true }, message: {} }))
-  const internals = adapter as unknown as { sock: unknown; toMessage: () => Promise<unknown> }
+  const internals = adapter as unknown as { sock: unknown; toMessage: (raw: { key: { id: string } }) => Promise<unknown> }
   internals.sock = { sendMessage: send }
-  internals.toMessage = async () => ({ id: 'm' })
+  // The id says which platform message it was made from: 'm1' is the first send.
+  internals.toMessage = async (raw) => ({ id: 'm' + raw.key.id, text: '' })
   return { send, log, adapter }
 }
 
@@ -51,6 +52,24 @@ describe('WhatsApp sending', () => {
     expect(send.mock.calls[0][1]).toMatchObject({ sticker: { url: still }, isAnimated: false, width: 512, height: 512 })
     expect(send.mock.calls[0][1]).not.toHaveProperty('caption')
     expect(send.mock.calls[1][1]).toEqual({ text: 'hello' })
+  })
+
+  it('returns the sticker message carrying the caption, not the text message', async () => {
+    const { adapter } = setup()
+    stickerFiles.mockResolvedValueOnce({ id: 'k', webp: still, png: join(dir, 'k.png'), width: 512, height: 512 })
+    const message = await adapter.sendMessage('whatsapp:1/a@s.whatsapp.net', 'hello', { attachments: [file({ sticker: 'custom:abc' })] })
+    expect(message).toMatchObject({ id: 'm1', text: 'hello' })
+  })
+
+  it('a caption that fails after the sticker went out is logged, not thrown', async () => {
+    const { send, log, adapter } = setup()
+    stickerFiles.mockResolvedValueOnce({ id: 'k', webp: still, png: join(dir, 'k.png'), width: 512, height: 512 })
+    const ok = send.getMockImplementation()!
+    send.mockImplementationOnce(ok).mockRejectedValueOnce(new Error('offline'))
+    const message = await adapter.sendMessage('whatsapp:1/a@s.whatsapp.net', 'hello', { attachments: [file({ sticker: 'custom:abc' })] })
+    expect(message).toMatchObject({ id: 'm1', text: 'hello' })
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(log.mock.calls.some((c) => /caption/.test(c.join(' ')) && /offline/.test(c.join(' ')))).toBe(true)
   })
 
   it('marks a moving sticker (a GIPHY one too) as animated, with no text message when there is no text', async () => {

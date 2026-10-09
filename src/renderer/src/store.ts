@@ -528,9 +528,13 @@ export const useStore = create<State>((set, get) => ({
     handle = (event: BridgeEvent): void => {
       const state = get()
       switch (event.type) {
-        case 'app:notice':
-          get().showToast(translate(get().settings.language, 'noticeInsecureSecrets'), 'error')
+        case 'app:notice': {
+          const lang = get().settings.language
+          if (event.notice === 'settings-restored') get().showToast(translate(lang, 'noticeSettingsRestored'), 'error')
+          else if (event.notice === 'settings-reset') get().showToast(translate(lang, 'noticeSettingsReset', { file: event.detail ?? 'unison.json' }), 'error')
+          else get().showToast(translate(lang, 'noticeInsecureSecrets'), 'error')
           break
+        }
         case 'account:updated':
           set({ accounts: { ...state.accounts, [event.account.id]: event.account } })
           break

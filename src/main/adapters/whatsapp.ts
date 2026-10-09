@@ -199,6 +199,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const quoted = options.replyToId ? this.rawMessage(jid, options.replyToId) : undefined
     const misc = quoted ? { quoted } : undefined
     let sent: WAMessage | undefined
+    let stickerCaption: string | undefined
     const files = options.attachments ?? []
     for (const [index, file] of files.entries()) {
       const caption = index === files.length - 1 ? text : undefined
@@ -215,7 +216,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
           // A real sticker: see-through WebP, moving when the sticker does. A sticker takes no caption, so the text follows.
           const isAnimated = ((await sharp(made.webp).metadata()).pages ?? 1) > 1
           sent = await sock.sendMessage(jid, { sticker: { url: made.webp }, isAnimated, width: made.width, height: made.height }, misc)
-          if (caption) sent = await sock.sendMessage(jid, { text: caption })
+          // The caption follows once the loop is done (below); the sticker stays the message the caller gets.
+          stickerCaption = caption
         } else {
           // The sticker could not be made (logged): its copy on white goes as a photo rather than not at all.
           const opaque = file.alternates?.find((alt) => alt.role === 'opaque')?.path ?? file.path
@@ -228,7 +230,16 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!files.length) sent = await sock.sendMessage(jid, { text }, misc)
     if (!sent) throw new Error('WhatsApp did not return the sent message')
     this.remember(jid, [sent])
-    const message = await this.toMessage(sent, id)
+    let message = await this.toMessage(sent, id)
+    if (stickerCaption) {
+      // The caller gets the sticker (its bubble and id), carrying the words; a caption that fails after the sticker is out is not a failed send.
+      message = { ...message, text: stickerCaption }
+      try {
+        await sock.sendMessage(jid, { text: stickerCaption })
+      } catch (err) {
+        this.ctx.log('whatsapp: the sticker went out but its caption did not:', (err as Error).message)
+      }
+    }
     this.cacheConverted(id, [message])
     return message
   }

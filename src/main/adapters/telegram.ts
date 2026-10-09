@@ -171,6 +171,7 @@ export class TelegramAdapter implements PlatformAdapter {
     const replyTo = options.replyToId ? Number(options.replyToId) : undefined
     const files = options.attachments ?? []
     let sent: Api.Message
+    let caption: string | undefined
     let made: { webp: string; width: number; height: number } | undefined
     const gifMp4 = files.length === 1 && files[0].gif ? files[0].alternates?.find((alt) => alt.mime === 'video/mp4') : undefined
     const sticker = files.length === 1 && files[0].sticker ? files[0] : undefined
@@ -195,8 +196,8 @@ export class TelegramAdapter implements PlatformAdapter {
           new Api.DocumentAttributeImageSize({ w: made.width, h: made.height })
         ]
       })
-      // A sticker takes no caption: the text follows as its own message.
-      if (text) sent = await client.sendMessage(entity, { message: text })
+      // A sticker takes no caption: the text follows as its own message, below.
+      caption = text || undefined
     } else if (sticker) {
       // The sticker could not be made (logged): its copy on white goes as a photo rather than not at all.
       sent = await client.sendFile(entity, { file: sticker.alternates?.find((alt) => alt.role === 'opaque')?.path ?? sticker.path, caption: text || undefined, replyTo })
@@ -213,7 +214,16 @@ export class TelegramAdapter implements PlatformAdapter {
     } else {
       sent = await client.sendMessage(entity, { message: text, replyTo })
     }
-    const message = await this.toMessage(sent, id)
+    let message = await this.toMessage(sent, id)
+    if (caption) {
+      // The caller gets the sticker (its bubble and id), carrying the words; a caption that fails after the sticker is out is not a failed send.
+      message = { ...message, text: caption }
+      try {
+        await client.sendMessage(entity, { message: caption })
+      } catch (err) {
+        this.ctx.log('telegram: the sticker went out but its caption did not:', (err as Error).message)
+      }
+    }
     this.remember(id, [message])
     return message
   }

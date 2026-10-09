@@ -46,6 +46,18 @@ describe('Scheduler after the computer slept', () => {
     expect(failed.map((m) => [m.id, m.status])).toEqual([['stale', 'missed']])
   })
 
+  it('a failing save in start() still installs the timer', async () => {
+    const { storage, scheduler, item, sent } = setup(ok)
+    storage.settings.scheduled = [item('stale', Date.now() - 3 * HOUR), item('due', Date.now() + 1000)]
+    storage.setSettings = async () => {
+      throw new Error('disk full')
+    }
+    await scheduler.start() // does not reject
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    scheduler.stop()
+    expect(sent).toEqual([])
+  })
+
   it('a message just past due is still sent', async () => {
     const { storage, sent, item, tick } = setup(ok)
     storage.settings.scheduled = [item('a', Date.now() - HOUR + 60_000)]

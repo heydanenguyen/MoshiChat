@@ -53,10 +53,11 @@ function setup(): { sendFile: ReturnType<typeof vi.fn>; sendText: ReturnType<typ
   const adapter = new TelegramAdapter('telegram:1', { apiId: 1, apiHash: 'h' }, { emit: () => undefined, log } as unknown as AdapterContext)
   const sendFile = vi.fn(async () => ({ id: 1 }))
   const sendText = vi.fn(async () => ({ id: 2 }))
-  const internals = adapter as unknown as { client: unknown; entityFor: () => Promise<unknown>; toMessage: () => Promise<unknown> }
+  const internals = adapter as unknown as { client: unknown; entityFor: () => Promise<unknown>; toMessage: (raw: { id: number }) => Promise<unknown> }
   internals.client = { sendFile, sendMessage: sendText }
   internals.entityFor = async () => ({ id: 'peer' })
-  internals.toMessage = async () => ({ id: 'm' })
+  // The id says which platform message it was made from: 'm1' is the file, 'm2' the text.
+  internals.toMessage = async (raw) => ({ id: 'm' + raw.id, text: '' })
   return { sendFile, sendText, log, adapter }
 }
 
@@ -80,6 +81,23 @@ describe('Telegram sending', () => {
     expect(attrs(sendFile.mock.calls[0]).map((a) => a.className)).toContain('DocumentAttributeSticker')
     expect(attrs(sendFile.mock.calls[0]).find((a) => a.className === 'DocumentAttributeSticker')?.args?.stickerset).toMatchObject({ className: 'InputStickerSetEmpty' })
     expect(sendText).toHaveBeenCalledWith({ id: 'peer' }, { message: 'hello' })
+  })
+
+  it('returns the sticker message carrying the caption, not the text message', async () => {
+    const { adapter } = setup()
+    stickerFiles.mockResolvedValueOnce({ id: 'k', webp: still, png: join(dir, 'k.png'), width: 512, height: 341 })
+    const message = await adapter.sendMessage('telegram:1/5', 'hello', { attachments: [file({ sticker: 'custom:abc' })] })
+    expect(message).toMatchObject({ id: 'm1', text: 'hello' })
+  })
+
+  it('a caption that fails after the sticker went out is logged, not thrown', async () => {
+    const { sendText, sendFile, log, adapter } = setup()
+    stickerFiles.mockResolvedValueOnce({ id: 'k', webp: still, png: join(dir, 'k.png'), width: 512, height: 341 })
+    sendText.mockRejectedValueOnce(new Error('FLOOD_WAIT'))
+    const message = await adapter.sendMessage('telegram:1/5', 'hello', { attachments: [file({ sticker: 'custom:abc' })] })
+    expect(message).toMatchObject({ id: 'm1', text: 'hello' })
+    expect(sendFile).toHaveBeenCalledTimes(1)
+    expect(log.mock.calls.some((c) => /caption/.test(c.join(' ')) && /FLOOD_WAIT/.test(c.join(' ')))).toBe(true)
   })
 
   it('tells Telegram the sticker size', async () => {

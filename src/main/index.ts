@@ -56,6 +56,8 @@ const BUILT_IN_GIF = { key: typeof __MOSHI_GIF_KEY__ === 'string' ? __MOSHI_GIF_
 let window: BrowserWindow | undefined
 /** Set once the app is really quitting, so closing the window on macOS stops hiding it. */
 let quitting = false
+/** The "settings were restored/reset" notice goes out once per run. */
+let toldRecovered = false
 /** The photo editor is open: its ⌘-shortcuts must reach it instead of the Edit/File menu. */
 let editorKeys = false
 const EDITOR_KEYS = new Set(['z', 'y', 'c', 's', 'w', 'enter'])
@@ -643,6 +645,12 @@ function createWindow(): void {
     for (const account of manager.listAccounts()) emit({ type: 'account:updated', account })
     // No keyring (some Linux desktops): sessions would be stored merely encoded, so say so rather than stay quiet.
     if (storage.accounts.length && !secretsProtected()) setTimeout(() => emit({ type: 'app:notice', notice: 'insecure-secrets' }), 4000)
+    // The settings file was unusable at startup: say so once (not on every reload), after the page is listening.
+    if (storage.recovered !== 'none' && !toldRecovered) {
+      toldRecovered = true
+      const notice = storage.recovered === 'backup' ? 'settings-restored' : 'settings-reset'
+      setTimeout(() => emit({ type: 'app:notice', notice, detail: storage.recoveredFrom }), 4000)
+    }
   })
   // Started with the computer: stay out of sight (in the Dock or the tray) until opened.
   const hidden = startedHidden
@@ -1844,7 +1852,8 @@ if (!gotLock) {
     }
     const bounded = (work: Promise<unknown>, ms: number): Promise<unknown> => Promise.race([work.catch(() => undefined), new Promise((r) => setTimeout(r, ms))])
     // The AI worker gets longer: stopAndWait itself gives up on a polite exit at 4 s and then ends the process.
-    void Promise.all([bounded(ai.stopAndWait(4_000), 6_500), bounded(Promise.all([manager.shutdown(), storage.flush()]), 4_000)]).finally(() => {
+    // Flush after the adapters are down: a disconnect() can still queue a write that a parallel flush would miss.
+    void Promise.all([bounded(ai.stopAndWait(4_000), 6_500), bounded(manager.shutdown().finally(() => storage.flush()), 4_000)]).finally(() => {
       shutDown = true
       app.quit()
     })

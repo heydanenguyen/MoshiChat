@@ -75,10 +75,10 @@ export function isAppNavigation(url: string, appPage: string): boolean {
 }
 
 /** Files that run when opened (or install something): shown in their folder instead of being opened. */
-const EXECUTABLE = new Set('exe bat cmd com scr pif msi msp lnk hta js jse vbs vbe wsf wsh ps1 reg cpl jar app dmg pkg sh'.split(' '))
+const EXECUTABLE = new Set('exe bat cmd com scr pif msi msp lnk hta js jse vbs vbe wsf wsh ps1 reg cpl jar app dmg pkg sh url scf msc chm inf application appref-ms gadget ws wsc py pyw command bash iso img'.split(' '))
 
 export function isExecutableName(name: string): boolean {
   // Windows ignores trailing dots and spaces ("a.exe " is still a.exe).
-  const ext = /\.([a-z0-9]+)$/i.exec(name.trim().replace(/[. ]+$/, ''))?.[1]
+  const ext = /\.([a-z0-9-]+)$/i.exec(name.trim().replace(/[. ]+$/, ''))?.[1]
   return !!ext && EXECUTABLE.has(ext.toLowerCase())
 }

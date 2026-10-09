@@ -79,7 +79,11 @@ describe('what the app window may navigate to', () => {
 describe('attachments that would run', () => {
   it('are shown in their folder instead of opened', async () => {
     const { isExecutableName } = await import('../src/main/safety')
-    for (const name of ['setup.exe', 'a.BAT', 'x.cmd', 'y.scr', 'z.msi', 'link.lnk', 'a.js', 'a.vbs', 'a.ps1', 'a.reg', 'a.jar', 'Mac.app', 'a.dmg', 'a.pkg', 'run.sh', 'photo.jpg.exe', 'a.exe ']) {
+    for (const name of ['setup.exe', 'a.BAT', 'x.cmd', 'y.scr', 'z.msi', 'link.lnk', 'a.js', 'a.vbs', 'a.ps1', 'a.reg', 'a.jar', 'Mac.app', 'a.dmg', 'a.pkg', 'run.sh', 'photo.jpg.exe', 'a.exe ', 'a.exe.', 'a.exe. .']) {
+      expect(isExecutableName(name), name).toBe(true)
+    }
+    // Shortcuts, shell scripts, installers-in-disguise and mountable images that run or open something on a double-click.
+    for (const name of ['a.url', 'a.SCF', 'a.msc', 'a.chm', 'a.inf', 'a.application', 'a.appref-ms', 'a.gadget', 'a.ws', 'a.wsc', 'a.py', 'a.pyw', 'a.command', 'a.bash', 'a.iso', 'a.img', 'a.url ', 'a.iso.']) {
       expect(isExecutableName(name), name).toBe(true)
     }
     for (const name of ['photo.jpg', 'notes.txt', 'report.pdf', 'archive.zip', 'voice.ogg', 'noext', 'exe', '.hidden', 'a.exe.txt', 'script.json']) {

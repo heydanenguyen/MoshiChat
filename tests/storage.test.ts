@@ -103,6 +103,8 @@ describe('Storage durability', () => {
     const corrupt = names.filter((n) => n.startsWith('unison.json.corrupt-'))
     expect(corrupt).toHaveLength(1)
     expect(corrupt[0]).not.toContain(':')
+    // The name is kept so the person can be told where the old file went.
+    expect(storage.recoveredFrom).toBe(corrupt[0])
     expect(await fs.readFile(join(dir, corrupt[0]), 'utf8')).toContain('"id":"x"')
   })
 
@@ -112,13 +114,16 @@ describe('Storage durability', () => {
     await storage.load()
     expect(storage.recovered).toBe('empty')
     expect(storage.accounts).toEqual([])
-    expect((await fs.readdir(dir)).some((n) => n.startsWith('unison.json.corrupt-'))).toBe(true)
+    const corrupt = (await fs.readdir(dir)).filter((n) => n.startsWith('unison.json.corrupt-'))
+    expect(corrupt).toHaveLength(1)
+    expect(storage.recoveredFrom).toBe(corrupt[0])
   })
 
   it('a first run (no file) is not a recovery', async () => {
     const storage = new Storage()
     await storage.load()
     expect(storage.recovered).toBe('none')
+    expect(storage.recoveredFrom).toBeUndefined()
     expect(await fs.readdir(dir)).toEqual([])
   })
 
@@ -187,6 +192,7 @@ describe('Storage durability', () => {
     const storage = new Storage()
     await settle(storage.load())
     expect(storage.recovered).toBe('backup')
+    expect(storage.recoveredFrom).toBeUndefined() // nothing was set aside, so there is no file to point at
     await settle(storage.upsertAccount(account('c')))
     expect((await read('unison.json.bak')).accounts.map((a: { id: string }) => a.id)).toEqual(['a'])
     expect((await read('unison.json')).accounts.map((a: { id: string }) => a.id)).toEqual(['a', 'c'])

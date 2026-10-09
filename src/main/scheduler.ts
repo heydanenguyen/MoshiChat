@@ -49,9 +49,14 @@ export class Scheduler {
   }
 
   async start(): Promise<void> {
-    await this.markMissed()
+    // The timer first: a failed save below must not leave this session without a scheduler (tick() retries markMissed).
     this.timer = setInterval(() => void this.tick(), TICK_MS)
     setTimeout(() => void this.tick(), 5_000)
+    try {
+      await this.markMissed()
+    } catch (err) {
+      this.log('scheduler: could not mark missed messages:', (err as Error).message)
+    }
   }
 
   stop(): void {

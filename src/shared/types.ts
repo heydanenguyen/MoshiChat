@@ -853,7 +853,7 @@ export type BridgeEvent =
   | { type: 'focus-conversation'; conversationId: string; messageId?: string }
   | { type: 'window:state'; maximized: boolean }
   /** Something about this computer the person should know (shown once per launch). */
-  | { type: 'app:notice'; notice: 'insecure-secrets' }
+  | { type: 'app:notice'; notice: 'insecure-secrets' | 'settings-restored' | 'settings-reset'; detail?: string }
   | { type: 'settings:updated'; settings: Settings }
   | { type: 'ai:progress'; progress: AiProgress }
   /** The insights backfill walking recent history: done of total chats. */

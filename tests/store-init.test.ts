@@ -66,6 +66,31 @@ describe('init', () => {
   })
 })
 
+describe('app notices', () => {
+  const noticeText = async (event: BridgeEvent): Promise<string | undefined> => {
+    useStore.setState({ toasts: [], settings: { ...DEFAULT_SETTINGS, language: 'en' } })
+    const done = useStore.getState().init()
+    await Promise.resolve()
+    resolvers.accounts!([])
+    await done
+    listener!(event)
+    return useStore.getState().toasts[0]?.text
+  }
+
+  it('says a restore from the backup happened', async () => {
+    expect(await noticeText({ type: 'app:notice', notice: 'settings-restored' })).toBe('Your settings were restored from the last backup.')
+  })
+
+  it('says a reset happened and names the file that was kept', async () => {
+    const text = await noticeText({ type: 'app:notice', notice: 'settings-reset', detail: 'unison.json.corrupt-2026-10-09T10-00-00.000Z' })
+    expect(text).toBe('Your settings file was damaged and has been reset; the old file is kept as unison.json.corrupt-2026-10-09T10-00-00.000Z.')
+  })
+
+  it('still shows the keyring warning for insecure-secrets', async () => {
+    expect(await noticeText({ type: 'app:notice', notice: 'insecure-secrets' })).toContain('no keyring')
+  })
+})
+
 describe('toggleSidebar', () => {
   it('applies the change at once and saves after, and puts it back if saving fails', async () => {
     let fail: (err: Error) => void = () => undefined
