@@ -170,7 +170,8 @@ async function giphyTitle(id: string, key: string): Promise<string | undefined> 
 
 /**
  * A GIPHY sticker as an outgoing sticker: the see-through GIF (Messenger and Zalo show it moving), a still copy on
- * white for platforms that flatten transparency, and its GIPHY id with searches to find it in Instagram's tray.
+ * white for platforms that flatten transparency, the GIF again as its animation (what WhatsApp's moving sticker is
+ * made from), and its GIPHY id with searches to find it in Instagram's tray.
  */
 export async function giphyStickerFile(id: string, key: string): Promise<OutgoingAttachment> {
   const known = listed.get(`giphy:${id}`)
@@ -188,7 +189,10 @@ export async function giphyStickerFile(id: string, key: string): Promise<Outgoin
     preview: url,
     width: meta.width,
     height: meta.pageHeight ?? meta.height,
-    alternates: [{ path: opaque, mime: 'image/png', size: (await stat(opaque)).size, role: 'opaque' }],
+    alternates: [
+      { path: opaque, mime: 'image/png', size: (await stat(opaque)).size, role: 'opaque' },
+      { path: gif.path, mime: 'image/gif', size: gif.size, role: 'animated' }
+    ],
     giphy: { id, queries: trayQueries(title, known?.query) }
   }
 }
@@ -245,7 +249,13 @@ async function download(url: string, ext: string): Promise<{ path: string; size:
  * video (WhatsApp plays it as a looping GIF, Instagram as a short video).
  */
 export async function gifFile(item: GifItem): Promise<OutgoingAttachment> {
-  const [gif, mp4] = await Promise.all([download(item.gif.url, 'gif'), item.mp4 ? download(item.mp4.url, 'mp4').catch(() => undefined) : undefined])
+  // Without the MP4 the GIF still goes, but WhatsApp then gets it as a still photo: leave a trace in the log.
+  const mp4Copy = (url: string): Promise<{ path: string; size: number } | undefined> =>
+    download(url, 'mp4').catch((err: Error) => {
+      console.warn('[gifs] no MP4 copy for', item.id, err.message)
+      return undefined
+    })
+  const [gif, mp4] = await Promise.all([download(item.gif.url, 'gif'), item.mp4 ? mp4Copy(item.mp4.url) : undefined])
   return {
     path: gif.path,
     name: `${

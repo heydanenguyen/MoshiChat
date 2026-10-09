@@ -1,12 +1,13 @@
 import { app } from 'electron'
 import sharp from 'sharp'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { ThreadType, type API, type AttachmentSource } from 'zca-js'
 import { isStickerId } from '@shared/stickers'
 import type { OutgoingAttachment } from '@shared/types'
 import { animatedStickerFrames } from '../media/sticker-gif'
+import { stickerMotionFrames, stickerStill } from '../media/sticker-webp'
 
 /**
  * Experimental: a Moshi sticker as a Zalo "photo sticker" (the kind made from a picture), so it arrives without the
@@ -39,6 +40,9 @@ const OWN_SIZE = 180
 const OWN_FPS = 40
 /** Bump when the pictures change, so cached ones are redrawn. */
 const VERSION = 7
+/** Frames a second and WebP quality to try, in order, until a moving sticker is under its byte budget. */
+const PACK_TRIES: Array<[number, number]> = [[FPS, 80], [10, 70], [6, 60]]
+const OWN_TRIES: Array<[number, number]> = [[OWN_FPS, 65], [20, 60], [12, 50]]
 
 /**
  * Which frames of an animation to keep at about `fps`, and how long each kept one shows. Frames are taken at even
@@ -59,41 +63,96 @@ export function framesAt(delays: number[], fps: number): { pages: number[]; dela
   return { pages, delays: pages.map((_, i) => moment(i + 1) - moment(i)) }
 }
 
+export interface StickerFileOptions {
+  /** Side of the square the sticker is fitted into; by default Zalo's (200 px for a pack sticker, 180 px for the rest). */
+  size?: number
+  /** 'contain' pads to exactly size × size (WhatsApp wants 512 × 512); 'inside' only bounds the longest side (Telegram). */
+  fit?: 'contain' | 'inside'
+  /**
+   * A moving WebP heavier than this (WhatsApp refuses animated stickers over ~500 KB) is redrawn at fewer frames a
+   * second and lower quality; if even that is too heavy the sticker goes as a still of its first frame.
+   */
+  maxBytes?: number
+}
+
+export interface StickerFiles {
+  id: string
+  webp: string
+  png: string
+  width: number
+  height: number
+  /** A moving sticker that came out as a still (over `maxBytes`). */
+  still?: boolean
+}
+
 /**
  * The sticker as a see-through WebP that moves the way it does in Moshi (a pack sticker with its motion loop, a
  * sticker with its own animation as that, fewer frames a second), and a PNG of the still sticker, the same size.
+ * Drawn from the source at the size asked for, never from a smaller copy.
  */
-export async function photoStickerFiles(a: Pick<OutgoingAttachment, 'sticker' | 'path' | 'alternates'>): Promise<{ id: string; webp: string; png: string; width: number; height: number }> {
+export async function photoStickerFiles(a: Pick<OutgoingAttachment, 'sticker' | 'path' | 'alternates'>, options: StickerFileOptions = {}): Promise<StickerFiles> {
   const moving = a.alternates?.find((alt) => alt.role === 'animated')?.path
   const pack = !!a.sticker && isStickerId(a.sticker)
-  const size = pack ? SIZE : OWN_SIZE
+  const size = options.size ?? (pack ? SIZE : OWN_SIZE)
+  const shape = options.fit ?? 'contain'
   const info = await stat(moving ?? a.path)
-  const key = createHash('sha1').update(`${a.sticker}|${moving ?? a.path}|${info.mtimeMs}|${size}|${VERSION}`).digest('hex').slice(0, 20)
+  // Zalo (no options) keeps its old key, so its cached pictures stay valid.
+  const extra = options.size || options.fit || options.maxBytes ? `|${shape}|${options.maxBytes ?? ''}` : ''
+  const key = createHash('sha1').update(`${a.sticker}|${moving ?? a.path}|${info.mtimeMs}|${size}|${VERSION}${extra}`).digest('hex').slice(0, 20)
   const base = join(await dir(), key)
   const webp = `${base}.webp`
   const png = `${base}.png`
+  const still = `${base}-still.webp`
   const transparent = { r: 0, g: 0, b: 0, alpha: 0 }
-  const fit = (input: ReturnType<typeof sharp>): ReturnType<typeof sharp> => input.resize(size, size, { fit: 'contain', background: transparent })
-  if (!(await stat(webp).catch(() => undefined))?.size) {
+  const fit = (input: ReturnType<typeof sharp>): ReturnType<typeof sharp> => input.resize(size, size, { fit: shape, background: transparent })
+  const made = async (path: string): Promise<boolean> => !!(await stat(path).catch(() => undefined))?.size
+  const fits = (data: Buffer): boolean => !options.maxBytes || data.length <= options.maxBytes
+  // Over budget last time: the still is what goes (and no moving WebP was kept).
+  let asStill = !!options.maxBytes && !(await made(webp)) && (await made(still))
+  if (!asStill && !(await made(webp))) {
+    let data: Buffer | undefined
+    const drawn = new Map<number, Promise<Buffer>>()
     if (pack && a.sticker && isStickerId(a.sticker)) {
-      const frames = await animatedStickerFrames(a.sticker, size, FPS)
-      await sharp(frames, { join: { animated: true } })
-        .webp({ quality: 80, alphaQuality: 90, effort: 6, loop: 0, delay: Array(frames.length).fill(Math.round(1000 / FPS)) })
-        .toFile(webp)
+      for (const [fps, quality] of options.maxBytes ? PACK_TRIES : PACK_TRIES.slice(0, 1)) {
+        // Zalo's size keeps the filtered frames (its pictures stay as they were); a bigger one is drawn without the slow filter.
+        const frames = await (options.size ? stickerMotionFrames : animatedStickerFrames)(a.sticker, size, fps)
+        data = await sharp(frames, { join: { animated: true } })
+          .webp({ quality, alphaQuality: 90, effort: 6, loop: 0, delay: Array(frames.length).fill(Math.round(1000 / fps)) })
+          .toBuffer()
+        if (fits(data)) break
+      }
     } else {
       const source = moving ?? a.path
       const { pages = 1, delay = [] } = await sharp(source, { animated: true }).metadata()
       if (pages > 1 && delay.length === pages) {
-        const kept = framesAt(delay, OWN_FPS)
-        const frames = await Promise.all(kept.pages.map((page) => fit(sharp(source, { page })).png().toBuffer()))
-        await sharp(frames, { join: { animated: true } }).webp({ quality: 65, alphaQuality: 80, effort: 6, loop: 0, delay: kept.delays }).toFile(webp)
+        for (const [fps, quality] of options.maxBytes ? OWN_TRIES : OWN_TRIES.slice(0, 1)) {
+          const kept = framesAt(delay, fps)
+          // A retry at fewer frames a second reuses the frames already drawn.
+          const frames = await Promise.all(kept.pages.map((page) => drawn.get(page) ?? drawn.set(page, fit(sharp(source, { page })).png().toBuffer()).get(page)!))
+          data =await sharp(frames, { join: { animated: true } }).webp({ quality, alphaQuality: 80, effort: 6, loop: 0, delay: kept.delays }).toBuffer()
+          if (fits(data)) break
+        }
       } else {
-        await fit(sharp(source)).webp({ quality: 80, alphaQuality: 90, effort: 6 }).toFile(webp)
+        data = await fit(sharp(source)).webp({ quality: 80, alphaQuality: 90, effort: 6 }).toBuffer()
       }
     }
+    if (data && fits(data)) await writeFile(webp, data)
+    else asStill = true
   }
-  if (!(await stat(png).catch(() => undefined))?.size) await fit(sharp(a.path)).png().toFile(png)
-  return { id: key, webp, png, width: size, height: size }
+  if (!(await made(png))) {
+    // A pack sticker bigger than Zalo's is drawn from its vector, not stretched from the 384 px picture.
+    const drawn = options.size && a.sticker && isStickerId(a.sticker) ? await stickerStill(a.sticker, size) : undefined
+    await fit(sharp(drawn ?? a.path)).png().toFile(png)
+  }
+  if (asStill) await stillWebp(png, still)
+  const { width = size, height = size } = shape === 'contain' ? { width: size, height: size } : await sharp(png).metadata()
+  return { id: key, webp: asStill ? still : webp, png, width, height, ...(asStill ? { still: true } : {}) }
+}
+
+/** A still, see-through WebP of a sticker's PNG (Telegram shows no moving WebP; WhatsApp's fallback when too heavy). */
+export async function stillWebp(png: string, out = png.replace(/\.png$/, '-still.webp')): Promise<string> {
+  if (!(await stat(out).catch(() => undefined))?.size) await sharp(png).webp({ quality: 80, alphaQuality: 90, effort: 6 }).toFile(out)
+  return out
 }
 
 export interface PhotoStickerImage {

@@ -62,3 +62,38 @@ describe('DirectComposer idle close', () => {
     expect(windows[1].destroyed).toBe(true)
   })
 })
+
+describe('DirectComposer sticker outcome', () => {
+  afterEach(() => {
+    windows.length = 0
+  })
+
+  /** The thread opens; the sticker script answers `outcome`; the page description is empty. */
+  function composerAnswering(outcome: string): DirectComposer {
+    const composer = new DirectComposer('persist:test')
+    const answers = ['OK', outcome]
+    const ready = (composer as unknown as { ensure(): InstanceType<typeof FakeWindow> }).ensure()
+    ready.webContents.executeJavaScript.mockImplementation(async () => answers.shift() ?? '{}')
+    return composer
+  }
+
+  it('a tray left open with nothing sent is a failure, so the caller falls back', async () => {
+    await expect(composerAnswering('TRAY_OPEN').sendSticker('https://www.instagram.com/direct/t/1/', { id: 'g', queries: ['cat'] })).rejects.toThrow(/TRAY_OPEN/)
+  })
+
+  it('a tapped sticker, one sent with the send button, or one that landed in the conversation is a success', async () => {
+    await expect(composerAnswering('OK_LANDED').sendSticker('https://www.instagram.com/direct/t/1/', { id: 'g', queries: ['cat'] })).resolves.toBeUndefined()
+    await expect(composerAnswering('OK').sendSticker('https://www.instagram.com/direct/t/1/', { id: 'g', queries: ['cat'] })).resolves.toBeUndefined()
+    await expect(composerAnswering('OK_SEND').sendSticker('https://www.instagram.com/direct/t/1/', { id: 'g', queries: ['cat'] })).resolves.toBeUndefined()
+  })
+
+  it('checks, before giving up on an open tray, whether the sticker turned up outside it', async () => {
+    const composer = composerAnswering('OK')
+    const run = (composer as unknown as { ensure(): InstanceType<typeof FakeWindow> }).ensure().webContents.executeJavaScript
+    await composer.sendSticker('https://www.instagram.com/direct/t/1/', { id: 'g', queries: ['cat'] })
+    const script = String(run.mock.calls.find((c) => String(c[0]).includes('TRAY_OPEN'))?.[0])
+    // the picture must be new, not inside the tray, and carry the sticker's id in its address
+    expect(script).toMatch(/!before\.has\(el\) && !tray\.contains\(el\) && srcOf\(el\)\.includes\('\/' \+ id \+ '\/'\)/)
+    expect(script.indexOf('OK_LANDED')).toBeLessThan(script.indexOf("'TRAY_OPEN'"))
+  })
+})

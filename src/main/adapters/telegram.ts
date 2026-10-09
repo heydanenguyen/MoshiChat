@@ -1,12 +1,14 @@
 import bigInt from 'big-integer'
+import sharp from 'sharp'
 import { Api, TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage, NewMessageEvent } from 'telegram/events'
 import { LogLevel } from 'telegram/extensions/Logger'
-import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, OutgoingAttachment, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, previewKindOf, unsentCopy } from './types'
+import { photoStickerFiles, stillWebp } from './zalo-photo-sticker'
 
 export interface TelegramSecret {
   apiId: number
@@ -29,6 +31,8 @@ export class TelegramAdapter implements PlatformAdapter {
   private senderNames = new Map<string, string>()
   private senderAvatars = new Map<string, string | undefined>()
   private meId = ''
+  /** The log has said once that moving stickers go as a still. */
+  private toldStill = false
 
   constructor(
     initialId: string,
@@ -166,10 +170,10 @@ export class TelegramAdapter implements PlatformAdapter {
     const entity = await this.entityFor(id)
     const replyTo = options.replyToId ? Number(options.replyToId) : undefined
     const files = options.attachments ?? []
-    // Stickers go as photos, which Telegram recompresses without transparency: use the copy on white.
-    const pathFor = (f: (typeof files)[number]): string => (f.sticker ? (f.alternates?.find((alt) => alt.role === 'opaque')?.path ?? f.path) : f.path)
     let sent: Api.Message
+    let made: { webp: string; width: number; height: number } | undefined
     const gifMp4 = files.length === 1 && files[0].gif ? files[0].alternates?.find((alt) => alt.mime === 'video/mp4') : undefined
+    const sticker = files.length === 1 && files[0].sticker ? files[0] : undefined
     if (gifMp4) {
       const gif = files[0]
       sent = await client.sendFile(entity, {
@@ -181,10 +185,25 @@ export class TelegramAdapter implements PlatformAdapter {
           new Api.DocumentAttributeAnimated()
         ]
       })
+    } else if (sticker && (made = await this.stickerWebp(sticker))) {
+      // Not forceDocument: gramjs would add force_file (a .webp is no "image" to it), asking for a plain file.
+      sent = await client.sendFile(entity, {
+        file: made.webp,
+        replyTo,
+        attributes: [
+          new Api.DocumentAttributeSticker({ alt: '', stickerset: new Api.InputStickerSetEmpty() }),
+          new Api.DocumentAttributeImageSize({ w: made.width, h: made.height })
+        ]
+      })
+      // A sticker takes no caption: the text follows as its own message.
+      if (text) sent = await client.sendMessage(entity, { message: text })
+    } else if (sticker) {
+      // The sticker could not be made (logged): its copy on white goes as a photo rather than not at all.
+      sent = await client.sendFile(entity, { file: sticker.alternates?.find((alt) => alt.role === 'opaque')?.path ?? sticker.path, caption: text || undefined, replyTo })
     } else if (files.length) {
       const voice = files.length === 1 && files[0].voice
       const result = await client.sendFile(entity, {
-        file: files.length === 1 ? pathFor(files[0]) : files.map(pathFor),
+        file: files.length === 1 ? files[0].path : files.map((f) => f.path),
         caption: text || undefined,
         replyTo,
         voiceNote: !!voice,
@@ -197,6 +216,24 @@ export class TelegramAdapter implements PlatformAdapter {
     const message = await this.toMessage(sent, id)
     this.remember(id, [message])
     return message
+  }
+
+  /**
+   * A sticker as a see-through WebP, 512 px on its longest side, which Telegram draws as a sticker. Its moving stickers
+   * are WebM video (we have no encoder) and it shows no animated WebP, so a moving one goes as a still of its first
+   * frame. Undefined when the conversion fails (logged), so the caller can send a photo instead.
+   */
+  private async stickerWebp(file: OutgoingAttachment): Promise<{ webp: string; width: number; height: number } | undefined> {
+    try {
+      const { webp, png, width, height } = await photoStickerFiles(file, { size: 512, fit: 'inside' })
+      if (((await sharp(webp).metadata()).pages ?? 1) <= 1) return { webp, width, height }
+      if (!this.toldStill) this.ctx.log('telegram: moving stickers go as a still (Telegram wants WebM video stickers)')
+      this.toldStill = true
+      return { webp: await stillWebp(png), width, height }
+    } catch (err) {
+      this.ctx.log('telegram: sticker conversion failed, sending it as a photo:', (err as Error).message)
+      return undefined
+    }
   }
 
   async forward(fromId: string, messageId: string, toId: string): Promise<Message> {

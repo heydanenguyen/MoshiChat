@@ -386,12 +386,19 @@ export class DirectComposer {
         for (let i = 0; i < 25; i++) { await wait(200); if (!search.isConnected || search.getBoundingClientRect().width === 0) return 'OK'; }
         const button = sendButton();
         if (button) { button.click(); await wait(800); return 'OK_SEND'; }
-        return 'TRAY_OPEN';
+        // The tray stayed up, but did the sticker land? Its picture now sits in the conversation, outside the tray.
+        // (The tray is the dialog around the result, else the nearest box holding both it and the search field; none found counts as not landed.)
+        let tray = found.closest('[role="dialog"]');
+        for (let el = found; !tray && el; el = el.parentElement) if (el.contains(search)) tray = el;
+        const landed = !!tray && [...document.querySelectorAll('img, video')].some((el) => !before.has(el) && !tray.contains(el) && srcOf(el).includes('/' + id + '/'));
+        // Either way close the tray, so the caller's fallback (or the next message) finds the composer as it was.
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        return landed ? 'OK_LANDED' : 'TRAY_OPEN';
       })()`,
       true
     )) as string
     this.log('[instagram composer] sticker', sticker.id, outcome)
-    if (outcome === 'OK' || outcome === 'OK_SEND' || outcome === 'TRAY_OPEN') return
+    if (outcome === 'OK' || outcome === 'OK_SEND' || outcome === 'OK_LANDED') return
     if (outcome === 'LOGGED_OUT') throw new SessionExpiredError('logged_out')
     this.log('[instagram composer] sticker tray:', await this.describe(win))
     throw new Error(

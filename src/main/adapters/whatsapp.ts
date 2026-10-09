@@ -1,11 +1,16 @@
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import sharp from 'sharp'
 import type { proto, WAMessage, Chat, Contact, WASocket } from '@whiskeysockets/baileys'
-import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Attachment, Conversation, ConversationStats, Message, OutgoingAttachment, Peer, PeerProfile, Reaction, SendOptions, SharedKind } from '@shared/types'
 import { ALL_FEATURES } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
+import { photoStickerFiles, type StickerFiles } from './zalo-photo-sticker'
+
+/** WhatsApp refuses a moving sticker much over this. */
+const STICKER_MAX_BYTES = 500_000
 
 export interface WhatsAppSecret {
   /** Folder name (under the adapter data dir) that holds the signal keys. */
@@ -197,13 +202,25 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const files = options.attachments ?? []
     for (const [index, file] of files.entries()) {
       const caption = index === files.length - 1 ? text : undefined
-      if (file.voice) sent = await sock.sendMessage(jid, { audio: { url: file.path }, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: file.duration }, misc)
-      else if (file.gif && file.alternates?.some((alt) => alt.mime === 'video/mp4')) {
+      if (file.voice) {
+        // A note whose Ogg remux failed goes as its AAC copy (index.ts saveVoice): say what it really is.
+        const mimetype = file.mime === 'audio/ogg' ? 'audio/ogg; codecs=opus' : file.mime
+        sent = await sock.sendMessage(jid, { audio: { url: file.path }, ptt: true, mimetype, seconds: file.duration }, misc)
+      } else if (file.gif && file.alternates?.some((alt) => alt.mime === 'video/mp4')) {
         const mp4 = file.alternates.find((alt) => alt.mime === 'video/mp4')!
         sent = await sock.sendMessage(jid, { video: { url: mp4.path }, gifPlayback: true, caption }, misc)
-      } else if (file.sticker && file.mime === 'image/gif') {
-        // A moving sticker (GIPHY): WhatsApp takes no GIF photo, so its still on white.
-        sent = await sock.sendMessage(jid, { image: { url: file.alternates?.find((alt) => alt.role === 'opaque')?.path ?? file.path }, caption }, misc)
+      } else if (file.sticker) {
+        const made = await this.stickerFiles(file)
+        if (made) {
+          // A real sticker: see-through WebP, moving when the sticker does. A sticker takes no caption, so the text follows.
+          const isAnimated = ((await sharp(made.webp).metadata()).pages ?? 1) > 1
+          sent = await sock.sendMessage(jid, { sticker: { url: made.webp }, isAnimated, width: made.width, height: made.height }, misc)
+          if (caption) sent = await sock.sendMessage(jid, { text: caption })
+        } else {
+          // The sticker could not be made (logged): its copy on white goes as a photo rather than not at all.
+          const opaque = file.alternates?.find((alt) => alt.role === 'opaque')?.path ?? file.path
+          sent = await sock.sendMessage(jid, { image: { url: opaque }, caption }, misc)
+        }
       } else if (file.mime.startsWith('image/')) sent = await sock.sendMessage(jid, { image: { url: file.path }, caption }, misc)
       else if (file.mime.startsWith('video/')) sent = await sock.sendMessage(jid, { video: { url: file.path }, caption }, misc)
       else sent = await sock.sendMessage(jid, { document: { url: file.path }, mimetype: file.mime, fileName: file.name, caption }, misc)
@@ -214,6 +231,18 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const message = await this.toMessage(sent, id)
     this.cacheConverted(id, [message])
     return message
+  }
+
+  /** A sticker as WhatsApp's own kind: 512 x 512, and a moving one under its ~500 KB limit (or a still, said in the log). */
+  private async stickerFiles(file: OutgoingAttachment): Promise<StickerFiles | undefined> {
+    try {
+      const made = await photoStickerFiles(file, { size: 512, fit: 'contain', maxBytes: STICKER_MAX_BYTES })
+      if (made.still) this.ctx.log('whatsapp: moving sticker over', STICKER_MAX_BYTES, 'bytes even when lightened, sent as a still', file.sticker)
+      return made
+    } catch (err) {
+      this.ctx.log('whatsapp: sticker conversion failed, sending it as a photo:', (err as Error).message)
+      return undefined
+    }
   }
 
   async markRead(id: string): Promise<void> {

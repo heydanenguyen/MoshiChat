@@ -217,7 +217,15 @@ export async function customStickerFile(id: string): Promise<OutgoingAttachment>
   const path = join(dir(), sticker.file)
   const size = (await stat(path)).size
   const opaque = join(dir(), `${id}-white.png`)
-  const opaqueInfo = sticker.animated ? undefined : await stat(opaque).catch(() => undefined)
+  // An animated one is kept as it is (addSticker): its still on white is its first frame, made when first sent.
+  if (sticker.animated && !(await stat(opaque).catch(() => undefined))?.size) {
+    await sharp(path)
+      .flatten({ background: '#ffffff' })
+      .png()
+      .toFile(opaque)
+      .catch((err: Error) => console.warn('[stickers] no still on white for', id, err.message))
+  }
+  const opaqueInfo = await stat(opaque).catch(() => undefined)
   return {
     path,
     name: sticker.file,
@@ -225,6 +233,6 @@ export async function customStickerFile(id: string): Promise<OutgoingAttachment>
     size,
     sticker: `custom:${id}`,
     preview: urlOf(sticker),
-    alternates: opaqueInfo ? [{ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' }] : undefined
+    alternates: opaqueInfo?.size ? [{ path: opaque, mime: 'image/png', size: opaqueInfo.size, role: 'opaque' }] : undefined
   }
 }

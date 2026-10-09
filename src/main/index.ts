@@ -1172,27 +1172,39 @@ async function saveVoice(bytes: Uint8Array, durationSeconds: number, aac?: Uint8
   let data: Uint8Array = bytes
   let ext = 'webm'
   let mime = 'audio/webm'
+  let voice = true
+  let copy = aac
   try {
     data = webmToOgg(bytes)
     ext = 'ogg'
     mime = 'audio/ogg'
   } catch (err) {
-    log('voice remux failed, keeping WebM:', (err as Error).message)
+    // No platform takes a WebM voice note: the AAC copy becomes the note, or the WebM goes as a plain file.
+    if (aac?.length) {
+      data = aac
+      ext = 'm4a'
+      mime = 'audio/mp4'
+      copy = undefined
+      log('voice remux failed, sending the AAC copy as the voice note:', (err as Error).message)
+    } else {
+      voice = false
+      log('voice remux failed and there is no AAC copy, sending the WebM as a file:', (err as Error).message)
+    }
   }
   const path = join(app.getPath('temp'), `unison-voice-${stamp}.${ext}`)
   await writeFile(path, data)
   const alternates: OutgoingAttachment['alternates'] = []
-  if (aac?.length) {
+  if (copy?.length) {
     const aacPath = join(app.getPath('temp'), `unison-voice-${stamp}.m4a`)
-    await writeFile(aacPath, aac)
-    alternates.push({ path: aacPath, mime: 'audio/mp4', size: aac.length })
+    await writeFile(aacPath, copy)
+    alternates.push({ path: aacPath, mime: 'audio/mp4', size: copy.length })
   }
   return {
     path,
     name: `voice-${stamp}.${ext}`,
     mime,
     size: data.length,
-    voice: true,
+    voice: voice || undefined,
     duration: Math.round(durationSeconds),
     alternates: alternates.length ? alternates : undefined,
     preview: data.length < 2_000_000 ? `data:${mime};base64,${Buffer.from(data).toString('base64')}` : undefined

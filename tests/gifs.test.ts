@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import sharp from 'sharp'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('electron', () => ({ app: { getPath: () => '' } }))
+const dir = mkdtempSync(join(tmpdir(), 'moshi-gifs-'))
+vi.mock('electron', () => ({ app: { getPath: () => dir } }))
 
-const { fromGiphy, fromGiphyStickers, fromKlipy } = await import('../src/main/gifs')
+const { fromGiphy, fromGiphyStickers, fromKlipy, gifFile, giphyStickerFile } = await import('../src/main/gifs')
 const { imageSize } = await import('../src/main/media/image-size')
 
 describe('GIF providers', () => {
@@ -119,5 +124,44 @@ describe('stickers from Instagram’s own tray', () => {
     expect(page.items.map((i) => i.id)).toEqual(['giphy:abc123XYZ', 'giphy:def456'])
     expect(page.items[0].preview.url).toBe('https://media.giphy.com/media/abc123XYZ/200.webp')
     expect(page.items[0].gif.url).toBe('https://media.giphy.com/media/abc123XYZ/giphy.gif')
+  })
+})
+
+/** A two-frame see-through GIF, as GIPHY serves a sticker. */
+async function movingGif(): Promise<Buffer> {
+  const frame = (colour: string): Promise<Buffer> =>
+    sharp({ create: { width: 16, height: 16, channels: 4, background: colour } })
+      .png()
+      .toBuffer()
+  return sharp([await frame('red'), await frame('#0000ff80')], { join: { animated: true } })
+    .gif({ loop: 0, delay: [100, 100] })
+    .toBuffer()
+}
+
+describe('downloaded GIFs and GIPHY stickers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('a GIPHY sticker carries its animation as well as a still on white', async () => {
+    const bytes = await movingGif()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(bytes))))
+    const file = await giphyStickerFile('anim1', '')
+    expect(file.alternates).toContainEqual({ path: file.path, mime: 'image/gif', size: file.size, role: 'animated' })
+    const opaque = file.alternates?.find((alt) => alt.role === 'opaque')
+    expect(opaque?.mime).toBe('image/png')
+    expect((await sharp(opaque!.path).metadata()).hasAlpha).toBe(false)
+  })
+
+  it('says which GIF went without its MP4 copy when that download fails', async () => {
+    const bytes = await movingGif()
+    vi.stubGlobal('fetch', vi.fn(async (url: URL) => (String(url).endsWith('.mp4') ? new Response('', { status: 404 }) : new Response(new Uint8Array(bytes)))))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const media = (url: string) => ({ url, width: 16, height: 16 })
+    const file = await gifFile({ id: 'giphy:nomp4', title: 'x', provider: 'giphy', preview: media('https://media.giphy.com/p.gif'), gif: media('https://media.giphy.com/nomp4.gif'), mp4: media('https://media.giphy.com/nomp4.mp4') })
+    expect(file.alternates).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0].join(' '))).toContain('giphy:nomp4')
   })
 })
