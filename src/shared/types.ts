@@ -714,6 +714,10 @@ export interface Settings {
   gif?: { provider: GifProvider; key: string }
   /** Download new versions in the background and offer a restart once ready (default on). Off: ask before downloading. */
   autoUpdate?: boolean
+  /** Start Moshi, hidden, when this computer starts, so chats (Zalo above all) stay connected. Per computer. */
+  openAtLogin?: boolean
+  /** Windows: closing the window keeps Moshi running in the tray (default on). macOS always keeps it in the Dock. Per computer. */
+  keepRunning?: boolean
   /** A GIPHY key for GIPHY stickers, when the GIF key above is KLIPY's (a GIPHY GIF key serves both). */
   giphyKey?: string
 }

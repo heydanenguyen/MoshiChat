@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell, Tray } from 'electron'
 import { join, basename, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
@@ -29,6 +29,8 @@ import { AppLock } from './lock'
 import { previewOf, prunePreviews } from './media/preview'
 import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
+import { lightSticker } from './media/sticker-light'
+import { ZaloShare } from './zalo-share'
 import { cutoutMemoryOk, nativeCutout, nativeCutoutAvailable, NativeCutoutError } from './media/mac-cutout'
 import { freshPartition, legacyPartition, newPartition, partitionFor, sessionUser, USER_COOKIE, wipePartition, type WebPlatform } from './web-partitions'
 import { givenName } from '@shared/extras'
@@ -59,6 +61,39 @@ let editorKeys = false
 const EDITOR_KEYS = new Set(['z', 'y', 'c', 's', 'w', 'enter'])
 
 /** Bring the main window back (Dock icon, second launch), creating it again if it was closed. */
+/** Launched by the computer's login items (see applyLoginItem): start without showing the window. */
+let startedHidden = process.argv.includes('--hidden') || (isMac && app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin)
+
+/** Open at login, hidden (Settings > General). Development runs never register themselves. */
+function applyLoginItem(): void {
+  if (!app.isPackaged) return
+  const openAtLogin = !!storage.settings.openAtLogin
+  try {
+    app.setLoginItemSettings(isMac ? { openAtLogin } : { openAtLogin, args: ['--hidden'] })
+  } catch (err) {
+    log('login item failed', (err as Error).message)
+  }
+}
+
+/** Windows: Moshi running with its window closed sits in the tray; a click opens it, the menu quits. */
+let tray: Tray | undefined
+function ensureTray(): void {
+  if (isMac || (tray && !tray.isDestroyed())) return
+  const icon = appIcon()
+  if (!icon) return
+  tray = new Tray(icon.resize({ width: 16, height: 16 }))
+  tray.setToolTip('Moshi')
+  const vi = storage.settings.language !== 'en'
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: vi ? 'Mở Moshi' : 'Open Moshi', click: () => showMain() },
+      { type: 'separator' },
+      { label: vi ? 'Thoát Moshi' : 'Quit Moshi', click: () => app.quit() }
+    ])
+  )
+  tray.on('click', () => showMain())
+}
+
 function showMain(): void {
   if (!window || window.isDestroyed()) {
     createWindow()
@@ -135,6 +170,7 @@ storage.onSettingsChanged((before, after) => {
 })
 
 const sync = new SyncService(storage, emit, log)
+const zaloShare = new ZaloShare(() => sync.folderPath(), () => sync.device(), () => manager.zaloAdapters(), log)
 
 const updater = new Updater(
   (state) => emit({ type: 'update:state', state }),
@@ -633,10 +669,14 @@ function createWindow(): void {
     // No keyring (some Linux desktops): sessions would be stored merely encoded, so say so rather than stay quiet.
     if (storage.accounts.length && !secretsProtected()) setTimeout(() => emit({ type: 'app:notice', notice: 'insecure-secrets' }), 4000)
   })
-  window.once('ready-to-show', () => window?.show())
+  // Started with the computer: stay out of sight (in the Dock or the tray) until opened.
+  const hidden = startedHidden
+  startedHidden = false
+  if (hidden && !isMac) ensureTray()
+  window.once('ready-to-show', () => !hidden && window?.show())
   // Safety net: never leave the user with an invisible window if the first paint stalls.
   setTimeout(() => {
-    if (window && !window.isDestroyed() && !window.isVisible()) window.show()
+    if (!hidden && window && !window.isDestroyed() && !window.isVisible()) window.show()
   }, 4000)
   window.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
     if (level === 'warning' || level === 'error') log('renderer:', message, sourceId ? `(${sourceId}:${lineNumber})` : '')
@@ -646,6 +686,13 @@ function createWindow(): void {
   // used to be destroyed while the app kept running, and the hidden Instagram/Zalo helper windows
   // stopped "activate" from ever making a new one, so the only way back was quitting.)
   window.on('close', (e) => {
+    // Windows: closing keeps Moshi running in the tray (chats stay connected) unless switched off in Settings.
+    if (!isMac && !quitting && window && storage.settings.keepRunning !== false) {
+      e.preventDefault()
+      window.hide()
+      ensureTray()
+      return
+    }
     if (!isMac || quitting || !window) return
     e.preventDefault()
     const w = window
@@ -815,7 +862,9 @@ function registerImageProxy(): void {
       const m = /^\/([a-z]+)\/([a-z]+)\.(png|webp)$/.exec(url.pathname)
       if (!m || !isPictureStickerId(`${m[1]}:${m[2]}`)) return new Response('blocked', { status: 403 })
       try {
-        const data = await readFile(join(stickerDir(), m[1], `${m[2]}.${m[3]}`))
+        const file = join(stickerDir(), m[1], `${m[2]}.${m[3]}`)
+        // The moving picture comes from a lighter copy made for the chat (see media/sticker-light.ts).
+        const data = m[3] === 'webp' ? await lightSticker(file, `${m[1]}-${m[2]}`).catch(() => readFile(file)) : await readFile(file)
         return new Response(new Uint8Array(data), { status: 200, headers: { 'content-type': `image/${m[3]}`, 'cache-control': 'max-age=31536000', 'access-control-allow-origin': '*' } })
       } catch {
         return new Response('missing', { status: 404 })
@@ -1434,6 +1483,7 @@ function registerIpc(): void {
     if (patch.theme) applyTheme(settings.theme)
     if ('style' in patch) applyBackdrop()
     if (patch.language) installMenu()
+    if ('openAtLogin' in patch) applyLoginItem()
     if ('zoom' in patch && window && !window.isDestroyed()) window.webContents.setZoomFactor(clampZoom(settings.zoom))
     if (patch.logo) {
       const icon = appIcon(settings.logo)
@@ -1577,6 +1627,9 @@ function registerIpc(): void {
     if (typeof path === 'string' && path.toLowerCase().endsWith(`.${BACKUP_EXTENSION}`)) shell.showItemInFolder(path)
   })
   handle(IPC.syncStatus, () => sync.status())
+  handle(IPC.zaloShareStatus, () => zaloShare.status())
+  handle(IPC.zaloShareEnable, (_e, passphrase: unknown) => zaloShare.enable(String(passphrase ?? '')))
+  handle(IPC.zaloShareDisable, () => zaloShare.disable())
   handle(IPC.syncChoose, async () => {
     const vi = storage.settings.language === 'vi'
     const options: Electron.OpenDialogOptions = {
@@ -1738,7 +1791,9 @@ if (!gotLock) {
       if (!!before.hideFromScreenShare !== !!after.hideFromScreenShare) window?.setContentProtection(!!after.hideFromScreenShare)
     })
     await pruneOrphanedSettings()
+    applyLoginItem()
     await sync.start()
+    void zaloShare.start()
     void scheduler.start()
     reminders.start()
     later.start()

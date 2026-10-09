@@ -86,6 +86,11 @@ const bridge: MoshiBridge = {
     restore: (input) => ipcRenderer.invoke(IPC.backupRestore, input),
     reveal: (path) => ipcRenderer.invoke(IPC.backupReveal, path)
   },
+  zaloShare: {
+    status: () => ipcRenderer.invoke(IPC.zaloShareStatus),
+    enable: (passphrase) => ipcRenderer.invoke(IPC.zaloShareEnable, passphrase),
+    disable: () => ipcRenderer.invoke(IPC.zaloShareDisable)
+  },
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),
     choose: () => ipcRenderer.invoke(IPC.syncChoose),

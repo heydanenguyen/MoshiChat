@@ -162,6 +162,11 @@ export class AccountManager {
     return account
   }
 
+  /** The Zalo accounts (connected or not: a signed-out one still has its cache, which shared copies can fill). */
+  zaloAdapters(): ZaloAdapter[] {
+    return [...this.adapters.values()].filter((a): a is ZaloAdapter => a instanceof ZaloAdapter)
+  }
+
   /** The browser session a personal Facebook / Instagram account signs in with. */
   storedPartition(accountId: string, platform: WebPlatform): string {
     return this.storage.readSecret<{ partition?: string }>(accountId)?.partition ?? legacyPartition(platform)

@@ -56,6 +56,16 @@ export class SyncService {
     this.timer = undefined
   }
 
+  /** The "Moshi Sync" folder, while syncing (other services keep their own files in it). */
+  folderPath(): string | undefined {
+    return this.state.folder
+  }
+
+  /** This computer as the folder knows it. */
+  device(): { id: string; name: string } {
+    return { id: this.state.deviceId, name: hostname() }
+  }
+
   status(): SyncStatus {
     return { enabled: !!this.state.folder, folder: this.state.folder, deviceName: hostname(), lastSyncAt: this.state.lastSyncAt, error: this.error, devices: this.devices }
   }

@@ -177,6 +177,13 @@ export interface MoshiBridge {
     restore(input: { path: string; password: string }): Promise<void>
     reveal(path: string): Promise<void>
   }
+  /** Zalo messages shared between this user's computers through the sync folder, encrypted (see main/zalo-share.ts). */
+  zaloShare: {
+    status(): Promise<ZaloShareStatus>
+    /** Turn on with the passphrase (the first computer sets it, the others must type the same). */
+    enable(passphrase: string): Promise<ZaloShareStatus>
+    disable(): Promise<ZaloShareStatus>
+  }
   sync: {
     status(): Promise<SyncStatus>
     /** Ask for a folder a cloud drive syncs (OneDrive, Google Drive, Dropbox...) and start syncing there. Null when cancelled. */
@@ -323,6 +330,9 @@ export const IPC = {
   backupRestore: 'backup:restore',
   backupReveal: 'backup:reveal',
   syncStatus: 'sync:status',
+  zaloShareStatus: 'zalo-share:status',
+  zaloShareEnable: 'zalo-share:enable',
+  zaloShareDisable: 'zalo-share:disable',
   syncChoose: 'sync:choose',
   syncDisable: 'sync:disable',
   syncNow: 'sync:now',
@@ -387,3 +397,15 @@ export const IPC = {
   updateInstall: 'update:install',
   event: 'bridge:event'
 } as const
+
+export interface ZaloShareStatus {
+  /** The settings sync folder is set up (sharing lives inside it). */
+  folderReady: boolean
+  enabled: boolean
+  /** Another computer already chose a passphrase: this one must type the same. */
+  passphraseSet: boolean
+  lastWriteAt?: number
+  /** What the other computers' copies brought, per computer, the last time each was read. */
+  received: Array<{ device: string; added: number; at: number }>
+  error?: string
+}

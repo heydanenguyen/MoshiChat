@@ -15765,3 +15765,14 @@ button.moment-card:hover {
   background: color-mix(in srgb, #ec4899 16%, transparent);
   color: #db2777;
 }
+
+/* Settings > Sync: the passphrase for sharing Zalo messages between computers, with its button beside it */
+.zalo-share-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.zalo-share-form .field-input {
+  flex: 1;
+  min-width: 0;
+}

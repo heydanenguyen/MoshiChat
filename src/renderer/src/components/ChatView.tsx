@@ -21,6 +21,7 @@ import { LaterButton } from './LaterPicker'
 import { ReactionGrid, ReactionPill } from './ReactionPill'
 import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
 import { useAccountLabels } from '../accountLabels'
+import { estimateRun } from '../rowEstimate'
 import { giphyIdOf } from '@shared/giphy'
 import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
@@ -250,7 +251,10 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (rows[i]?.kind === 'group' ? 30 + (rows[i] as Extract<ChatRow, { kind: 'group' }>).group.messages.length * 44 : 40),
+    estimateSize: (i) => {
+      const row = rows[i]
+      return row?.kind === 'group' ? estimateRun(row.group.messages) : row?.kind === 'day' ? 45 : 40
+    },
     overscan: 6,
     getItemKey: (i) => rows[i]?.key ?? i,
     // The loader and "load more" above the rows push them down inside the scroller.

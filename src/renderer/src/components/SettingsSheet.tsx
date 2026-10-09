@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ZaloShareStatus } from '@shared/bridge'
 import { BirthdayDemo, FeatureCard, FeatureGrid, FriendsDemo, LaterDemo, NoteDemo, ScheduleDemo, TodosDemo } from './FeatureCards'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, History, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
@@ -20,7 +21,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { GifKeyForm } from './GifPicker'
 import { QuickReplyManager } from './QuickReplyManager'
 import { LEGAL_TITLE_KEY } from './LegalSheet'
-import { formatListTime } from '../utils'
+import { isMac, formatListTime } from '../utils'
 import { AiSettings } from './AiParts'
 import { UpdateSettings } from './UpdateCard'
 import { SoundSettings } from './SoundSettings'
@@ -176,6 +177,16 @@ function GeneralPage(): JSX.Element {
         {settings.greetings && (
           <Row title={t('greetingsWeather')} sub={t('greetingsWeatherHint')}>
             <Switch on={!!settings.weather} onChange={(weather) => void setSettings({ weather })} />
+          </Row>
+        )}
+      </Group>
+      <Group label={t('backgroundSection')}>
+        <Row title={t('openAtLogin')} sub={t('openAtLoginHint')}>
+          <Switch on={!!settings.openAtLogin} onChange={(openAtLogin) => void setSettings({ openAtLogin })} />
+        </Row>
+        {!isMac && (
+          <Row title={t('keepRunning')} sub={t('keepRunningHint')}>
+            <Switch on={settings.keepRunning !== false} onChange={(keepRunning) => void setSettings({ keepRunning })} />
           </Row>
         )}
       </Group>
@@ -830,6 +841,89 @@ function AiPage(): JSX.Element {
 }
 
 /** Sync between computers through a folder a cloud drive already keeps in step. */
+/**
+ * Zalo messages shared between computers (inside the sync folder, encrypted with a passphrase typed on each one):
+ * Zalo keeps one web session, so whatever arrives while another computer holds it is missing here otherwise.
+ */
+function ZaloShareSettings(): JSX.Element | null {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const showToast = useStore((s) => s.showToast)
+  const hasZalo = useStore((s) => Object.values(s.accounts).some((a) => a.platform === 'zalo' && !a.demo))
+  const [status, setStatus] = useState<ZaloShareStatus>()
+  const [passphrase, setPassphrase] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const load = (): void => void window.unison.zaloShare.status().then((s) => alive && setStatus(s))
+    load()
+    const timer = setInterval(load, 5000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  if (!hasZalo || !status?.folderReady) return null
+  const act = async (action: () => Promise<ZaloShareStatus>, done: string): Promise<void> => {
+    setBusy(true)
+    try {
+      setStatus(await action())
+      setPassphrase('')
+      showToast(done)
+    } catch (err) {
+      showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const brought = status.received.filter((r) => r.added > 0)
+  const sub = status.enabled
+    ? brought.length
+      ? t('zaloShareReceived', { list: brought.map((r) => `${r.added} · ${r.device} · ${formatListTime(r.at, language)}`).join(', ') })
+      : status.lastWriteAt
+        ? t('zaloShareWritten', { time: formatListTime(status.lastWriteAt, language) })
+        : t('zaloShareOnHint')
+    : status.passphraseSet
+      ? t('zaloShareJoinHint')
+      : t('zaloShareHint')
+
+  return (
+    <>
+      <Row title={t('zaloShareTitle')} sub={status.error ? t('syncError', { error: status.error }) : sub}>
+        {status.enabled && (
+          <button className="btn" disabled={busy} onClick={() => void act(() => window.unison.zaloShare.disable(), t('zaloShareOff'))}>
+            {t('syncOff')}
+          </button>
+        )}
+      </Row>
+      {!status.enabled && (
+        <form
+          className="settings-row zalo-share-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void act(() => window.unison.zaloShare.enable(passphrase), t('zaloShareOn'))
+          }}
+        >
+          <input
+            id="zalo-share-passphrase"
+            type="password"
+            className="field-input"
+            autoComplete="new-password"
+            placeholder={status.passphraseSet ? t('zaloSharePassphraseSame') : t('zaloSharePassphraseNew')}
+            value={passphrase}
+            onChange={(e) => setPassphrase(e.target.value)}
+          />
+          <button className="btn primary" type="submit" disabled={busy || passphrase.length < 8}>
+            {t('zaloShareEnable')}
+          </button>
+        </form>
+      )}
+    </>
+  )
+}
+
 function SyncSettings(): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
@@ -878,6 +972,7 @@ function SyncSettings(): JSX.Element {
                 : t('syncNoDevices', { name: status.deviceName })
             }
           />
+          <ZaloShareSettings />
           <Row
             title={t('syncThisDevice', { name: status.deviceName })}
             sub={status.error ? t('syncError', { error: status.error }) : status.lastSyncAt ? t('syncLast', { time: formatListTime(status.lastSyncAt, language) }) : undefined}

@@ -20,7 +20,12 @@ export interface ZaloSecret {
 type ZcaModule = typeof import('zca-js')
 
 /** Messages kept per chat (memory and the cache on disk). */
+/** One message in the copy shared between computers: chat id, direct (0) or group (1), Zalo's own record. */
+export type SharedZaloMessage = [string, 0 | 1, TMessage]
+
 const HISTORY_LIMIT = 1000
+/** Groups whose latest page is asked for after each start (the most recently active ones). */
+const GROUP_BACKFILL = 40
 
 /** Pages one "Sync Zalo history" may walk per kind of chat (a start walks 60); about 0.6 s each. */
 const DEEP_SYNC_PAGES = 1500
@@ -81,6 +86,7 @@ export class ZaloAdapter implements PlatformAdapter {
   /** A history sync the user asked for, while it runs. */
   private deepSync?: DeepSync
   private groupHistoryGone = false
+  private backfilling = false
   private saveTimer?: NodeJS.Timeout
   /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
   private stickerUrls = new Map<number, StickerPicture>()
@@ -823,12 +829,60 @@ export class ZaloAdapter implements PlatformAdapter {
     for (const message of messages) {
       const index = list.findIndex((m) => m.msgId === message.msgId)
       if (index >= 0) list[index] = message
-      else list.push(message)
+      else {
+        list.push(message)
+        this.shareVersion += 1
+      }
     }
     list.sort((a, b) => Number(a.ts) - Number(b.ts))
     const overflow = list.length - HISTORY_LIMIT
     if (overflow > 0) this.toArchive(threadId, list.slice(0, overflow))
     this.raw.set(threadId, overflow > 0 ? list.slice(overflow) : list)
+  }
+
+  /** Grows whenever a message this computer did not have arrives: the shared copy (zalo-share.ts) is rewritten then. */
+  shareVersion = 0
+
+  /** Whose Zalo this is (other computers' copies are matched by it). */
+  get shareOwner(): string {
+    return this.meId
+  }
+
+  /** The messages of the last `days` days, for the copy other computers read (see zalo-share.ts). */
+  shareSnapshot(days: number): SharedZaloMessage[] {
+    const since = Date.now() - days * 24 * 3600_000
+    const out: SharedZaloMessage[] = []
+    for (const [threadId, list] of this.raw) {
+      const type = this.threadTypes.get(threadId) ?? 0
+      for (const message of list) if (Number(message.ts) >= since) out.push([threadId, type, message])
+    }
+    return out
+  }
+
+  /** Messages another computer had (it held the Zalo session while this one did not): the ones missing here are kept. */
+  importShared(entries: SharedZaloMessage[]): number {
+    const byThread = new Map<string, { type: 0 | 1; messages: TMessage[] }>()
+    for (const [threadId, type, message] of entries) {
+      if (!message?.msgId || this.has(threadId, message.msgId)) continue
+      const bucket = byThread.get(threadId) ?? { type, messages: [] }
+      bucket.messages.push(message)
+      byThread.set(threadId, bucket)
+    }
+    let added = 0
+    for (const [threadId, { type, messages }] of byThread) {
+      if (!this.threadTypes.has(threadId)) this.threadTypes.set(threadId, type)
+      this.remember(threadId, messages)
+      added += messages.length
+      const id = conversationId(this.account.id, threadId)
+      this.converted.delete(id)
+      const last = this.messagesFor(id).at(-1)
+      if (last) this.lastActivity.set(threadId, Math.max(this.lastActivity.get(threadId) ?? 0, last.sentAt))
+    }
+    if (added) {
+      this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: this.buildConversations() })
+      this.scheduleSave()
+    }
+    return added
   }
 
   /** Messages too old for the cache go to the archive (written in batches: the history walk brings them by the page). */
@@ -889,6 +943,9 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 
   private startSync(api: API): void {
+    // Groups can be asked for their own latest messages, which the account-wide feed may not have (written while
+    // Moshi was closed or the session was on another computer): once the feed walk has had its turn.
+    setTimeout(() => this.api === api && void this.backfillGroups(api), 20_000)
     this.syncWalks = { 0: { rounds: 0, jumped: false }, 1: { rounds: 0, jumped: false } }
     this.ctx.log('zalo: syncing messages', JSON.stringify(this.syncCursors))
     api.listener.requestOldMessages(0)
@@ -901,12 +958,64 @@ export class ZaloAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * The newest page of each group active lately, from Zalo's per-group history, merged into what is here. Direct chats
+   * have no such call on Zalo Web: for them only the feed walk and other computers' copies (shared sync) can help.
+   */
+  private async backfillGroups(api: API): Promise<void> {
+    if (this.groupHistoryGone || this.backfilling) return
+    this.backfilling = true
+    const recent = [...this.groups.keys()]
+      .map((id) => ({ id, at: this.lastActivity.get(id) ?? 0 }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, GROUP_BACKFILL)
+    let added = 0
+    let asked = 0
+    const touched = new Set<string>()
+    try {
+      for (const { id } of recent) {
+        if (this.api !== api) break
+        const history = await api.getGroupChatHistory(id, 50)
+        asked += 1
+        const fresh = history.groupMsgs.filter((m) => !this.has(id, m.data.msgId)).map((m) => m.data)
+        if (fresh.length) {
+          this.threadTypes.set(id, 1)
+          this.remember(id, fresh)
+          this.converted.delete(conversationId(this.account.id, id))
+          touched.add(id)
+          added += fresh.length
+        }
+        await new Promise((resolve) => setTimeout(resolve, 700))
+      }
+    } catch (err) {
+      // Zalo retired this endpoint for web sessions (404); stop asking until the next start.
+      if (/404/.test((err as Error).message)) this.groupHistoryGone = true
+      this.ctx.log('zalo group backfill failed', (err as Error).message)
+    } finally {
+      this.backfilling = false
+    }
+    this.ctx.log(`zalo: group backfill asked ${asked} groups, added ${added} messages in ${touched.size}`)
+    if (!touched.size) return
+    for (const threadId of touched) {
+      const last = this.messagesFor(conversationId(this.account.id, threadId)).at(-1)
+      if (last) this.lastActivity.set(threadId, Math.max(this.lastActivity.get(threadId) ?? 0, last.sentAt))
+    }
+    this.ctx.emit({ type: 'conversations:reset', accountId: this.account.id, conversations: this.buildConversations() })
+    this.scheduleSave()
+  }
+
   /** After each page: continue below it, skip down to where the last walk stopped, or stop. */
   private continueSync(api: API, messages: ZMessage[], fresh: number, threadType: 0 | 1): void {
     const type = threadType === 1 ? 1 : 0
     const walk = this.syncWalks[type]
     walk.rounds += 1
     const oldest = messages.length ? messages.reduce((a, b) => (Number(a.data.ts) <= Number(b.data.ts) ? a : b)) : undefined
+    // Which stretch of time each page covers: days with nothing on this computer show whether Zalo sent them at all.
+    if (messages.length) {
+      const day = (ts: number): string => new Date(ts).toISOString().slice(0, 16).replace('T', ' ')
+      const newest = Math.max(...messages.map((m) => Number(m.data.ts)))
+      this.ctx.log(`zalo: ${type ? 'group' : 'direct'} page ${walk.rounds}: ${messages.length} messages, ${fresh} new, ${day(Number(oldest!.data.ts))} → ${day(newest)} UTC, ${new Set(messages.map((m) => m.threadId)).size} chats`)
+    } else this.ctx.log(`zalo: ${type ? 'group' : 'direct'} page ${walk.rounds}: empty`)
     const deep = this.deepSync
     const { step, cursor } = nextSyncStep(walk, { size: messages.length, fresh, oldestId: oldest?.data.msgId, oldestTs: oldest ? Number(oldest.data.ts) : undefined }, this.syncCursors[type], deep ? DEEP_SYNC_PAGES : undefined)
     this.syncCursors[type] = cursor

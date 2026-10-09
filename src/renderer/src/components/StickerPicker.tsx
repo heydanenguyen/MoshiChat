@@ -205,7 +205,9 @@ export function PictureArt({ id, size = 72, play = 'none' }: { id: PictureSticke
   return (
     <span ref={ref} className="sticker-art mito-art" style={{ width: size, height: size }} aria-hidden>
       <img src={pictureUrl(id, 'still')} alt="" draggable={false} style={{ visibility: run.shown ? 'hidden' : undefined }} />
-      {run.n > 0 && <img key={run.n} src={pictureUrl(id, 'animated', run.n)} alt="" draggable={false} onLoad={loaded} style={{ visibility: run.shown ? undefined : 'hidden' }} />}
+      {/* In a chat the WebP loops by itself: one address, so a sticker scrolled back into view reuses the decoded
+          picture instead of fetching and decoding every frame again. Elsewhere each play starts from its first frame. */}
+      {run.n > 0 && <img key={run.n} src={pictureUrl(id, 'animated', play === 'auto' ? 0 : run.n)} alt="" draggable={false} onLoad={loaded} style={{ visibility: run.shown ? undefined : 'hidden' }} />}
     </span>
   )
 }

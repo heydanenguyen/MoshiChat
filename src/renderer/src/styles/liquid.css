@@ -270,3 +270,10 @@
     0 0 0 2px var(--bg-elevated),
     0 0 0 4px var(--tone);
 }
+
+/* stickers (and big emoji, photo-only grids) stand on their own: no glass bubble, no hairline, in either theme */
+:root[data-style='liquid'] .chat-col .bubble:is(.sticker, .jumbo, .grid-only),
+:root[data-style='liquid'][data-theme] .chat-col .bubble:is(.sticker, .jumbo, .grid-only) {
+  background: transparent;
+  box-shadow: none;
+}
