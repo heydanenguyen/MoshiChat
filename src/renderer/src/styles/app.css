@@ -1447,7 +1447,6 @@ a {
   position: relative;
   transition:
     background var(--duration-fast) ease,
-    transform var(--duration-base) var(--ease-spring),
     box-shadow var(--duration-base) ease;
 }
 
@@ -1941,6 +1940,10 @@ mark {
   align-items: flex-end;
   gap: 6px;
   max-width: 100%;
+}
+
+/* Only a message that has just arrived slides in; rows the virtualizer remounts while scrolling stay still. */
+.bubble-row.fresh {
   animation: bubble-in var(--duration-base) var(--ease-out);
 }
 
@@ -3079,10 +3082,6 @@ button.reaction-chip.mine:hover {
 
 /* ================================================================== tag creator & manager */
 
-.stat-cards.single {
-  grid-template-columns: 1fr;
-}
-
 .tag-manager {
   display: flex;
   flex-direction: column;
@@ -3178,8 +3177,10 @@ button.reaction-chip.mine:hover {
   max-height: 160px;
   min-height: 36px;
   font-family: var(--font-text);
-  /* scrolls only at max height (set from Composer); thin bar instead of the classic arrowed one on Windows */
-  overflow-y: hidden;
+  /* grows with its text up to the cap, so nothing is measured per keystroke; it scrolls only once it reaches the cap
+     (thin bar instead of the classic arrowed one on Windows) */
+  field-sizing: content;
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--fill-secondary) transparent;
 }
@@ -3582,12 +3583,6 @@ button.reaction-chip.mine:hover {
   letter-spacing: -0.02em;
 }
 
-.details-handle {
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  margin-top: 2px;
-}
-
 .profile-bio {
   color: var(--text-secondary);
   font-size: var(--text-base);
@@ -3646,67 +3641,6 @@ button.reaction-chip.mine:hover {
 .details-row-sub {
   font-size: var(--text-xs);
   color: var(--text-secondary);
-}
-
-.details-kv {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 5px 0;
-  font-size: var(--text-base);
-}
-
-.details-kv span:first-child {
-  color: var(--text-secondary);
-}
-
-.profile-facts {
-  display: flex;
-  flex-direction: column;
-}
-
-/* stat cards: pastel "moments" */
-
-.stat-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 12px 10px;
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  line-height: 1.25;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card:first-child {
-  grid-column: 1 / -1;
-}
-
-.stat-card.peach {
-  background: linear-gradient(135deg, #ffe4d0, #ffd0dc);
-}
-.stat-card.sky {
-  background: linear-gradient(135deg, #d8e8ff, #e3dbff);
-}
-.stat-card.mint {
-  background: linear-gradient(135deg, #d5f5e3, #dcf3ff);
-}
-
-:root[data-theme='dark'] .stat-card.peach {
-  background: linear-gradient(135deg, #4a2f2a, #4a2a3c);
-}
-:root[data-theme='dark'] .stat-card.sky {
-  background: linear-gradient(135deg, #22335c, #2f2a56);
-}
-:root[data-theme='dark'] .stat-card.mint {
-  background: linear-gradient(135deg, #1f3d34, #1e3446);
 }
 
 .stat-emoji {
@@ -3936,23 +3870,6 @@ button.reaction-chip.mine:hover {
   text-align: center;
   padding: var(--space-8);
   gap: var(--space-3);
-}
-
-.welcome-logos {
-  display: flex;
-  gap: 14px;
-  margin-bottom: var(--space-4);
-}
-
-.welcome-logos .platform-icon {
-  box-shadow: var(--shadow-md);
-  animation: float 4s ease-in-out infinite;
-}
-.welcome-logos .platform-icon:nth-child(2) {
-  animation-delay: 0.5s;
-}
-.welcome-logos .platform-icon:nth-child(3) {
-  animation-delay: 1s;
 }
 
 @keyframes float {
@@ -4776,10 +4693,6 @@ kbd {
 .titlebar-title strong {
   color: var(--text-primary);
   font-weight: 700;
-}
-
-.titlebar-sub {
-  color: var(--text-secondary);
 }
 
 .titlebar-right {
@@ -5826,7 +5739,6 @@ kbd {
 .tag-chips {
   gap: 8px;
 }
-
 
 /* context menu: a pill per tag, calm hover instead of the accent fill */
 .context-menu-item.tag-row:hover {
@@ -7724,7 +7636,6 @@ kbd {
 .nav-item:active {
   transform: none;
 }
-
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -11049,7 +10960,7 @@ button.moment-card:hover {
   --glass: rgba(255, 255, 255, 0.5);
   --glass-strong: rgba(255, 255, 255, 0.8);
   --glass-border: rgba(255, 255, 255, 0.95);
-  --glass-blur: 44px;
+  --glass-blur: 24px;
   --bg-elevated: rgba(255, 255, 255, 0.88);
   --bg-input: rgba(255, 255, 255, 0.62);
   --bg-selected: rgba(255, 255, 255, 0.95);
@@ -11211,7 +11122,6 @@ button.moment-card:hover {
   backdrop-filter: blur(18px) saturate(160%);
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--liquid-edge) inset;
 }
-
 
 /* ================================================================== settings: page list + one page at a time */
 .settings-sheet {
@@ -11478,38 +11388,6 @@ button.moment-card:hover {
   background: color-mix(in srgb, var(--success, #34c759) 18%, transparent);
   color: var(--success, #34c759);
 }
-.todo-sheet {
-  width: min(560px, calc(100vw - 32px));
-}
-.todo-count {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: var(--radius-full);
-  background: var(--accent-soft-2);
-  color: var(--accent);
-  font-size: var(--text-xs);
-  font-weight: 700;
-}
-.todo-add {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
-  border-radius: var(--radius-full);
-  background: var(--bg-input);
-  border: 1px solid var(--glass-border);
-  color: var(--text-tertiary);
-  margin-bottom: 14px;
-}
-.todo-add-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font: inherit;
-  color: var(--text-primary);
-}
 .todo-add-when {
   position: relative;
   display: inline-flex;
@@ -11526,138 +11404,6 @@ button.moment-card:hover {
 }
 .todo-picker-anchor .schedule-picker {
   position: static;
-}
-.todo-group + .todo-group {
-  margin-top: 14px;
-}
-.todo-group-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0 4px 6px;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-.todo-group.overdue .todo-group-title {
-  color: var(--danger);
-}
-.todo-group-toggle {
-  margin-top: 14px;
-  background: none;
-  border: 0;
-  padding: 6px 4px;
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-.todo-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 8px;
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast) ease;
-}
-.todo-row:hover {
-  background: var(--bg-selected);
-}
-.todo-row.done .todo-title {
-  text-decoration: line-through;
-  color: var(--text-tertiary);
-}
-.todo-check {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-top: 1px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--text-tertiary);
-  background: transparent;
-  color: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) ease,
-    border-color var(--duration-fast) ease,
-    transform var(--duration-fast) var(--ease-spring);
-}
-.todo-check:hover {
-  border-color: var(--accent);
-  transform: scale(1.08);
-}
-.todo-check.on {
-  background: var(--success, #34c759);
-  border-color: var(--success, #34c759);
-  color: white;
-}
-.todo-text {
-  flex: 1;
-  min-width: 0;
-}
-.todo-title {
-  font-size: var(--text-md);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-.todo-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 3px;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.todo-chat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.todo-chat:hover {
-  color: var(--accent);
-}
-.todo-due {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.todo-due.late {
-  color: var(--danger);
-  font-weight: 600;
-}
-.todo-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--duration-fast) ease;
-}
-.todo-row:hover .todo-actions,
-.todo-row:focus-within .todo-actions {
-  opacity: 1;
-}
-.todo-actions .icon-btn.small {
-  width: 26px;
-  height: 26px;
-  color: var(--text-tertiary);
-}
-.todo-actions .icon-btn.small.danger:hover {
-  color: var(--danger);
 }
 .bubble-actions .todo-picker-anchor {
   bottom: 30px;
@@ -11706,20 +11452,6 @@ button.moment-card:hover {
   gap: 6px;
   padding: 6px 12px;
   font-size: var(--text-xs);
-}
-.sticker-cutout {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.sticker-cutout input {
-  accent-color: var(--accent);
-}
-.sticker-cutout-note {
-  color: var(--text-tertiary);
 }
 .sticker-empty {
   padding: 18px 16px;
@@ -12642,208 +12374,6 @@ button.moment-card:hover {
   color: var(--text-secondary);
 }
 
-/* ================================================================== to-dos, second pass */
-.todo-sheet .sheet-body {
-  padding-top: 4px;
-}
-.todo-add {
-  display: block;
-  padding: 4px 6px 4px 12px;
-  border-radius: 18px;
-}
-.todo-add.typing {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.todo-add-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-}
-.todo-add-go {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--accent-gradient);
-  color: var(--on-accent);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.todo-quick {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.todo-add .todo-quick {
-  padding: 2px 0 8px 24px;
-}
-.todo-add-hint {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-.todo-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--bg-selected);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease,
-    transform var(--duration-fast) var(--ease-spring);
-}
-.todo-chip:hover {
-  color: var(--accent);
-  background: var(--accent-soft-2);
-  transform: translateY(-1px);
-}
-.todo-chip.action {
-  color: var(--accent);
-  background: var(--accent-soft-2);
-}
-.todo-chip.chat {
-  padding-left: 4px;
-}
-.todo-chip.due.late {
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-.todo-chip.due.today {
-  color: var(--accent);
-  background: var(--accent-soft-2);
-}
-.todo-group-count {
-  margin-left: 4px;
-  opacity: 0.7;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.todo-group + .todo-group {
-  margin-top: 10px;
-}
-.todo-group-title {
-  margin: 0 4px 2px;
-}
-.todo-row {
-  padding: 8px 8px 8px 6px;
-  gap: 10px;
-}
-.todo-row.late {
-  box-shadow: inset 3px 0 0 var(--danger);
-  border-radius: var(--radius-md);
-}
-.todo-title {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: none;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--text-primary);
-  overflow-wrap: anywhere;
-  cursor: text;
-}
-.todo-title-edit {
-  width: 100%;
-  border: 0;
-  border-bottom: 2px solid var(--accent);
-  background: transparent;
-  outline: none;
-  font: inherit;
-  font-size: var(--text-md);
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--text-primary);
-  padding: 0 0 1px;
-}
-.todo-meta {
-  gap: 6px;
-  margin-top: 5px;
-}
-.todo-snooze {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-.todo-row:hover .todo-snooze,
-.todo-row:focus-within .todo-snooze {
-  display: flex;
-}
-.todo-snooze-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-.todo-done-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 4px 0 2px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-.todo-done-toggle:hover {
-  background: var(--bg-selected);
-  color: var(--text-secondary);
-}
-.todo-clear {
-  margin: 4px 8px 0;
-  font-size: var(--text-xs);
-}
-.todo-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 6px;
-  padding: 28px 24px 20px;
-  color: var(--text-secondary);
-}
-.todo-empty-title {
-  margin-top: 8px;
-  font-family: var(--font-display);
-  font-weight: 800;
-  color: var(--text-primary);
-}
-.todo-empty-hint {
-  font-size: var(--text-sm);
-  max-width: 320px;
-  line-height: 1.45;
-}
-.todo-title:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
 /* ================================================================== bubble width, second pass
    The hover actions used to sit inside the row even while invisible, so every bubble lost ~200px
    to buttons nobody could see. They now float beside the bubble; the body keeps just enough
@@ -13422,18 +12952,35 @@ button.moment-card:hover {
   }
 }
 
-
-
-/* Decorative loops (the drifting backdrop, the buddies blinking and bobbing, the floating logos) rest while
+/* Decorative loops (the drifting backdrop, the buddies blinking and bobbing) rest while
    the window is in the background: nobody is watching them and they cost CPU and GPU all day (App.tsx sets
    window-idle). Loaders and typing dots keep going, they say something. */
 :root.window-idle .mesh-blob,
 :root.window-idle .buddy-eyes,
 :root.window-idle .buddy-pupils,
 :root.window-idle .buddy-body,
-:root.window-idle .buddy-pink,
-:root.window-idle .welcome-logos .platform-icon {
+:root.window-idle .buddy-pink {
   animation-play-state: paused;
+}
+
+/* While the window is hidden (minimised or covered: document.hidden, not merely unfocused, so clicking into another window
+   never flips the look) the four panes stop blurring, which is redrawn with everything under it. The glass ones take the solid colours
+   "reduce transparency" uses, so the panes do not turn see-through where the blur used to be. Mono and Pals panes are already opaque. */
+:root.window-hidden :is(.sidebar, .list-col, .chat-col, .details-col) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+:root.window-hidden:not([data-style='mono']):not([data-style='pals']) :is(.list-col, .details-col) {
+  background: #f8f9fc;
+}
+:root.window-hidden:not([data-style='mono']):not([data-style='pals']) .chat-col {
+  background: #ffffff;
+}
+:root.window-hidden[data-theme='dark']:not([data-style='mono']):not([data-style='pals']) :is(.list-col, .details-col) {
+  background: var(--bg-sidebar-solid);
+}
+:root.window-hidden[data-theme='dark']:not([data-style='mono']):not([data-style='pals']) .chat-col {
+  background: color-mix(in srgb, var(--bg-sidebar-solid) 90%, white 6%);
 }
 
 /* Windows "Transparency effects" off / macOS "Reduce transparency": every glass surface (both styles) turns

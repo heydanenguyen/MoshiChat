@@ -3,6 +3,7 @@ import type { Message } from '../src/shared/types'
 import { formatBytes, gradientFor, initials, sectionize } from '../src/renderer/src/utils'
 import { translate } from '../src/renderer/src/i18n'
 import { popoverShift } from '../src/renderer/src/popover'
+import { isFresh } from '../src/renderer/src/fresh'
 
 const msg = (id: string, sender: string, sentAt: number, isOutgoing = false): Message => ({
   id,
@@ -158,5 +159,18 @@ describe('popoverShift', () => {
   })
   it('hugs the left edge when the popover is wider than the panel', () => {
     expect(popoverShift({ left: 300, right: 1200 }, { left: 400, right: 700 })).toBe(108)
+  })
+})
+
+describe('isFresh', () => {
+  it('is true for a message that just arrived and false once it is a few seconds old', () => {
+    expect(isFresh(10_000, 10_000)).toBe(true)
+    expect(isFresh(10_000, 12_999)).toBe(true)
+    expect(isFresh(10_000, 13_000)).toBe(false)
+    expect(isFresh(0, 60_000)).toBe(false)
+  })
+
+  it('treats a timestamp slightly ahead of this clock as fresh', () => {
+    expect(isFresh(10_500, 10_000)).toBe(true)
   })
 })

@@ -22,6 +22,7 @@ import { ReactionGrid, ReactionPill } from './ReactionPill'
 import { imageSrc, mediaSrc, previewSrc } from '@shared/media'
 import { useAccountLabels } from '../accountLabels'
 import { estimateRun } from '../rowEstimate'
+import { isFresh } from '../fresh'
 import { giphyIdOf } from '@shared/giphy'
 import { rememberGiphySticker } from '../giphyStickers'
 import { ZALO_ALL, ZALO_QUICK } from '@shared/reactions'
@@ -147,7 +148,10 @@ function EmptyPane({ pane, active }: { pane: PaneIndex; active: boolean }): JSX.
   )
 }
 
-function Thread({ conversation, pane, split, active }: { conversation: Conversation; pane: PaneIndex; split: boolean; active: boolean }): JSX.Element {
+/** Re-renders for its own chat, not whenever the list around it changes (the props are a chat, a pane and two flags). */
+const Thread = memo(ThreadPane)
+
+function ThreadPane({ conversation, pane, split, active }: { conversation: Conversation; pane: PaneIndex; split: boolean; active: boolean }): JSX.Element {
   const t = useT()
   const activatePane = useStore((s) => s.activatePane)
   const closePane = useStore((s) => s.closePane)
@@ -196,6 +200,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
   useEffect(() => {
     for (const id of memberKey?.split('\n') ?? []) void prefetch(id, false)
   }, [memberKey, prefetch])
+  const platformOf = useCallback((m: Message): Platform => memberOf(m).platform, [memberOf])
   const featuresOf = useCallback(
     (m: Message): Account['features'] => accounts[memberOf(m).accountId]?.features ?? NO_FEATURES,
     [accounts, memberOf]
@@ -505,7 +510,7 @@ function Thread({ conversation, pane, split, active }: { conversation: Conversat
                       conversation={conversation}
                       features={features}
                       featuresOf={members ? featuresOf : undefined}
-                      platformOf={members ? (m) => memberOf(m).platform : undefined}
+                      platformOf={members ? platformOf : undefined}
                       lastOutgoingId={lastOutgoing?.id}
                       highlightId={highlightId}
                       language={language}
@@ -710,7 +715,10 @@ export function ReconnectBanner({ accountId, status, reason, label }: { accountI
   )
 }
 
-function Group({
+/** A sender's run of messages: redrawn when the run, or how it is shown, changes (not on every scroll of the list). */
+const Group = memo(GroupView)
+
+function GroupView({
   group,
   conversation,
   features: chatFeatures,
@@ -735,6 +743,8 @@ function Group({
   // A group never mixes apps (sectionize splits them), so its first message speaks for it.
   const features = featuresOf?.(group.messages[0]) ?? chatFeatures
   const platform = platformOf?.(group.messages[0]) ?? conversation.platform
+  // Kept per run so a memoised album sees the same messages until the run changes.
+  const items = useMemo(() => groupItems(group.messages), [group.messages])
   if (group.system) return <SystemRow message={group.messages[0]} platform={platform} />
   return (
     <div className={`msg-group ${group.isOutgoing ? 'out' : 'in'}`}>
@@ -745,7 +755,7 @@ function Group({
       )}
       <div className="msg-group-body">
         {showSender && <div className="msg-sender">{group.senderName}</div>}
-        {groupItems(group.messages).map((item, index, items) => {
+        {items.map((item, index) => {
           const position = items.length === 1 ? 'single' : index === 0 ? 'first' : index === items.length - 1 ? 'last' : 'middle'
           if (item.type === 'album') {
             const reacted = item.messages.flatMap((m) => m.reactions)
@@ -846,9 +856,23 @@ function groupItems(messages: Message[]): GroupItem[] {
   return items.map((item) => (item.type === 'album' && item.messages.length === 1 ? { type: 'one', message: item.messages[0] } : item))
 }
 
-function Album({ messages, outgoing, highlightId, language }: { messages: Message[]; outgoing: boolean; highlightId?: string; language: 'vi' | 'en' }): JSX.Element {
+const Album = memo(AlbumView)
+
+function AlbumView({
+  messages,
+  outgoing,
+  highlightId,
+  language
+}: {
+  messages: Message[]
+  outgoing: boolean
+  highlightId?: string
+  language: 'vi' | 'en'
+}): JSX.Element {
+  const [fresh] = useState(() => isFresh(messages[messages.length - 1].sentAt))
+  const highlighted = messages.some((m) => m.id === highlightId)
   return (
-    <div className={`bubble-row album-row ${messages.some((m) => m.id === highlightId) ? 'highlight' : ''}`} data-message-id={messages[0].id}>
+    <div className={`bubble-row album-row ${fresh ? 'fresh' : ''} ${highlighted ? 'highlight' : ''}`} data-message-id={messages[0].id}>
       <MediaGrid conversationId={messages[0]?.conversationId} tiles={messages.map((m) => ({ id: m.id, messageId: m.id, attachment: m.attachments[0] }))} className={outgoing ? 'out' : 'in'} />
       <span className="bubble-time">{formatTime(messages[messages.length - 1].sentAt, language)}</span>
     </div>
@@ -947,30 +971,46 @@ function BubbleView({
   platform: Platform
 }): JSX.Element {
   const t = useT()
-  const setReplyTo = useStore((s) => s.setReplyTo)
-  const startForward = useStore((s) => s.startForward)
-  const react = useStore((s) => s.react)
-  const toggleSaved = useStore((s) => s.toggleSaved)
+  // The store's actions are stable functions: one shallow-compared pick instead of a subscription each.
+  const { setReplyTo, startForward, react, toggleSaved, showToast, unsend, rememberSticker } = useStore(
+    useShallow((s) => ({
+      setReplyTo: s.setReplyTo,
+      startForward: s.startForward,
+      react: s.react,
+      toggleSaved: s.toggleSaved,
+      showToast: s.showToast,
+      unsend: s.unsend,
+      rememberSticker: s.rememberSticker
+    }))
+  )
   const saved = useStore((s) => !!savedSetOf(s.settings.savedMessages)?.has(`${message.conversationId}|${message.id}`))
+  // Slides in only when it is new, not each time scrolling remounts its row (decided once, at mount).
+  const [fresh] = useState(() => isFresh(message.sentAt))
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
   // The bar's "…": everything but reacting and replying, in a menu (like Instagram), so the bar stays short.
   const [moreOpen, setMoreOpen] = useState(false)
-  const translate = useAi((s) => s.translate)
-  const translated = useAi((s) => !!s.results[`t:${textKey(message)}`]?.text && !s.results[`t:${textKey(message)}`]?.hidden)
-  const speak = useAi((s) => s.speak)
-  const speaking = useAi((s) => s.speaking === textKey(message))
-  const showToast = useStore((s) => s.showToast)
-  const unsend = useStore((s) => s.unsend)
+  const { translate, speak, translated, speaking } = useAi(
+    useShallow((s) => ({
+      translate: s.translate,
+      speak: s.speak,
+      translated: !!s.results[`t:${textKey(message)}`]?.text && !s.results[`t:${textKey(message)}`]?.hidden,
+      speaking: s.speaking === textKey(message)
+    }))
+  )
   const [confirmUnsend, setConfirmUnsend] = useState(false)
-  // Small labels on the bar's buttons (Settings > Chat > Message actions); on by default.
-  const tips = useStore((s) => s.settings.actionLabels !== false)
-  // Where reactions sit (Settings > Chat): the lower edge (default), the top corner, a row below, or beside the end.
-  const placement = useStore((s) => s.settings.reactionPlacement ?? 'overlap')
-  const todosOn = useStore((s) => s.settings.todosOn !== false)
-  // Which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
-  const bubbleActions = useStore((s) => s.settings.bubbleActions)
+  // tips: small labels on the bar's buttons (Settings > Chat > Message actions); on by default.
+  // placement: where reactions sit (Settings > Chat): the lower edge (default), the top corner, a row below, or beside the end.
+  // bubbleActions: which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
+  const { tips, placement, todosOn, bubbleActions } = useStore(
+    useShallow((s) => ({
+      tips: s.settings.actionLabels !== false,
+      placement: s.settings.reactionPlacement ?? 'overlap',
+      todosOn: s.settings.todosOn !== false,
+      bubbleActions: s.settings.bubbleActions
+    }))
+  )
   const wants = (action: BubbleAction): boolean => bubbleActions?.[action] !== false
   // Keep the full emoji sheet inside the chat column, whichever side the bubble is on.
   const fitInChat = useCallback((anchor: HTMLSpanElement | null) => {
@@ -1015,7 +1055,6 @@ function BubbleView({
   const customStickers = useStore((s) => s.customStickers)
   const customUrl = (id: string): string | undefined => customStickers.find((c) => c.id === id)?.url
   // An older sticker the platform gave back as a photo: find out which one it is, once, and remember it.
-  const rememberSticker = useStore((s) => s.rememberSticker)
   const unknownSticker = sticker && !sticker.sticker && message.isOutgoing ? sticker.url : undefined
   useEffect(() => {
     if (!unknownSticker) return
@@ -1069,7 +1108,7 @@ function BubbleView({
   // Taken back: only a faint line where it was, like Messenger and Zalo show it.
   if (message.unsent) {
     return (
-      <div className="bubble-row" data-message-id={message.id}>
+      <div className={`bubble-row ${fresh ? 'fresh' : ''}`} data-message-id={message.id}>
         <div className="bubble-stack">
           <div className={`bubble ${direction} ${position} unsent`}>
             <Undo2 size={13} strokeWidth={2.2} aria-hidden />
@@ -1137,7 +1176,10 @@ function BubbleView({
     ) : null
 
   return (
-    <div className={`bubble-row ${highlighted ? 'highlight' : ''} ${reactionSlot && placement === 'top' ? 'react-top' : ''}`} data-message-id={message.id}>
+    <div
+      className={`bubble-row ${fresh ? 'fresh' : ''} ${highlighted ? 'highlight' : ''} ${reactionSlot && placement === 'top' ? 'react-top' : ''}`}
+      data-message-id={message.id}
+    >
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (

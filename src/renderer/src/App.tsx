@@ -232,6 +232,8 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const apply = (): void => {
       document.documentElement.classList.toggle('window-idle', document.hidden || !document.hasFocus())
+      // Hidden only (not just unfocused): the panes swap blur for solid colour then, which must not flip on every alt-tab.
+      document.documentElement.classList.toggle('window-hidden', document.hidden)
     }
     apply()
     window.addEventListener('focus', apply)
@@ -350,18 +352,50 @@ export default function App(): JSX.Element {
       e.preventDefault()
     }
     let last = 0
-    const onWheel = (e: WheelEvent): void => {
-      if (!e.ctrlKey) return
-      e.preventDefault()
+    const zoomWheel = (e: WheelEvent): void => {
       if (Date.now() - last < 180) return
       last = Date.now()
       zoomBy(e.deltaY < 0 ? 1 : -1)
     }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('wheel', onWheel, { passive: false })
-    return () => {
-      window.removeEventListener('keydown', onKey)
+    // Non-passive (it cancels the default), so it blocks every scroll tick: only attached while Ctrl is held.
+    let armed = false
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      zoomWheel(e)
+    }
+    // A touchpad pinch is a ctrl+wheel with no key held; this passive listener keeps it zooming without ever delaying a scroll.
+    const onPinch = (e: WheelEvent): void => {
+      if (!armed && e.ctrlKey) zoomWheel(e)
+    }
+    const arm = (): void => {
+      if (armed) return
+      armed = true
+      window.addEventListener('wheel', onWheel, { passive: false })
+    }
+    const disarm = (): void => {
+      if (!armed) return
+      armed = false
       window.removeEventListener('wheel', onWheel)
+    }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.ctrlKey) arm()
+    }
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey) disarm()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', disarm)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onPinch, { passive: true })
+    return () => {
+      disarm()
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', disarm)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onPinch)
     }
   }, [])
 

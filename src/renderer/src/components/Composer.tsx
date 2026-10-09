@@ -171,20 +171,29 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     focusInput()
   }
 
+  // The box grows with its text in CSS (field-sizing), so typing needs no height writes and no layout reads here.
+  // More than one line: the text takes the whole width and the tools move to a row underneath. It goes back only
+  // once the text is shorter than when it moved, so the layout never flips back and forth while typing.
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-    // Windows draws a classic scrollbar for any overflow, even a rounding pixel; only scroll once the box is at its max height.
-    el.style.overflowY = el.scrollHeight > 160 ? 'auto' : 'hidden'
-    // More than one line: the text takes the whole width and the tools move to a row underneath. It goes back only
-    // once the text is shorter than when it moved, so the layout never flips back and forth while typing.
-    if (!tall && (el.scrollHeight > 46 || text.includes('\n'))) {
+    if (!tall && text.includes('\n')) {
       tallAt.current = text.length
       setTall(true)
     } else if (tall && text.length < tallAt.current && !text.includes('\n')) setTall(false)
   }, [text, tall])
+  // A line that wraps is only known once the box is laid out: the observer reads its height then (after layout, so no
+  // forced reflow). It also looks again when the box comes back (a voice note ended) or the layout un-flips.
+  const isRecording = !!recording
+  useEffect(() => {
+    const el = ref.current
+    if (!el || tall) return
+    const observer = new ResizeObserver(() => {
+      if (el.scrollHeight <= 46) return
+      tallAt.current = el.value.length
+      setTall(true)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [tall, isRecording])
 
   useEffect(() => {
     if (!recording) return

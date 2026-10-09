@@ -97,7 +97,7 @@
 }
 
 /* ---- type: a tight grotesk for everything that names a place; messages keep the reading face */
-:root[data-style='mono'] :is(.brand-word, .list-title, .empty-title, .welcome-title, .sheet-title, .settings-page-title, .settings-nav-title, .pane-empty-title, .todo-empty-title, .tz-title, .chat-header-name, .details-name) {
+:root[data-style='mono'] :is(.brand-word, .list-title, .empty-title, .welcome-title, .sheet-title, .settings-page-title, .settings-nav-title, .pane-empty-title, .tz-title, .chat-header-name, .details-name) {
   font-family: var(--font-pop);
   font-weight: 600;
   letter-spacing: -0.035em;
@@ -114,7 +114,7 @@
   font-size: 21px;
 }
 /* labels: sentence case, small and grey, never tracked capitals */
-:root[data-style='mono'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .todo-group-title, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
+:root[data-style='mono'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
   font-family: var(--font-pop);
   text-transform: none;
   letter-spacing: -0.005em;

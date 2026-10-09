@@ -42,18 +42,18 @@
 }
 :root[data-style='liquid'] .list-col {
   background: rgba(255, 255, 255, 0.7);
-  -webkit-backdrop-filter: blur(32px) saturate(160%);
-  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
 }
 :root[data-style='liquid'] .details-col {
   background: rgba(255, 255, 255, 0.56);
-  -webkit-backdrop-filter: blur(38px) saturate(170%);
-  backdrop-filter: blur(38px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
 }
 :root[data-style='liquid'] .sidebar {
   background: rgba(255, 255, 255, 0.34);
-  -webkit-backdrop-filter: blur(46px) saturate(180%);
-  backdrop-filter: blur(46px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
 }
 
 /* where you are: a white card lifted off the glass with a hairline in the tone */

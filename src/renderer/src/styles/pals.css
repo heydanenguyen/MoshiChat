@@ -93,8 +93,7 @@
 :root[data-style='pals'] .welcome-title,
 :root[data-style='pals'] .sheet-title,
 :root[data-style='pals'] .settings-page-title,
-:root[data-style='pals'] .pane-empty-title,
-:root[data-style='pals'] .todo-empty-title {
+:root[data-style='pals'] .pane-empty-title {
   font-family: var(--font-pop);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -436,7 +435,7 @@
 }
 
 /* labels: sentence case in the display face instead of tracked capitals */
-:root[data-style='pals'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .todo-group-title, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
+:root[data-style='pals'] :is(.fold-toggle, .sidebar-section-title, .conv-group-label, .details-section-title, .details-card-title, .settings-group-label, .command-section, .moments-month-label, .summary-head, .quick-menu-head, .reaction-grid-title, .context-menu-title, .stat-label, .color-field-label) {
   text-transform: none;
   letter-spacing: -0.01em;
   font-family: var(--font-pop);

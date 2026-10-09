@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import type { CustomSticker, StickerSource } from '@shared/bridge'
 import { shareSettings } from '@shared/settings-share'
 import type { SettingsPage } from './components/SettingsSheet'
@@ -317,6 +318,7 @@ interface State {
 /** What the platforms return for a search inside one chat (manager SEARCH_LIMIT). */
 const IN_CHAT_RESULTS = 60
 let toastCounter = 0
+let unsubscribeEvents: (() => void) | undefined
 let sendCounter = 0
 let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -504,7 +506,9 @@ export const useStore = create<State>((set, get) => ({
     set({ layout, selectedId: activeId(layout), recent: openIds(layout) })
     for (const id of openIds(layout)) void get().prefetch(id, true)
 
-    bridge.onEvent((event: BridgeEvent) => {
+    // StrictMode runs init() twice in dev: drop the previous subscription so each event is handled once.
+    unsubscribeEvents?.()
+    unsubscribeEvents = bridge.onEvent((event: BridgeEvent) => {
       const state = get()
       switch (event.type) {
         case 'app:notice':
@@ -1669,6 +1673,17 @@ export function anchorFor(state: PeopleState, conversationId: string): string {
 
 let foldCache: { conversations?: Record<string, Conversation>; people?: Record<string, Person>; folded: Record<string, Conversation> } = { folded: {} }
 
+/** A merged person's chat, kept while the person and its member chats are the same objects (the open thread keeps its `conversation`). */
+const mergedCache = new WeakMap<Person, { members: Conversation[]; merged: Conversation }>()
+
+function mergedFor(person: Person, members: Conversation[]): Conversation {
+  const cached = mergedCache.get(person)
+  if (cached && cached.members.length === members.length && cached.members.every((m, i) => m === members[i])) return cached.merged
+  const merged = mergeConversation(person, members)
+  mergedCache.set(person, { members, merged })
+  return merged
+}
+
 /** The chats as the app shows them: a merged person as one chat under the anchor's id, the others folded in. */
 export function foldPeople(conversations: Record<string, Conversation>, people: Record<string, Person> | undefined): Record<string, Conversation> {
   if (foldCache.conversations === conversations && foldCache.people === people) return foldCache.folded
@@ -1678,7 +1693,7 @@ export function foldPeople(conversations: Record<string, Conversation>, people: 
     if (members.length < 2) continue
     if (folded === conversations) folded = { ...conversations }
     for (const member of members.slice(1)) delete folded[member.id]
-    folded[members[0].id] = mergeConversation(person, members)
+    folded[members[0].id] = mergedFor(person, members)
   }
   foldCache = { conversations, people, folded }
   return folded
@@ -1712,18 +1727,21 @@ export function threadOf(state: Pick<State, 'settings' | 'conversations' | 'mess
   return { messages: merged.messages, hasMore: merged.hasMore, loading }
 }
 
+/** The chats a thread reads: its person's member chats, or just itself. */
+function useThreadIds(conversationId: string): string[] {
+  return useStore(useShallow((s) => personFor(s, conversationId)?.members ?? [conversationId]))
+}
+
 export function useThread(conversationId: string): ThreadView {
-  const merged = useStore((s) => !!personFor(s, conversationId))
-  // A plain chat listens to its own messages only; a merged one to all of them (rarely more than one open).
-  const messages = useStore((s) => (merged ? s.messages : s.messages[conversationId]))
-  const hasMore = useStore((s) => (merged ? s.hasMore : s.hasMore[conversationId]))
-  const loading = useStore((s) => (merged ? s.loading : s.loading[conversationId]))
-  const settings = useStore((s) => s.settings)
-  const conversations = useStore((s) => s.conversations)
+  // Only what the thread reads: its own chats' messages and flags (not every chat in the app), so a message elsewhere leaves it alone.
+  const ids = useThreadIds(conversationId)
+  const messages = useStore(useShallow((s) => ids.map((id) => s.messages[id])))
+  const hasMore = useStore(useShallow((s) => ids.map((id) => !!s.hasMore[id])))
+  const loading = useStore(useShallow((s) => ids.map((id) => !!s.loading[id])))
   return useMemo(
     () => threadOf(useStore.getState(), conversationId),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the slices above are what the thread reads
-    [conversationId, merged, messages, hasMore, loading, settings.people, conversations]
+    [conversationId, ids, messages, hasMore, loading]
   )
 }
 
@@ -1752,16 +1770,27 @@ export function sendViaOf(state: Pick<State, 'settings' | 'conversations' | 'mes
 }
 
 export function useSendVia(conversationId: string): string {
-  const merged = useStore((s) => !!personFor(s, conversationId))
-  const messages = useStore((s) => (merged ? s.messages : undefined))
+  const ids = useThreadIds(conversationId)
+  const merged = ids.length > 1
+  // A plain chat writes to itself; a merged one reads its members' messages and last incoming previews.
+  const messages = useStore(useShallow((s) => (merged ? ids.map((id) => s.messages[id]) : [])))
+  const previews = useStore(
+    useShallow((s) =>
+      merged
+        ? ids.map((id) => {
+            const last = s.conversations[id]?.lastMessage
+            return last && !last.isOutgoing ? last.sentAt : 0
+          })
+        : []
+    )
+  )
   const picks = useStore((s) => s.sendPicks[conversationId])
   const replyTo = useStore((s) => s.replyTos[conversationId])
-  const conversations = useStore((s) => s.conversations)
   const people = useStore((s) => s.settings.people)
   return useMemo(
     () => sendViaOf(useStore.getState(), conversationId),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the slices above are what the choice reads
-    [conversationId, merged, messages, picks, replyTo, conversations, people]
+    [conversationId, ids, messages, previews, picks, replyTo, people]
   )
 }
 
@@ -2155,17 +2184,41 @@ export interface UnreadCounts {
 }
 
 export function useUnreadCounts(): UnreadCounts {
-  const conversations = useStore((s) => s.conversations)
-  const tags = useStore((s) => s.settings.tags)
-  const muted = useStore((s) => s.settings.muted)
-  const markedUnread = useStore((s) => s.settings.markedUnread)
-  const mentionsOnly = useStore((s) => s.settings.mentionsOnly)
-  const accepted = useStore((s) => s.settings.acceptedRequests)
-  const people = useStore((s) => s.settings.people)
-  return useMemo(
-    () => computeUnread(conversations, tags, muted, markedUnread, mentionsOnly, accepted, people),
-    [conversations, tags, muted, markedUnread, mentionsOnly, accepted, people]
+  // unreadCounts hands back the same object while the counts hold, so a message in a muted chat re-renders nobody.
+  return useStore((s) =>
+    unreadCounts(
+      s.conversations,
+      s.settings.tags,
+      s.settings.muted,
+      s.settings.markedUnread,
+      s.settings.mentionsOnly,
+      s.settings.acceptedRequests,
+      s.settings.people
+    )
   )
+}
+
+let unreadCache: { args: unknown[]; counts: UnreadCounts } | undefined
+
+const sameRecord = (a: Record<string, number>, b: Record<string, number>): boolean => {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
+}
+
+/** computeUnread, kept for the last inputs: the sidebar, the title bar and the badge all ask on every change, so the walk runs once. */
+export function unreadCounts(...args: Parameters<typeof computeUnread>): UnreadCounts {
+  if (unreadCache && unreadCache.args.length === args.length && unreadCache.args.every((arg, i) => arg === args[i])) return unreadCache.counts
+  const fresh = computeUnread(...args)
+  const last = unreadCache?.counts
+  const same =
+    !!last &&
+    last.total === fresh.total &&
+    sameRecord(last.byPlatform, fresh.byPlatform) &&
+    sameRecord(last.byAccount, fresh.byAccount) &&
+    sameRecord(last.byTag, fresh.byTag)
+  const counts = same ? last : fresh
+  unreadCache = { args, counts }
+  return counts
 }
 
 function computeUnread(

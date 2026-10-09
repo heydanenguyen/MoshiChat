@@ -67,7 +67,7 @@
   --glass: rgba(255, 255, 255, 0.64);
   --glass-strong: rgba(255, 255, 255, 0.82);
   --glass-border: rgba(255, 255, 255, 0.75);
-  --glass-blur: 28px;
+  --glass-blur: 24px;
 
   --bg-window: #f3f4fa;
   --bg-sidebar: transparent;
