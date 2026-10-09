@@ -25,6 +25,23 @@ interface StoreShape {
   settings: Settings
 }
 
+/** Windows file-lock errors worth a short retry. */
+const LOCKED = new Set(['EPERM', 'EBUSY', 'EACCES'])
+
+const errorCode = (err: unknown): string | undefined => (err as NodeJS.ErrnoException | undefined)?.code
+
+/** Windows: antivirus or the indexer may hold the file for a moment, so a locked-file error gets a few tries, 100 ms apart. */
+async function retryLocked<T>(op: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await op()
+    } catch (err) {
+      if (attempt >= 3 || !LOCKED.has(errorCode(err) ?? '')) throw err
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+}
+
 const EMPTY: StoreShape = { version: 1, accounts: [], settings: DEFAULT_SETTINGS }
 
 /**
@@ -46,37 +63,96 @@ export class Storage {
   private writing: Promise<void> = Promise.resolve()
   private listeners: SettingsListener[] = []
 
+  /** How the last load() went: untouched, rebuilt from the backup, or (the file was unusable) started empty. */
+  recovered: 'none' | 'backup' | 'empty' = 'none'
+  /** unison.json is still on disk but could not be trusted (set-aside failed): the next save must not copy it over the good .bak. */
+  private fileUntrusted = false
+
   async load(): Promise<void> {
+    this.recovered = 'none'
+    let raw: string
     try {
-      const raw = await fs.readFile(this.file, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<StoreShape>
-      this.data = {
-        version: 1,
-        accounts: parsed.accounts ?? [],
-        settings: {
-          ...DEFAULT_SETTINGS,
-          language: systemLanguage(),
-          ...(parsed.settings ?? {}),
-          // Weather became opt-in: installs from before the switch keep it while their greetings are on.
-          weather: parsed.settings?.weather ?? parsed.settings?.greetings !== false,
-          muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) }
-        }
+      raw = await retryLocked(() => fs.readFile(this.file, 'utf8'))
+    } catch (err) {
+      if (errorCode(err) === 'ENOENT') return this.startEmpty()
+      return this.recover(err)
+    }
+    try {
+      this.data = this.parse(raw)
+    } catch (err) {
+      await this.recover(err)
+    }
+  }
+
+  private startEmpty(): void {
+    this.data = structuredClone(EMPTY)
+    this.data.settings.language = systemLanguage()
+  }
+
+  private parse(raw: string): StoreShape {
+    const parsed = JSON.parse(raw) as Partial<StoreShape>
+    return {
+      version: 1,
+      accounts: parsed.accounts ?? [],
+      settings: {
+        ...DEFAULT_SETTINGS,
+        language: systemLanguage(),
+        ...(parsed.settings ?? {}),
+        // Weather became opt-in: installs from before the switch keep it while their greetings are on.
+        weather: parsed.settings?.weather ?? parsed.settings?.greetings !== false,
+        muted: { ...DEFAULT_SETTINGS.muted, ...(parsed.settings?.muted ?? {}) }
       }
+    }
+  }
+
+  /** The store could not be read: keep the broken file for inspection (the next save must not overwrite it), then fall back to the backup. */
+  private async recover(err: unknown): Promise<void> {
+    console.error('[storage] unison.json is unreadable, setting it aside', err)
+    const aside = `${this.file}.corrupt-${new Date().toISOString().replace(/:/g, '-')}`
+    await fs.rename(this.file, aside).catch((e) => {
+      this.fileUntrusted = true
+      console.error('[storage] could not set the broken file aside', e)
+    })
+    try {
+      this.data = this.parse(await fs.readFile(this.file + '.bak', 'utf8'))
+      this.recovered = 'backup'
     } catch {
-      this.data = structuredClone(EMPTY)
-      this.data.settings.language = systemLanguage()
+      this.startEmpty()
+      this.recovered = 'empty'
     }
   }
 
   private persist(): Promise<void> {
     // Compact: written whole on every change (settings, accounts), so no indentation to write and parse.
     const snapshot = JSON.stringify(this.data)
-    this.writing = this.writing.then(async () => {
-      const tmp = this.file + '.tmp'
+    // A failed write rejects only its own caller; later writes carry the whole current data, so they still run.
+    const run = this.writing.catch(() => undefined).then(() => this.write(snapshot))
+    this.writing = run
+    return run
+  }
+
+  private async write(snapshot: string): Promise<void> {
+    const tmp = this.file + '.tmp'
+    try {
       await fs.writeFile(tmp, snapshot, 'utf8')
-      await fs.rename(tmp, this.file)
-    })
-    return this.writing
+      // Best effort: the previous good store stays as .bak for load() to fall back on.
+      if (!this.fileUntrusted) await fs.copyFile(this.file, this.file + '.bak').catch(() => undefined)
+      await retryLocked(() => fs.rename(tmp, this.file))
+      this.fileUntrusted = false
+    } catch (err) {
+      console.error('[storage] could not save unison.json', err)
+      await fs.rm(tmp, { force: true }).catch(() => undefined)
+      throw err
+    }
+  }
+
+  /** Resolves when every queued write has settled (failed ones included); for before-quit. */
+  async flush(): Promise<void> {
+    let last: Promise<void>
+    do {
+      last = this.writing
+      await last.catch(() => undefined)
+    } while (last !== this.writing)
   }
 
   get settings(): Settings {

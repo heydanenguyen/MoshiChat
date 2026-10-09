@@ -1,5 +1,5 @@
 import { mkdtempSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +10,12 @@ vi.mock('electron', () => ({
   app: { getPath: () => dir },
   powerMonitor: { on: () => undefined, getSystemIdleTime: () => 0 }
 }))
+
+// Real fs, but with rename watched: the lock file has to be written as tmp + rename.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...real, rename: vi.fn(real.rename) }
+})
 
 const { AppLock, validPasscode } = await import('../src/main/lock')
 type Storage = import('../src/main/storage').Storage
@@ -116,5 +122,45 @@ describe('AppLock', () => {
     expect(signOut).toHaveBeenCalledOnce()
     expect(store.settings.appLock).toBeUndefined()
     expect(lock.isLocked()).toBe(false)
+  })
+  it('an unreadable lock file (not just a missing one) keeps the lock on and takes no code', async () => {
+    const first = setup()
+    await first.lock.enable('2468')
+    const file = join(dir, 'lock.json')
+    await rm(file)
+    await mkdir(file) // reading a folder fails with EISDIR: some error other than ENOENT
+    try {
+      const next = setup(first.store.settings)
+      await next.lock.load()
+      expect(next.store.settings.appLock).toEqual({ length: 4, autoLock: 5 })
+      expect(next.lock.state()).toMatchObject({ enabled: true, locked: true })
+      expect((await next.lock.unlock('2468')).ok).toBe(false)
+      expect(next.lock.isLocked()).toBe(true)
+    } finally {
+      await rm(file, { recursive: true, force: true })
+    }
+  })
+
+  it('a lock file with no secret in it is damaged, not "no lock"', async () => {
+    const file = join(dir, 'lock.json')
+    await writeFile(file, '{}')
+    try {
+      const { lock, store } = setup({ appLock: { length: 4, autoLock: 5 } })
+      await lock.load()
+      expect(store.settings.appLock).toEqual({ length: 4, autoLock: 5 })
+      expect(lock.state()).toMatchObject({ enabled: true, locked: true })
+      expect((await lock.unlock('2468')).ok).toBe(false)
+    } finally {
+      await rm(file, { force: true })
+    }
+  })
+
+  it('writes the lock file as tmp + rename, leaving no tmp behind', async () => {
+    const { lock } = setup()
+    vi.mocked(rename).mockClear()
+    await lock.enable('2468')
+    expect(vi.mocked(rename)).toHaveBeenCalledWith(join(dir, 'lock.json.tmp'), join(dir, 'lock.json'))
+    expect((await readdir(dir)).filter((n) => n.endsWith('.tmp'))).toEqual([])
+    expect(JSON.parse(await readFile(join(dir, 'lock.json'), 'utf8')).hash).toMatch(/^[0-9a-f]{64}$/)
   })
 })

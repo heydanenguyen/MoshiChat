@@ -1,6 +1,6 @@
 import { app, powerMonitor } from 'electron'
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BridgeEvent, LockState } from '@shared/types'
 import type { Storage } from './storage'
@@ -22,6 +22,8 @@ export const validPasscode = (code: unknown): code is string => typeof code === 
  */
 export class AppLock {
   private secret: { salt: string; hash: string } | undefined
+  /** The lock file exists but could not be read (not just missing): stay locked and take no code rather than open up. */
+  private unreadable = false
   private locked = false
   /** Wrong codes and the wait they earned; kept in the lock file so quitting and reopening does not reset them. */
   private failures = 0
@@ -40,7 +42,7 @@ export class AppLock {
   }
 
   get enabled(): boolean {
-    return !!this.secret && !!this.storage.settings.appLock
+    return (!!this.secret || this.unreadable) && !!this.storage.settings.appLock
   }
 
   isLocked(): boolean {
@@ -61,12 +63,17 @@ export class AppLock {
     try {
       const raw = JSON.parse(await readFile(this.file, 'utf8')) as { salt?: string; hash?: string; failures?: number; blockedUntil?: number }
       if (raw.salt && raw.hash) this.secret = { salt: raw.salt, hash: raw.hash }
+      else this.unreadable = true // a file without a secret in it is damaged, not "no lock"
       this.failures = Math.max(0, Number(raw.failures) || 0)
       this.blockedUntil = Math.max(0, Number(raw.blockedUntil) || 0)
-    } catch {
-      /* no lock */
+    } catch (err) {
+      // Only a missing file means "no lock"; a busy or unreadable one must not drop the lock setting.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.unreadable = true
+        this.log('[lock] could not read the lock file', err)
+      }
     }
-    if (this.storage.settings.appLock && !this.secret) await this.storage.setSettings({ appLock: undefined })
+    if (this.storage.settings.appLock && !this.secret && !this.unreadable) await this.storage.setSettings({ appLock: undefined })
     if (!this.storage.settings.appLock && this.secret) await this.clearSecret()
     this.locked = this.enabled
   }
@@ -130,7 +137,10 @@ export class AppLock {
 
   private async saveFile(): Promise<void> {
     if (!this.secret) return
-    await writeFile(this.file, JSON.stringify({ ...this.secret, failures: this.failures, blockedUntil: this.blockedUntil }), { mode: 0o600 })
+    // tmp + rename: a crash mid-write must not leave a half-written secret (which would read as no lock).
+    const tmp = this.file + '.tmp'
+    await writeFile(tmp, JSON.stringify({ ...this.secret, failures: this.failures, blockedUntil: this.blockedUntil }), { mode: 0o600 })
+    await rename(tmp, this.file)
   }
 
   private async writeSecret(code: string): Promise<void> {
@@ -144,6 +154,7 @@ export class AppLock {
 
   private async clearSecret(): Promise<void> {
     this.secret = undefined
+    this.unreadable = false
     this.failures = 0
     this.blockedUntil = 0
     await rm(this.file, { force: true })
