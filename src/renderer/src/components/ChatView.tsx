@@ -40,6 +40,7 @@ import { useScrollFade } from '../scrollFade'
 import { Presence } from './Presence'
 import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
+import { nextPinned } from '../scrollPin'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -416,13 +417,21 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
     const up = (): void => {
       held = false
     }
+    let prevDistance = el.scrollHeight - el.scrollTop - el.clientHeight
     const onScroll = (): void => {
       rememberAnchor()
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-      if (nearBottom) {
-        stickToBottom.current = true
-        setUnseen((n) => (n ? 0 : n))
-      } else if (held || Date.now() - lastInput < 600) stickToBottom.current = false
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      // Scrolling up unpins at once: while the view stayed pinned inside the near-bottom band, every row that
+      // entered the view snapped it back to the bottom (the thread jittered and would not scroll up).
+      const pinned = nextPinned({
+        pinned: stickToBottom.current,
+        distanceFromBottom: distance,
+        prevDistanceFromBottom: prevDistance,
+        userInput: held || Date.now() - lastInput < 600
+      })
+      prevDistance = distance
+      if (pinned) setUnseen((n) => (n ? 0 : n))
+      stickToBottom.current = pinned
       if (el.scrollTop < 60 && hasMore && !loading) void loadMore(conversation.id)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
