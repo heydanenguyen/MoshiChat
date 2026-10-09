@@ -40,6 +40,7 @@ export function planChatSync(dirty: Iterable<string>, resetPending: boolean, max
  */
 export class WhatsAppAdapter implements PlatformAdapter {
   readonly account: Account
+  readonly selfReconnects = true as const
   private lib?: Baileys
   private sock?: WASocket
   private chats = new Map<string, Chat>()

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tmpdir } from 'os'
 
 vi.mock('electron', () => ({
@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
 
 import type { Account, BridgeEvent, Conversation, Message } from '../src/shared/types'
 import { ALL_FEATURES } from '../src/shared/types'
-import { AccountManager } from '../src/main/adapters/manager'
+import { AccountManager, isTransientConnectError } from '../src/main/adapters/manager'
 import type { AdapterContext, PlatformAdapter } from '../src/main/adapters/types'
 import type { Storage, StoredAccount } from '../src/main/storage'
 
@@ -187,5 +187,279 @@ describe('AccountManager', () => {
     const last = events.filter((e): e is Extract<BridgeEvent, { type: 'auth:prompt' }> => e.type === 'auth:prompt').at(-1)!
     manager.cancelAuth(last.prompt.requestId)
     await expect(rejected).rejects.toThrow('cancelled')
+  })
+})
+
+/** Fails its first `failures` connects the way real adapters do (status error, then throw). */
+class FlakyAdapter extends FakeAdapter {
+  calls = 0
+  failMessage = 'offline'
+  constructor(
+    id: string,
+    private readonly ectx: AdapterContext,
+    private failures: number
+  ) {
+    super(id, ectx)
+  }
+  async connect(): Promise<void> {
+    this.calls++
+    if (this.failures > 0) {
+      this.failures--
+      this.account.status = 'error'
+      this.account.error = this.failMessage
+      this.ectx.emit({ type: 'account:updated', account: { ...this.account } })
+      throw new Error(this.failMessage)
+    }
+    await super.connect()
+  }
+}
+
+describe('AccountManager resilience', () => {
+  const stored = (id: string): StoredAccount => ({ id, platform: 'telegram', displayName: id })
+  const make = (ids: string[], failures: number | ((id: string) => number), isOnline?: () => boolean) => {
+    const adapters = new Map<string, FlakyAdapter>()
+    const manager = new AccountManager(
+      fakeStorage(ids.map(stored)),
+      () => undefined,
+      () => undefined,
+      (s, ctx) => {
+        const adapter = new FlakyAdapter(s.id, ctx, typeof failures === 'number' ? failures : failures(s.id))
+        adapters.set(s.id, adapter)
+        return adapter
+      },
+      isOnline
+    )
+    return { manager, adapters }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0.5) // no jitter
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('retries a failed connect with growing back-off and stops once it connects', async () => {
+    const { manager, adapters } = make(['telegram:1'], 3)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    const a = adapters.get('telegram:1')!
+    expect(a.calls).toBe(1)
+    await vi.advanceTimersByTimeAsync(29_000)
+    expect(a.calls).toBe(1)
+    await vi.advanceTimersByTimeAsync(1_000) // 30 s
+    expect(a.calls).toBe(2)
+    await vi.advanceTimersByTimeAsync(59_000)
+    expect(a.calls).toBe(2)
+    await vi.advanceTimersByTimeAsync(1_000) // then 1 min
+    expect(a.calls).toBe(3)
+    await vi.advanceTimersByTimeAsync(119_000)
+    expect(a.calls).toBe(3)
+    await vi.advanceTimersByTimeAsync(1_000) // then 2 min: connects
+    expect(a.calls).toBe(4)
+    expect(manager.listAccounts()[0].status).toBe('connected')
+    await vi.advanceTimersByTimeAsync(20 * 60_000)
+    expect(a.calls).toBe(4)
+    await manager.shutdown()
+  })
+
+  it('stops retrying an account that is removed while it waits', async () => {
+    const { manager, adapters } = make(['telegram:1'], 5)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    await manager.remove('telegram:1')
+    await vi.advanceTimersByTimeAsync(20 * 60_000)
+    expect(adapters.get('telegram:1')!.calls).toBe(1)
+    expect(manager['retries'].size).toBe(0)
+    expect(manager['onlinePoll']).toBeUndefined()
+  })
+
+  it('runs one connect when reconnect is pressed twice at once', async () => {
+    const { manager, adapters } = make(['telegram:1'], 0)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(1_000)
+    const a = adapters.get('telegram:1')!
+    expect(a.calls).toBe(1)
+    await Promise.all([manager.reconnect('telegram:1'), manager.reconnect('telegram:1')])
+    expect(a.calls).toBe(2)
+    await manager.shutdown()
+  })
+
+  it('keeps an account whose saved sign-in cannot be read, asking to sign in again', async () => {
+    const storage = fakeStorage([{ ...stored('telegram:1'), secret: 'enc:garbage' }])
+    storage.readSecret = (() => {
+      throw new Error('decrypt failed')
+    }) as Storage['readSecret']
+    const manager = new AccountManager(storage, () => undefined, () => undefined)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    const [account] = manager.listAccounts()
+    expect(account).toMatchObject({ id: 'telegram:1', status: 'needs_auth', error: 'secrets-unreadable' })
+    await vi.advanceTimersByTimeAsync(20 * 60_000) // signed-out accounts are not retried
+    expect(manager['retries'].size).toBe(0)
+    await manager.remove('telegram:1')
+    expect(manager.listAccounts()).toEqual([])
+    expect(storage.accounts).toEqual([])
+  })
+
+  it('also keeps it when decrypting quietly returns nothing', async () => {
+    const storage = fakeStorage([{ ...stored('telegram:1'), secret: 'enc:garbage' }])
+    const manager = new AccountManager(storage, () => undefined, () => undefined)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(manager.listAccounts()[0]).toMatchObject({ status: 'needs_auth', error: 'secrets-unreadable' })
+    expect(manager['retries'].size).toBe(0)
+  })
+
+  it('leaves an account without a saved secret out, as before', async () => {
+    const manager = new AccountManager(fakeStorage([stored('telegram:1')]), () => undefined, () => undefined)
+    await manager.restore()
+    expect(manager.listAccounts()).toEqual([])
+  })
+
+  it('does not start a second loop beside an adapter that reconnects itself', async () => {
+    const { manager, adapters } = make(['telegram:1'], 0)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(1_000)
+    const a = adapters.get('telegram:1')!
+    ;(a as { selfReconnects?: true }).selfReconnects = true
+    a.account.status = 'error'
+    a.account.error = 'offline'
+    manager['contextFor']('telegram:1').emit({ type: 'account:updated', account: { ...a.account } })
+    expect(manager['retries'].size).toBe(0)
+    await vi.advanceTimersByTimeAsync(20 * 60_000)
+    expect(a.calls).toBe(1)
+    await manager.shutdown()
+  })
+
+  it('does not retry a rejected sign-in by itself, but retryErrored tries it once', async () => {
+    const adapters: FlakyAdapter[] = []
+    const manager = new AccountManager(
+      fakeStorage([stored('telegram:1')]),
+      () => undefined,
+      () => undefined,
+      (s, ctx) => {
+        const a = new FlakyAdapter(s.id, ctx, 1)
+        a.failMessage = 'Gmail did not accept this email and app password'
+        adapters.push(a)
+        return a
+      }
+    )
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(manager['retries'].size).toBe(0)
+    await vi.advanceTimersByTimeAsync(20 * 60_000)
+    expect(adapters[0].calls).toBe(1)
+    manager.retryErrored()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(adapters[0].calls).toBe(2)
+    expect(manager.listAccounts()[0].status).toBe('connected')
+    await manager.shutdown()
+  })
+
+  it('leaves nothing behind when the account is removed while it is still connecting', async () => {
+    const events: BridgeEvent[] = []
+    const storage = fakeStorage([stored('telegram:1')])
+    const upserts: string[] = []
+    const upsert = storage.upsertAccount.bind(storage)
+    storage.upsertAccount = async (account, secret) => {
+      upserts.push(account.id)
+      await upsert(account, secret)
+    }
+    let release!: () => void
+    let adapter!: FakeAdapter
+    const manager = new AccountManager(
+      storage,
+      (e) => events.push(e),
+      () => undefined,
+      (s, ctx) => {
+        adapter = new FakeAdapter(s.id, ctx)
+        const connect = adapter.connect.bind(adapter)
+        adapter.connect = () => new Promise<void>((r) => (release = r)).then(connect)
+        return adapter
+      }
+    )
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    await manager.remove('telegram:1')
+    release()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(upserts).toEqual([])
+    expect(storage.accounts).toEqual([])
+    expect(events.some((e) => e.type === 'conversations:reset')).toBe(false)
+    expect(events.slice(events.findIndex((e) => e.type === 'account:removed')).some((e) => e.type === 'account:updated')).toBe(false)
+    expect(manager['inflight'].size).toBe(0)
+    expect(adapter.account.status).toBe('disconnected')
+  })
+
+  it('retryErrored connects every errored account at once, skipping connected ones', async () => {
+    const { manager, adapters } = make(['telegram:1', 'telegram:2', 'telegram:3'], (id) => (id === 'telegram:3' ? 0 : 1))
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(0)
+    manager.retryErrored()
+    await vi.advanceTimersByTimeAsync(0)
+    expect([...adapters.values()].map((a) => a.calls)).toEqual([2, 2, 1])
+    expect(manager.listAccounts().map((a) => a.status)).toEqual(['connected', 'connected', 'connected'])
+    expect(manager['retries'].size).toBe(0)
+    expect(manager['onlinePoll']).toBeUndefined()
+    await manager.shutdown()
+  })
+
+  it('retries at once when the network comes back', async () => {
+    let online = false
+    const { manager, adapters } = make(['telegram:1'], 2, () => online)
+    await manager.restore()
+    await vi.advanceTimersByTimeAsync(31_000)
+    const a = adapters.get('telegram:1')!
+    expect(a.calls).toBe(2) // next back-off is 1 min, due at 90 s
+    online = true
+    await vi.advanceTimersByTimeAsync(30_000) // the 60 s poll sees the network, well before that
+    expect(a.calls).toBe(3)
+    await manager.shutdown()
+  })
+})
+
+describe('isTransientConnectError', () => {
+  it('retries what looks like the network or a server being down', () => {
+    const messages = [
+      'Could not reach Gmail: Connection not available',
+      'Could not reach Slack: ratelimited',
+      'Could not reach Slack: fetch failed',
+      'connect ECONNREFUSED 1.2.3.4:993',
+      'ETIMEDOUT',
+      'getaddrinfo ENOTFOUND imap.gmail.com',
+      'WhatsApp connection closed (503)',
+      'WhatsApp connection closed (408)',
+      'Request failed with status code 502',
+      'socket hang up',
+      'request timed out'
+    ]
+    for (const message of messages) expect(isTransientConnectError(new Error(message), true), message).toBe(true)
+    expect(isTransientConnectError(Object.assign(new Error('Could not connect'), { code: 'ECONNRESET' }), true)).toBe(true)
+    expect(isTransientConnectError(new Error('failed', { cause: new Error('read ETIMEDOUT') }), true)).toBe(true)
+  })
+
+  it('does not retry rejected credentials or a sign-in that needs the user', () => {
+    const messages = [
+      'Gmail did not accept this email and app password',
+      'Slack did not accept this token',
+      'Sign-in was declined on the phone',
+      'Sign-in cancelled',
+      'WhatsApp session was logged out',
+      'Could not reach Slack: token_revoked',
+      'Could not reach Slack: account_inactive',
+      'WhatsApp connection closed (401)',
+      'Gmail account 500123 rejected the login',
+      'invalid password'
+    ]
+    for (const message of messages) expect(isTransientConnectError(new Error(message), true), message).toBe(false)
+  })
+
+  it('retries anything that failed while offline, except what needs the user', () => {
+    expect(isTransientConnectError(new Error('Slack did not accept this token'), false)).toBe(true)
+    expect(isTransientConnectError('Gmail did not accept this email and app password', false)).toBe(true)
+    expect(isTransientConnectError(new Error('Sign-in cancelled'), false)).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, Notification, nativeImage, nativeTheme, protocol, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, net, Notification, nativeImage, nativeTheme, powerMonitor, protocol, session, shell, Tray } from 'electron'
 import { join, basename, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
@@ -149,7 +149,7 @@ const emit = (event: BridgeEvent): void => {
   }
 }
 
-const manager = new AccountManager(storage, emit, log)
+const manager = new AccountManager(storage, emit, log, undefined, () => net.isOnline())
 
 const appLock = new AppLock(storage, emit, log)
 
@@ -1813,6 +1813,8 @@ if (!gotLock) {
     installMenu()
     createWindow()
     await manager.restore()
+    // After sleep the network takes a moment, but the accounts that failed in the meantime need not wait out their back-off.
+    powerMonitor.on('resume', () => manager.retryErrored())
     void updater.start()
 
     app.on('activate', showMain)
@@ -1822,25 +1824,33 @@ if (!gotLock) {
     if (!isMac) app.quit()
   })
 
-  // The AI worker is waited for once before quitting: a pending update installs on quit, and its installer gives up
-  // while a worker that still holds a model on the GPU is shutting down.
-  let workerStopped = false
+  // Quitting waits (bounded) for what must not be cut off: the AI worker (a pending update installs on quit, and its
+  // installer gives up while a worker that still holds a model on the GPU is shutting down), the adapters and the
+  // queued writes. The first before-quit only starts that; app.quit() again then falls through.
+  let shutDown = false
+  let shuttingDown = false
   app.on('before-quit', (event) => {
-    if (!workerStopped && ai.running()) {
-      event.preventDefault()
-      workerStopped = true
-      quitting = true
-      void ai.stopAndWait(4_000).finally(() => app.quit())
-      return
-    }
     quitting = true
-    updater.stop()
-    scheduler.stop()
-    later?.stop()
-    appLock.stop()
-    birthdays.stop()
-    sync.stop()
-    ai.stop()
-    void manager.shutdown()
+    if (shutDown) return
+    event.preventDefault()
+    if (shuttingDown) return
+    shuttingDown = true
+    try {
+      updater.stop()
+      scheduler.stop()
+      later?.stop()
+      appLock.stop()
+      birthdays.stop()
+      reminders.stop()
+      sync.stop()
+    } catch (err) {
+      log('[quit] stopping services failed:', (err as Error).message)
+    }
+    const bounded = (work: Promise<unknown>, ms: number): Promise<unknown> => Promise.race([work.catch(() => undefined), new Promise((r) => setTimeout(r, ms))])
+    // The AI worker gets longer: stopAndWait itself gives up on a polite exit at 4 s and then ends the process.
+    void Promise.all([bounded(ai.stopAndWait(4_000), 6_500), bounded(Promise.all([manager.shutdown(), storage.flush()]), 4_000)]).finally(() => {
+      shutDown = true
+      app.quit()
+    })
   })
 }

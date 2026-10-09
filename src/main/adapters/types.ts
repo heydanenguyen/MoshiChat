@@ -34,6 +34,8 @@ export interface FetchMessagesOptions {
  */
 export interface PlatformAdapter {
   readonly account: Account
+  /** The adapter reconnects itself after a drop; the manager must not run a second loop beside it. */
+  readonly selfReconnects?: true
   connect(): Promise<void>
   disconnect(): Promise<void>
   listConversations(): Promise<Conversation[]>

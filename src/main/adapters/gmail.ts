@@ -34,6 +34,7 @@ const LIST_LIMIT = 400
 
 export class GmailAdapter implements PlatformAdapter {
   readonly account: Account
+  readonly selfReconnects = true as const
   private imap?: ImapFlow
   private smtp?: Transporter
   private allMail = '[Gmail]/All Mail'

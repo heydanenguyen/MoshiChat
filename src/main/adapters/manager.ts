@@ -25,6 +25,7 @@ import type {
 import type { Storage, StoredAccount } from '../storage'
 import type { AdapterContext, PlatformAdapter } from './types'
 import type { Peer } from '@shared/types'
+import { ALL_FEATURES } from '@shared/types'
 import { isShared, matchesQuery, previewOf, statsOf } from './types'
 import { DemoAdapter } from './demo'
 import { GmailAdapter, type GmailSecret } from './gmail'
@@ -46,6 +47,10 @@ interface PendingAuth {
 
 const SEARCH_LIMIT = 60
 const SEARCH_TIMEOUT = 4000
+/** Wait before the n-th automatic reconnect of an account that failed to connect; the last step repeats. */
+const RETRY_DELAYS = [30_000, 60_000, 120_000, 300_000, 600_000]
+/** While accounts wait to retry, how often to look for the network coming back. */
+const ONLINE_POLL = 30_000
 
 /** Injectable factory so tests can plug in fake adapters. */
 export type AdapterFactory = (stored: StoredAccount, ctx: AdapterContext, storage: Storage) => PlatformAdapter | undefined
@@ -64,12 +69,21 @@ export class AccountManager {
   private insightStore = new InsightStore()
   private backfilling: Promise<void> | undefined
   private contactCache = new Map<string, { at: number; list: Contact[] }>()
+  /** Connects (and reconnects) running now, so a second request joins the first instead of opening another session. */
+  private inflight = new Map<string, Promise<void>>()
+  /** Accounts waiting to retry a failed connect: how many times it has failed in a row, and the pending timer. */
+  private retries = new Map<string, { attempt: number; timer?: ReturnType<typeof setTimeout> }>()
+  private onlinePoll: ReturnType<typeof setInterval> | undefined
+  private wasOnline = true
+  private closed = false
 
   constructor(
     private readonly storage: Storage,
     private readonly emit: (event: BridgeEvent) => void,
     private readonly log: (...args: unknown[]) => void,
-    private readonly factory: AdapterFactory = defaultFactory
+    private readonly factory: AdapterFactory = defaultFactory,
+    /** electron's net.isOnline(), passed in so this file stays free of it. */
+    private readonly isOnline: () => boolean = () => true
   ) {}
 
   /** Restore persisted accounts and connect them in the background. */
@@ -78,6 +92,18 @@ export class AccountManager {
       const adapter = this.factory(stored, this.contextFor(stored.id), this.storage)
       if (!adapter) continue
       this.adapters.set(stored.id, adapter)
+      void this.connect(adapter)
+    }
+  }
+
+  /** Connect every account that failed (after sleep or when the network is back), without waiting out its back-off. */
+  retryErrored(): void {
+    for (const adapter of this.adapters.values()) {
+      const { id, status, error } = adapter.account
+      // A failed WhatsApp connect can leave the status at 'connecting', so waiting for a retry counts too.
+      if (this.inflight.has(id) || status === 'connected' || status === 'needs_auth') continue
+      if (!(status === 'error' || this.retries.has(id)) || !isRetryable(error)) continue
+      this.cancelRetry(id)
       void this.connect(adapter)
     }
   }
@@ -117,6 +143,7 @@ export class AccountManager {
         await adapter.connect()
       } catch (err) {
         this.adapters.delete(id)
+        this.cancelRetry(id)
         this.emit({ type: 'account:removed', accountId: id })
         throw err
       }
@@ -265,10 +292,12 @@ export class AccountManager {
       await adapter.connect()
     } catch (err) {
       this.adapters.delete(tempId)
+      this.cancelRetry(tempId)
       this.emit({ type: 'account:removed', accountId: tempId })
       throw err
     }
     this.adapters.delete(tempId)
+    this.cancelRetry(tempId)
     this.emit({ type: 'account:removed', accountId: tempId })
     const existing = this.adapters.get(adapter.account.id)
     if (existing && existing !== adapter) await existing.disconnect().catch(() => undefined)
@@ -283,6 +312,8 @@ export class AccountManager {
     const web = webPlatformOf(accountId)
     const partition = web ? this.storage.readSecret<{ partition?: string }>(accountId)?.partition : undefined
     const adapter = this.adapters.get(accountId)
+    this.cancelRetry(accountId)
+    this.inflight.delete(accountId)
     if (adapter) {
       await adapter.disconnect().catch(() => undefined)
       this.adapters.delete(accountId)
@@ -304,11 +335,14 @@ export class AccountManager {
   async reconnect(accountId: string): Promise<void> {
     const adapter = this.adapters.get(accountId)
     if (!adapter) throw new Error('Unknown account')
-    await adapter.disconnect().catch(() => undefined)
+    this.cancelRetry(accountId)
     // Unlike the background connect at start-up, the user pressed "Sign in again": tell them why it did not work.
-    await adapter.connect()
-    await this.storage.upsertAccount(adapter.account)
-    await this.loadConversations(adapter)
+    try {
+      await this.run(adapter, true)
+    } catch (err) {
+      this.scheduleRetry(adapter, err)
+      throw err
+    }
   }
 
   async fetchMessages(conversationId: string, beforeId?: string): Promise<Message[]> {
@@ -559,6 +593,8 @@ export class AccountManager {
   }
 
   async shutdown(): Promise<void> {
+    this.closed = true
+    for (const id of [...this.retries.keys()]) this.cancelRetry(id)
     await Promise.all([...this.adapters.values()].map((a) => a.disconnect().catch(() => undefined)))
     await this.insightStore.flush()
   }
@@ -575,14 +611,81 @@ export class AccountManager {
     }
   }
 
+  /** Background connect: failures are logged and retried with back-off rather than shown. */
   private async connect(adapter: PlatformAdapter): Promise<void> {
     try {
-      await adapter.connect()
-      await this.storage.upsertAccount(adapter.account)
-      await this.loadConversations(adapter)
+      await this.run(adapter, false)
     } catch (err) {
       this.log(`connect failed for ${adapter.account.id}:`, (err as Error).message)
+      this.scheduleRetry(adapter, err)
     }
+  }
+
+  /** One connect at a time per account: a request that arrives while one is running gets that one's outcome. */
+  private run(adapter: PlatformAdapter, disconnectFirst: boolean): Promise<void> {
+    const id = adapter.account.id
+    const running = this.inflight.get(id)
+    if (running) return running
+    const attempt: Promise<void> = (async (): Promise<void> => {
+      if (disconnectFirst) await adapter.disconnect().catch(() => undefined)
+      await adapter.connect()
+      // Removed (or shutting down) while it was connecting: let go of the session and leave nothing behind.
+      if (this.closed || this.adapters.get(id) !== adapter) {
+        await adapter.disconnect().catch(() => undefined)
+        return
+      }
+      this.cancelRetry(id)
+      await this.storage.upsertAccount(adapter.account)
+      await this.loadConversations(adapter)
+    })().finally(() => {
+      if (this.inflight.get(id) === attempt) this.inflight.delete(id)
+    })
+    this.inflight.set(id, attempt)
+    return attempt
+  }
+
+  /** Try this account again after a growing pause (30 s up to 10 min, jittered), unless it is gone, signed out or already waiting. */
+  private scheduleRetry(adapter: PlatformAdapter, err?: unknown): void {
+    const id = adapter.account.id
+    const { status, error } = adapter.account
+    if (this.closed || this.adapters.get(id) !== adapter || status === 'connected' || status === 'needs_auth') return this.cancelRetry(id)
+    // Only trouble that can pass by itself: a rejected password or token stays an error until the user acts (or tries once on resume).
+    if (!isTransientConnectError(err ?? error, this.isOnline())) return this.cancelRetry(id)
+    const entry = this.retries.get(id) ?? { attempt: 0 }
+    this.retries.set(id, entry)
+    if (entry.timer) return
+    const base = RETRY_DELAYS[Math.min(entry.attempt, RETRY_DELAYS.length - 1)]
+    entry.attempt++
+    entry.timer = setTimeout(() => {
+      entry.timer = undefined
+      const { status } = adapter.account
+      if (this.adapters.get(id) !== adapter || status === 'connected' || status === 'needs_auth') this.cancelRetry(id)
+      else void this.connect(adapter)
+    }, Math.round(base * (0.8 + Math.random() * 0.4)))
+    this.watchNetwork()
+  }
+
+  private cancelRetry(id: string): void {
+    const entry = this.retries.get(id)
+    if (!entry) return
+    clearTimeout(entry.timer)
+    this.retries.delete(id)
+    if (!this.retries.size && this.onlinePoll) {
+      clearInterval(this.onlinePoll)
+      this.onlinePoll = undefined
+    }
+  }
+
+  /** While accounts are waiting to retry, notice the network coming back and retry them at once. */
+  private watchNetwork(): void {
+    if (this.onlinePoll) return
+    this.wasOnline = this.isOnline()
+    this.onlinePoll = setInterval(() => {
+      const online = this.isOnline()
+      const returned = online && !this.wasOnline
+      this.wasOnline = online
+      if (returned) this.retryErrored()
+    }, ONLINE_POLL)
   }
 
   private async loadConversations(adapter: PlatformAdapter): Promise<void> {
@@ -738,6 +841,16 @@ export class AccountManager {
       this.adapters.get(currentId()) ?? [...this.adapters.values()].find((a) => a.account.id === currentId())
     return {
       emit: (event) => {
+        // A removed account's adapter can still report once more: no ghost row (its id is no adapter's, not even a pending one's).
+        if (event.type === 'account:updated' && !this.adapters.has(event.account.id) && ![...this.adapters.values()].some((a) => a.account.id === event.account.id)) return
+        if (event.type === 'account:updated') {
+          // An adapter can fail outside connect() (it reports it as a status): same back-off, unless it reconnects itself.
+          // Connected or signed out clears it.
+          const adapter = this.adapters.get(event.account.id)
+          const { status } = event.account
+          if (status === 'connected' || status === 'needs_auth') this.cancelRetry(event.account.id)
+          else if (adapter && status === 'error' && !adapter.selfReconnects && !this.inflight.has(event.account.id)) this.scheduleRetry(adapter)
+        }
         if (event.type === 'conversation:upserted') {
           this.conversations.set(event.conversation.id, event.conversation)
         } else if (event.type === 'conversations:reset') {
@@ -823,38 +936,118 @@ export class AccountManager {
 function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Storage): PlatformAdapter | undefined {
   if (stored.demo) return new DemoAdapter(stored.platform, ctx)
   let adapter: PlatformAdapter | undefined
+  // A secret that cannot be decrypted (keychain changed, corrupt file) must not make the account disappear.
+  let unreadable = 'nothing came back'
+  const read = <T>(): T | undefined => {
+    try {
+      return storage.readSecret<T>(stored.id)
+    } catch (err) {
+      unreadable = (err as Error).message
+      return undefined
+    }
+  }
   if (stored.platform === 'telegram') {
-    const secret = storage.readSecret<TelegramSecret>(stored.id)
+    const secret = read<TelegramSecret>()
     if (secret) adapter = new TelegramAdapter(stored.id, secret, ctx)
   } else if (stored.platform === 'zalo') {
-    const secret = storage.readSecret<ZaloSecret>(stored.id)
+    const secret = read<ZaloSecret>()
     if (secret) adapter = new ZaloAdapter(stored.id, secret, ctx)
   } else if (stored.platform === 'whatsapp') {
-    const secret = storage.readSecret<WhatsAppSecret>(stored.id)
+    const secret = read<WhatsAppSecret>()
     if (secret) adapter = new WhatsAppAdapter(stored.id, secret, ctx)
   } else if (stored.platform === 'gmail') {
-    const secret = storage.readSecret<GmailSecret>(stored.id)
+    const secret = read<GmailSecret>()
     if (secret) adapter = new GmailAdapter(stored.id, secret, ctx)
   } else if (stored.platform === 'slack') {
-    const secret = storage.readSecret<SlackSecret>(stored.id)
+    const secret = read<SlackSecret>()
     if (secret) adapter = new SlackAdapter(stored.id, secret, ctx)
   } else if (stored.id.startsWith('messenger:fb-')) {
-    const secret = storage.readSecret<FacebookPersonalSecret>(stored.id)
+    const secret = read<FacebookPersonalSecret>()
     if (secret) adapter = new FacebookPersonalAdapter(stored.id, secret, ctx)
     if (secret) rememberPartition(stored.id, 'messenger', secret.partition ?? legacyPartition('messenger'))
   } else if (stored.id.startsWith('instagram:ig-')) {
-    const secret = storage.readSecret<InstagramPersonalSecret>(stored.id)
+    const secret = read<InstagramPersonalSecret>()
     if (secret) adapter = new InstagramPersonalAdapter(stored.id, secret, ctx)
     if (secret) rememberPartition(stored.id, 'instagram', secret.partition ?? legacyPartition('instagram'))
   } else {
-    const secret = storage.readSecret<MetaSecret>(stored.id)
+    const secret = read<MetaSecret>()
     if (secret) adapter = new MetaAdapter(stored.platform, secret, ctx)
   }
-  if (!adapter) return undefined
+  if (!adapter) {
+    if (!stored.secret) return undefined
+    // Every platform needs its secret to start, so the account stays visible and asks to be signed in again.
+    ctx.log(`the saved sign-in for ${stored.id} could not be read (${unreadable})`)
+    adapter = new UnavailableAdapter(stored, ctx)
+  }
   adapter.account.displayName = stored.displayName
   adapter.account.handle = stored.handle
   adapter.account.avatarUrl = stored.avatarUrl
   return adapter
+}
+
+/** Whether trying again can help: a cancelled sign-in or a session logged out on the phone needs the user instead. */
+function isRetryable(message: string | undefined): boolean {
+  return !/cancelled|logged out/i.test(message ?? '')
+}
+
+// 'Could not reach X: <reason>' is Gmail's and Slack's wording for any failure; a snake_case API code (token_revoked) is not a network problem.
+const TRANSIENT = new RegExp(
+  [
+    'ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|network|time(d )?out|offline|fetch failed|getaddrinfo',
+    'socket (hang up|closed|disconnected|timeout)',
+    'could not reach \\w+: (?![a-z]+_[a-z_]+\\b)',
+    // HTTP 5xx, and WhatsApp's 408 / 428 closes
+    '(http|status|code)( code)?\\W{0,3}5\\d\\d|\\((5\\d\\d|408|428)\\)|: 5\\d\\d\\b'
+  ].join('|'),
+  'i'
+)
+
+/**
+ * Whether a failed connect is worth trying again by itself: the network was down (`online` false at the time) or the
+ * error reads like a network/timeout/server problem. A rejected token, password or cookie is not: it would only fail
+ * again (and ask Telegram or Zalo for a new sign-in each time).
+ */
+export function isTransientConnectError(err: unknown, online: boolean): boolean {
+  const parts: string[] = []
+  for (let e = err, depth = 0; e && depth < 3; depth++) {
+    if (typeof e === 'string') parts.push(e)
+    const { message, code, cause } = e as { message?: unknown; code?: unknown; cause?: unknown }
+    if (typeof message === 'string') parts.push(message)
+    if (typeof code === 'string') parts.push(code)
+    e = cause
+  }
+  const text = parts.join(' ')
+  if (!isRetryable(text)) return false
+  return !online || TRANSIENT.test(text)
+}
+
+/** Stands in for an account whose saved sign-in cannot be read, so it still shows up (to sign in again or remove). */
+class UnavailableAdapter implements PlatformAdapter {
+  readonly account: Account
+  constructor(
+    stored: StoredAccount,
+    private readonly ctx: AdapterContext
+  ) {
+    const { id, platform, displayName, handle, avatarUrl } = stored
+    this.account = { id, platform, displayName, handle, avatarUrl, status: 'needs_auth', error: 'secrets-unreadable', features: ALL_FEATURES }
+  }
+  async connect(): Promise<void> {
+    this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
+    throw new Error('The saved sign-in for this account could not be read. Remove it and add it again.')
+  }
+  async disconnect(): Promise<void> {}
+  async listConversations(): Promise<Conversation[]> {
+    return []
+  }
+  async fetchMessages(): Promise<Message[]> {
+    throw new Error('needs sign-in')
+  }
+  async sendMessage(): Promise<Message> {
+    throw new Error('needs sign-in')
+  }
+  async markRead(): Promise<void> {
+    throw new Error('needs sign-in')
+  }
 }
 
 /** Personal Facebook / Instagram accounts (web sessions) by their id. */

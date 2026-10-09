@@ -15,7 +15,7 @@ const IDLE_MS = 10 * 60 * 1000
 const CACHE_LIMIT = 3000
 const MEDIA_HOSTS = /(^|\.)(fbcdn\.net|cdninstagram\.com|instagram\.com|facebook\.com|fbsbx\.com|zdn\.vn|zadn\.vn|zaloapp\.com|telegram\.org|whatsapp\.net)$/i
 
-type Pending = { resolve(value: unknown): void; reject(err: Error): void; message: Record<string, unknown>; retried?: boolean }
+type Pending = { resolve(value: unknown): void; reject(err: Error): void; message: Record<string, unknown>; retried?: boolean; worker: UtilityProcess }
 type Cache = { transcripts: Record<string, string>; translations: Record<string, string>; summaries: Record<string, string> }
 
 const modelsDir = (): string => join(app.getPath('userData'), 'models')
@@ -147,13 +147,15 @@ export class AiService {
       }
     })
     worker.on('exit', () => {
-      this.worker = undefined
-      const pending = [...this.pending.values()]
-      this.pending.clear()
+      // A worker that was stopped can exit after the next one has started: that one stays.
+      if (this.worker === worker) this.worker = undefined
+      // Only this worker's requests: an older worker exiting late must not fail (or blame the GPU for) the new one's.
+      const pending = [...this.pending.entries()].filter(([, p]) => p.worker === worker)
+      for (const [id] of pending) this.pending.delete(id)
       // A native crash while the GPU was in use: remember it and run those requests again on the CPU.
-      const onGpu = pending.filter((p) => p.message.device === 'dml')
+      const onGpu = pending.filter(([, p]) => p.message.device === 'dml')
       if (onGpu.length) this.markGpuBroken()
-      for (const p of pending) {
+      for (const [, p] of pending) {
         if (p.message.device === 'dml' && !p.retried) {
           this.request({ ...p.message, device: 'cpu' }, true).then(p.resolve, p.reject)
         } else p.reject(new Error('The AI worker stopped'))
@@ -169,7 +171,7 @@ export class AiService {
     const id = this.nextId++
     if (this.idleTimer) clearTimeout(this.idleTimer)
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, message, retried })
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, message, retried, worker })
       worker.postMessage({ ...message, id })
     }).finally(() => {
       if (this.idleTimer) clearTimeout(this.idleTimer)
