@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'fs/promises'
+import { copyFile, readFile, rename, writeFile } from 'fs/promises'
 import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, MessageContent, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
@@ -9,7 +9,7 @@ import { tally, zaloCode, zaloEmoji } from '@shared/reactions'
 import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { sendPhotoSticker } from './zalo-photo-sticker'
-import { nextSyncStep, type SyncCursor, type SyncWalk } from './zalo-sync'
+import { isProbeRejected, isSessionRejected, nextSyncStep, savedCursor, type SyncCursor, type SyncWalk } from './zalo-sync'
 import { ZaloArchive } from './zalo-archive'
 import { VIDEO_FILE } from '@shared/media'
 
@@ -27,6 +27,13 @@ const HISTORY_LIMIT = 1000
 /** Groups whose latest page is asked for after each start (the most recently active ones). */
 const GROUP_BACKFILL = 40
 
+/** Socket restarts that fail in a row before asking Zalo whether the session itself still exists. */
+const RESTARTS_BEFORE_PROBE = 8
+/** At most one round of asking groups for their latest messages this often (a flapping socket gets a key each time). */
+const GROUP_BACKFILL_EVERY = 10 * 60_000
+/** After a round that found nothing, groups are not asked again for this long (a dropped socket cancels it). */
+const GROUP_BACKFILL_IDLE_FOR = 60 * 60_000
+
 /** Pages one "Sync Zalo history" may walk per kind of chat (a start walks 60); about 0.6 s each. */
 const DEEP_SYNC_PAGES = 1500
 
@@ -38,6 +45,18 @@ type DeepSync = {
   finish: (result: { pages: number; added: number; reachedEnd: boolean }) => void
   done: Promise<{ pages: number; added: number; reachedEnd: boolean }>
   lastAt: number
+}
+
+/** zalo-cache-<uid>.json: what this computer keeps between starts. */
+interface CacheFile {
+  threads?: Array<[string, 0 | 1, TMessage[]]>
+  /** Sticker id -> picture (a bare URL in caches from before sprite sheets were kept). */
+  stickers?: Array<[number, string | StickerPicture]>
+  sync?: Partial<Record<0 | 1, SyncCursor>>
+  /** Chats with non-friends you opened yourself (never message requests). */
+  started?: string[]
+  /** Thread id -> [message id, person -> reaction code]. */
+  reactions?: Array<[string, Array<[string, Record<string, string>]>]>
 }
 
 /** My own reactions are kept under this key (Zalo marks them isSelf; uidFrom can be "0"). */
@@ -76,6 +95,8 @@ export class ZaloAdapter implements PlatformAdapter {
   /** Zalo Web has no per-chat history API for 1:1 chats; messages come page by page over the socket (see zalo-sync). */
   private syncWalks: Record<0 | 1, SyncWalk> = { 0: { rounds: 0, jumped: false }, 1: { rounds: 0, jumped: false } }
   private syncCursors: Record<0 | 1, SyncCursor> = { 0: {}, 1: {} }
+  /** Bumped by each start of the walk, so a page request still waiting from an earlier one is dropped. */
+  private syncGeneration = 0
   private cacheFile = ''
   /** History imported from Zalo PC, older than the cache keeps. */
   private archive?: ZaloArchive
@@ -86,8 +107,20 @@ export class ZaloAdapter implements PlatformAdapter {
   /** A history sync the user asked for, while it runs. */
   private deepSync?: DeepSync
   private groupHistoryGone = false
+  private lastGroupBackfill = 0
+  /** When the last round of asking groups found nothing new: the feed walk is enough for a while, unless the socket dropped since. */
+  private groupBackfillIdleAt = 0
+  /** The archive write in progress (or the last one done). */
+  private archiveFlush: Promise<void> = Promise.resolve()
   private backfilling = false
   private saveTimer?: NodeJS.Timeout
+  /** The cache write in progress; the next one waits for it. */
+  private saving: Promise<void> = Promise.resolve()
+  /** Starting the socket again after zca-js gave up on it (see wireListener, 'closed'). */
+  private restartTimer?: NodeJS.Timeout
+  private restartAttempts = 0
+  /** Probes in a row that Zalo refused; the session is only given up on at the second. */
+  private rejectedProbes = 0
   /** Sticker id -> picture. Zalo only sends the id with a sticker message; the picture is looked up once. */
   private stickerUrls = new Map<number, StickerPicture>()
   private stickerLookups = new Set<number>()
@@ -122,7 +155,7 @@ export class ZaloAdapter implements PlatformAdapter {
         api = await this.loginWithQr(zalo, zca)
       }
     } catch (err) {
-      if (this.secret.credentials && isRejectedSession(err)) {
+      if (this.secret.credentials && isSessionRejected(err)) {
         // The saved cookie no longer works (signed out, or signed in elsewhere). Ask for a new QR instead of retrying it.
         this.sessionEnded = true
         this.setStatus('needs_auth', 'Zalo signed this session out')
@@ -155,14 +188,17 @@ export class ZaloAdapter implements PlatformAdapter {
     } catch (err) {
       this.ctx.log('zalo profile failed', (err as Error).message)
     }
+    // Disconnected (quit, account removed) while signing in: keep nothing and open no socket, which would be a second session.
+    if (this.api !== api) return
     await this.ctx.saveSecret(this.secret)
     // Messages synced earlier, so chats are not empty after a restart.
     this.cacheFile = join(this.ctx.dataDir(), `zalo-cache-${this.meId}.json`)
     this.archive = new ZaloArchive(join(this.ctx.dataDir(), `zalo-archive-${this.meId}`))
-    void this.archive.ids().then((ids) => {
-      for (const [threadId, known] of ids) for (const msgId of known) (this.archivedIds.get(threadId) ?? this.archivedIds.set(threadId, new Set()).get(threadId)!).add(msgId)
-    })
+    // Before the walk starts: it counts what is new against these.
+    const archived = await this.archive.ids()
+    for (const [threadId, known] of archived) for (const msgId of known) (this.archivedIds.get(threadId) ?? this.archivedIds.set(threadId, new Set()).get(threadId)!).add(msgId)
     await this.loadCache()
+    if (this.api !== api) return
     this.wireListener(api, zca)
     api.listener.start({ retryOnClose: true })
     this.setStatus('connected')
@@ -196,15 +232,18 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 
   async disconnect(): Promise<void> {
+    if (this.restartTimer) clearTimeout(this.restartTimer)
+    this.restartTimer = undefined
+    this.restartAttempts = 0
+    this.rejectedProbes = 0
     this.api?.listener.stop()
     this.api = undefined
     this.setStatus('disconnected')
-    // Whatever was waiting to be saved goes now (quitting, removing the account).
-    if (this.saveTimer) this.saveCache()
-    if (this.archiveTimer) {
-      clearTimeout(this.archiveTimer)
-      await this.flushArchive()
-    }
+    // Whatever was waiting to be saved goes now (quitting, removing the account), and is on disk before this returns. The
+    // archive first: the cache's walk cursors count the pages whose older messages only the archive keeps.
+    await this.archiveFlush
+    if (this.archiveTimer) await this.flushArchive()
+    await (this.saveTimer ? this.saveCache() : this.saving)
     // A history sync cannot go on without the session.
     const deep = this.deepSync
     this.deepSync = undefined
@@ -350,22 +389,29 @@ export class ZaloAdapter implements PlatformAdapter {
         : undefined,
       attachments: options.attachments?.length ? await Promise.all(options.attachments.map((a) => this.uploadPath(a))) : undefined
     })
-    const msgId = (await this.trySendPhotoSticker(threadId, text, options, !!quoteRaw)) ?? (await this.sendContent(content(), threadId, type))
+    const voiceId = await this.trySendVoice(threadId, text, options, type)
+    const msgId = voiceId ?? (await this.trySendPhotoSticker(threadId, text, options, !!quoteRaw)) ?? (await this.sendContent(content(), threadId, type))
+    // A Zalo voice message cannot carry a quote, so the echo shows none either.
+    const quoted = voiceId ? undefined : quoteRaw
     const message: Message = {
       id: msgId,
       conversationId: id,
       senderId: this.meId,
       senderName: this.account.displayName,
       text,
-      attachments: (options.attachments ?? []).map((a, i) => ({
-        id: `${msgId}-${i}`,
-        kind: a.mime.startsWith('image/') ? 'image' : a.mime.startsWith('video/') ? 'video' : 'file',
-        name: a.name,
-        size: a.size,
-        url: a.preview
-      })),
+      attachments: (options.attachments ?? []).map((a, i) =>
+        voiceId
+          ? { id: `${msgId}-${i}`, kind: 'audio', name: 'Voice message', size: a.size, url: a.preview, duration: a.duration }
+          : {
+              id: `${msgId}-${i}`,
+              kind: a.mime.startsWith('image/') ? 'image' : a.mime.startsWith('video/') ? 'video' : 'file',
+              name: a.name,
+              size: a.size,
+              url: a.preview
+            }
+      ),
       reactions: [],
-      replyTo: quoteRaw ? { id: quoteRaw.msgId, senderName: this.names.get(quoteRaw.uidFrom) ?? quoteRaw.dName, text: textOf(quoteRaw) } : undefined,
+      replyTo: quoted ? { id: quoted.msgId, senderName: this.names.get(quoted.uidFrom) ?? quoted.dName, text: textOf(quoted) } : undefined,
       sentAt: Date.now(),
       isOutgoing: true,
       status: 'sent'
@@ -378,6 +424,29 @@ export class ZaloAdapter implements PlatformAdapter {
   private async sendContent(content: Promise<MessageContent>, threadId: string, type: 0 | 1): Promise<string> {
     const result = await this.requireApi().sendMessage(await content, threadId, type)
     return String(result.message?.msgId ?? result.attachment[0]?.msgId ?? Date.now())
+  }
+
+  /**
+   * A recorded voice note sent on its own goes out as a Zalo voice message (a player on the other side, not a
+   * file): uploaded first, the AAC copy when there is one (what Zalo's own apps record), then sent by its CDN url.
+   * Undefined when it does not apply or Zalo said no; the caller then sends the file the usual way.
+   */
+  private async trySendVoice(threadId: string, text: string, options: SendOptions, type: 0 | 1): Promise<string | undefined> {
+    const [voice, ...rest] = options.attachments ?? []
+    if (!voice?.voice || rest.length || text.trim()) return undefined
+    const path = voice.alternates?.find((alt) => alt.mime === 'audio/mp4')?.path ?? voice.path
+    try {
+      const api = this.requireApi()
+      const [uploaded] = await api.uploadAttachment([path], threadId, type)
+      // Audio uploads come back as "others" with a fileUrl; only images use normalUrl.
+      const voiceUrl = uploaded?.fileType === 'image' ? uploaded.normalUrl : uploaded?.fileUrl
+      if (!voiceUrl) throw new Error(`upload gave no url (${uploaded?.fileType ?? 'nothing'})`)
+      const sent = await api.sendVoice({ voiceUrl }, threadId, type)
+      return String(sent?.msgId ?? Date.now())
+    } catch (err) {
+      this.ctx.log('zalo voice message failed, sending the file', (err as Error).message)
+      return undefined
+    }
   }
 
   /**
@@ -609,7 +678,17 @@ export class ZaloAdapter implements PlatformAdapter {
 
   private wireListener(api: API, _zca: ZcaModule): void {
     // History can only be requested once the socket has its cipher key (replies are encrypted with it).
-    api.listener.on('cipher_key', () => this.startSync(api))
+    api.listener.on('cipher_key', () => {
+      // The socket is really up (Zalo accepted the session): a restart after a drop worked.
+      if (this.api === api) {
+        if (this.restartTimer) clearTimeout(this.restartTimer)
+        this.restartTimer = undefined
+        this.restartAttempts = 0
+        this.rejectedProbes = 0
+        if (this.account.status === 'connecting') this.setStatus('connected')
+      }
+      this.startSync(api)
+    })
     api.listener.on('message', (message: ZMessage) => {
       const threadId = message.threadId
       this.threadTypes.set(threadId, message.type)
@@ -703,8 +782,55 @@ export class ZaloAdapter implements PlatformAdapter {
       if (Number(code) === 3000 || Number(code) === 3003) {
         this.sessionEnded = true
         this.setStatus('needs_auth', 'Signed out from another device')
+        return
       }
+      if (this.sessionEnded) return
+      // Whatever the socket missed while down is what the group backfill is for.
+      this.groupBackfillIdleAt = 0
+      // zca-js retries a few times and then just gives up (it never resets its retry count): keep trying with the same session.
+      this.setStatus('connecting', `Zalo connection lost (${code})`)
+      // Restarts failing over and over may mean the cookie died while the socket was down.
+      if (this.restartAttempts && this.restartAttempts % RESTARTS_BEFORE_PROBE === 0) void this.probeSession(api)
+      this.scheduleRestart(api)
     })
+  }
+
+  /** Whether Zalo still accepts this session (a cheap call); a refused one needs a new QR instead of endless restarts. */
+  private async probeSession(api: API): Promise<void> {
+    try {
+      await api.fetchAccountInfo()
+      this.rejectedProbes = 0
+      this.ctx.log('zalo: session still accepted, restarting the socket goes on')
+    } catch (err) {
+      // Logged every time: the code Zalo uses for a dead session is only known from such a log.
+      this.ctx.log('zalo: session check failed', (err as Error).message, (err as { code?: unknown }).code ?? '')
+      if (this.api !== api || this.sessionEnded) return
+      // Two refusals in a row (8 and 16 failed restarts): one odd answer is not the end of the session.
+      this.rejectedProbes = isProbeRejected(err) ? this.rejectedProbes + 1 : 0
+      if (this.rejectedProbes < 2) return
+      this.sessionEnded = true
+      if (this.restartTimer) clearTimeout(this.restartTimer)
+      this.restartTimer = undefined
+      this.setStatus('needs_auth', 'Zalo signed this session out')
+    }
+  }
+
+  /** Start the socket again after a wait that doubles each time (2 s up to a minute, with jitter), as long as this session lasts. */
+  private scheduleRestart(api: API): void {
+    if (this.restartTimer) clearTimeout(this.restartTimer)
+    const wait = Math.min(60_000, 2_000 * 2 ** this.restartAttempts) * (0.8 + Math.random() * 0.4)
+    this.restartAttempts += 1
+    this.ctx.log(`zalo: socket restart ${this.restartAttempts} in ${Math.round(wait / 1000)} s`)
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined
+      if (this.api !== api || this.sessionEnded) return
+      try {
+        api.listener.start({ retryOnClose: true })
+      } catch (err) {
+        this.ctx.log('zalo socket restart failed', (err as Error).message)
+        this.scheduleRestart(api)
+      }
+    }, wait)
   }
 
   private async discoverThread(threadId: string, type: 0 | 1): Promise<void> {
@@ -901,14 +1027,19 @@ export class ZaloAdapter implements PlatformAdapter {
     this.archiveTimer ??= setTimeout(() => void this.flushArchive(), 2_000)
   }
 
-  private async flushArchive(): Promise<void> {
+  private flushArchive(): Promise<void> {
     if (this.archiveTimer) clearTimeout(this.archiveTimer)
     this.archiveTimer = undefined
     const batches = [...this.archiveQueue]
     this.archiveQueue.clear()
-    for (const [threadId, messages] of batches) {
-      await this.archive?.add(threadId, messages).catch((err: Error) => this.ctx.log('zalo archive write failed', err.message))
+    const write = async (): Promise<void> => {
+      for (const [threadId, messages] of batches) {
+        await this.archive?.add(threadId, messages).catch((err: Error) => this.ctx.log('zalo archive write failed', err.message))
+      }
     }
+    // Kept, so disconnect can wait for a write that started before it (the timer is already gone by then).
+    this.archiveFlush = this.archiveFlush.then(write)
+    return this.archiveFlush
   }
 
   /** Whether this computer already has the message: in the cache or the archive. */
@@ -947,6 +1078,7 @@ export class ZaloAdapter implements PlatformAdapter {
     // Moshi was closed or the session was on another computer): once the feed walk has had its turn.
     setTimeout(() => this.api === api && void this.backfillGroups(api), 20_000)
     this.syncWalks = { 0: { rounds: 0, jumped: false }, 1: { rounds: 0, jumped: false } }
+    this.syncGeneration += 1
     this.ctx.log('zalo: syncing messages', JSON.stringify(this.syncCursors))
     api.listener.requestOldMessages(0)
     api.listener.requestOldMessages(1)
@@ -963,8 +1095,9 @@ export class ZaloAdapter implements PlatformAdapter {
    * have no such call on Zalo Web: for them only the feed walk and other computers' copies (shared sync) can help.
    */
   private async backfillGroups(api: API): Promise<void> {
-    if (this.groupHistoryGone || this.backfilling) return
+    if (this.groupHistoryGone || this.backfilling || Date.now() - this.groupBackfillIdleAt < GROUP_BACKFILL_IDLE_FOR || Date.now() - this.lastGroupBackfill < GROUP_BACKFILL_EVERY) return
     this.backfilling = true
+    this.lastGroupBackfill = Date.now()
     const recent = [...this.groups.keys()]
       .map((id) => ({ id, at: this.lastActivity.get(id) ?? 0 }))
       .sort((a, b) => b.at - a.at)
@@ -995,6 +1128,7 @@ export class ZaloAdapter implements PlatformAdapter {
       this.backfilling = false
     }
     this.ctx.log(`zalo: group backfill asked ${asked} groups, added ${added} messages in ${touched.size}`)
+    if (asked && !added) this.groupBackfillIdleAt = Date.now()
     if (!touched.size) return
     for (const threadId of touched) {
       const last = this.messagesFor(conversationId(this.account.id, threadId)).at(-1)
@@ -1038,10 +1172,12 @@ export class ZaloAdapter implements PlatformAdapter {
       }
       return
     }
-    if (step.below !== oldest?.data.msgId) walk.jumped = true
+    // Skipping to a gap an interrupted walk left still leaves the skip down to the oldest point for later.
+    if (step.below !== oldest?.data.msgId && !cursor.gaps?.some((gap) => gap.below === step.below)) walk.jumped = true
     walk.askedBelow = step.below
+    const generation = this.syncGeneration
     setTimeout(() => {
-      if (this.api !== api) return
+      if (this.api !== api || this.syncGeneration !== generation) return
       try {
         api.listener.requestOldMessages(type, step.below)
       } catch (err) {
@@ -1051,29 +1187,32 @@ export class ZaloAdapter implements PlatformAdapter {
   }
 
   private async loadCache(): Promise<void> {
+    const read = async (file: string): Promise<CacheFile> => JSON.parse(await readFile(file, 'utf8')) as CacheFile
+    let data: CacheFile
     try {
-      const data = JSON.parse(await readFile(this.cacheFile, 'utf8')) as {
-        threads?: Array<[string, 0 | 1, TMessage[]]>
-        /** Sticker id -> picture (a bare URL in caches from before sprite sheets were kept). */
-        stickers?: Array<[number, string | StickerPicture]>
-        sync?: Partial<Record<0 | 1, SyncCursor>>
-        /** Chats with non-friends you opened yourself (never message requests). */
-        started?: string[]
-        /** Thread id -> [message id, person -> reaction code]. */
-        reactions?: Array<[string, Array<[string, Record<string, string>]>]>
+      data = await read(this.cacheFile)
+    } catch (err) {
+      // Cut short or missing: the copy from before the last save.
+      try {
+        data = await read(`${this.cacheFile}.bak`)
+        this.ctx.log('zalo: cache unreadable, loaded the previous copy (.bak):', (err as Error).message)
+      } catch {
+        return // first run
       }
+    }
+    try {
       for (const [threadId, byMsg] of data.reactions ?? []) this.reacts.set(threadId, new Map(byMsg))
       for (const threadId of data.started ?? []) this.startedByMe.add(threadId)
       for (const [stickerId, picture] of data.stickers ?? []) this.stickerUrls.set(stickerId, typeof picture === 'string' ? { url: picture } : picture)
-      this.syncCursors = { 0: data.sync?.[0] ?? {}, 1: data.sync?.[1] ?? {} }
+      this.syncCursors = { 0: savedCursor(data.sync?.[0]), 1: savedCursor(data.sync?.[1]) }
       for (const [threadId, type, list] of data.threads ?? []) {
         this.threadTypes.set(threadId, type)
         this.raw.set(threadId, list)
         const last = list.at(-1)
         if (last) this.lastActivity.set(threadId, Math.max(this.lastActivity.get(threadId) ?? 0, Number(last.ts)))
       }
-    } catch {
-      /* first run */
+    } catch (err) {
+      this.ctx.log('zalo: cache unreadable', (err as Error).message)
     }
   }
 
@@ -1083,22 +1222,30 @@ export class ZaloAdapter implements PlatformAdapter {
    */
   private scheduleSave(): void {
     if (!this.cacheFile || this.saveTimer) return
-    this.saveTimer = setTimeout(() => this.saveCache(), 15_000)
+    this.saveTimer = setTimeout(() => void this.saveCache(), 15_000)
   }
 
-  private saveCache(): void {
+  /** Writes go one after another, each to a temporary file renamed over the cache (the previous one copied to .bak). */
+  private saveCache(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     this.saveTimer = undefined
-    if (!this.cacheFile) return
+    const file = this.cacheFile
+    if (!file) return this.saving
     const threads = [...this.raw.entries()].map(([threadId, list]) => [threadId, this.threadTypes.get(threadId) ?? 0, list])
     // Reactions only for messages still kept (the rest would never show again).
     const reactions = [...this.reacts.entries()].map(([threadId, byMsg]) => {
       const kept = new Set((this.raw.get(threadId) ?? []).map((m) => m.msgId))
       return [threadId, [...byMsg.entries()].filter(([msgId]) => kept.has(msgId))] as const
     })
-    void writeFile(this.cacheFile, JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe], reactions })).catch((err) =>
-      this.ctx.log('zalo cache save failed', (err as Error).message)
-    )
+    const json = JSON.stringify({ version: 1, threads, stickers: [...this.stickerUrls], sync: this.syncCursors, started: [...this.startedByMe], reactions })
+    this.saving = this.saving
+      .then(async () => {
+        await writeFile(`${file}.tmp`, json)
+        await copyFile(file, `${file}.bak`).catch(() => undefined)
+        await rename(`${file}.tmp`, file)
+      })
+      .catch((err) => this.ctx.log('zalo cache save failed', (err as Error).message))
+    return this.saving
   }
 
   private rawMessage(threadId: string, messageId: string): TMessage | undefined {
@@ -1115,12 +1262,6 @@ export class ZaloAdapter implements PlatformAdapter {
     this.account.error = error
     this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
   }
-}
-
-/** zca-js rejects a dead cookie with its own login errors; anything else (offline, timeouts) is worth retrying as is. */
-function isRejectedSession(err: unknown): boolean {
-  const message = (err as Error)?.message ?? ''
-  return (err as Error)?.name === 'ZcaApiError' || /Đăng nhập thất bại|Khởi tạo ngữ cảnh/i.test(message)
 }
 
 function textOf(raw: TMessage): string {
