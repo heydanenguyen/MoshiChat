@@ -84,6 +84,16 @@ export interface Toast {
   action?: { label: string; run(): void }
 }
 
+/** A send that failed, kept in memory only (the composer was already cleared when it went out). */
+export interface FailedSend {
+  /** The composer it came from (a merged chat's anchor): sending again picks the app the normal way. */
+  composerId: string
+  text: string
+  files: OutgoingAttachment[]
+  resolveFiles?: () => Promise<OutgoingAttachment[]>
+  replyTo?: Message
+}
+
 export interface Lightbox {
   url: string
   name?: string
@@ -178,7 +188,13 @@ interface State {
   /** Settings pushed from main (scheduled messages) or returned by an IPC call. */
   applySettings(settings: Settings): void
   scheduleMessage(conversationId: string, text: string, sendAt: number): Promise<void>
-  send(conversationId: string, text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>): Promise<void>
+  /** `again`: a retry of a failed send, with its own reply target (the composer's current one is left alone). */
+  send(conversationId: string, text: string, files?: OutgoingAttachment[], resolveFiles?: () => Promise<OutgoingAttachment[]>, again?: { replyTo?: Message }): Promise<void>
+  /** Sends that failed, by their bubble's temporary id: what went out, so the bubble can be sent again as it was. */
+  failedSends: Record<string, FailedSend>
+  /** Send a failed bubble again (it is replaced by a new one) / take it away. */
+  retrySend(conversationId: string, tempId: string): Promise<void>
+  discardFailed(conversationId: string, tempId: string): void
   sendGif(conversationId: string, item: GifItem): Promise<void>
   react(conversationId: string, messageId: string, emoji: string): Promise<void>
   /** Take one of my messages back for everyone (shown as unsent right away, restored if the platform refuses). */
@@ -186,7 +202,8 @@ interface State {
   setReplyTo(conversationId: string, message?: Message): void
   startForward(message?: Message): void
   forward(toConversationId: string): Promise<void>
-  loadAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<string | undefined>
+  /** `quiet`: a load nobody asked for (a sticker coming into view) fails without a toast. */
+  loadAttachment(conversationId: string, messageId: string, attachmentId: string, options?: { quiet?: boolean }): Promise<string | undefined>
   openAttachment(conversationId: string, messageId: string, attachmentId: string): Promise<void>
   openLightbox(lightbox?: Lightbox): void
   addFiles(conversationId: string, files: OutgoingAttachment[]): void
@@ -300,6 +317,7 @@ interface State {
 /** What the platforms return for a search inside one chat (manager SEARCH_LIMIT). */
 const IN_CHAT_RESULTS = 60
 let toastCounter = 0
+let sendCounter = 0
 let lastTypingSent = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -460,6 +478,7 @@ export const useStore = create<State>((set, get) => ({
   shared: {},
   replyTos: {},
   pendingFiles: {},
+  failedSends: {},
   composerDrafts: {},
   narrow: false,
 
@@ -733,9 +752,9 @@ export const useStore = create<State>((set, get) => ({
     setTimeout(() => set({ highlightIds: { ...get().highlightIds, [id]: messageId } }), 0)
   },
 
-  async send(composerId, text, files, resolveFiles) {
+  async send(composerId, text, files, resolveFiles, again) {
     const { settings, conversations } = get()
-    const replyTo = get().replyTos[composerId]
+    const replyTo = again ? again.replyTo : get().replyTos[composerId]
     const pendingFiles = files ?? get().pendingFiles[composerId] ?? []
     const trimmed = text.trim()
     if (!composerId || (!trimmed && !pendingFiles.length)) return
@@ -746,7 +765,8 @@ export const useStore = create<State>((set, get) => ({
     // Replying to a message request accepts it, as it does on the platforms.
     const conversation = conversations[selectedId]
     if (conversation && isPendingRequest(conversation, settings.acceptedRequests)) void get().acceptRequest(selectedId)
-    const tempId = `temp-${Date.now()}`
+    // Unique even for two sends in the same millisecond (a failed one is remembered by this id).
+    const tempId = `temp-${Date.now()}-${++sendCounter}`
     const optimistic: Message = {
       id: tempId,
       conversationId: selectedId,
@@ -771,7 +791,7 @@ export const useStore = create<State>((set, get) => ({
     const { messages } = get()
     set({
       messages: { ...messages, [selectedId]: [...(messages[selectedId] ?? []), optimistic] },
-      replyTos: { ...get().replyTos, [composerId]: undefined },
+      replyTos: again ? get().replyTos : { ...get().replyTos, [composerId]: undefined },
       pendingFiles: files ? get().pendingFiles : { ...get().pendingFiles, [composerId]: [] }
     })
     try {
@@ -803,9 +823,28 @@ export const useStore = create<State>((set, get) => ({
     } catch (err) {
       const s = get()
       const failed = { ...optimistic, status: 'failed' as const }
-      set({ messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], failed) ?? [] } })
+      set({
+        messages: { ...s.messages, [selectedId]: upsertMessage(s.messages[selectedId], failed) ?? [] },
+        failedSends: { ...s.failedSends, [tempId]: { composerId, text: trimmed, files: pendingFiles, resolveFiles, replyTo } }
+      })
       get().showToast(cleanError(err), 'error')
     }
+  },
+
+  async retrySend(conversationId, tempId) {
+    // A send that failed may still have reached the platform (a timeout after delivery): retrying is the user's call.
+    const saved = get().failedSends[tempId]
+    if (!saved) return
+    get().discardFailed(conversationId, tempId)
+    await get().send(saved.composerId, saved.text, saved.files, saved.resolveFiles, { replyTo: saved.replyTo })
+  },
+
+  discardFailed(conversationId, tempId) {
+    const s = get()
+    const failedSends = { ...s.failedSends }
+    delete failedSends[tempId]
+    const list = s.messages[conversationId]
+    set({ failedSends, messages: list ? { ...s.messages, [conversationId]: list.filter((m) => m.id !== tempId) } : s.messages })
   },
 
   async sendGif(conversationId, item) {
@@ -898,7 +937,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async loadAttachment(conversationId, messageId, attachmentId) {
+  async loadAttachment(conversationId, messageId, attachmentId, options) {
     try {
       const url = await window.unison.messages.loadAttachment(conversationId, messageId, attachmentId)
       if (!url) return undefined
@@ -912,7 +951,7 @@ export const useStore = create<State>((set, get) => ({
       }
       return url
     } catch (err) {
-      get().showToast(cleanError(err), 'error')
+      if (!options?.quiet) get().showToast(cleanError(err), 'error')
       return undefined
     }
   },

@@ -3,6 +3,7 @@ import { Clock, ExternalLink, Search, TrendingUp, X } from 'lucide-react'
 import type { GifItem, GifProvider } from '@shared/types'
 import { useStore, useT } from '../store'
 import { useKeepInside } from '../popover'
+import { useGifKeyState } from '../gifKey'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
 
@@ -62,7 +63,9 @@ export function GifPicker({ onPick, onClose }: { onPick(item: GifItem): void; on
   const t = useT()
   const language = useStore((s) => s.settings.language)
   const provider = useStore((s) => s.settings.gif?.provider ?? 'klipy')
-  const hasKey = useStore((s) => !!s.settings.gif?.key?.trim())
+  // The release may ship a key of its own: only ask for one when there is neither.
+  const { gif: hasKey, own: ownKey, checked } = useGifKeyState()
+  const noKey = !hasKey && checked
   const [recent, setRecent] = useState<GifItem[]>(loadRecent)
   const [query, setQuery] = useState('')
   const [mood, setMood] = useState<string | undefined>()
@@ -70,7 +73,7 @@ export function GifPicker({ onPick, onClose }: { onPick(item: GifItem): void; on
   const [items, setItems] = useState<GifItem[]>([])
   const [page, setPage] = useState(1)
   const [hasNext, setHasNext] = useState(false)
-  const [status, setStatus] = useState<Status>(hasKey ? 'loading' : 'nokey')
+  const [status, setStatus] = useState<Status>(noKey ? 'nokey' : 'loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const request = useRef(0)
@@ -119,12 +122,12 @@ export function GifPicker({ onPick, onClose }: { onPick(item: GifItem): void; on
   // Search as you type (debounced); trending when empty.
   useEffect(() => {
     if (!hasKey) {
-      setStatus('nokey')
+      if (noKey) setStatus('nokey')
       return
     }
     const timer = setTimeout(() => void load(effective, 1), effective ? 320 : 0)
     return () => clearTimeout(timer)
-  }, [effective, hasKey, provider, load])
+  }, [effective, hasKey, noKey, provider, load])
 
   const onScroll = (e: React.UIEvent<HTMLDivElement>): void => {
     const el = e.currentTarget
@@ -148,7 +151,7 @@ export function GifPicker({ onPick, onClose }: { onPick(item: GifItem): void; on
           <LogoMark size={52} title="" className="gif-setup-buddy" />
           <strong>{t('gifSetupTitle')}</strong>
           <span className="gif-setup-text">{t('gifSetupHint')}</span>
-          <GifKeyForm compact onSaved={() => void load(effective, 1)} invalid={hasKey} />
+          <GifKeyForm compact onSaved={() => void load(effective, 1)} invalid={ownKey} />
         </div>
       ) : (
         <>

@@ -774,22 +774,43 @@ function Group({
             <div key={message.id} style={{ display: 'contents' }}>
               {/* the bubble draws its own reactions, wherever Settings > Chat puts them */}
               <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={platform} />
-              {message.id === lastOutgoingId && (
-                <div className={`status-line ${message.status === 'failed' ? 'failed' : ''}`}>
-                  {message.status === 'read'
-                    ? t('read')
-                    : message.status === 'failed'
-                      ? t('failed')
-                      : message.status === 'sending'
-                        ? t('sending')
-                        : t('delivered')}
+              {/* every failed bubble gets its line (with Send again / Delete), not only the last one */}
+              {message.status === 'failed' ? (
+                <div className="status-line failed">
+                  {t('failed')}
+                  <FailedActions message={message} />
                 </div>
+              ) : (
+                message.id === lastOutgoingId && (
+                  <div className="status-line">{message.status === 'read' ? t('read') : message.status === 'sending' ? t('sending') : t('delivered')}</div>
+                )
               )}
             </div>
           )
         })}
       </div>
     </div>
+  )
+}
+
+/** Under a bubble that did not go out: send it again as it was, or take it away. */
+function FailedActions({ message }: { message: Message }): JSX.Element {
+  const t = useT()
+  const retrySend = useStore((s) => s.retrySend)
+  const discardFailed = useStore((s) => s.discardFailed)
+  // Only a send from this session can go again (what went out is kept in memory, not with the message).
+  const canRetry = useStore((s) => !!s.failedSends[message.id])
+  return (
+    <span className="status-actions">
+      {canRetry && (
+        <button type="button" className="status-action" onClick={() => void retrySend(message.conversationId, message.id)}>
+          {t('sendAgain')}
+        </button>
+      )}
+      <button type="button" className="status-action" onClick={() => discardFailed(message.conversationId, message.id)}>
+        {t('delete')}
+      </button>
+    </span>
   )
 }
 
@@ -971,7 +992,8 @@ function BubbleView({
     void react(message.conversationId, message.id, '❤️')
   }
   const direction = message.isOutgoing ? 'out' : 'in'
-  const tagged = message.attachments.find((a) => a.kind === 'sticker' && (a.url || a.sticker))
+  // A sticker without a link (WhatsApp, Telegram) is one too: StickerImage fetches its picture.
+  const tagged = message.attachments.find((a) => a.kind === 'sticker')
   // A photo tagged as a sticker only by timing or size is checked against the pack's pictures; a
   // pasted screenshot that happened to go out right after a sticker turns back into a photo.
   const guessedUrl = tagged?.guessed && tagged.url && !tagged.sticker?.startsWith('custom:') ? tagged.url : undefined
@@ -1133,7 +1155,7 @@ function BubbleView({
             )}
             {sticker &&
               (sticker.sticker?.startsWith('custom:') && customUrl(sticker.sticker.slice(7)) ? (
-                <img className="attachment-sticker" src={customUrl(sticker.sticker.slice(7))} alt={sticker.name ?? t('sticker')} draggable={false} />
+                <StickerImage src={customUrl(sticker.sticker.slice(7))} attachment={sticker} message={message} />
               ) : sticker.sticker && isStickerId(sticker.sticker) ? (
                 <span className="attachment-sticker" role="img" aria-label={t('sticker')}>
                   <StickerArt id={sticker.sticker} play="auto" />
@@ -1150,7 +1172,7 @@ function BubbleView({
                   style={{ backgroundImage: `url("${imageSrc(sticker.url)}")`, '--frames': sticker.frames, '--loop': `${sticker.duration ?? sticker.frames * 0.25}s` } as CSSProperties}
                 />
               ) : (
-                <img className={`attachment-sticker ${sticker.flattened ? 'flattened' : ''}`} src={imageSrc(sticker.url)} alt={sticker.name ?? t('sticker')} draggable={false} />
+                <StickerImage src={imageSrc(sticker.url)} attachment={sticker} message={message} flattened={sticker.flattened} />
               ))}
             {!sticker && gridded && <MediaGrid conversationId={message.conversationId} tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
             {!sticker &&
@@ -1307,6 +1329,50 @@ function BubbleView({
       {!showActions && time}
     </div>
   )
+}
+
+/** Stickers that would not load this session: not asked for again every time their row scrolls back in. */
+const unloadableStickers = new Set<string>()
+
+/**
+ * A sticker picture. WhatsApp and Telegram send stickers without a link: the file is fetched through the platform
+ * (like a voice note), with a placeholder meanwhile. One that will not show (a dead link, a Telegram animated
+ * .tgs) becomes a placeholder with its name instead of a broken image.
+ */
+function StickerImage({ src, attachment, message, flattened }: { src?: string; attachment: Attachment; message: Message; flattened?: boolean }): JSX.Element {
+  const t = useT()
+  const loadAttachment = useStore((s) => s.loadAttachment)
+  const [loaded, setLoaded] = useState<string>()
+  const [broken, setBroken] = useState<string>()
+  const key = `${message.conversationId}/${message.id}/${attachment.id}`
+  // Nothing to fetch: a bubble still being sent (no platform id yet), or one of your stickers that was deleted.
+  const sending = message.id.startsWith('temp-')
+  const gone = !!attachment.sticker?.startsWith('custom:')
+  const [unloadable, setUnloadable] = useState(() => gone || unloadableStickers.has(key))
+  const url = src ?? loaded
+  useEffect(() => {
+    if (src || sending || gone || unloadableStickers.has(key)) return
+    let live = true
+    void loadAttachment(message.conversationId, message.id, attachment.id, { quiet: true }).then((next) => {
+      if (!next) unloadableStickers.add(key)
+      if (!live) return
+      if (next) setLoaded(next)
+      else setUnloadable(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [src, sending, gone, key, loadAttachment, message.conversationId, message.id, attachment.id])
+  const label = attachment.name || t('sticker')
+  if (!url || url === broken) {
+    const failed = unloadable || url === broken
+    return (
+      <span className={`attachment-sticker sticker-placeholder ${failed ? 'failed' : ''}`} role="img" aria-label={label}>
+        {failed && label}
+      </span>
+    )
+  }
+  return <img className={`attachment-sticker ${flattened ? 'flattened' : ''}`} src={url} alt={label} draggable={false} onError={() => setBroken(url)} />
 }
 
 function AttachmentView({ attachment, message, platform }: { attachment: Attachment; message: Message; platform: Platform }): JSX.Element {

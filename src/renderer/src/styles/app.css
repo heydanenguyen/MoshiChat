@@ -2422,6 +2422,40 @@ button.reaction-chip.mine:hover {
 .status-line.failed {
   color: var(--danger);
 }
+/* Send again / Delete beside "Not delivered": plain text buttons, only the colour answers the pointer */
+.status-actions {
+  display: inline-flex;
+  gap: 10px;
+  margin-left: 10px;
+}
+.status-action {
+  font: inherit;
+  color: var(--accent);
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color var(--duration-fast) ease;
+}
+.status-action:hover {
+  color: color-mix(in srgb, var(--accent) 75%, var(--text-primary));
+}
+.status-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* a sticker whose picture is still being fetched, or would not load (its name instead of a broken image) */
+.attachment-sticker.sticker-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: 28px;
+  background: var(--fill-tertiary);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
+  overflow: hidden;
+}
 
 .typing-bubble {
   display: inline-flex;

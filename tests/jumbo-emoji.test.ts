@@ -19,4 +19,16 @@ describe('jumboEmojiCount', () => {
     expect(jumboEmojiCount('#')).toBe(0)
     expect(jumboEmojiCount('')).toBe(0)
   })
+
+  it('treats text-style symbols as text unless they ask for the emoji look (U+FE0F)', () => {
+    expect(jumboEmojiCount('©')).toBe(0)
+    expect(jumboEmojiCount('®')).toBe(0)
+    expect(jumboEmojiCount('™')).toBe(0)
+    expect(jumboEmojiCount('↔')).toBe(0)
+    expect(jumboEmojiCount('‼')).toBe(0)
+    expect(jumboEmojiCount('© ®')).toBe(0)
+    expect(jumboEmojiCount('©\uFE0F')).toBe(1)
+    expect(jumboEmojiCount('‼️')).toBe(1)
+    expect(jumboEmojiCount('⬅️⬅️')).toBe(2)
+  })
 })

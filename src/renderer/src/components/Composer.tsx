@@ -42,6 +42,12 @@ const stopped = (recorder: MediaRecorder): Promise<void> =>
     recorder.stop()
   })
 
+/** Stop both recorders and free the microphone. */
+const stopRecording = async (session: Recording): Promise<void> => {
+  await Promise.all([stopped(session.recorder), session.aac ? stopped(session.aac.recorder) : Promise.resolve()])
+  session.stream.getTracks().forEach((track) => track.stop())
+}
+
 export function Composer({ conversationId, active = true, disabled, canAttach, canVoice = canAttach }: Props): JSX.Element {
   const t = useT()
   const send = useStore((s) => s.send)
@@ -212,6 +218,34 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   // Some input methods commit the word AND pass the Enter on, which sent the message twice 80 ms
   // apart; the same text again within a moment is that echo, not a second message.
   const lastSent = useRef<{ text: string; at: number }>()
+  // Emoji picked while a word was still being composed, inserted once it is committed.
+  const pendingEmoji = useRef('')
+
+  // The pane shows another chat (it is not re-mounted, to keep its scroll): nothing begun in the previous one may
+  // carry over. A voice note still recording would otherwise go to the new chat, and an open sticker or GIF
+  // picker would send there. Reply targets stay: each chat keeps its own, like its draft.
+  const shownId = useRef(conversationId)
+  const recordingRef = useRef<Recording>()
+  useEffect(() => {
+    recordingRef.current = recording
+  }, [recording])
+  useEffect(() => {
+    const previous = shownId.current
+    shownId.current = conversationId
+    // First render, or StrictMode running the effect again: nothing to undo.
+    if (previous === conversationId) return
+    const session = recordingRef.current
+    if (session) {
+      setRecording(undefined)
+      void stopRecording(session)
+    }
+    setStickersOpen(false)
+    setGifsOpen(false)
+    setScheduleOpen(false)
+    setSlash(null)
+    pendingEmoji.current = ''
+    sendWhenComposed.current = false
+  }, [conversationId])
 
   const submit = (value: string = text): void => {
     if ((!value.trim() && !pendingFiles.length) || disabled || translating) return
@@ -284,9 +318,13 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
 
   const onCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>): void => {
     composing.current = false
+    let value = e.currentTarget.value
+    if (pendingEmoji.current) {
+      value = placeEmoji(pendingEmoji.current)
+      pendingEmoji.current = ''
+    }
     if (!sendWhenComposed.current) return
     sendWhenComposed.current = false
-    const value = e.currentTarget.value
     setText(value)
     // After the input method has finished writing into the box.
     composedTimer.current = setTimeout(() => {
@@ -310,22 +348,37 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     focusInput()
   }
 
-  const insertEmoji = (emoji: string): void => {
+  /** Put an emoji at the caret, in what the box holds right now (the state can lag the input method). */
+  const placeEmoji = (emoji: string): string => {
     const el = ref.current
-    const start = el?.selectionStart ?? text.length
-    const end = el?.selectionEnd ?? text.length
-    const next = text.slice(0, start) + emoji + text.slice(end)
+    const value = el?.value ?? text
+    const start = el?.selectionStart ?? value.length
+    const end = el?.selectionEnd ?? value.length
+    const next = value.slice(0, start) + emoji + value.slice(end)
     setText(next)
     requestAnimationFrame(() => {
       if (!el) return
       el.focus({ preventScroll: true })
       el.setSelectionRange(start + emoji.length, start + emoji.length)
     })
+    return next
+  }
+
+  // Mid-composition the box still holds the input method's uncommitted word; writing into it now would drop that
+  // word or have it written again. The emoji waits for the word to be committed.
+  const insertEmoji = (emoji: string): void => {
+    if (composing.current) pendingEmoji.current += emoji
+    else placeEmoji(emoji)
   }
 
   const startRecording = async (): Promise<void> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      // The chat changed while the microphone was being opened: this recording belongs to none.
+      if (shownId.current !== conversationId) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
       const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32_000 })
       const session: Recording = { recorder, stream, chunks: [], startedAt: Date.now() }
@@ -350,8 +403,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
     setRecording(undefined)
     const duration = (Date.now() - session.startedAt) / 1000
     void (async () => {
-      await Promise.all([stopped(session.recorder), session.aac ? stopped(session.aac.recorder) : Promise.resolve()])
-      session.stream.getTracks().forEach((track) => track.stop())
+      await stopRecording(session)
       if (!sendIt || duration < 0.6) return
       try {
         const blob = new Blob(session.chunks, { type: session.recorder.mimeType })

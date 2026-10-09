@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useT } from '../store'
 import { useKeepInside } from '../popover'
+import { searchEmoji } from '../emojiKeywords'
 
 interface Category {
   id: string
@@ -105,11 +106,7 @@ export function EmojiPicker({ onPick, onClose }: Props): JSX.Element {
   }, [recent.length, category])
 
   const visible = useMemo(() => {
-    const q = query.trim()
-    if (q) {
-      const all = CATEGORIES.flatMap((c) => c.emoji)
-      return all.filter((e) => e.includes(q)).length ? all.filter((e) => e.includes(q)) : all.slice(0, 0)
-    }
+    if (query.trim()) return searchEmoji(query, CATEGORIES)
     if (category === 'recent') return recent
     return CATEGORIES.find((c) => c.id === category)?.emoji ?? []
   }, [query, category, recent])

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleDashed, Clapperboard, EyeOff, File, FileText, Image, ImagePlay, Info, Link2, Mic, Phone, PhoneMissed, Play, Sticker, Undo2, Video } from 'lucide-react'
 import type { Attachment, Message, Platform, PreviewKind } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
@@ -161,6 +161,46 @@ export function LinkCard({ attachment }: { attachment: Attachment }): JSX.Elemen
 
 // ---------------------------------------------------------------- video
 
+/**
+ * A GIF that came as a video: loops only while it is in view and the window is in front (see .window-idle).
+ * Every GIF in a long chat used to keep decoding for as long as the chat was open, scrolled away or not.
+ */
+function GifVideo({ src, poster, onError }: { src?: string; poster?: string; onError(): void }): JSX.Element {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const video = ref.current
+    if (!video) return
+    const root = document.documentElement
+    let visible = false
+    let idleNow = root.classList.contains('window-idle')
+    const update = (): void => {
+      if (visible && !idleNow) void video.play().catch(() => undefined)
+      else video.pause()
+    }
+    const inView = new IntersectionObserver(
+      ([entry]) => {
+        visible = entry.isIntersecting
+        update()
+      },
+      { root: video.closest('.chat-scroll'), threshold: 0 }
+    )
+    inView.observe(video)
+    // <html> changes class for other reasons too (theme, …): act only when the idle state flips.
+    const idle = new MutationObserver(() => {
+      const next = root.classList.contains('window-idle')
+      if (next === idleNow) return
+      idleNow = next
+      update()
+    })
+    idle.observe(root, { attributes: true, attributeFilter: ['class'] })
+    return () => {
+      inView.disconnect()
+      idle.disconnect()
+    }
+  }, [])
+  return <video ref={ref} className="attachment-image" src={src} poster={poster} loop muted playsInline preload="metadata" onError={onError} />
+}
+
 /** Poster with a play button; plays full screen in the app instead of bouncing to the browser. */
 export function VideoThumb({ attachment, onFallback }: { attachment: Attachment; onFallback(): void }): JSX.Element {
   const t = useT()
@@ -179,7 +219,7 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
   if (attachment.gif && playable && !failed) {
     return (
       <button className="video-thumb gif" onClick={play} title="GIF">
-        <video className="attachment-image" src={mediaSrc(attachment.url)} poster={attachment.thumbnailUrl} autoPlay loop muted playsInline onError={() => setFailed(true)} />
+        <GifVideo src={mediaSrc(attachment.url)} poster={attachment.thumbnailUrl} onError={() => setFailed(true)} />
         <span className="gif-badge">GIF</span>
       </button>
     )

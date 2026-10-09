@@ -4,26 +4,13 @@ import type { GifItem } from '@shared/types'
 import { useStore, useT } from '../store'
 import { imageSrc } from '@shared/media'
 import { loadGiphyStickers, rememberGiphySticker, type SavedGiphySticker } from '../giphyStickers'
+import { useGifKeyState } from '../gifKey'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
 import { MOODS } from './GifPicker'
 
 type Status = 'loading' | 'ready' | 'nokey' | 'rate' | 'error'
 type View = 'search' | 'recent' | 'received'
-
-/** A GIPHY key is at hand: the GIF key when it is GIPHY's, one set for stickers, or one built into the release. */
-function useGiphyKey(): boolean {
-  const own = useStore((s) => (s.settings.gif?.provider === 'giphy' && !!s.settings.gif.key?.trim()) || !!s.settings.giphyKey?.trim())
-  const [builtIn, setBuiltIn] = useState(false)
-  useEffect(() => {
-    let live = true
-    void window.unison.app.gifDefault().then((p) => live && setBuiltIn(p === 'giphy'))
-    return () => {
-      live = false
-    }
-  }, [])
-  return own || builtIn
-}
 
 /**
  * The GIPHY sticker tab: the same library as Instagram's sticker tray, so a pick reaches Instagram as a real sticker
@@ -33,7 +20,8 @@ function useGiphyKey(): boolean {
 export function GiphyStickers({ onPick, tray }: { onPick(id: string): void; tray?: string }): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
-  const hasKey = useGiphyKey()
+  // A GIPHY key: the GIF key when it is GIPHY's, one set for stickers, or one built into the release.
+  const hasKey = useGifKeyState().giphy
   const viaTray = !hasKey && !!tray
   const canSearch = hasKey || viaTray
   const [recent, setRecent] = useState<SavedGiphySticker[]>(() => loadGiphyStickers('recent'))

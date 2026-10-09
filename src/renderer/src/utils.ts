@@ -200,6 +200,8 @@ export function shortcutLabel(key: string, shift = false): string {
 // Each code point is checked on its own (a ZWJ or variation selector inside a class is the point here).
 // eslint-disable-next-line no-misleading-character-class
 const EMOJI_GRAPHEME = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\u{200D}\u{FE0F}\u{20E3}#*0-9])+$/u
+// Pictographic, but drawn as plain text unless U+FE0F asks for the emoji look: a lone © or ™ is not a big emoji.
+const TEXT_STYLE = /^[\u{A9}\u{AE}\u{2122}\u{2194}-\u{2199}\u{21A9}\u{21AA}\u{2B05}-\u{2B07}\u{203C}\u{2049}\u{2139}\u{3030}\u{303D}\u{3297}\u{3299}]$/u
 
 /**
  * 1-3 when the text is only emoji (shown large, no bubble, like Instagram/iMessage); 0 otherwise.
@@ -210,7 +212,7 @@ export function jumboEmojiCount(text: string): number {
   if (!trimmed || trimmed.length > 40) return 0
   const segments = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)].map((s) => s.segment).filter((s) => s.trim())
   if (!segments.length || segments.length > 3) return 0
-  const allEmoji = segments.every((g) => EMOJI_GRAPHEME.test(g) && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g))
+  const allEmoji = segments.every((g) => EMOJI_GRAPHEME.test(g) && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g) && !TEXT_STYLE.test(g))
   return allEmoji ? segments.length : 0
 }
 
