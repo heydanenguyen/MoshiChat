@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { PhoneCall, PhoneOff, Video } from 'lucide-react'
+import { Phone, PhoneCall, PhoneOff, Video } from 'lucide-react'
 import type { CallState, IncomingCall } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
@@ -8,6 +8,7 @@ import { startRing } from '../sounds'
 import { usePresence, usePresenceList } from '../usePresence'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
+import { isQuietStyle } from '../rowState'
 
 const callKey = (call: IncomingCall): string => call.id
 
@@ -37,9 +38,14 @@ function CallCard({ call, closing }: { call: IncomingCall; closing: boolean }): 
     void run(call.id).finally(() => setBusy(false))
   }
   const label = call.kind === 'video' ? t('callIncomingVideo') : t('callIncomingVoice')
+  // The default style shows the two answers as round glyph buttons (text kept for screen readers and as the tooltip).
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
   return (
     <div className="call-card" data-state={closing ? 'closing' : 'open'} role="alert" aria-label={`${label}: ${call.peerName}`}>
-      <Avatar name={call.peerName} url={call.peerAvatarUrl} size={44} platform={call.platform} />
+      <span className="call-card-avatar">
+        <Avatar name={call.peerName} url={call.peerAvatarUrl} size={44} platform={call.platform} />
+        <i className="call-ring" aria-hidden />
+      </span>
       <div className="call-card-info">
         <div className="call-card-name">{call.peerName}</div>
         <div className="call-card-sub">
@@ -49,18 +55,24 @@ function CallCard({ call, closing }: { call: IncomingCall; closing: boolean }): 
           </span>
           <span className="call-card-kind">
             {call.kind === 'video' ? <Video size={13} strokeWidth={2.2} /> : <PhoneCall size={13} strokeWidth={2.2} />}
-            {call.kind === 'video' ? t('callVideo') : t('callVoice')}
+            {quiet ? label : call.kind === 'video' ? t('callVideo') : t('callVoice')}
           </span>
         </div>
       </div>
       <div className="call-card-actions">
-        <button type="button" className="btn secondary call-decline" disabled={busy || closing} onClick={() => act(declineCall)}>
+        <button type="button" className="btn secondary call-decline" title={quiet ? t('callDecline') : undefined} disabled={busy || closing} onClick={() => act(declineCall)}>
           <PhoneOff size={15} strokeWidth={2.2} />
-          {t('callDecline')}
+          <span className="call-card-glyph" aria-hidden>
+            <Phone size={20} strokeWidth={2} />
+          </span>
+          <span className="call-card-btn-text">{t('callDecline')}</span>
         </button>
-        <button type="button" className="btn primary" disabled={busy || closing} onClick={() => act(answerCall)}>
+        <button type="button" className="btn primary call-answer" title={quiet ? t('callAnswer') : undefined} disabled={busy || closing} onClick={() => act(answerCall)}>
           {call.kind === 'video' ? <Video size={15} strokeWidth={2.2} /> : <PhoneCall size={15} strokeWidth={2.2} />}
-          {t('callAnswer')}
+          <span className="call-card-glyph" aria-hidden>
+            {call.kind === 'video' ? <Video size={20} strokeWidth={2} /> : <Phone size={20} strokeWidth={2} />}
+          </span>
+          <span className="call-card-btn-text">{t('callAnswer')}</span>
         </button>
       </div>
     </div>
@@ -100,6 +112,7 @@ function StripBody({ call, closing }: { call: NonNullable<CallState['active']>; 
   const t = useT()
   const name = useConversationTitle(call.conversationId) ?? PLATFORMS[call.platform].name
   const endCall = useStore((s) => s.endCall)
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
   const now = useNow()
   return (
     <div className="call-strip" data-state={closing ? 'closing' : 'open'}>
@@ -108,9 +121,9 @@ function StripBody({ call, closing }: { call: NonNullable<CallState['active']>; 
         <span className="call-strip-text">{t('callInCallWith', { name })}</span>
         <span className="call-strip-time">{callTimer(call.startedAt, now)}</span>
       </button>
-      <button type="button" className="call-strip-end" disabled={closing} onClick={() => void endCall()}>
+      <button type="button" className="call-strip-end" title={quiet ? t('callEnd') : undefined} disabled={closing} onClick={() => void endCall()}>
         <PhoneOff size={14} strokeWidth={2.2} />
-        {t('callEnd')}
+        <span className="call-strip-end-text">{t('callEnd')}</span>
       </button>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { AlarmClock, ArrowUp, File, Languages, Mic, Paperclip, Reply, Smile, Sticker, Trash2, Undo2, X } from 'lucide-react'
+import { AlarmClock, ArrowUp, Clock, File, Languages, Mic, Paperclip, Reply, Smile, Sticker, Trash2, Undo2, X } from 'lucide-react'
 import { useAi } from '../aiStore'
 import { TranslatePicker, languageName } from './TranslatePicker'
 import { readDraft, useStore, useT } from '../store'
@@ -14,6 +14,8 @@ import type { QuickReply } from '@shared/types'
 import { isComposingEnter } from '../imeGuard'
 import { Presence } from './Presence'
 import { Collapse } from './Collapse'
+import { isQuietStyle } from '../rowState'
+import { WAVE_BARS, waveLevels } from '../recordingWave'
 
 interface Props {
   /** The chat this composer writes to (each pane of a split view has its own). */
@@ -51,6 +53,52 @@ const stopRecording = async (session: Recording): Promise<void> => {
   session.stream.getTracks().forEach((track) => track.stop())
 }
 
+/**
+ * The meter between the timer and the label while recording (default style): the bars follow the microphone's level
+ * through an AnalyserNode on the same stream (a second reader, so the recorders are untouched); one animation frame
+ * at a time, only while this is mounted. Without an analyser (or with reduced motion) the stylesheet's loop or still
+ * bars stay.
+ */
+function RecordingWave({ stream }: { stream: MediaStream }): JSX.Element {
+  const bars = useRef<HTMLSpanElement>(null)
+  const [live, setLive] = useState(false)
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let frame = 0
+    let ctx: AudioContext | undefined
+    try {
+      ctx = new AudioContext()
+      ctx.resume().catch(() => undefined)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.7
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const tick = (): void => {
+        analyser.getByteFrequencyData(data)
+        const levels = waveLevels(data)
+        bars.current?.childNodes.forEach((bar, i) => ((bar as HTMLElement).style.transform = `scaleY(${levels[i]})`))
+        frame = requestAnimationFrame(tick)
+      }
+      frame = requestAnimationFrame(tick)
+      setLive(true)
+    } catch {
+      /* no meter: the looping bars stay */
+    }
+    return () => {
+      cancelAnimationFrame(frame)
+      void ctx?.close().catch(() => undefined)
+    }
+  }, [stream])
+  return (
+    <span ref={bars} className={`recording-wave ${live ? 'live' : ''}`} aria-hidden>
+      {Array.from({ length: WAVE_BARS }, (_, i) => (
+        <i key={i} style={{ animationDelay: `${-((i * 0.37) % 1.2).toFixed(2)}s` }} />
+      ))}
+    </span>
+  )
+}
+
 export function Composer({ conversationId, active = true, disabled, canAttach, canVoice = canAttach }: Props): JSX.Element {
   const t = useT()
   const send = useStore((s) => s.send)
@@ -65,6 +113,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const removeFile = useStore((s) => s.removeFile)
   const showToast = useStore((s) => s.showToast)
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
   const [text, setText] = useState('')
   const [tall, setTall] = useState(false)
   const tallAt = useRef(0)
@@ -522,6 +571,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           <span className="recording-time">
             {mm}:{ss.toString().padStart(2, '0')}
           </span>
+          {quiet && recording && <RecordingWave stream={recording.stream} />}
           <span className="recording-label">{t('recording')}</span>
           <button className="composer-send visible" onClick={() => finishRecording(true)} title={t('send')}>
             <ArrowUp size={18} strokeWidth={2.6} />
@@ -618,7 +668,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
               </span>
             )}
             {canVoice && (
-              <button className="icon-btn" onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
+              <button className={`icon-btn composer-mic ${canSend ? 'swap-off' : ''}`} onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
                 <Mic size={18} strokeWidth={2} />
               </button>
             )}
@@ -652,13 +702,14 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
             {scheduleOn && text.trim() && !pendingFiles.length && (
               <span className="emoji-anchor">
                 <button
-                  className={`icon-btn ${scheduleOpen ? 'active' : ''}`}
+                  className={`icon-btn composer-later ${scheduleOpen ? 'active' : ''}`}
                   onMouseDown={(e) => scheduleOpen && e.stopPropagation()}
                   onClick={() => setScheduleOpen((o) => !o)}
                   title={t('scheduleSend')}
                   disabled={disabled}
                 >
-                  <AlarmClock size={18} strokeWidth={2} />
+                  {quiet ? <Clock size={18} strokeWidth={2} /> : <AlarmClock size={18} strokeWidth={2} />}
+                  {quiet && <span className="composer-later-label">{t('scheduleSend')}</span>}
                 </button>
                 <Presence modal={false}>{scheduleOpen && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}</Presence>
               </span>

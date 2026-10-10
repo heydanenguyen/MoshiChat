@@ -42,6 +42,7 @@ import { Presence } from './Presence'
 import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
 import { nextPinned } from '../scrollPin'
+import { isQuietStyle } from '../rowState'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -161,6 +162,8 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   const activatePane = useStore((s) => s.activatePane)
   const closePane = useStore((s) => s.closePane)
   const laterOn = useStore((s) => s.settings.laterTools !== false)
+  // The default (Moshi) style draws the header at 64 with a 36 avatar (UI direction A); the other styles keep 34.
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
   const toggleSplit = useStore((s) => s.toggleSplit)
   const canSplit = useStore((s) => s.wide && !s.narrow)
   const thread = useThread(conversation.id)
@@ -497,7 +500,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
             <ChevronLeft size={20} strokeWidth={2.4} />
           </button>
         )}
-        <Avatar name={conversation.title} url={conversation.avatarUrl} size={34} onClick={() => withViewTransition('details', () => toggleDetails('info'))} />
+        <Avatar name={conversation.title} url={conversation.avatarUrl} size={quiet ? 36 : 34} onClick={() => withViewTransition('details', () => toggleDetails('info'))} />
         <div className="chat-header-info">
           <div className="chat-header-title">
             {conversation.title}

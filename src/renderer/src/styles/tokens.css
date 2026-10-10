@@ -188,6 +188,34 @@
   --row-radius: 12px;
   --row-dot: 7px;
   --icon-stroke: 1.75;
+
+  /* phase 2: chat header, composer pill, call banner (used by the Quiet Glass rules only) */
+  --header-height: 64px;
+  --composer-height: 48px;
+  --ctl: 36px;
+}
+
+/* Neutral colours of the Quiet Glass rules (they do not depend on the accent, so every accent preset and custom accent
+   gets them; only the Quiet Glass rules read them). --glass-pill is the brief's "--glass": the existing --glass paints
+   the list and chat panels (phase 3). --row-selected falls back to the accent's own soft tint; Ocean sets its own below. */
+:root {
+  --danger-text: #c8323c;
+  --danger-solid: #c8323c;
+  --ok: #1e8a54;
+  --ok-solid: #1a7a46;
+  --glass-pill: rgba(255, 255, 255, 0.74);
+  --line2: rgba(18, 20, 28, 0.14);
+  --nv-on: rgba(18, 20, 28, 0.06);
+  --pill-muted: var(--fill-secondary);
+  --row-selected: var(--accent-soft);
+}
+:root[data-theme='dark'] {
+  --danger-text: #ff8a92;
+  --ok: #5fd09a;
+  --glass-pill: rgba(32, 35, 46, 0.74);
+  --line2: rgba(255, 255, 255, 0.13);
+  --nv-on: rgba(255, 255, 255, 0.07);
+  --pill-muted: var(--fill-tertiary);
 }
 
 /* The default Moshi look only: Liquid, Mono and Pals set their own colours and are left alone, and so are the other
@@ -204,9 +232,7 @@
   --bubble-out-solid: #2f5fe0;
   --bubble-out-text: #ffffff;
   --bubble-out-shadow: 0 0 0 0 transparent;
-  --danger-text: #c8323c;
   --row-selected: #eaf0ff;
-  --pill-muted: var(--fill-secondary);
 }
 
 :root:is(:not([data-accent]), [data-accent='ocean'])[data-theme='dark']:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) {
@@ -221,7 +247,5 @@
   --bubble-out-solid: #3a62e0;
   --bubble-out-text: #ffffff;
   --bubble-out-shadow: 0 0 0 0 transparent;
-  --danger-text: #ff8a92;
   --row-selected: rgba(134, 164, 255, 0.12);
-  --pill-muted: var(--fill-tertiary);
 }

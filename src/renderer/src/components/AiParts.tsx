@@ -7,6 +7,7 @@ import { useStore, useT, useThread } from '../store'
 import { formatBytes, tip } from '../utils'
 import { BuddyLoader } from './BuddyLoader'
 import { LogoMark } from './Logo'
+import { isQuietStyle } from '../rowState'
 
 export const LANGUAGE_NAMES: Record<string, { vi: string; en: string }> = {
   vi: { vi: 'tiếng Việt', en: 'Vietnamese' },
@@ -524,6 +525,7 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
   const clear = useAi((s) => s.clearSuggestions)
   const ready = useAi((s) => !!s.status?.chat.ready)
   const setComposerDraft = useStore((s) => s.setComposerDraft)
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
   // A merged person's newest message, whichever of its chats it came in.
   const last = useThread(conversationId).messages?.at(-1)
   const opener = state?.opener
@@ -540,14 +542,35 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
       </div>
     )
   }
+  const refresh = !state.busy && (
+    <button
+      className="icon-btn small"
+      onClick={() => {
+        if (!opener) return void suggest(conversationId, true)
+        clear(conversationId)
+        void openerAgain(conversationId, state.silentDays ?? 0)
+      }}
+      title={t('aiSuggestAgain')}
+    >
+      <RefreshCw size={12} strokeWidth={2.4} />
+    </button>
+  )
   return (
     <div className="suggest-row">
+      {quiet && (
+        <span className="suggest-label">
+          <Sparkles size={13} strokeWidth={2} aria-hidden />
+          {t('suggested')}
+        </span>
+      )}
+      {/* Next to the label in the default style, where a clipped row can never hide it */}
+      {quiet && refresh}
       {state.busy && (
         <span className="suggest-chip busy">
           <BuddyLoader size={14} inline /> {t('aiThinking')}
         </span>
       )}
-      {state.items?.map((text) => (
+      {(quiet ? state.items?.slice(0, 3) : state.items)?.map((text) => (
         <button
           key={text}
           className="suggest-chip"
@@ -559,19 +582,7 @@ export function SuggestionChips({ conversationId }: { conversationId: string }):
           {text}
         </button>
       ))}
-      {!state.busy && (
-        <button
-          className="icon-btn small"
-          onClick={() => {
-            if (!opener) return void suggest(conversationId, true)
-            clear(conversationId)
-            void openerAgain(conversationId, state.silentDays ?? 0)
-          }}
-          title={t('aiSuggestAgain')}
-        >
-          <RefreshCw size={12} strokeWidth={2.4} />
-        </button>
-      )}
+      {!quiet && refresh}
     </div>
   )
 }

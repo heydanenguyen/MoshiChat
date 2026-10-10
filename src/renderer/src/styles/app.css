@@ -16140,11 +16140,511 @@ html[data-vt='details']::view-transition-new(vt-chat) {
   font-weight: 600;
 }
 
-/* no glow: the composer's focus is a clear accent edge, the send button sits flat */
-:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
+/* ================================================================== Quiet Glass (UI direction A, phase 2)
+   Chat header, composer pill and incoming call banner, default style only. --glass-pill is the one glass in the
+   chat column (the composer) plus the call card and strip; controls are 36 round, colour changes on hover only. */
+
+/* header: 64 high, a hairline under it (no border, no blur); actions are 36 round, quiet until hovered */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header {
+  height: var(--header-height);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--separator);
 }
-:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send {
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions {
+  gap: 4px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions .icon-btn {
+  width: var(--ctl);
+  height: var(--ctl);
+  border-radius: 18px;
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions .icon-btn:hover {
+  background: var(--nv-on);
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions .icon-btn:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions .icon-btn.active,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-actions .icon-btn.active:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* the details pane's top row lines its close button up with the header's buttons */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .details-top {
+  height: var(--header-height);
+}
+
+/* composer: one glass pill, 48 high; the controls inside are 36 round */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box {
+  isolation: isolate;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: var(--composer-height);
+  padding: 6px;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
   box-shadow: none;
+}
+/* The glass is a layer behind the controls (not on the box itself): a box with a backdrop filter is a "backdrop root",
+   and the pickers and the "/" menu that open from inside it would then have nothing to blur but the box. */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    0 0 0 1px var(--line2),
+    0 8px 24px -8px rgba(15, 20, 50, 0.18);
+  pointer-events: none;
+  transition: box-shadow var(--duration-fast) ease;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box:focus-within::before {
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 8px 24px -8px rgba(15, 20, 50, 0.18);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-tools {
+  gap: 4px;
+  margin-bottom: 0;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.composer-box > .icon-btn, .composer-tools > .icon-btn, .composer-tools > .emoji-anchor > .icon-btn) {
+  width: var(--ctl);
+  height: var(--ctl);
+  margin-bottom: 0;
+  border-radius: 18px;
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.composer-box > .icon-btn, .composer-tools > .icon-btn, .composer-tools > .emoji-anchor > .icon-btn):hover {
+  background: var(--nv-on);
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.composer-box > .icon-btn, .composer-tools > .icon-btn, .composer-tools > .emoji-anchor > .icon-btn):active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.composer-box > .icon-btn, .composer-tools > .icon-btn, .composer-tools > .emoji-anchor > .icon-btn).active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box svg.lucide {
+  stroke-width: var(--icon-stroke);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-input {
+  padding: 8px;
+  min-height: var(--ctl);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text-primary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box.tall .composer-input {
+  padding: 6px 10px 4px;
+}
+
+/* the trailing control: the mic while the box is empty, the send button once there is something to send (never dimmed) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send {
+  width: var(--ctl);
+  height: var(--ctl);
+  margin-left: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+  transform: none;
+  opacity: 1;
+  transition: none;
+  animation: quiet-ctl-in 200ms var(--ease-out);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send svg.lucide {
+  stroke-width: 2.2;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send.idle,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-mic.swap-off {
+  display: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-mic {
+  animation: quiet-ctl-in 200ms var(--ease-out);
+}
+@keyframes quiet-ctl-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes quiet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* send later: a 36 high pill with the clock; the words show once the chat is 560 px wide or more */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-later-label {
+  display: none;
+  font-size: 12.5px;
+  line-height: 16px;
+  font-weight: 600;
+}
+@container chat (width >= 560px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-tools > .emoji-anchor > .composer-later {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    padding: 0 12px 0 10px;
+    gap: 6px;
+  }
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-later-label {
+    display: inline;
+  }
+}
+@container chat (width <= 560px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-input {
+    padding: 5px 8px;
+    min-height: 30px;
+  }
+  /* on the tools row the trailing control sits at the right, as the send button always did */
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-tools > .composer-mic {
+    margin-left: auto;
+  }
+}
+
+/* recording: trash in the danger colour, a red dot, the time, a 18-bar level meter, the label, then send */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box.recording {
+  align-items: center;
+  gap: 10px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box.recording > .icon-btn {
+  color: var(--danger-text);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: 0;
+  background: var(--danger-text);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-time {
+  min-width: 36px;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-label {
+  flex: 1;
+  min-width: 0;
+  padding-left: 2px;
+  font-size: 12.5px;
+  line-height: 16px;
+  color: var(--text-tertiary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-wave {
+  flex: none;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-wave i {
+  flex: none;
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleY(0.3);
+  animation: quiet-wave 1.2s ease-in-out infinite both;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-wave.live i {
+  animation: none;
+  transform: scaleY(0.18);
+  transition: transform 90ms linear;
+}
+@keyframes quiet-wave {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* suggestions: one row above the pill, a label then up to three chips, fading out at the right edge */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-row {
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow: hidden;
+  padding: 1px 4px 8px;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  animation: quiet-ctl-in 200ms var(--ease-out);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-row > * {
+  flex: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 2px;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 600;
+  color: var(--accent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-chip {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  box-shadow:
+    0 0 0 1px var(--line2),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  font-size: 13px;
+  line-height: 32px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: background var(--duration-fast) ease;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-chip:not(.ask, .busy) {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-chip:hover {
+  background: var(--accent-soft);
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-chip:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-chip.ask {
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--line2);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-row .icon-btn.small {
+  width: var(--ctl);
+  height: 32px;
+  border-radius: 16px;
+}
+
+/* incoming call: a glass card centred under the title bar; avatar with a ringing ring, two round answers */
+.call-card-avatar {
+  display: contents;
+}
+.call-ring,
+.call-card-glyph {
+  display: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-banners {
+  left: 50%;
+  right: auto;
+  width: min(400px, calc(100vw - 32px));
+  transform: translateX(-50%);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card {
+  display: flex;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 20px;
+  background: var(--glass-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    0 0 0 1px var(--line2),
+    0 16px 40px -12px rgba(10, 14, 40, 0.4);
+  animation: quiet-call-in 240ms var(--ease-out);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card[data-state='closing'] {
+  animation: quiet-call-out 160ms var(--ease-out) forwards;
+}
+@keyframes quiet-call-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes quiet-call-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-avatar {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-ring {
+  display: block;
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: quiet-ring 1.8s var(--ease-out) infinite;
+}
+@keyframes quiet-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-info {
+  flex: 1;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-name {
+  font-size: var(--fs-14);
+  line-height: 18px;
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-kind {
+  min-width: 0;
+  white-space: nowrap;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-sub {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+  gap: 6px;
+  margin-top: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-actions {
+  flex: none;
+  gap: 12px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-actions .btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-actions .btn > svg {
+  display: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-actions .btn:hover:not(:disabled) {
+  box-shadow: none;
+  filter: brightness(0.92);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-actions .btn:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-decline {
+  background: var(--danger-solid);
+  color: #fff;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-answer {
+  background: var(--ok-solid);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card-glyph {
+  display: grid;
+  place-items: center;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-decline .call-card-glyph svg {
+  transform: rotate(135deg);
+}
+/* the words stay for screen readers (and as the tooltip) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.call-card-btn-text, .call-strip-end-text) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* in a call: the same glass, 44 high, with a round end button */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip {
+  align-items: center;
+  height: 44px;
+  padding: 0 6px 0 0;
+  border-radius: 22px;
+  background: var(--glass-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    0 0 0 1px var(--line2),
+    0 8px 24px -8px rgba(15, 20, 50, 0.18);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-main {
+  align-self: stretch;
+  padding: 0 8px 0 14px;
+  border-radius: 22px 0 0 22px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-main:hover {
+  background: var(--nv-on);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-dot {
+  background: var(--ok);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-end {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--danger-solid);
+  color: #fff;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-end:hover {
+  background: var(--danger-solid);
+  filter: brightness(0.92);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-strip-end:focus-visible {
+  outline-offset: 2px;
+}
+
+/* reduced motion: opacity only, the ring and the bars stand still */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send,
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-mic,
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .suggest-row {
+    animation: quiet-fade-in 200ms linear;
+  }
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card {
+    animation: quiet-fade-in 240ms linear;
+  }
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-card[data-state='closing'] {
+    animation: quiet-call-fade-out 160ms linear forwards;
+  }
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .call-ring {
+    animation: none;
+    opacity: 0.4;
+    transform: none;
+  }
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .recording-wave i {
+    animation: none;
+    transform: scaleY(0.6);
+  }
+}
+@keyframes quiet-call-fade-out {
+  to {
+    opacity: 0;
+  }
 }
