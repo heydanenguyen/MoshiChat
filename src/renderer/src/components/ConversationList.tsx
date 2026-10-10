@@ -42,6 +42,7 @@ import { Avatar } from './Avatar'
 import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
+import { ActiveCallStrip } from './IncomingCallBanner'
 import { isBirthdayToday } from '@shared/extras'
 import { ListEmpty, QuickFilterEmpty, QuickFilters } from './QuickFilters'
 import { AccountFilters } from './AccountFilters'
@@ -590,11 +591,12 @@ export function ConversationList(): JSX.Element {
       {!searching && listView === 'requests' && <p className="requests-note">{t('requestsNote')}</p>}
 
       {Object.values(accounts)
-        .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error'))
+        .filter((a) => !a.demo && (a.status === 'needs_auth' || a.status === 'error' || a.error?.startsWith('relay-offline:')))
         .filter((a) => filter === 'all' || filter === a.platform || filter === `account:${a.id}`)
         .map((a) => (
           <ReconnectBanner key={a.id} accountId={a.id} status={a.status} reason={a.error} label={`${PLATFORMS[a.platform].name}${a.handle ? ` ${a.handle}` : ''}`} />
         ))}
+      <ActiveCallStrip />
       <div className="conv-list scroll edge-fade" ref={listRef}>
         {empty === 'chip' && quickFilter !== 'all' && <QuickFilterEmpty filter={quickFilter} />}
         {!searching && listView === 'inbox' && requestCount > 0 && (

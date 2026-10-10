@@ -37,6 +37,31 @@ const ENCODED_MARKERS = ['SlideUQPP', 'activity_indicator', 'ACTIVITY_INDICATOR'
 const BLOCKED_TYPES: Array<'image' | 'media' | 'font'> = ['image', 'media', 'font']
 /** Web contents ids whose heavy resources are refused, per session (Electron keeps one onBeforeRequest listener per session). */
 const blockedBySession = new WeakMap<Session, Set<number>>()
+const watchedDestroy = new WeakSet<WebContents>()
+
+/**
+ * Where a realtime window tells that it exists (and that it is gone): the incoming-call code listens to it for ringing
+ * calls (calls/incoming.ts). Set once by the main process; nothing here depends on it.
+ */
+export interface RingSource {
+  readonly key: string
+  /** Where the page rests (an answered call's window goes back there). */
+  readonly homeUrl: string
+  /** The hidden window, which an answered call is carried on in. */
+  getWindow(): BrowserWindow | undefined
+  /** An answered call starts on the page: sound on, pictures through, no reload under it. */
+  beginCall(): void
+  endCall(): void
+}
+
+export interface RingHooks {
+  attach(source: RingSource, partition: string): void
+  detach(source: RingSource): void
+}
+let ringHooks: RingHooks | undefined
+export function setRingHooks(hooks?: RingHooks): void {
+  ringHooks = hooks
+}
 
 /**
  * Keeps instagram.com/direct/inbox open in a hidden window of the user's
@@ -45,8 +70,12 @@ const blockedBySession = new WeakMap<Session, Set<number>>()
  * contents from the socket: events only tell us *when* to refresh and who is
  * typing; the data itself still comes from the regular web endpoints.
  */
-export class InstagramRealtime {
+export class InstagramRealtime implements RingSource {
   private window?: BrowserWindow
+  /** A call is being carried by this page: no reload under it. */
+  private inCall = false
+  readonly key: string
+  readonly homeUrl = 'https://www.instagram.com/direct/inbox/'
   private reloadTimer?: NodeJS.Timeout
   private seenKinds = new Set<string>()
   private stopped = true
@@ -54,7 +83,13 @@ export class InstagramRealtime {
   constructor(
     private readonly partition: string,
     private readonly handlers: RealtimeHandlers
-  ) {}
+  ) {
+    this.key = `instagram-realtime:${partition}`
+  }
+
+  getWindow(): BrowserWindow | undefined {
+    return this.window && !this.window.isDestroyed() ? this.window : undefined
+  }
 
   start(): void {
     this.stopped = false
@@ -84,13 +119,15 @@ export class InstagramRealtime {
     win.webContents.on('render-process-gone', () => this.restart())
     win.on('closed', () => {
       this.window = undefined
+      ringHooks?.detach(this)
       if (!this.stopped) setTimeout(() => this.start(), 5000)
     })
-    void win.loadURL('https://www.instagram.com/direct/inbox/').catch(() => undefined)
+    ringHooks?.attach(this, this.partition)
+    void win.loadURL(this.homeUrl).catch(() => undefined)
     // start() runs again after the window closes on its own, without stop(): never keep two reload timers.
     if (this.reloadTimer) clearInterval(this.reloadTimer)
     this.reloadTimer = setInterval(() => {
-      if (this.window && !this.window.isDestroyed()) this.window.webContents.reload()
+      if (this.window && !this.window.isDestroyed() && !this.inCall) this.window.webContents.reload()
     }, RELOAD_EVERY)
   }
 
@@ -98,8 +135,26 @@ export class InstagramRealtime {
     this.stopped = true
     if (this.reloadTimer) clearInterval(this.reloadTimer)
     this.reloadTimer = undefined
+    ringHooks?.detach(this)
     if (this.window && !this.window.isDestroyed()) this.window.destroy()
     this.window = undefined
+  }
+
+  beginCall(): void {
+    this.inCall = true
+    const contents = this.getWindow()?.webContents
+    if (!contents) return
+    // The call must be heard and seen: sound on, pictures and media let through.
+    contents.setAudioMuted(false)
+    unblockHeavyResources(contents)
+  }
+
+  endCall(): void {
+    this.inCall = false
+    const contents = this.getWindow()?.webContents
+    if (!contents) return
+    contents.setAudioMuted(true)
+    blockHeavyResources(contents)
   }
 
   /**
@@ -243,7 +298,15 @@ export function blockHeavyResources(contents: WebContents): void {
   const id = contents.id
   const set = ids
   set.add(id)
+  // Blocked again after every call: one listener per page, not one per call.
+  if (watchedDestroy.has(contents)) return
+  watchedDestroy.add(contents)
   contents.once('destroyed', () => set.delete(id))
+}
+
+/** Lets a window's images, media and fonts through again (an answered call needs them). */
+export function unblockHeavyResources(contents: WebContents): void {
+  blockedBySession.get(contents.session)?.delete(contents.id)
 }
 
 /**

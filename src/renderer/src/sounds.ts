@@ -206,3 +206,52 @@ export async function renderSound(id: SoundId | 'sent', volume = 0.7, sampleRate
   else SOUNDS[id](c, out, volume * LEVEL[id])
   return c.startRendering()
 }
+
+/** One ring: two soft two-tone chimes (A5 then D6), a pause, repeated by startRing. */
+function ringOnce(c: BaseAudioContext, out: AudioNode, v: number): void {
+  ;[0, 0.42].forEach((at) => {
+    tone(c, out, v, { type: 'triangle', from: 880, at, dur: 0.22, gain: 0.5, attack: 0.012 })
+    tone(c, out, v, { type: 'triangle', from: 1174.7, at: at + 0.16, dur: 0.3, gain: 0.5, attack: 0.012 })
+    tone(c, out, v, { from: 2349.3, at: at + 0.16, dur: 0.18, gain: 0.06, attack: 0.012 })
+  })
+}
+
+const RING_EVERY_MS = 2400
+
+let ringing: (() => void) | undefined
+
+/** One chime through the shared bus (volume 0..1). */
+function playRing(volume: number): void {
+  const { ctx: c, out } = audio()
+  ringOnce(c, out, Math.max(0, Math.min(1, volume)) * 1.2)
+}
+
+/**
+ * Ring for an incoming call until the returned stop function is called or `stopAt` (ms since epoch) passes. Starting
+ * while it already rings (a double effect run) returns the same stop instead of a second ring. `play` is for tests.
+ */
+export function startRing(volume: number, stopAt: number, play: (volume: number) => void = playRing): () => void {
+  if (ringing) return ringing
+  const left = stopAt - Date.now()
+  if (left <= 0) return () => undefined
+  let timer: ReturnType<typeof setInterval> | undefined
+  let limit: ReturnType<typeof setTimeout> | undefined
+  const stop = (): void => {
+    if (timer) clearInterval(timer)
+    if (limit) clearTimeout(limit)
+    timer = limit = undefined
+    if (ringing === stop) ringing = undefined
+  }
+  const once = (): void => {
+    try {
+      play(volume)
+    } catch {
+      stop()
+    }
+  }
+  ringing = stop
+  timer = setInterval(once, RING_EVERY_MS)
+  limit = setTimeout(stop, left)
+  once()
+  return stop
+}

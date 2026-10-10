@@ -396,7 +396,7 @@ export class DemoAdapter implements PlatformAdapter {
       displayName: seed.name,
       handle: seed.handle,
       status: 'disconnected',
-      features: ALL_FEATURES,
+      features: { ...ALL_FEATURES, call: 'none' },
       demo: true
     }
     this.buildSeed()

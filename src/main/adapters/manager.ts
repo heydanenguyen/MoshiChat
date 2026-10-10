@@ -34,6 +34,7 @@ import { SlackAdapter, type SlackSecret } from './slack'
 import { TelegramAdapter, type TelegramSecret } from './telegram'
 import { MetaAdapter, type MetaSecret } from './meta'
 import { ZaloAdapter, type ZaloSecret } from './zalo'
+import { ZaloRelayAdapter, isRelayAccountId, ownerOfRelayAccount, relayAccountId, relayEnv, type RelaySecret } from './zalo-relay-adapter'
 import { WhatsAppAdapter, type WhatsAppSecret } from './whatsapp'
 import { FacebookPersonalAdapter, type FacebookPersonalSecret, type WebCookie } from './facebook-personal'
 import { InstagramPersonalAdapter, type InstagramPersonalSecret } from './instagram-personal'
@@ -188,6 +189,33 @@ export class AccountManager {
     // Signed in again from a new session: the one it used before is let go.
     if (previous && previous !== partition) void wipePartition(platform, previous)
     return account
+  }
+
+  /**
+   * A Zalo another computer relays through the sync folder (see zalo-relay-adapter.ts). Not added when its state cannot
+   * be read; added (waiting) when this computer has a live Zalo of the same owner, which wins.
+   */
+  async addRelayAccount(ownerId: string): Promise<Account> {
+    const env = relayEnv()
+    if (!env) throw new Error('Zalo relay is not available here')
+    const id = relayAccountId(ownerId)
+    const existing = this.adapters.get(id)
+    if (existing) return { ...existing.account }
+    const adapter = new ZaloRelayAdapter(id, ownerId, this.contextFor(id), env)
+    this.adapters.set(id, adapter)
+    try {
+      await adapter.connect()
+      if (adapter.account.error === 'relay-missing') throw new Error('Moshi cannot read this relay yet: check that sync and the Zalo sharing passphrase are set up here and that the relay computer is on')
+    } catch (err) {
+      await adapter.disconnect().catch(() => undefined)
+      this.adapters.delete(id)
+      this.emit({ type: 'account:removed', accountId: id })
+      throw err
+    }
+    const secret: RelaySecret = { ownerId }
+    await this.storage.upsertAccount(adapter.account, secret)
+    await this.loadConversations(adapter)
+    return { ...adapter.account }
   }
 
   /** The Zalo accounts (connected or not: a signed-out one still has its cache, which shared copies can fill). */
@@ -884,6 +912,8 @@ export class AccountManager {
         } else if (event.type === 'conversations:reset') {
           this.replaceConversations(event.accountId, event.conversations)
         } else if (event.type === 'message:updated') {
+          // A queued send that got its real id (Zalo relay): the stand-in leaves the cache.
+          if (event.replacesId && event.replacesId !== event.message.id) this.messages.get(event.message.conversationId)?.delete(event.replacesId)
           this.cache([event.message])
           // An unsent last message: the chat list shows "message unsent" instead of what it said.
           const conversation = this.conversations.get(event.message.conversationId)
@@ -964,7 +994,13 @@ function defaultFactory(stored: StoredAccount, ctx: AdapterContext, storage: Sto
       return undefined
     }
   }
-  if (stored.platform === 'telegram') {
+  // Before the 'zalo' branch: a relay account is platform 'zalo' too, but has no session of its own.
+  if (isRelayAccountId(stored.id)) {
+    const env = relayEnv()
+    const secret = read<RelaySecret>()
+    if (env) adapter = new ZaloRelayAdapter(stored.id, secret?.ownerId ?? ownerOfRelayAccount(stored.id), ctx, env)
+    else return undefined
+  } else if (stored.platform === 'telegram') {
     const secret = read<TelegramSecret>()
     if (secret) adapter = new TelegramAdapter(stored.id, secret, ctx)
   } else if (stored.platform === 'zalo') {

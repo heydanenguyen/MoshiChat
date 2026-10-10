@@ -132,8 +132,8 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Moshi uses the microphone only while you record a voice message.",
-        "NSCameraUsageDescription": "Moshi does not use the camera."
+        "NSMicrophoneUsageDescription": "Moshi uses the microphone while you record a voice message or are in a call.",
+        "NSCameraUsageDescription": "Moshi uses the camera only during a video call."
       },
       "files": [
         "out/**",

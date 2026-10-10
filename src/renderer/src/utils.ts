@@ -282,3 +282,12 @@ export function withStickers(messages: Message[], sent: SentSticker[] | undefine
   })
   return changed ? out : messages
 }
+
+/** What the Zalo relay reader puts in `account.error` (see main/adapters/zalo-relay-adapter.ts), as i18n key and values. */
+export function relayReason(reason: string | undefined, lang: Language): { key: 'relayOffline' | 'relayMissing' | 'relayLiveAccount'; params?: { time: string } } | undefined {
+  if (reason === 'relay-missing') return { key: 'relayMissing' }
+  if (reason === 'live-account') return { key: 'relayLiveAccount' }
+  if (!reason?.startsWith('relay-offline:')) return undefined
+  const at = Date.parse(reason.slice('relay-offline:'.length))
+  return { key: 'relayOffline', params: { time: Number.isFinite(at) ? formatListTime(at, lang) : '?' } }
+}

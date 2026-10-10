@@ -2,7 +2,7 @@ import { copyFile, readFile, rename, writeFile } from 'fs/promises'
 import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, MessageContent, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
-import type { Account, Attachment, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
+import type { Account, Conversation, ConversationStats, Message, Peer, PeerProfile, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, previewOf, statsOf, unsentCopy } from './types'
 import { tally, zaloCode, zaloEmoji } from '@shared/reactions'
@@ -11,7 +11,8 @@ import { outgoingStickerGif } from '../media/sticker-gif'
 import { sendPhotoSticker } from './zalo-photo-sticker'
 import { isProbeRejected, isSessionRejected, nextSyncStep, savedCursor, type SyncCursor, type SyncWalk } from './zalo-sync'
 import { ZaloArchive } from './zalo-archive'
-import { VIDEO_FILE } from '@shared/media'
+import { STICKER_PICTURE_VERSION, attachmentsOf, loopSeconds, mapMessage, stickerIdOf, textOf, type StickerPicture } from './zalo-map'
+import type { RelaySnapshot, RelayThread } from '@shared/zalo-relay'
 
 export interface ZaloSecret {
   credentials?: Credentials
@@ -61,6 +62,8 @@ interface CacheFile {
 
 /** My own reactions are kept under this key (Zalo marks them isSelf; uidFrom can be "0"). */
 const ME = 'me'
+
+export { loopSeconds }
 
 /**
  * Zalo personal account through the Zalo Web protocol (zca-js). Sign in by
@@ -126,6 +129,10 @@ export class ZaloAdapter implements PlatformAdapter {
   private stickerLookups = new Set<number>()
   /** Zalo ended this session (signed out elsewhere or the cookie stopped working); the next sign-in needs a fresh QR. */
   private sessionEnded = false
+  /** A call window is using this login (Zalo allows one web session): the socket stays down and being kicked off is not a sign-out. */
+  private callActive = false
+  /** After a call: how many more times Zalo may still hold the web session (code 3000) before it counts as signed out. */
+  private callGrace = 0
 
   constructor(
     initialId: string,
@@ -137,7 +144,7 @@ export class ZaloAdapter implements PlatformAdapter {
       platform: 'zalo',
       displayName: 'Zalo',
       status: 'disconnected',
-      features: { reply: true, react: true, attachments: true, unsend: true }
+      features: { reply: true, react: true, attachments: true, unsend: true, call: 'both' }
     }
   }
 
@@ -229,6 +236,30 @@ export class ZaloAdapter implements PlatformAdapter {
         })
         .then(resolve, reject)
     })
+  }
+
+  /** Steps aside for a call: Zalo's web app is about to use this login, which closes the socket here (code 3000). */
+  pauseForCall(): void {
+    this.callActive = true
+    if (this.restartTimer) clearTimeout(this.restartTimer)
+    this.restartTimer = undefined
+    if (!this.api) return
+    this.api.listener.stop()
+    this.setStatus('connecting', 'call')
+  }
+
+  /** The call window is gone: the socket comes back with the usual back-off, and a few 3000s are waited out while Zalo lets go of the web session. */
+  resumeAfterCall(): void {
+    if (!this.callActive) return
+    this.callActive = false
+    const api = this.api
+    if (!api || this.sessionEnded) return
+    // connect() ran during the call and has a socket of its own again: nothing to restart.
+    if (this.account.status === 'connected') return
+    this.callGrace = 2
+    this.restartAttempts = 0
+    this.setStatus('connecting', 'call')
+    this.scheduleRestart(api)
   }
 
   async disconnect(): Promise<void> {
@@ -685,6 +716,7 @@ export class ZaloAdapter implements PlatformAdapter {
         this.restartTimer = undefined
         this.restartAttempts = 0
         this.rejectedProbes = 0
+        this.callGrace = 0
         if (this.account.status === 'connecting') this.setStatus('connected')
       }
       this.startSync(api)
@@ -780,12 +812,27 @@ export class ZaloAdapter implements PlatformAdapter {
     api.listener.on('undo', (undo) => {
       this.markUnsent(conversationId(this.account.id, undo.threadId), String(undo.data.content.globalMsgId))
     })
+    // zca-js's own retry timer cannot be cancelled: a socket it opens during a call would take the login from the call window.
+    api.listener.on('connected', () => {
+      if (this.api !== api || !this.callActive) return
+      api.listener.stop()
+      this.setStatus('connecting', 'call')
+    })
     api.listener.on('error', (err) => this.ctx.log('zalo listener error', err))
     api.listener.on('closed', (code, reason) => {
       this.ctx.log('zalo listener closed', code, reason)
       if (this.api !== api) return
+      // The call window is what closed it (or is about to take the login): nothing to restart until the call is over.
+      if (this.callActive) return
       // 3000: the same session was opened somewhere else; 3003: Zalo kicked it (signed in on another computer).
       if (Number(code) === 3000 || Number(code) === 3003) {
+        // Just after a call Zalo can take a moment to let go of the web session: ask again before taking it for a sign-out.
+        if (this.callGrace > 0) {
+          this.callGrace -= 1
+          this.setStatus('connecting', 'call')
+          this.scheduleRestart(api)
+          return
+        }
         this.sessionEnded = true
         this.setStatus('needs_auth', 'Signed out from another device')
         return
@@ -867,25 +914,21 @@ export class ZaloAdapter implements PlatformAdapter {
 
   private toMessage(raw: TMessage, id: string, isSelf?: boolean): Message {
     const outgoing = isSelf ?? (raw.uidFrom === '0' || raw.uidFrom === this.meId)
-    const senderId = outgoing ? this.meId : raw.uidFrom
     if (!outgoing && raw.dName) this.names.set(raw.uidFrom, raw.dName)
-    const message: Message = {
-      id: raw.msgId,
-      conversationId: id,
-      senderId,
-      senderName: outgoing ? this.account.displayName : raw.dName || this.names.get(raw.uidFrom) || 'Zalo',
-      senderAvatarUrl: outgoing ? this.account.avatarUrl : this.avatars.get(raw.uidFrom),
-      text: textOf(raw),
-      attachments: attachmentsOf(raw, this.stickerUrlFor(raw)),
-      reactions: this.reactionsOf(externalIdOf(id), raw.msgId),
-      sentAt: Number(raw.ts),
-      isOutgoing: outgoing,
-      status: outgoing ? 'delivered' : 'delivered'
-    }
-    if (raw.quote) {
-      message.replyTo = { id: String(raw.quote.globalMsgId), senderName: raw.quote.fromD, text: raw.quote.msg || (raw.quote.attach ? 'Attachment' : '') }
-    }
-    return message
+    return mapMessage(
+      raw,
+      {
+        conversationId: id,
+        meId: this.meId,
+        meName: this.account.displayName,
+        meAvatar: this.account.avatarUrl,
+        nameOf: (userId) => this.names.get(userId),
+        avatarOf: (userId) => this.avatars.get(userId),
+        reactions: this.reactionsOf(externalIdOf(id), raw.msgId),
+        sticker: this.stickerUrlFor(raw)
+      },
+      outgoing
+    )
   }
 
   /**
@@ -989,6 +1032,37 @@ export class ZaloAdapter implements PlatformAdapter {
       for (const message of list) if (Number(message.ts) >= since) out.push([threadId, type, message])
     }
     return out
+  }
+
+  /**
+   * What the relay (zalo-relay.ts) writes for the user's other computers: the chat list, and each chat's messages of
+   * the last `days` days from the cache and, when the cache does not reach back that far, the archive.
+   */
+  async relaySnapshot(days: number): Promise<RelaySnapshot> {
+    const since = Date.now() - days * 24 * 3600_000
+    if (this.archiveQueue.size) await this.flushArchive()
+    const messages: Record<string, TMessage[]> = {}
+    for (const threadId of new Set([...this.raw.keys(), ...this.archivedIds.keys()])) {
+      const cached = this.raw.get(threadId) ?? []
+      let list = cached.filter((m) => Number(m.ts) >= since)
+      if (this.archive && this.archivedIds.get(threadId)?.size && (!cached.length || Number(cached[0].ts) > since)) {
+        const have = new Set(list.map((m) => m.msgId))
+        const older = (await this.archive.get(threadId)).filter((m) => Number(m.ts) >= since && !have.has(m.msgId))
+        list = [...older, ...list].sort((a, b) => Number(a.ts) - Number(b.ts))
+      }
+      if (list.length) messages[threadId] = list
+    }
+    const threads: RelayThread[] = this.buildConversations().map((c) => ({
+      id: externalIdOf(c.id),
+      type: c.isGroup ? 1 : 0,
+      name: c.title,
+      avatar: c.avatarUrl,
+      ...(c.isGroup ? { members: c.participants.filter((p) => !p.isMe).map((p) => ({ id: p.id, name: p.name, avatar: p.avatarUrl })) } : {}),
+      unread: c.unreadCount,
+      lastAt: c.updatedAt,
+      ...(c.request ? { request: true } : {})
+    }))
+    return { me: { id: this.meId, name: this.account.displayName, avatar: this.account.avatarUrl }, threads, messages, stickers: [...this.stickerUrls] }
   }
 
   /** Messages another computer had (it held the Zalo session while this one did not): the ones missing here are kept. */
@@ -1267,135 +1341,5 @@ export class ZaloAdapter implements PlatformAdapter {
     this.account.status = status
     this.account.error = error
     this.ctx.emit({ type: 'account:updated', account: { ...this.account } })
-  }
-}
-
-/** Messages with their own card (media and files): the card says what they are. */
-const CARD_TYPES = ['chat.photo', 'chat.video.msg', 'chat.sticker', 'chat.voice', 'chat.gif', 'share.file', 'chat.file']
-
-/**
- * A location, contact card, poll or to-do has no picture to show: it reads as a line of text (a location also links to
- * its map when Zalo sent coordinates).
- */
-function lineOf(raw: TMessage): { text: string; link?: { url: string; name: string } } | undefined {
-  if (typeof raw.content !== 'object' || !raw.content) return undefined
-  const c = raw.content as { title?: string; description?: string; href?: string; action?: string; params?: string }
-  const p = paramsOf(c.params)
-  if (raw.msgType.startsWith('chat.location')) {
-    const place = c.title || c.description || ''
-    const text = `📍 ${place}`.trim()
-    const lat = Number(p.latitude)
-    const lng = Number(p.longitude)
-    const mapped = Number.isFinite(lat) && Number.isFinite(lng) && (lat || lng)
-    return { text, link: mapped ? { url: `https://www.google.com/maps?q=${lat},${lng}`, name: place || 'Map' } : undefined }
-  }
-  // "recommened" is Zalo's own spelling. A recommended item with no link is a contact card.
-  if (raw.msgType === 'chat.recommended' && (/recommen\w*\.user/.test(c.action ?? '') || !c.href)) {
-    return { text: `👤 ${[c.title, c.description].filter(Boolean).join(' · ')}`.trim() }
-  }
-  if (raw.msgType === 'group.poll') return { text: `Poll: ${(p.question as string | undefined) ?? c.title ?? ''}`.trim() }
-  if (raw.msgType === 'chat.todo') return { text: `To-do: ${(p.item as { content?: string } | undefined)?.content ?? c.title ?? ''}`.trim() }
-  return undefined
-}
-
-function textOf(raw: TMessage): string {
-  if (typeof raw.content === 'string') return raw.content
-  if (raw.content && typeof raw.content === 'object') {
-    const c = raw.content as { title?: string; description?: string; text?: string; href?: string }
-    // Media and files say what they are in their own card; their title is the file name, not words to show twice.
-    if (CARD_TYPES.includes(raw.msgType)) return ''
-    const line = lineOf(raw)
-    if (line) return line.text
-    // Something this app does not know: its type, rather than an empty bubble.
-    return c.text ?? c.title ?? (c.href ? '' : `[${raw.msgType}]`)
-  }
-  return ''
-}
-
-function stickerIdOf(raw: TMessage): number | undefined {
-  if (typeof raw.content !== 'object' || !raw.content) return undefined
-  const c = raw.content as { id?: number | string; stickerId?: number | string }
-  const n = Number(c.id ?? c.stickerId)
-  return Number.isFinite(n) && n > 0 ? n : undefined
-}
-
-/** A Zalo sticker's picture: a still image, or a sprite sheet of `frames` frames over `duration` seconds. */
-interface StickerPicture {
-  url: string
-  /** Absent: remembered before sprite sheets were kept, so worth looking up again. */
-  frames?: number
-  duration?: number
-  /** Pictures from an older way of reading Zalo's answer (or none) are looked up again. */
-  v?: number
-}
-const STICKER_PICTURE_VERSION = 2
-
-/** Seconds one loop of a sprite sticker takes. Zalo's duration is per frame (milliseconds), 250 when it has none. */
-export function loopSeconds(duration: unknown, frames: number): number {
-  const perFrame = Number(duration) > 0 ? Number(duration) : 250
-  return (perFrame * frames) / 1000
-}
-
-/** A photo sticker (made from a picture, an AI sticker, one from Zalo's photo sticker search): drawn borderless. */
-function isPhotoSticker(raw: TMessage): boolean {
-  const ext = typeof raw.propertyExt === 'string' ? paramsOf(raw.propertyExt) : (raw.propertyExt as Record<string, unknown> | undefined)
-  return raw.msgType === 'chat.photo' && Number(ext?.type) === 3
-}
-
-function attachmentsOf(raw: TMessage, sticker?: StickerPicture): Attachment[] {
-  if (typeof raw.content !== 'object' || !raw.content) return []
-  const line = lineOf(raw)
-  if (line) return line.link ? [{ id: `${raw.msgId}-a`, kind: 'link', url: line.link.url, name: line.link.name }] : []
-  const c = raw.content as { href?: string; thumb?: string; title?: string; description?: string; params?: string; type?: string }
-  const id = `${raw.msgId}-a`
-  const p = paramsOf(c.params)
-  // Width and height let the bubble keep its place while the picture loads.
-  const box = Number(p.width) > 0 && Number(p.height) > 0 ? { width: Number(p.width), height: Number(p.height) } : {}
-  switch (raw.msgType) {
-    case 'chat.photo': {
-      // A photo sticker moves in its WebP; the photo itself is the still (and is all an older sticker has).
-      const webp = (p.webp as { url?: string } | undefined)?.url
-      if (isPhotoSticker(raw)) return [{ id, kind: 'sticker', name: '', url: webp || c.href, ...box }]
-      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb, ...box }]
-    }
-    case 'chat.video.msg':
-      return [{ id, kind: 'video', url: c.href, thumbnailUrl: c.thumb, ...box, ...(Number(p.duration) > 0 ? { duration: Number(p.duration) / 1000 } : {}) }]
-    case 'chat.voice':
-      return [{ id, kind: 'audio', url: c.href, name: 'Voice message' }]
-    case 'chat.sticker':
-      return [{ id, kind: 'sticker', name: '', url: sticker?.url, ...(sticker?.frames && sticker.frames > 1 ? { frames: sticker.frames, duration: sticker.duration } : {}) }]
-    case 'chat.gif':
-      return [{ id, kind: 'image', url: c.href, thumbnailUrl: c.thumb, ...box }]
-    case 'share.file':
-    case 'chat.file': {
-      const name = c.title ?? 'File'
-      // A video sent as a file (from a computer, or "send as file" on the phone) still gets a player.
-      if (VIDEO_FILE.test(name) || /^(mp4|m4v|mov|webm)$/i.test(String(p.fileExt ?? ''))) return [{ id, kind: 'video', url: c.href, thumbnailUrl: c.thumb || undefined, name, size: sizeFrom(c.params) }]
-      return [{ id, kind: 'file', url: c.href, name, size: sizeFrom(c.params) }]
-    }
-    case 'chat.recommended':
-      return [{ id, kind: 'link', url: c.href, name: c.title ?? c.href }]
-    default:
-      return c.href ? [{ id, kind: 'link', url: c.href, name: c.title ?? c.href }] : []
-  }
-}
-
-/** Zalo's attachment params (a JSON string), or nothing. */
-function paramsOf(params?: string): Record<string, unknown> {
-  if (!params || params[0] !== '{') return {}
-  try {
-    return JSON.parse(params) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-
-function sizeFrom(params?: string): number | undefined {
-  if (!params) return undefined
-  try {
-    const parsed = JSON.parse(params) as { fileSize?: string | number }
-    return parsed.fileSize ? Number(parsed.fileSize) : undefined
-  } catch {
-    return undefined
   }
 }

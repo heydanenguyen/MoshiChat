@@ -2,13 +2,14 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { isPendingRequest } from '@shared/inbox'
-import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, Copy, File, Forward, Info, Languages, ListTodo, MoreHorizontal, Pause, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, Volume2, X } from 'lucide-react'
+import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, Copy, File, Forward, Info, Languages, ListTodo, MoreHorizontal, Pause, Phone, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, Video, Volume2, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { anchorFor, bubbleVarsOf, useSendVia, useShownConversations, useStore, useT, useThread } from '../store'
+import { canCall } from '../calls'
 import { PlatformIcon } from './PlatformIcon'
-import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, sectionize, tip, withStickers, type MessageGroup } from '../utils'
+import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, relayReason, sectionize, tip, withStickers, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
@@ -512,6 +513,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
           )}
           {laterOn && <LaterButton conversationId={conversation.id} />}
           <SummaryButton conversationId={conversation.id} />
+          <CallButtons conversationId={viaConversation.id} features={features} status={account?.status} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => withViewTransition('details', () => toggleDetails())} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
@@ -585,7 +587,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
         </div>
       )}
       {dragging > 0 && <div className="drop-overlay">{t('dropHint')}</div>}
-      {account && account.status !== 'connected' && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
+      {account && (account.status !== 'connected' || account.error?.startsWith('relay-offline:')) && <ReconnectBanner accountId={account.id} status={account.status} reason={account.error} />}
       {effect && <EffectLayer key={effect.key} kind={effect.kind} seed={effect.key} onDone={() => setEffect(undefined)} />}
       <RequestBanner conversation={conversation} />
       <ScheduledStrip conversationId={conversation.id} members={members} />
@@ -726,15 +728,20 @@ export function ReconnectBanner({ accountId, status, reason, label }: { accountI
   const t = useT()
   const reconnect = useStore((s) => s.reconnect)
   const showToast = useStore((s) => s.showToast)
+  const language = useStore((s) => s.settings.language)
   const [busy, setBusy] = useState(false)
+  // A Zalo that another computer relays: its own reasons, and nothing to sign in to.
+  const relay = relayReason(reason, language)
   const text =
     status === 'connecting'
       ? t('connecting')
-      : reason === 'checkpoint'
-        ? t('sessionCheckpoint')
-        : status === 'needs_auth'
-          ? t('sessionExpired')
-          : (reason ?? t('disconnected'))
+      : relay
+        ? t(relay.key, relay.params)
+        : reason === 'checkpoint'
+          ? t('sessionCheckpoint')
+          : status === 'needs_auth'
+            ? t('sessionExpired')
+            : (reason ?? t('disconnected'))
   return (
     <div className={`reconnect-banner ${status}`}>
       <span className={`status-dot ${status}`} />
@@ -742,7 +749,7 @@ export function ReconnectBanner({ accountId, status, reason, label }: { accountI
         {label && <strong>{label} · </strong>}
         {text}
       </span>
-      {status !== 'connecting' && (
+      {status !== 'connecting' && relay?.key !== 'relayOffline' && relay?.key !== 'relayLiveAccount' && (
         <button
           className="btn primary"
           disabled={busy}
@@ -757,7 +764,7 @@ export function ReconnectBanner({ accountId, status, reason, label }: { accountI
             }
           }}
         >
-          {busy ? t('waitingLogin') : t('signInAgain')}
+          {relay ? t('zaloRelayReaderRefresh') : busy ? t('waitingLogin') : t('signInAgain')}
         </button>
       )}
     </div>
@@ -985,6 +992,32 @@ function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; c
 
 /** One row of a thread as drawn: a day label, where a merged person switches app, or a sender's run of messages. */
 type ChatRow = { key: string; kind: 'day'; day: number } | { key: string; kind: 'via'; conversation: Conversation } | { key: string; kind: 'group'; group: MessageGroup }
+
+/** Voice and video call buttons for the account this chat writes through; off while a call is on or the account cannot connect. */
+function CallButtons({ conversationId, features, status }: { conversationId: string; features: Account['features']; status?: Account['status'] }): JSX.Element | null {
+  const t = useT()
+  const busy = useStore((s) => !!s.calls.active)
+  const startCall = useStore((s) => s.startCall)
+  const audio = canCall(features, 'audio')
+  const video = canCall(features, 'video')
+  if (!audio && !video) return null
+  const offline = status === 'needs_auth' || status === 'connecting'
+  const why = busy ? t('callBusy') : offline ? t('callNeedsAccount') : undefined
+  // A disabled button gets no pointer events (so no tooltip): the wrapper carries the title and the reason is also spoken.
+  const button = (kind: 'audio' | 'video', label: string, icon: JSX.Element): JSX.Element => (
+    <span className="call-btn-wrap" title={why ?? label}>
+      <button className="icon-btn" disabled={!!why} aria-label={label} aria-description={why} onClick={() => void startCall(conversationId, kind)}>
+        {icon}
+      </button>
+    </span>
+  )
+  return (
+    <>
+      {audio && button('audio', t('callVoice'), <Phone size={18} strokeWidth={2} />)}
+      {video && button('video', t('callVideo'), <Video size={18} strokeWidth={2} />)}
+    </>
+  )
+}
 
 /** No account (or an unknown one): nothing can be done; one shared object so memoised bubbles see it unchanged. */
 const NO_FEATURES: Account['features'] = { reply: false, react: false, attachments: false }

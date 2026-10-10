@@ -18,6 +18,33 @@ export interface AccountFeatures {
   voice?: boolean
   /** Taking back (unsending) my own messages for everyone. */
   unsend?: boolean
+  /** Voice / video calls started from the chat header (opened in a call window by the main process); absent = none. */
+  call?: 'audio' | 'video' | 'both' | 'none'
+}
+
+/** A call ringing on an account: shown as a banner until answered, declined or gone. */
+export interface IncomingCall {
+  id: string
+  accountId: string
+  platform: Platform
+  peerName: string
+  peerAvatarUrl?: string
+  kind: 'audio' | 'video'
+  /** When it started ringing (ms since epoch). */
+  at: number
+}
+
+/** Every call Moshi knows of right now: the one in progress (if any) and those ringing. */
+export interface CallState {
+  active?: { id: string; conversationId?: string; accountId: string; platform: Platform; kind: 'audio' | 'video'; startedAt: number }
+  incoming: IncomingCall[]
+}
+
+/** Settings -> Calls: which incoming calls Moshi listens for, and whether it rings. */
+export interface CallSettings {
+  incomingMessenger: boolean
+  incomingInstagram: boolean
+  ring: boolean
 }
 
 export const ALL_FEATURES: AccountFeatures = { reply: true, react: true, attachments: true, unsend: true }
@@ -676,6 +703,8 @@ export interface Settings {
   bubbleActions?: Partial<Record<BubbleAction, boolean>>
   /** A small label naming each of those buttons when the pointer rests on it. Default on. */
   actionLabels?: boolean
+  /** Calls: incoming-call listening per app and the ring. Absent = all on. */
+  calls?: CallSettings
   /** Where Download in the photo viewer saves; unset (or a folder that is gone) means the system Downloads folder. */
   downloadDir?: string
   /** Ask where to save each time instead of saving straight into that folder. Default off. */
@@ -782,7 +811,8 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: 'ocean',
   font: 'jakarta',
   muted: { conversations: [], tags: [], accounts: [], platforms: [] },
-  greetings: true
+  greetings: true,
+  calls: { incomingMessenger: true, incomingInstagram: true, ring: true }
 }
 
 /** True when notifications for this conversation are switched off by any rule. */
@@ -842,7 +872,8 @@ export type BridgeEvent =
   | { type: 'conversation:upserted'; conversation: Conversation }
   | { type: 'conversations:reset'; accountId: string; conversations: Conversation[] }
   | { type: 'message:new'; message: Message }
-  | { type: 'message:updated'; message: Message }
+  /** `replacesId`: the message went by that id until now (a send queued through the Zalo relay, then given its real id). */
+  | { type: 'message:updated'; message: Message; replacesId?: string }
   /** Reactions on a message changed (someone reacted or took it back); nothing else about it did. */
   | { type: 'message:reactions'; conversationId: string; messageId: string; reactions: Reaction[] }
   | { type: 'typing'; typing: TypingEvent }
@@ -858,6 +889,10 @@ export type BridgeEvent =
   | { type: 'ai:progress'; progress: AiProgress }
   /** The insights backfill walking recent history: done of total chats. */
   | { type: 'insights:progress'; done: number; total: number }
+  /** A call started ringing on one of the accounts. */
+  | { type: 'call:incoming'; call: IncomingCall }
+  /** The whole call picture changed (answered, declined, ended, started): replaces what the window knew. */
+  | { type: 'call:state'; state: CallState }
 
 export interface PlatformMeta {
   id: Platform

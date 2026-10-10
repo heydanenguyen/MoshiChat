@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ZaloShareStatus } from '@shared/bridge'
+import type { ZaloRelayOwner, ZaloRelayStatus, ZaloShareStatus } from '@shared/bridge'
 import { BirthdayDemo, FeatureCard, FeatureGrid, FriendsDemo, LaterDemo, NoteDemo, ScheduleDemo, TodosDemo } from './FeatureCards'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, History, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
@@ -759,6 +759,7 @@ function NotificationsPage(): JSX.Element {
         </Row>
         <SoundSettings />
       </Group>
+      <CallSettings />
       <Group label={t('groupMute')}>
         <Row title={t('muteByPlatform')} stack>
           <div className="mute-chips">
@@ -788,6 +789,29 @@ function NotificationsPage(): JSX.Element {
         </Row>
       </Group>
     </>
+  )
+}
+
+/** Settings -> Calls: which incoming calls Moshi listens for and whether it rings. */
+function CallSettings(): JSX.Element {
+  const t = useT()
+  const calls = useStore((s) => s.settings.calls)
+  const setSettings = useStore((s) => s.setSettings)
+  const current = { incomingMessenger: calls?.incomingMessenger !== false, incomingInstagram: calls?.incomingInstagram !== false, ring: calls?.ring !== false }
+  const set = (patch: Partial<typeof current>): void => void setSettings({ calls: { ...current, ...patch } })
+  return (
+    <Group label={t('callsSection')}>
+      <Row title={t('callsIncomingMessenger')} sub={t('callsIncomingMessengerHint')}>
+        <Switch on={current.incomingMessenger} onChange={(incomingMessenger) => set({ incomingMessenger })} />
+      </Row>
+      <Row title={t('callsIncomingInstagram')} sub={t('callsIncomingInstagramHint')}>
+        <Switch on={current.incomingInstagram} onChange={(incomingInstagram) => set({ incomingInstagram })} />
+      </Row>
+      <Row title={t('callsRing')} sub={t('callsRingHint')}>
+        <Switch on={current.ring} onChange={(ring) => set({ ring })} />
+      </Row>
+      <Row title={t('callsZaloNote')} />
+    </Group>
   )
 }
 
@@ -924,6 +948,150 @@ function ZaloShareSettings(): JSX.Element | null {
   )
 }
 
+/** Make this computer the one that keeps Zalo signed in for the others (needs Zalo sharing, whose key it uses). */
+function ZaloRelaySettings(): JSX.Element | null {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const showToast = useStore((s) => s.showToast)
+  const hasZalo = useStore((s) => Object.values(s.accounts).some((a) => a.platform === 'zalo' && !a.demo))
+  const [status, setStatus] = useState<ZaloRelayStatus>()
+  const [sharing, setSharing] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const load = (): void => {
+      void window.unison.zaloRelay.status().then((s) => alive && setStatus(s))
+      void window.unison.zaloShare.status().then((s) => alive && setSharing(s.enabled))
+    }
+    load()
+    const timer = setInterval(load, 5000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  if (!hasZalo || !status || (!sharing && !status.enabled)) return null
+  const toggle = async (on: boolean): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const next = await (on ? window.unison.zaloRelay.enable() : window.unison.zaloRelay.disable())
+      setStatus(next)
+      if (next.enabled === on) showToast(on ? t('zaloRelayOn') : t('zaloRelayOff'))
+      else if (next.errors.length) showToast(next.errors.at(-1)!, 'error')
+    } catch (err) {
+      showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const error = status.errors.at(-1)
+  const sub = status.enabled
+    ? status.lastWriteAt
+      ? t('zaloRelayRunning', {
+          time: formatListTime(status.lastWriteAt, language),
+          count: String(status.processed),
+          last: status.lastOutboxAt ? t('zaloRelayLastRequest', { time: formatListTime(status.lastOutboxAt, language) }) : ''
+        })
+      : t('zaloRelayWaiting')
+    : t('zaloRelayHint')
+  return (
+    <Row title={t('zaloRelayTitle')} sub={error ? `${sub} — ${t('zaloRelayError', { error })}` : sub}>
+      <Switch on={status.enabled} onChange={(on) => void toggle(on)} />
+    </Row>
+  )
+}
+
+/**
+ * Reader side of the relay: another computer keeps Zalo signed in and writes it into the sync folder; this one adds it
+ * as an account without a Zalo session. Needs the Zalo sharing passphrase (the key), which is asked here too since a
+ * computer without Zalo has no other place to type it.
+ */
+function ZaloRelayReaderSettings(): JSX.Element | null {
+  const t = useT()
+  const language = useStore((s) => s.settings.language)
+  const showToast = useStore((s) => s.showToast)
+  const accounts = useStore((s) => s.accounts)
+  const [sharing, setSharing] = useState<boolean>()
+  const [owners, setOwners] = useState<ZaloRelayOwner[]>([])
+  const [passphrase, setPassphrase] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = async (): Promise<void> => {
+    const share = await window.unison.zaloShare.status()
+    setSharing(share.enabled)
+    setOwners(share.enabled ? await window.unison.zaloRelay.owners() : [])
+  }
+  useEffect(() => {
+    let alive = true
+    const run = (): void => void load().catch(() => alive && setSharing(false))
+    run()
+    const timer = setInterval(run, 15000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  if (sharing === undefined) return null
+  const fail = (err: unknown): void => showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''), 'error')
+  const connect = async (ownerId: string): Promise<void> => {
+    setBusy(true)
+    try {
+      await window.unison.zaloRelay.connect(ownerId)
+      showToast(t('zaloRelayReaderConnected'))
+      await load()
+    } catch (err) {
+      fail(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const shown = owners.filter((o) => !accounts[`zalo:relay-${o.ownerId}`])
+  return (
+    <>
+      <Row title={t('zaloRelayReaderTitle')} sub={sharing ? (shown.length ? t('zaloRelayReaderHint') : t('zaloRelayReaderNone')) : t('zaloRelayReaderNeedsPassphrase')}>
+        {sharing && (
+          <button className="btn" disabled={busy} onClick={() => void load().catch(fail)}>
+            {t('zaloRelayReaderRefresh')}
+          </button>
+        )}
+      </Row>
+      {!sharing && (
+        <form
+          className="settings-row zalo-share-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setBusy(true)
+            void window.unison.zaloShare
+              .enable(passphrase)
+              .then(() => {
+                setPassphrase('')
+                return load()
+              })
+              .catch(fail)
+              .finally(() => setBusy(false))
+          }}
+        >
+          <input type="password" className="field-input" autoComplete="new-password" placeholder={t('zaloSharePassphraseSame')} value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+          <button className="btn primary" type="submit" disabled={busy || passphrase.length < 8}>
+            {t('zaloShareEnable')}
+          </button>
+        </form>
+      )}
+      {shown.map((o) => (
+        <Row key={o.ownerId} title={o.name} sub={t('zaloRelayReaderOwner', { device: o.relayDeviceName ?? '?', time: formatListTime(o.writtenAt, language) })}>
+          <button className="btn primary" disabled={busy} onClick={() => void connect(o.ownerId)}>
+            {t('zaloRelayReaderConnect')}
+          </button>
+        </Row>
+      ))}
+    </>
+  )
+}
+
 function SyncSettings(): JSX.Element {
   const t = useT()
   const language = useStore((s) => s.settings.language)
@@ -973,6 +1141,8 @@ function SyncSettings(): JSX.Element {
             }
           />
           <ZaloShareSettings />
+          <ZaloRelaySettings />
+          <ZaloRelayReaderSettings />
           <Row
             title={t('syncThisDevice', { name: status.deviceName })}
             sub={status.error ? t('syncError', { error: status.error }) : status.lastSyncAt ? t('syncLast', { time: formatListTime(status.lastSyncAt, language) }) : undefined}

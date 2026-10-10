@@ -80,7 +80,7 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     private secret: FacebookPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'messenger', displayName: 'Facebook', status: 'disconnected', features: { reply: true, react: true, attachments: true, unsend: true } }
+    this.account = { id: initialId, platform: 'messenger', displayName: 'Facebook', status: 'disconnected', features: { reply: true, react: true, attachments: true, unsend: true, call: 'both' } }
   }
 
   async connect(): Promise<void> {

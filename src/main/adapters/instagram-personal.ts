@@ -164,7 +164,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     private secret: InstagramPersonalSecret,
     private readonly ctx: AdapterContext
   ) {
-    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true, unsend: true } }
+    this.account = { id: initialId, platform: 'instagram', displayName: 'Instagram', status: 'disconnected', features: { reply: false, react: false, attachments: true, voice: true, unsend: true, call: 'both' } }
     const partition = secret.partition ?? legacyPartition('instagram')
     this.web = new WebClient(partition, 'https://www.instagram.com')
     this.composer = new DirectComposer(partition, (...args) => this.ctx.log(...args))

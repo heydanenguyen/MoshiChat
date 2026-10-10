@@ -15626,3 +15626,210 @@ html[data-vt='details']::view-transition-new(vt-chat) {
     transition-duration: 0.01ms;
   }
 }
+
+/* ================================================================== calls: incoming banner + in-call strip */
+
+/* Top right, under the title bar; above the sheets (they are earlier siblings), below the toasts (95). */
+.call-banners {
+  position: fixed;
+  top: calc(var(--titlebar-height) + 8px);
+  right: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.call-card {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-md);
+  animation: call-card-in var(--duration-slow) var(--ease-spring);
+}
+
+.call-card[data-state='closing'] {
+  pointer-events: none;
+  animation: call-card-out var(--duration-fast) var(--ease-out) forwards;
+}
+
+@keyframes call-card-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes call-card-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.call-btn-wrap {
+  display: inline-flex;
+}
+
+.call-card-info {
+  min-width: 0;
+}
+
+.call-card-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-card-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.call-card-chip,
+.call-card-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.call-card-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.call-card-actions .btn {
+  flex: 1;
+  height: 32px;
+}
+
+.call-decline {
+  color: var(--danger);
+}
+
+.call-strip {
+  display: flex;
+  align-items: stretch;
+  margin: 0 var(--space-3) var(--space-2);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--success) 16%, var(--glass-strong));
+  box-shadow: var(--shadow-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  animation: call-strip-in var(--duration-base) var(--ease-out);
+}
+
+.call-strip[data-state='closing'] {
+  pointer-events: none;
+  animation: call-strip-out var(--duration-fast) var(--ease-out) forwards;
+}
+
+@keyframes call-strip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes call-strip-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.call-strip-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  text-align: left;
+  color: inherit;
+  transition: background var(--duration-fast) ease;
+}
+
+.call-strip-main:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.call-strip-main:focus-visible,
+.call-strip-end:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.call-strip-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.call-strip-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-strip-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.call-strip-end {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  color: var(--danger);
+  font-weight: 700;
+  transition: background var(--duration-fast) ease;
+}
+
+.call-strip-end:hover {
+  background: rgba(255, 90, 95, 0.12);
+}
+
+.call-strip-end:disabled {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-card,
+  .call-strip {
+    animation: none;
+  }
+}

@@ -16,6 +16,7 @@ import { PlatformIcon } from './PlatformIcon'
 import { GummyIcon, useTileIcons } from './GummyIcon'
 import { useScrollFade } from '../scrollFade'
 import { withViewTransition } from '../viewTransition'
+import { relayReason } from '../utils'
 
 type MuteTarget = { kind: 'platforms'; id: Platform } | { kind: 'accounts'; id: string } | { kind: 'tags'; id: TagId }
 
@@ -85,6 +86,10 @@ export function Sidebar(): JSX.Element {
   )
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const language = useStore((s) => s.settings.language)
+  const accountNote = (error: string): string => {
+    const relay = relayReason(error, language)
+    return relay ? t(relay.key, relay.params) : error
+  }
   const tags = useStore((s) => s.settings.tags)
   const conversations = useStore((s) => s.conversations)
   const { list: tagList } = useTagDefs()
@@ -294,7 +299,7 @@ export function Sidebar(): JSX.Element {
                   className={`account-row ${filter === `account:${account.id}` ? 'active' : ''}`}
                   onClick={() => setFilter(`account:${account.id}`)}
                   onContextMenu={contextFor(target, account.displayName)}
-                  title={`${account.displayName} · ${PLATFORMS[account.platform].name}${account.error ? ` · ${account.error}` : ''}`}
+                  title={`${account.displayName} · ${PLATFORMS[account.platform].name}${account.error ? ` · ${accountNote(account.error)}` : ''}`}
                 >
                   <Avatar name={account.displayName} url={account.avatarUrl} size={30} platform={account.platform} />
                   {!collapsed && (

@@ -28,7 +28,8 @@ import type {
   SavedMessage,
   GifItem,
   SentSticker,
-  LockState
+  LockState,
+  CallState
 } from '@shared/types'
 import { ACCENTS, DEFAULT_SETTINGS, isMutedBy, tagDefsOf, type MuteRules } from '@shared/types'
 import { translate, type TKey } from './i18n'
@@ -38,6 +39,7 @@ import { previewKindOf } from '@shared/preview'
 import { abstractIdUrl } from './components/AbstractAvatar'
 import { palPickUrl } from '@shared/pals-art'
 import { playSent, playSound } from './sounds'
+import { EMPTY_CALLS, addIncoming, callsOf } from './calls'
 import { toggleReaction } from './utils'
 import { applyQuickFilter, countQuickFilters, isUnread, type QuickFilter, type QuickFilterContext } from './quickFilter'
 import { mergeConversation, mergeTimeline, memberIndex, pairKey, pickSendVia as chooseSendVia, type Person } from '@shared/people'
@@ -124,6 +126,8 @@ interface State {
   /** A history sync per account (Zalo), while it runs and its outcome after. */
   historySync: Record<string, { pages: number; added: number; done: boolean; reachedEnd?: boolean }>
   typing: Record<string, { name: string; until: number }>
+  /** Calls: the one in progress and those ringing (kept in step by call:incoming / call:state from the main process). */
+  calls: CallState
   /** The chat in the active pane (kept in step with `layout` for everything that means "the open chat"). */
   selectedId?: string
   /** One or two panes side by side (split chat). */
@@ -312,6 +316,10 @@ interface State {
   reconnect(accountId: string): Promise<void>
   addDemo(): Promise<void>
   toggleDetails(tab?: DetailsTab): void
+  startCall(conversationId: string, kind: 'audio' | 'video'): Promise<void>
+  endCall(): Promise<void>
+  answerCall(id: string): Promise<void>
+  declineCall(id: string): Promise<void>
   notifyTyping(conversationId: string): void
   showToast(text: string, kind?: Toast['kind'], action?: Toast['action']): void
   dismissToast(id: number): void
@@ -470,6 +478,7 @@ export const useStore = create<State>((set, get) => ({
   hasMore: {},
   historySync: {},
   typing: {},
+  calls: EMPTY_CALLS,
   layout: { panes: [undefined], active: 0 },
   recent: [],
   wide: true,
@@ -505,17 +514,20 @@ export const useStore = create<State>((set, get) => ({
     let handle: (event: BridgeEvent) => void = (event) => early.push(event)
     unsubscribeEvents?.()
     unsubscribeEvents = bridge.onEvent((event: BridgeEvent) => handle(event))
-    const [settings, accounts, conversations, lock] = await Promise.all([
+    const [settings, accounts, conversations, lock, calls] = await Promise.all([
       bridge.settings.get(),
       bridge.accounts.list(),
       bridge.conversations.list(),
       // Known before anything is drawn, so a locked Moshi never flashes its chats.
-      bridge.lock.state().catch(() => undefined)
+      bridge.lock.state().catch(() => undefined),
+      // A call already ringing when this window opened (or reloaded) still shows its banner.
+      bridge.calls.state().catch(() => undefined)
     ])
     const conversationMap = Object.fromEntries(conversations.map((c) => [c.id, c]))
     set({
       ready: true,
       lock,
+      ...(calls ? { calls: callsOf(calls) } : {}),
       settings: { ...DEFAULT_SETTINGS, ...settings },
       accounts: Object.fromEntries(accounts.map((a) => [a.id, a])),
       conversations: conversationMap
@@ -583,7 +595,7 @@ export const useStore = create<State>((set, get) => ({
           break
         }
         case 'message:updated': {
-          const list = upsertMessage(state.messages[event.message.conversationId], event.message)
+          const list = upsertMessage(state.messages[event.message.conversationId], event.message, event.replacesId)
           if (list) set({ messages: { ...state.messages, [event.message.conversationId]: list } })
           break
         }
@@ -633,6 +645,12 @@ export const useStore = create<State>((set, get) => ({
           set({ typing })
           break
         }
+        case 'call:incoming':
+          set({ calls: addIncoming(state.calls, event.call) })
+          break
+        case 'call:state':
+          set({ calls: callsOf(event.state) })
+          break
         case 'auth:prompt':
           set({ authPrompts: withPrompt(state.authPrompts, event.prompt) })
           break
@@ -1637,6 +1655,41 @@ export const useStore = create<State>((set, get) => ({
     const next = { ...get().accounts }
     for (const a of accounts) next[a.id] = a
     set({ accounts: next })
+  },
+
+  async startCall(conversationId, kind) {
+    if (get().calls.active) return
+    try {
+      await window.unison.calls.start(conversationId, kind)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  async endCall() {
+    const active = get().calls.active
+    if (!active) return
+    try {
+      await window.unison.calls.end(active.id)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  async answerCall(id) {
+    try {
+      await window.unison.calls.answer(id)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
+  },
+
+  async declineCall(id) {
+    try {
+      await window.unison.calls.decline(id)
+    } catch (err) {
+      get().showToast(cleanError(err), 'error')
+    }
   },
 
   toggleDetails(tab) {

@@ -29,6 +29,7 @@ import { useUpdate } from './updateStore'
 import { usePresenceList } from './usePresence'
 import { withViewTransition } from './viewTransition'
 import { Presence } from './components/Presence'
+import { IncomingCallBanner } from './components/IncomingCallBanner'
 
 /*
  * Sheets opened now and then load when first opened, so they are not part of what has to load at launch.
@@ -578,6 +579,7 @@ export default function App(): JSX.Element {
             <Presence key="lightbox">{lightbox && <Lightbox {...lightbox} />}</Presence>
             <Presence key="auth">{authPrompts[0] && <AuthPromptSheet prompt={authPrompts[0]} />}</Presence>
 
+            <IncomingCallBanner />
             <ToastStack />
           </div>
         </>

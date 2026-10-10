@@ -21,10 +21,14 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@shared': resolve('src/shared') } },
+    // The call window's bar has a preload of its own (end / minimise / state, nothing else).
+    build: { rollupOptions: { input: { index: resolve('src/preload/index.ts'), 'call-frame': resolve('src/preload/call-frame.ts') } } }
   },
   renderer: {
     plugins: [react()],
-    resolve: { alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } }
+    resolve: { alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } },
+    // Moshi itself, and the bar over a call window.
+    build: { rollupOptions: { input: { index: resolve('src/renderer/index.html'), call: resolve('src/renderer/call.html') } } }
   }
 })

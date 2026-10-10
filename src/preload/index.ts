@@ -92,6 +92,21 @@ const bridge: MoshiBridge = {
     enable: (passphrase) => ipcRenderer.invoke(IPC.zaloShareEnable, passphrase),
     disable: () => ipcRenderer.invoke(IPC.zaloShareDisable)
   },
+  zaloRelay: {
+    status: () => ipcRenderer.invoke(IPC.zaloRelayStatus),
+    enable: () => ipcRenderer.invoke(IPC.zaloRelayEnable),
+    disable: () => ipcRenderer.invoke(IPC.zaloRelayDisable),
+    owners: () => ipcRenderer.invoke(IPC.zaloRelayOwners),
+    connect: (ownerId: string) => ipcRenderer.invoke(IPC.zaloRelayConnect, ownerId)
+  },
+  calls: {
+    start: (conversationId, kind) => ipcRenderer.invoke(IPC.callsStart, conversationId, kind),
+    end: (id) => ipcRenderer.invoke(IPC.callsEnd, id),
+    answer: (id) => ipcRenderer.invoke(IPC.callsAnswer, id),
+    decline: (id) => ipcRenderer.invoke(IPC.callsDecline, id),
+    state: () => ipcRenderer.invoke(IPC.callsState),
+    focus: () => ipcRenderer.invoke(IPC.callsFocus)
+  },
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),
     choose: () => ipcRenderer.invoke(IPC.syncChoose),

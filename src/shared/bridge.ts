@@ -47,6 +47,7 @@ import type {
   GifPage,
   GifProvider,
   LockState,
+  CallState,
   UpdateState
 } from './types'
 
@@ -186,6 +187,27 @@ export interface MoshiBridge {
     /** Turn on with the passphrase (the first computer sets it, the others must type the same). */
     enable(passphrase: string): Promise<ZaloShareStatus>
     disable(): Promise<ZaloShareStatus>
+  }
+  /** In-app calls (Messenger, Instagram, Zalo): the call itself runs in a window the main process opens. */
+  calls: {
+    /** Ring the other side / open the call window for this chat. Rejects with a readable reason when it cannot. */
+    start(conversationId: string, kind: 'audio' | 'video'): Promise<void>
+    end(id: string): Promise<void>
+    answer(id: string): Promise<void>
+    decline(id: string): Promise<void>
+    state(): Promise<CallState>
+    /** Bring the call window of the call in progress to the front. */
+    focus(): Promise<void>
+  }
+  /** This computer relays Zalo for the user's other computers through the sync folder (see main/zalo-relay.ts). */
+  zaloRelay: {
+    status(): Promise<ZaloRelayStatus>
+    enable(): Promise<ZaloRelayStatus>
+    disable(): Promise<ZaloRelayStatus>
+    /** Owners whose relay state can be read here (reader side): for "connect Zalo through a relay computer". */
+    owners(): Promise<ZaloRelayOwner[]>
+    /** Add the relay of `ownerId` as a Zalo account on this computer. */
+    connect(ownerId: string): Promise<Account>
   }
   sync: {
     status(): Promise<SyncStatus>
@@ -337,6 +359,11 @@ export const IPC = {
   zaloShareStatus: 'zalo-share:status',
   zaloShareEnable: 'zalo-share:enable',
   zaloShareDisable: 'zalo-share:disable',
+  zaloRelayStatus: 'zalo-relay:status',
+  zaloRelayEnable: 'zalo-relay:enable',
+  zaloRelayDisable: 'zalo-relay:disable',
+  zaloRelayOwners: 'zalo-relay:owners',
+  zaloRelayConnect: 'zalo-relay:connect',
   syncChoose: 'sync:choose',
   syncDisable: 'sync:disable',
   syncNow: 'sync:now',
@@ -395,12 +422,38 @@ export const IPC = {
   appWindowAction: 'app:windowAction',
   appSetBadge: 'app:setBadge',
   appVersion: 'app:version',
+  callsStart: 'calls:start',
+  callsEnd: 'calls:end',
+  callsAnswer: 'calls:answer',
+  callsDecline: 'calls:decline',
+  callsState: 'calls:state',
+  callsFocus: 'calls:focus',
   updateState: 'update:state',
   updateCheck: 'update:check',
   updateDownload: 'update:download',
   updateInstall: 'update:install',
   event: 'bridge:event'
 } as const
+
+/** A Zalo another computer relays through the sync folder. */
+export interface ZaloRelayOwner {
+  ownerId: string
+  name: string
+  relayDeviceName?: string
+  /** The relay's last heartbeat (ms). */
+  writtenAt: number
+}
+
+export interface ZaloRelayStatus {
+  enabled: boolean
+  /** The Zalo account being relayed. */
+  owner?: string
+  lastWriteAt?: number
+  lastOutboxAt?: number
+  /** Items from other computers' outboxes carried out since Moshi started. */
+  processed: number
+  errors: string[]
+}
 
 export interface ZaloShareStatus {
   /** The settings sync folder is set up (sharing lives inside it). */

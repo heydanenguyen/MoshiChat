@@ -3,7 +3,7 @@ import { join, basename, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { migrateLegacyProfile } from './profile-migration'
-import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, MessagePreview, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
+import type { AddAccountInput, AppCommand, BridgeEvent, Conversation, GifItem, IncomingCall, MessagePreview, OutgoingAttachment, PageOption, SendOptions, Settings, SharedKind } from '@shared/types'
 import type { WebCookie } from './adapters/facebook-personal'
 import { browserUserAgent } from './user-agent'
 import { isStickerId } from '@shared/stickers'
@@ -11,7 +11,7 @@ import { MITO_GIPHY, isMitoId, mitoSticker } from '@shared/mito'
 import { isPictureStickerId, packOf, pictureSticker } from '@shared/picture-packs'
 import { isLogoId } from '@shared/logos'
 import { IPC } from '@shared/bridge'
-import { clampZoom, isMutedBy } from '@shared/types'
+import { DEFAULT_SETTINGS, clampZoom, isMutedBy } from '@shared/types'
 import { accountNames, isForMe, isPendingRequest, looksLikeCode } from '@shared/inbox'
 import { memberIndex } from '@shared/people'
 import { Storage, secretsProtected } from './storage'
@@ -31,6 +31,17 @@ import { pruneTemp } from './temp-cleanup'
 import { imageTypeOf } from './media/image-type'
 import { lightSticker } from './media/sticker-light'
 import { ZaloShare } from './zalo-share'
+import { CallManager } from './calls/manager'
+import { installPermissions } from './calls/permissions'
+import { MessengerPresence } from './calls/messenger-presence'
+import { callPlatformOf } from './calls/target'
+import type { RingHost } from './calls/incoming'
+import { setRingHooks } from './instagram-realtime'
+import type { ZaloSecret } from './adapters/zalo'
+import { ZaloRelay } from './zalo-relay'
+import { setRelayEnv } from './adapters/zalo-relay-adapter'
+import { listRelayOwners } from './adapters/zalo-relay-files'
+import { readShareKey } from './zalo-share-key'
 import { cutoutMemoryOk, nativeCutout, nativeCutoutAvailable, NativeCutoutError } from './media/mac-cutout'
 import { freshPartition, legacyPartition, newPartition, partitionFor, sessionUser, USER_COOKIE, wipePartition, type WebPlatform } from './web-partitions'
 import { givenName } from '@shared/extras'
@@ -142,7 +153,16 @@ const log = (...args: unknown[]): void => {
 process.on('unhandledRejection', (reason) => log('unhandled rejection:', reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)))
 process.on('uncaughtException', (err) => log('uncaught exception:', err.stack ?? err.message))
 
+// Created with the IPC handlers (registerIpc); every account the window hears about passes through it for its call feature.
+let calls: CallManager | undefined
+// The hidden Messenger pages that listen for incoming calls (one per account with the setting on).
+let presence: MessengerPresence | undefined
+
 const emit = (event: BridgeEvent): void => {
+  if (event.type === 'account:updated' && calls) event = { ...event, account: calls.decorate(event.account) }
+  presence?.onEvent(event)
+  if (event.type === 'call:incoming') notifyIncomingCall(event.call)
+  if (event.type === 'call:state') closeCallNotifications(event.state.incoming)
   if (window && !window.isDestroyed()) window.webContents.send(IPC.event, event)
   if (event.type === 'message:new') {
     // Snoozes and follow-ups are kept under the chat the list shows (a merged person's first chat).
@@ -173,6 +193,14 @@ storage.onSettingsChanged((before, after) => {
 
 const sync = new SyncService(storage, emit, log)
 const zaloShare = new ZaloShare(() => sync.folderPath(), () => sync.device(), () => manager.zaloAdapters(), log)
+const zaloRelay = new ZaloRelay(() => sync.folderPath(), () => sync.device(), () => manager.zaloAdapters(), log)
+// Reader side: Zalo accounts that other computers relay (a live Zalo of the same owner here wins, see the adapter).
+setRelayEnv({
+  folder: () => sync.folderPath(),
+  device: () => sync.device(),
+  key: readShareKey,
+  liveOwners: () => manager.zaloAdapters().filter((a) => a.account.status !== 'needs_auth').map((a) => a.account.id.replace(/^zalo:/, ''))
+})
 
 const updater = new Updater(
   (state) => emit({ type: 'update:state', state }),
@@ -315,6 +343,36 @@ function lockedNotification(): void {
   })
   keepAlive(n)
   n.show()
+}
+
+/** The notification of each ringing call, kept so it can be taken down when the call stops ringing. */
+const callNotifications = new Map<string, Notification>()
+
+/** A call is ringing: a notification when Moshi is not in front (the banner is in the window; locked, it only says that someone calls). */
+function notifyIncomingCall(call: IncomingCall): void {
+  if (!storage.settings.notifications || !Notification.isSupported() || window?.isFocused()) return
+  const vi = storage.settings.language === 'vi'
+  const locked = appLock.isLocked()
+  const n = new Notification({
+    title: locked ? 'Moshi' : vi ? `Cuộc gọi đến từ ${call.peerName}` : `Incoming call from ${call.peerName}`,
+    body: locked ? (vi ? 'Có cuộc gọi đến. Mở Moshi để xem.' : 'Incoming call. Open Moshi to see who.') : call.kind === 'video' ? (vi ? 'Cuộc gọi video' : 'Video call') : vi ? 'Cuộc gọi thoại' : 'Voice call',
+    // Moshi rings in the window itself unless that is turned off.
+    silent: storage.settings.calls?.ring !== false
+  })
+  n.on('click', showMain)
+  n.on('close', () => callNotifications.delete(call.id))
+  keepAlive(n)
+  callNotifications.set(call.id, n)
+  n.show()
+}
+
+/** The calls that no longer ring take their notifications away. */
+function closeCallNotifications(ringing: IncomingCall[]): void {
+  for (const [id, n] of callNotifications) {
+    if (ringing.some((c) => c.id === id)) continue
+    callNotifications.delete(id)
+    n.close()
+  }
 }
 
 /** Snoozes back and follow-ups unanswered: one notification each (three at most), answerable in place on macOS. */
@@ -1420,9 +1478,11 @@ function registerIpc(): void {
       if (fromApp(event)) fn(event, ...args)
     })
   }
-  handle(IPC.accountsList, () => manager.listAccounts())
+  handle(IPC.accountsList, () => manager.listAccounts().map((a) => calls?.decorate(a) ?? a))
   handle(IPC.accountsAdd, (_e, input: AddAccountInput) => manager.add(input))
   handle(IPC.accountsRemove, async (_e, id: string) => {
+    // Its hidden Messenger page goes before the session it runs in is wiped.
+    presence?.stopAccount(id)
     await manager.remove(id)
     await pruneOrphanedSettings()
   })
@@ -1634,6 +1694,19 @@ function registerIpc(): void {
   handle(IPC.zaloShareStatus, () => zaloShare.status())
   handle(IPC.zaloShareEnable, (_e, passphrase: unknown) => zaloShare.enable(String(passphrase ?? '')))
   handle(IPC.zaloShareDisable, () => zaloShare.disable())
+  handle(IPC.zaloRelayStatus, () => zaloRelay.status())
+  handle(IPC.zaloRelayEnable, () => zaloRelay.enable())
+  handle(IPC.zaloRelayDisable, () => zaloRelay.disable())
+  handle(IPC.zaloRelayOwners, async () => {
+    const folder = sync.folderPath()
+    const key = await readShareKey()
+    return folder && key ? listRelayOwners(folder, key) : []
+  })
+  handle(IPC.zaloRelayConnect, (_e, ownerId: unknown) => {
+    // The id becomes a folder name and an account id: ids Zalo gives are digits.
+    if (typeof ownerId !== 'string' || !/^[\w-]{1,40}$/.test(ownerId)) throw new Error('Unknown Zalo owner')
+    return manager.addRelayAccount(ownerId)
+  })
   handle(IPC.syncChoose, async () => {
     const vi = storage.settings.language === 'vi'
     const options: Electron.OpenDialogOptions = {
@@ -1768,6 +1841,67 @@ function registerIpc(): void {
     else if (action === 'maximize') window.isMaximized() ? window.unmaximize() : window.maximize()
     else window.close()
   })
+
+  // Calls in a window of their own (Messenger, Instagram, Zalo); see calls/manager.ts.
+  const calling = new CallManager({
+    backend: {
+      account: (id) => manager.listAccounts().find((a) => a.id === id),
+      conversation: (id) => manager.listConversations().find((c) => c.id === id),
+      partition: (id, platform) => manager.storedPartition(id, platform),
+      zaloCredentials: (id) => storage.readSecret<ZaloSecret>(id)?.credentials,
+      zalo: (id) => manager.zaloAdapters().find((a) => a.account.id === id)
+    },
+    emit,
+    log,
+    language: () => storage.settings.language,
+    background: windowColorFor,
+    icon: () => appIcon(),
+    probeFile: join(app.getPath('userData'), 'calls-probe.json'),
+    callSettings: () => ({ ...DEFAULT_SETTINGS.calls!, ...storage.settings.calls })
+  })
+  calls = calling
+  // Incoming calls: Messenger gets a hidden page of its own per account; Instagram's realtime page doubles as its listener.
+  presence = new MessengerPresence({
+    accounts: () => manager.listAccounts(),
+    settings: () => storage.settings,
+    partition: (id) => manager.storedPartition(id, 'messenger'),
+    watch: (host) => calling.watchRing(host),
+    forget: (host) => calling.forgetRing(host),
+    log
+  })
+  const instagramHosts = new Map<string, RingHost>()
+  setRingHooks({
+    attach: (source, partition) => {
+      const host: RingHost = {
+        key: source.key,
+        platform: 'instagram',
+        homeUrl: source.homeUrl,
+        accountId: () => manager.listAccounts().find((a) => callPlatformOf(a) === 'instagram' && manager.storedPartition(a.id, 'instagram') === partition)?.id,
+        callWindow: () => source.getWindow(),
+        beginCall: () => source.beginCall(),
+        endCall: () => source.endCall()
+      }
+      instagramHosts.set(source.key, host)
+      calling.watchRing(host)
+    },
+    detach: (source) => {
+      const host = instagramHosts.get(source.key)
+      if (!host) return
+      instagramHosts.delete(source.key)
+      calling.forgetRing(host)
+    }
+  })
+  storage.onSettingsChanged((before, after) => {
+    if (before.calls?.incomingMessenger !== after.calls?.incomingMessenger) presence?.sync()
+  })
+  // Only the call's own pages get the camera and microphone, and only on the call sites (before any account page is created).
+  installPermissions({ ownsCall: (contents) => calling.owns(contents), isAppPage: (url) => isAppNavigation(url, APP_PAGE) })
+  handle(IPC.callsStart, (_e, conversationId: unknown, kind: unknown) => calling.start(String(conversationId), kind === 'video' ? 'video' : 'audio'))
+  handle(IPC.callsEnd, (_e, id: unknown) => calling.end(String(id)))
+  handle(IPC.callsAnswer, async (_e, id: unknown) => void (await calling.answer(String(id))))
+  handle(IPC.callsDecline, async (_e, id: unknown) => void (await calling.decline(String(id))))
+  handle(IPC.callsState, () => calling.state())
+  handle(IPC.callsFocus, () => calling.focus())
 }
 
 // Chromium stops painting occluded windows on Windows, which breaks screenshot-based
@@ -1798,6 +1932,7 @@ if (!gotLock) {
     applyLoginItem()
     await sync.start()
     void zaloShare.start()
+    void zaloRelay.start()
     void scheduler.start()
     reminders.start()
     later.start()
@@ -1817,6 +1952,7 @@ if (!gotLock) {
     installMenu()
     createWindow()
     await manager.restore()
+    presence?.sync()
     // After sleep the network takes a moment, but the accounts that failed in the meantime need not wait out their back-off.
     powerMonitor.on('resume', () => manager.retryErrored())
     void updater.start()
@@ -1847,13 +1983,14 @@ if (!gotLock) {
       birthdays.stop()
       reminders.stop()
       sync.stop()
+      presence?.stopAll()
     } catch (err) {
       log('[quit] stopping services failed:', (err as Error).message)
     }
     const bounded = (work: Promise<unknown>, ms: number): Promise<unknown> => Promise.race([work.catch(() => undefined), new Promise((r) => setTimeout(r, ms))])
     // The AI worker gets longer: stopAndWait itself gives up on a polite exit at 4 s and then ends the process.
     // Flush after the adapters are down: a disconnect() can still queue a write that a parallel flush would miss.
-    void Promise.all([bounded(ai.stopAndWait(4_000), 6_500), bounded(manager.shutdown().finally(() => storage.flush()), 4_000)]).finally(() => {
+    void Promise.all([bounded(ai.stopAndWait(4_000), 6_500), bounded(manager.shutdown().finally(() => storage.flush()), 4_000), bounded(calls?.shutdown() ?? Promise.resolve(), 3_000)]).finally(() => {
       shutDown = true
       app.quit()
     })

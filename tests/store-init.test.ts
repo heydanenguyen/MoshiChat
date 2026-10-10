@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Account, AuthPrompt, BridgeEvent } from '../src/shared/types'
+import type { Account, AuthPrompt, BridgeEvent, CallState, IncomingCall } from '../src/shared/types'
 import { DEFAULT_SETTINGS } from '../src/shared/types'
 
 // Headless store, like store-send.test.ts: the bridge is a hand-made object whose lists we resolve by hand.
 let listener: ((event: BridgeEvent) => void) | undefined
 const resolvers: { accounts?: (a: Account[]) => void } = {}
 const pending = vi.fn()
+const callsState = vi.fn()
 const unison = {
   app: { platform: 'win32' },
   onEvent: (fn: (event: BridgeEvent) => void) => {
@@ -18,6 +19,7 @@ const unison = {
   accounts: { list: () => new Promise<Account[]>((resolve) => (resolvers.accounts = resolve)) },
   conversations: { list: async () => [] },
   lock: { state: async () => undefined },
+  calls: { state: callsState },
   auth: { pending }
 }
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined })
@@ -31,7 +33,9 @@ beforeEach(() => {
   listener = undefined
   pending.mockReset()
   pending.mockResolvedValue([])
-  useStore.setState({ ready: false, accounts: {}, conversations: {}, authPrompts: [] })
+  callsState.mockReset()
+  callsState.mockResolvedValue({ incoming: [] })
+  useStore.setState({ ready: false, accounts: {}, conversations: {}, authPrompts: [], calls: { incoming: [] } })
 })
 
 describe('init', () => {
@@ -106,5 +110,40 @@ describe('toggleSidebar', () => {
     await saving
     expect(useStore.getState().settings.sidebarCollapsed).toBe(false)
     expect(useStore.getState().toasts.some((t) => t.kind === 'error')).toBe(true)
+  })
+})
+
+describe('calls', () => {
+  const ringing = (id: string): IncomingCall => ({ id, accountId: 'a1', platform: 'messenger', peerName: 'Lan', kind: 'video', at: 1 })
+  const ready = async (): Promise<void> => {
+    const done = useStore.getState().init()
+    await Promise.resolve()
+    resolvers.accounts!([])
+    await done
+  }
+
+  it('lists a call that starts ringing', async () => {
+    await ready()
+    listener!({ type: 'call:incoming', call: ringing('c1') })
+    expect(useStore.getState().calls.incoming.map((c) => c.id)).toEqual(['c1'])
+  })
+
+  it('takes call:state as the whole picture: the active call, and ringing calls that are gone are removed', async () => {
+    await ready()
+    listener!({ type: 'call:incoming', call: ringing('c1') })
+    const state: CallState = { active: { id: 'c1', accountId: 'a1', platform: 'messenger', kind: 'video', startedAt: 9 }, incoming: [] }
+    listener!({ type: 'call:state', state })
+    expect(useStore.getState().calls.active?.id).toBe('c1')
+    expect(useStore.getState().calls.incoming).toEqual([])
+  })
+
+  it('shows a call that was already ringing before the window listened, and keeps one that arrives meanwhile', async () => {
+    callsState.mockResolvedValue({ incoming: [ringing('c0')] })
+    const done = useStore.getState().init()
+    await Promise.resolve()
+    listener!({ type: 'call:incoming', call: ringing('c1') })
+    resolvers.accounts!([])
+    await done
+    expect(useStore.getState().calls.incoming.map((c) => c.id)).toEqual(['c0', 'c1'])
   })
 })
