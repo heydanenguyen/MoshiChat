@@ -15833,3 +15833,318 @@ html[data-vt='details']::view-transition-new(vt-chat) {
     animation: none;
   }
 }
+
+/* ================================================================== Quiet Glass (UI direction A, phases 0-1)
+   The default Moshi look only: every rule starts with the same :root test, so Liquid, Mono and Pals (and the picked
+   accents, see tokens.css) are left as they were. Tokens (type scale, row size, icon stroke) are in tokens.css.
+   Nothing here moves on hover: colour only. */
+
+/* one stroke weight for every line icon in the sidebar, the list and the chat header (tag glyphs keep their 2) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.sidebar, .list-col, .chat-header) svg.lucide {
+  stroke-width: var(--icon-stroke);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .tag-pill svg.lucide {
+  stroke-width: 2;
+}
+
+/* sidebar: sentence-case section labels at 12/16, nav at 14/20, counts as quiet numbers (pills only for accounts) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.sidebar-section-title, .fold-toggle, .conv-group-label) {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .fold-count {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .nav-item {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .nav-item.active {
+  font-weight: 700;
+  background: var(--bg-active);
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .nav-item .nav-badge {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .nav-item.active .nav-badge {
+  color: var(--accent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .account-row .nav-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-12);
+  line-height: 20px;
+  font-weight: 700;
+}
+
+/* list header and message requests */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .list-title {
+  font-size: var(--fs-22);
+  line-height: var(--lh-22);
+  letter-spacing: -0.02em;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row {
+  height: calc(var(--row-height) - 8px);
+  margin-bottom: 0;
+  padding: 0 12px;
+  border-radius: var(--row-radius);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row-icon {
+  width: var(--row-avatar);
+  height: var(--row-avatar);
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row-text {
+  gap: 0;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row-title {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row-sub {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-tertiary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .requests-row-count {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* the conversation row: 64 high, 40 avatar, two lines (name and time; preview and marks), no third */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item {
+  gap: 12px;
+  height: var(--row-height);
+  padding: 0 12px;
+  border-radius: var(--row-radius);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.hit {
+  height: auto;
+  padding: 8px 12px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.selected {
+  --ring-gap: var(--row-selected);
+  background: var(--row-selected);
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-top {
+  gap: 6px;
+  min-height: var(--lh-14);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-title {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.unread .conv-title {
+  font-weight: 800;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.muted .conv-title {
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.muted.unread .conv-title {
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-time {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.unread:not(.muted) .conv-time {
+  color: var(--accent);
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-bottom {
+  gap: 6px;
+  margin-top: 0;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-preview {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  min-height: var(--lh-13);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.muted .conv-preview {
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-account {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-more {
+  top: 12px;
+  right: 8px;
+}
+
+/* unread: a dot at the row's left edge, in the accent */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-dot {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: var(--row-dot);
+  height: var(--row-dot);
+  margin-top: calc(var(--row-dot) / -2);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* the app badge on the avatar: 18 on 40 (46 %), always round, whatever icon style is picked */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item .avatar-badge {
+  right: -3px;
+  bottom: -3px;
+  width: var(--row-badge) !important;
+  height: var(--row-badge) !important;
+  border-radius: 50%;
+  overflow: hidden;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item .avatar-badge .platform-icon {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item .avatar-badge .platform-icon > svg {
+  width: 64%;
+  height: 64%;
+}
+
+/* typing replaces the preview, in the accent, with three dots (opacity and transform only) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-preview.typing {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: quiet-dot 1.2s ease-in-out infinite both;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes quiet-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* draft: the word in the danger colour, bold; my last message: one grey check sent, two accent checks read */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-draft {
+  color: var(--danger-text);
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-receipt {
+  display: inline-grid;
+  vertical-align: -3px;
+  margin-right: 4px;
+  color: var(--text-tertiary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-receipt.read {
+  color: var(--accent);
+}
+
+/* the marks on the second line: pin, mute, close friend, then the count */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-meta {
+  gap: 6px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-meta > svg,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-close-mark {
+  width: 15px;
+  height: 15px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-close-mark {
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-pinned-mark {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .unread-pill {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-12);
+  line-height: 20px;
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .conv-item.muted .unread-pill {
+  background: var(--pill-muted);
+  color: var(--text-secondary);
+}
+
+/* the chat header: name 15/20, line under it 12/16 */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-info {
+  line-height: normal;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-title {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: 700;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-sub {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-tertiary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-header-sub.typing {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* no glow: the composer's focus is a clear accent edge, the send button sits flat */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-send {
+  box-shadow: none;
+}

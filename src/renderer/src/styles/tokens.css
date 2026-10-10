@@ -165,3 +165,63 @@
   --shadow-panel: 0 12px 40px rgba(0, 0, 0, 0.35);
   --shadow-avatar: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
 }
+
+/* ---- Quiet Glass (UI direction A, phases 0-1) ------------------------------------------------------------------
+   Inert until a rule uses them: the type scale (size / line-height pairs) and the 8-pt row.                      */
+:root {
+  --fs-12: 12px;
+  --lh-12: 16px;
+  --fs-13: 13px;
+  --lh-13: 20px;
+  --fs-14: 14px;
+  --lh-14: 20px;
+  --fs-15: 15px;
+  --lh-15: 20px;
+  --fs-17: 17px;
+  --lh-17: 24px;
+  --fs-22: 22px;
+  --lh-22: 28px;
+
+  --row-height: 64px;
+  --row-avatar: 40px;
+  --row-badge: 18px;
+  --row-radius: 12px;
+  --row-dot: 7px;
+  --icon-stroke: 1.75;
+}
+
+/* The default Moshi look only: Liquid, Mono and Pals set their own colours and are left alone, and so are the other
+   accent colours (a picked accent keeps its own gradient). One flat accent, white on it at 5.5:1; no glow under bubbles. */
+:root:is(:not([data-accent]), [data-accent='ocean']):not([data-theme='dark']):not([data-style='liquid'], [data-style='mono'], [data-style='pals']) {
+  --accent: #2f5fe0;
+  --accent-hover: #2650cc;
+  --accent-2: #2f5fe0;
+  --accent-gradient: linear-gradient(#2f5fe0, #2f5fe0);
+  --accent-soft: rgba(47, 95, 224, 0.1);
+  --accent-soft-2: rgba(47, 95, 224, 0.1);
+  --on-accent: #ffffff;
+  --bubble-out: #2f5fe0;
+  --bubble-out-solid: #2f5fe0;
+  --bubble-out-text: #ffffff;
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --danger-text: #c8323c;
+  --row-selected: #eaf0ff;
+  --pill-muted: var(--fill-secondary);
+}
+
+:root:is(:not([data-accent]), [data-accent='ocean'])[data-theme='dark']:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) {
+  --accent: #86a4ff;
+  --accent-hover: #9db5ff;
+  --accent-2: #86a4ff;
+  --accent-gradient: linear-gradient(#86a4ff, #86a4ff);
+  --accent-soft: rgba(134, 164, 255, 0.16);
+  --accent-soft-2: rgba(134, 164, 255, 0.16);
+  --on-accent: #0b1020;
+  --bubble-out: #3a62e0;
+  --bubble-out-solid: #3a62e0;
+  --bubble-out-text: #ffffff;
+  --bubble-out-shadow: 0 0 0 0 transparent;
+  --danger-text: #ff8a92;
+  --row-selected: rgba(134, 164, 255, 0.12);
+  --pill-muted: var(--fill-tertiary);
+}

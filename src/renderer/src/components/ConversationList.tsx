@@ -10,12 +10,14 @@ import {
   AtSign,
   BellOff,
   BellRing,
+  Check,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
   CircleDot,
   Columns2,
   EyeOff,
+  Heart,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -25,7 +27,7 @@ import {
   UserRoundPlus,
   X
 } from 'lucide-react'
-import { PLATFORMS, type Conversation, type Language, type Platform, type TagMeta } from '@shared/types'
+import { PLATFORMS, type Conversation, type Language, type MessageStatus, type Platform, type TagMeta } from '@shared/types'
 import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
 import { PlatformIcon } from './PlatformIcon'
 import { formatBadge, isUnread } from '../quickFilter'
@@ -35,6 +37,8 @@ import { popoverShift } from '../popover'
 import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
 import { flipMoves, reordered } from '../flip'
+import { icon } from '../icons'
+import { isQuietStyle, rowState } from '../rowState'
 
 /** Drag payload type for a chat row (dropped onto a pane of the chat area). */
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
@@ -75,6 +79,10 @@ interface ConversationRowProps {
   isTyping: boolean
   typingName: string | undefined
   draft: string | undefined
+  /** The Moshi look (UI direction A): the row has its own anatomy; the other styles keep theirs. */
+  quiet: boolean
+  /** How my last message in this chat stands (only known for chats that were opened); undefined for theirs. */
+  lastStatus: MessageStatus | undefined
   timeLabel: string
   /** The app badge on the avatar, if any. */
   badge: Platform | undefined
@@ -117,6 +125,8 @@ const ConversationRow = memo(function ConversationRow({
   isTyping,
   typingName,
   draft,
+  quiet,
+  lastStatus,
   timeLabel,
   badge,
   appsKey,
@@ -143,10 +153,13 @@ const ConversationRow = memo(function ConversationRow({
   const prefix = preview && !isTyping && (preview.isOutgoing || c.isGroup) ? `${preview.isOutgoing ? t('you') : preview.senderName.split(' ')[0]}: ` : ''
   const convTags = (tagIds ?? []).filter((tag) => tagById[tag])
   const apps = appsKey?.split(',') as Platform[] | undefined
+  const state = rowState({ unread, muted, isTyping, draft, selected, lastOutgoing: !!preview?.isOutgoing, status: lastStatus, tagIds: convTags })
+  // Quiet: one tag chip, the rest are in Details. Other styles: two and a "+n".
+  const shownTags = quiet ? (state.chip ? [state.chip] : []) : convTags.slice(0, 2)
   return (
     <>
       <button
-        className={`conv-item ${selected ? 'selected' : ''} ${beside ? 'beside' : ''} ${unread ? 'unread' : ''} ${muted ? 'muted' : ''}`}
+        className={`conv-item ${selected ? 'selected' : ''} ${beside ? 'beside' : ''} ${unread ? 'unread' : ''} ${muted ? 'muted' : ''} ${quiet ? 'quiet' : ''}`}
         data-id={c.id}
         aria-haspopup="menu"
         onClick={(e) => onOpen(c.id, canSplit && (e.metaKey || e.ctrlKey))}
@@ -170,7 +183,8 @@ const ConversationRow = memo(function ConversationRow({
           }
         }}
       >
-        <Avatar name={c.title} url={c.avatarUrl} size={44} platform={badge} />
+        {quiet && state.dot && (c.unreadCount > 0 ? <i className="conv-dot" aria-hidden /> : <i className="conv-dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />)}
+        <Avatar name={c.title} url={c.avatarUrl} size={quiet ? 40 : 44} platform={badge} />
         <span className="conv-body">
           <span className="conv-top">
             <span className="conv-title">
@@ -189,10 +203,10 @@ const ConversationRow = memo(function ConversationRow({
               )}
               {convTags.length > 0 && (
                 <span className="conv-tags" title={convTags.map((tag) => tagById[tag].name[language]).join(', ')}>
-                  {convTags.slice(0, 2).map((tag) => (
+                  {shownTags.map((tag) => (
                     <TagChip key={tag} tag={tagById[tag]} size="xs" iconOnly />
                   ))}
-                  {convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
+                  {!quiet && convTags.length > 2 && <span className="conv-tags-more">+{convTags.length - 2}</span>}
                 </span>
               )}
             </span>
@@ -228,13 +242,23 @@ const ConversationRow = memo(function ConversationRow({
                   <span className="conv-draft">{t('draft')}</span> {draft}
                 </>
               ) : isTyping ? (
-                c.isGroup ? (
-                  t('typingIn', { name: typingName ?? '' })
-                ) : (
-                  t('typing')
-                )
+                <>
+                  {quiet && (
+                    <span className="typing-dots" aria-hidden>
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  )}
+                  {c.isGroup ? t('typingIn', { name: typingName ?? '' }) : t('typing')}
+                </>
               ) : (
                 <>
+                  {quiet && state.receipt && (
+                    <span className={`conv-receipt ${state.receipt}`} role="img" aria-label={state.receipt === 'read' ? t('read') : t('delivered')}>
+                      {state.receipt === 'read' ? <CheckCheck {...icon(16)} /> : <Check {...icon(16)} />}
+                    </span>
+                  )}
                   {prefix}
                   <PreviewText kind={preview?.kind} text={maskCode(preview?.text ?? '')} />
                 </>
@@ -253,12 +277,17 @@ const ConversationRow = memo(function ConversationRow({
               )}
               {pinned && <Pin size={12} strokeWidth={2.2} className="conv-pinned-mark" />}
               {muted ? <BellOff size={12} strokeWidth={2.2} /> : mentionsOnly && <AtSign size={12} strokeWidth={2.4} aria-label={t('mentionsOnly')} />}
+              {quiet && state.close && (
+                <span className="conv-close-mark" role="img" title={t('insights')} aria-label={t('insights')}>
+                  <Heart {...icon(15)} />
+                </span>
+              )}
               {archivedMark && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
               {requestMark && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
               {c.unreadCount > 0 ? (
                 <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
               ) : (
-                unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
+                !quiet && unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
               )}
             </span>
           </span>
@@ -326,6 +355,19 @@ export function ConversationList(): JSX.Element {
   const prefetch = useStore((s) => s.prefetch)
   const drafts = useStore((s) => s.drafts)
   const pals = useStore((s) => s.settings.style === 'pals')
+  const quiet = useStore((s) => isQuietStyle(s.settings.style))
+  // How my last message stands, for the chats that were opened (message id -> status). One string, so the list only
+  // redraws when a receipt changes; the Moshi look is the only one that shows it.
+  const receiptKey = useStore((s) => {
+    if (!isQuietStyle(s.settings.style)) return ''
+    let key = ''
+    for (const id in s.messages) {
+      const last = s.messages[id]?.at(-1)
+      if (last?.isOutgoing) key += `${last.id}|${last.status};`
+    }
+    return key
+  })
+  const receipts = new Map<string, MessageStatus>(receiptKey.split(';').filter(Boolean).map((pair) => [pair.slice(0, pair.lastIndexOf('|')), pair.slice(pair.lastIndexOf('|') + 1) as MessageStatus]))
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pins = useStore((s) => s.settings.pins)
   const togglePin = useStore((s) => s.togglePin)
@@ -378,7 +420,7 @@ export function ConversationList(): JSX.Element {
   const virtualizer = useVirtualizer({
     count: conversations.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 68,
+    estimateSize: () => (quiet ? 64 : 68),
     overscan: 8,
     // What sits above the rows in the same scroller (the requests row, a filter note) shifts them down.
     scrollMargin: rowsOffset,
@@ -656,6 +698,8 @@ export function ConversationList(): JSX.Element {
                   isTyping={isTyping}
                   typingName={isTyping ? typing[c.id].name : undefined}
                   draft={drafts[c.id]}
+                  quiet={quiet}
+                  lastStatus={c.lastMessage?.isOutgoing ? receipts.get(c.lastMessage.id) : undefined}
                   timeLabel={c.updatedAt > 0 ? formatListTime(c.updatedAt, language) : ''}
                   badge={merged ? latestApp : showBadge ? c.platform : undefined}
                   appsKey={merged ? memberChats.map((m) => m.platform).join(',') : undefined}
