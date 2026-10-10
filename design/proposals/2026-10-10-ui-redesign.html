@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="vi" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moshi UI redesign proposals 2026-10-10</title>
+<meta name="description" content="Ba hướng thiết kế lại UI Moshi: Quiet Glass, Editorial, Playful Pals+">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<style>/* ============ PAGE CHROME (neutral frame; the mockups carry the colour) ============ */
+:root{--pg-bg:#e7e9ef;--pg-card:#f7f8fb;--pg-ink:#14161c;--pg-ink2:#454a57;--pg-line:rgba(20,22,28,.14);--pg-acc:#2f5fe0;--pg-onacc:#fff;--pg-soft:rgba(20,22,28,.05)}
+html[data-theme=dark]{--pg-bg:#0a0b0e;--pg-card:#13151a;--pg-ink:#eceef3;--pg-ink2:#a6abb8;--pg-line:rgba(255,255,255,.14);--pg-acc:#86a4ff;--pg-onacc:#0b1020;--pg-soft:rgba(255,255,255,.06)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;color-scheme:light}
+html[data-theme=dark]{color-scheme:dark}
+body{margin:0;background:var(--pg-bg);color:var(--pg-ink);font:15px/1.65 'Be Vietnam Pro',system-ui,'Segoe UI',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+a{color:inherit}
+.pg-top{position:sticky;top:0;z-index:50;height:52px;display:flex;align-items:center;gap:8px;padding:0 24px;background:color-mix(in srgb,var(--pg-bg) 84%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--pg-line)}
+.pg-top .pg-brand{display:flex;align-items:center;gap:8px;font-weight:700;margin-right:12px;white-space:nowrap}
+.pg-top .pg-brand svg{width:24px;height:24px}
+.pg-top nav{display:flex;gap:2px;flex:1;overflow:hidden}
+.pg-top nav a{padding:6px 12px;border-radius:8px;text-decoration:none;font-size:13.5px;font-weight:500;color:var(--pg-ink2);white-space:nowrap}
+.pg-top nav a:hover{background:var(--pg-soft);color:var(--pg-ink)}
+.pg-top nav a:focus-visible,.pg-btn:focus-visible,#themeBtn:focus-visible{outline:2px solid var(--pg-acc);outline-offset:2px}
+#themeBtn{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--pg-line);background:var(--pg-card);color:var(--pg-ink);font:600 13px/1 inherit;font-family:inherit;cursor:pointer}
+#themeBtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+#themeBtn .moon{display:none}html[data-theme=dark] #themeBtn .moon{display:block}html[data-theme=dark] #themeBtn .sun{display:none}
+.pg-wrap{max-width:1264px;margin:0 auto;padding:0 24px}
+.pg-hero{padding:56px 0 8px;max-width:820px}
+.pg-hero h1{font-size:44px;line-height:1.12;margin:0 0 16px;letter-spacing:-.025em;font-weight:800}
+.pg-hero p{margin:0 0 10px;color:var(--pg-ink2);font-size:16.5px;max-width:68ch}
+.pg-hero .pg-flag{display:inline-block;font-size:13px;padding:6px 12px;border-radius:8px;background:var(--pg-soft);color:var(--pg-ink2);margin-top:6px}
+.pg-sec{padding:64px 0 8px;scroll-margin-top:52px}
+.pg-sec>h2{font-size:30px;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em;font-weight:800}
+.pg-sec>.pg-lede{margin:0 0 28px;color:var(--pg-ink2);max-width:72ch;font-size:15.5px}
+.pg-sec h3{font-size:19px;margin:44px 0 6px;letter-spacing:-.01em;font-weight:700}
+.pg-sec h3+p.pg-sub{margin:0 0 16px;color:var(--pg-ink2);max-width:76ch}
+.pg-crit{display:grid;grid-template-columns:repeat(2,1fr);gap:20px 32px}
+.pg-ci{display:grid;grid-template-columns:240px 1fr;gap:16px;align-items:start}
+.pg-crop{width:240px;height:150px;border-radius:10px;background-color:#101224;background-repeat:no-repeat;box-shadow:0 0 0 1px var(--pg-line);position:relative;overflow:hidden}
+.pg-crop::after{content:attr(data-src);position:absolute;left:6px;bottom:6px;font:600 10.5px/1 'Be Vietnam Pro',sans-serif;padding:3px 6px;border-radius:4px;background:rgba(0,0,0,.6);color:#fff}
+.pg-ci h4{margin:0 0 2px;font-size:15px;line-height:1.35;font-weight:700}
+.pg-ci p{margin:0;font-size:13.5px;line-height:1.55;color:var(--pg-ink2)}
+.pg-ci .pg-fix{margin-top:6px;color:var(--pg-ink)}
+.pg-ci .pg-fix b{color:var(--pg-acc)}
+.pg-dhead{display:grid;grid-template-columns:1.15fr 1fr;gap:32px;align-items:start;margin-bottom:20px}
+.pg-dhead h2{margin:0 0 6px;font-size:34px;line-height:1.1;letter-spacing:-.025em;font-weight:800}
+.pg-dhead .pg-th{margin:0;font-size:16.5px;color:var(--pg-ink2);max-width:52ch}
+.pg-dhead ul{margin:0;padding:0 0 0 18px;color:var(--pg-ink2);font-size:14px;line-height:1.55}
+.pg-dhead li{margin:0 0 4px}
+.pg-dhead li b{color:var(--pg-ink)}
+.pg-ctl{display:flex;gap:8px;align-items:center;margin:0 0 14px;flex-wrap:wrap}
+.pg-ctl span{font-size:12.5px;color:var(--pg-ink2);margin-right:4px}
+.pg-btn{height:32px;padding:0 14px;border-radius:16px;border:1px solid var(--pg-line);background:var(--pg-card);color:var(--pg-ink);font:600 12.5px/1 inherit;font-family:inherit;cursor:pointer}
+.pg-btn[aria-pressed=true]{background:var(--pg-ink);color:var(--pg-bg);border-color:transparent}
+.stage{position:relative;width:100%;overflow-x:clip}
+.stage-in{width:1240px;transform:scale(var(--k,1));transform-origin:0 0}
+.spec{display:grid;grid-template-columns:minmax(0,auto) minmax(260px,1fr);gap:28px;align-items:start}
+.spec.one{grid-template-columns:1fr}.spec.one .notes{max-width:none}.spec .notes{font-size:13.5px;color:var(--pg-ink2);line-height:1.6;max-width:46ch}
+.spec .notes ul{margin:0;padding-left:18px}.spec .notes li{margin-bottom:6px}
+.spec .notes b{color:var(--pg-ink)}
+.pg-note{margin:0;font-size:12.5px;line-height:1.5;color:var(--pg-ink2);max-width:30ch}
+.pg-note b{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:9px;margin-right:8px;background:var(--pg-ink);color:var(--pg-bg);font-size:11px;vertical-align:1px}
+.pg-two{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.demo-col{display:flex;flex-direction:column;gap:16px}
+.an,.cf{display:flex;align-items:center;gap:14px}
+.an .frag{flex:none}
+.pg-narrow{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.pg-tok{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:12px;font-size:13px}
+.pg-tok h5{margin:0 0 8px;font-size:13.5px;font-weight:700}
+.pg-sw{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.pg-sw div{display:flex;align-items:center;gap:8px;font-size:12px;line-height:1.3;color:var(--pg-ink2)}
+.pg-sw i{width:26px;height:26px;border-radius:7px;flex:none;box-shadow:0 0 0 1px var(--pg-line)}
+.pg-sw b{display:block;color:var(--pg-ink);font-weight:600}
+.pg-tok table{border-collapse:collapse;width:100%}
+.pg-tok td{padding:3px 0;border-bottom:1px solid var(--pg-line);color:var(--pg-ink2);font-size:12.5px}
+.pg-tok td:first-child{color:var(--pg-ink);font-weight:600;width:42%}
+.pg-tok p{margin:0 0 6px;color:var(--pg-ink2);font-size:12.5px;line-height:1.55}
+table.pg-cmp{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;background:var(--pg-card);border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--pg-line)}
+.pg-cmp th,.pg-cmp td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--pg-line)}
+.pg-cmp thead th{font-size:13px;font-weight:700;background:var(--pg-soft)}
+.pg-cmp tbody th{width:128px;font-weight:700;color:var(--pg-ink)}
+.pg-cmp td{color:var(--pg-ink2)}
+.pg-cmp td b{color:var(--pg-ink)}
+.pg-cmp tr:last-child th,.pg-cmp tr:last-child td{border-bottom:0}
+.pg-ok{color:#14733f}.pg-bad{color:#b3261e}html[data-theme=dark] .pg-ok{color:#62d19a}html[data-theme=dark] .pg-bad{color:#ff9a93}
+.pg-rec{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.pg-rec p{margin:0 0 12px;color:var(--pg-ink2)}
+.pg-rec strong{color:var(--pg-ink)}
+.pg-phase{display:grid;grid-template-columns:64px 1fr;gap:6px 16px;margin:0 0 16px}
+.pg-phase .pg-ph{grid-row:span 2;font-weight:800;font-size:13px;padding-top:2px;color:var(--pg-acc)}
+.pg-phase h4{margin:0;font-size:15px}.pg-phase p{margin:0;font-size:13.5px;color:var(--pg-ink2)}
+.pg-foot{padding:72px 0 80px;font-size:12.5px;color:var(--pg-ink2)}
+.pg-hr{height:1px;background:var(--pg-line);border:0;margin:56px 0 0}
+@media (max-width:1100px){.pg-crit,.pg-dhead,.pg-rec,.pg-tok{grid-template-columns:1fr}.spec{grid-template-columns:1fr}.pg-ci{grid-template-columns:200px 1fr}.pg-crop{width:200px}}
+
+/* ----- fragment holders (specimen boards) ----- */
+.frag{position:relative;background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--frame),0 12px 30px -18px rgba(10,12,30,.35)}
+.frag.wide{width:680px}
+.frag.rowf{width:var(--list-w);padding:6px 0;background:var(--surface)}
+.m-c.frag.rowf{background:var(--bg);padding:6px 0 6px 8px}
+.m-c.frag.rowf .rows{padding:0 12px 0 0}
+.m-c.frag.wide,.m-c.frag.compf{border-radius:32px}
+.frag.compf{width:680px;height:auto;background:var(--surface)}
+.frag.compf .cmp-wrap{position:static;padding:16px}
+.frag.compf .cmp-wrap::before{display:none}
+.m-b .frag.compf,.frag.m-b.compf{background:var(--surface)}
+.frag.callf{width:100%;max-width:640px;padding:24px;display:flex;justify-content:center;background:var(--bg);height:auto}
+.frag.callf .callwrap{display:flex;justify-content:center}
+.m-b.frag.callf .call{width:640px;max-width:100%}
+.m-a.frag.callf{background:linear-gradient(120deg,#dbe4ff,#ece2ff)}
+html[data-theme=dark] .m-a.frag.callf{background:linear-gradient(120deg,#1a2447,#2a1f4a)}
+.frag .rows::after{display:none}
+.frag.rowf .row{margin:0}
+
+/* narrow tab bar */
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;justify-content:space-around;align-items:center;padding:0 8px 6px;background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 -1px 0 var(--line);z-index:5}
+.tabbar a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--ink3);min-width:64px;height:48px;justify-content:center}
+.tabbar a.on{color:var(--accent)}
+.m-b .tabbar{background:var(--surface)}.m-b .tabbar a.on{color:var(--ink)}
+.m-c .tabbar{background:var(--surface);margin:0 12px 10px;border-radius:32px;height:60px;left:0;right:0;box-shadow:0 10px 30px -10px rgba(52,30,110,.35)}
+.m-c .tabbar a{height:48px;border-radius:24px;color:var(--ink);padding:0 10px}.m-c .tabbar a.on{background:var(--ink);color:var(--surface)}
+.nf .list .rows{padding-bottom:70px}
+.nf .msgs{padding-bottom:112px}
+.nf .cmp-wrap{bottom:0}
+
+/* ============ MOCKUP BASE (.mk) — written in variables; Direction A is the base, B and C override ============ */
+.mk{
+  --f-ui:'Plus Jakarta Sans',system-ui,sans-serif; --f-disp:var(--f-ui);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  font-family:var(--f-ui);font-size:13px;line-height:20px;color:var(--ink);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;font-synthesis:none;
+}
+.mk,.mk *{box-sizing:border-box}
+.mk :where(h1,h2,h3,p,ul,b,em,i,time){margin:0;padding:0;font-style:normal}
+.mk :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;cursor:default;text-align:inherit}
+.mk svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.mk svg.i.s{width:16px;height:16px}.mk svg.i.xs{width:14px;height:14px}.mk svg.i.l{width:24px;height:24px}
+.mk .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---- frame ---- */
+.m{position:relative;width:1240px;height:800px;overflow:hidden;background:var(--bg);border-radius:var(--win-r);isolation:isolate;
+   box-shadow:0 0 0 1px var(--frame),0 40px 90px -30px rgba(10,12,30,.45)}
+.m .tb{position:absolute;inset:0 0 auto 0;height:var(--tbh);display:flex;align-items:center;z-index:6}
+.m .bd{position:absolute;inset:0;display:flex;padding-top:var(--tbh)}
+.m .win{margin-left:auto;display:flex;align-self:stretch}
+.m .win i{width:46px;display:grid;place-items:center;color:var(--ink2)}
+.m .win i svg{width:16px;height:16px}
+.m .bg{position:absolute;inset:0;z-index:-1}
+
+/* ---- avatars + platform badge ---- */
+.av{--s:40px;position:relative;width:var(--s);height:var(--s);flex:none;--av-bg:hsl(var(--h) 80% 91%);--av-fg:hsl(var(--h) 55% 24%)}
+.av>b{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:var(--av-bg);color:var(--av-fg);font-size:calc(var(--s)*.34);font-weight:700;letter-spacing:0}
+.av.sm{--s:36px}.av.xs{--s:28px}.av.lg{--s:72px}
+.pb{position:absolute;right:-3px;bottom:-3px;width:calc(var(--s)*.46);height:calc(var(--s)*.46);min-width:16px;min-height:16px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 2px var(--ring,var(--surface));display:grid;place-items:center}
+.pb svg{width:68%;height:68%;display:block}
+.pb.ig,.pd.ig{background:linear-gradient(45deg,#f5a623 0%,#e1306c 50%,#6a40d4 100%)}
+html[data-theme=dark] .mk .av{--av-bg:hsl(var(--h) 38% 24%);--av-fg:hsl(var(--h) 85% 86%)}
+.pd{--s:22px;width:var(--s);height:var(--s);border-radius:50%;background:var(--pc,var(--ink3));display:grid;place-items:center;flex:none}
+.pd svg{width:68%;height:68%}
+
+/* ---- tags: pastel slabs, no outline ---- */
+.tg{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:var(--tg-r,6px);font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;background:var(--tgb);color:var(--ti)}
+.tg svg{width:12px;height:12px;stroke-width:2}
+.tg.work{--tgb:#dbe6ff;--ti:#1f3f9e}.tg.family{--tgb:#d6f2e4;--ti:#11623f}.tg.vip{--tgb:#ece0ff;--ti:#5a30b3}
+.tg.bf{--tgb:#ffe8bf;--ti:#7a4a00}.tg.love{--tgb:#ffdbe5;--ti:#a3213f}.tg.fun{--tgb:#fff3b8;--ti:#6b5600}
+html[data-theme=dark] .tg.work{--tgb:#2a3b6e;--ti:#bcd0ff}html[data-theme=dark] .tg.family{--tgb:#1d4a37;--ti:#a8ecc8}
+html[data-theme=dark] .tg.vip{--tgb:#41307a;--ti:#d9c6ff}html[data-theme=dark] .tg.bf{--tgb:#5a4210;--ti:#ffd98a}
+html[data-theme=dark] .tg.love{--tgb:#6b2339;--ti:#ffb9cc}html[data-theme=dark] .tg.fun{--tgb:#54480b;--ti:#ffec8a}
+
+/* ---- counts, typing dots ---- */
+.cnt{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent);color:var(--on-accent);font-size:12px;line-height:20px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.cnt.mute{background:var(--fill);color:var(--ink2)}
+.dots{display:inline-flex;gap:3px;align-items:center;height:14px}
+.dots i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.45;animation:dot 1.2s infinite var(--ease)}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+
+/* ---- sidebar (A) ---- */
+.side{width:var(--side-w);flex:none;padding:8px 12px 12px;display:flex;flex-direction:column;gap:2px;position:relative}
+.brand{display:flex;align-items:center;gap:8px;height:48px;padding:0 8px}
+.brand svg.mas{width:28px;height:28px}
+.brand b{font-size:17px;line-height:24px;font-weight:800;letter-spacing:-.02em}
+.brand .tgl{margin-left:auto;color:var(--ink3);width:32px;height:32px;display:grid;place-items:center;border-radius:8px}
+.nv{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:var(--nv-r,8px);color:var(--ink2);font-weight:500;font-size:13.5px}
+.nv>svg.i{color:var(--ink3)}
+.nv span{flex:1;white-space:nowrap}.nv span.pdw{flex:none;display:grid}
+.nv em{font-size:12px;font-weight:600;color:var(--ink3);font-variant-numeric:tabular-nums}
+.nv.on{background:var(--nv-on);color:var(--ink);font-weight:700}
+.nv.on>svg.i{color:var(--accent)}.nv.on em{color:var(--accent)}
+.nv .pd{--pc:var(--ink3);--s:20px}.nv.on .pd{--pc:var(--ink)}
+.nv-sec{display:flex;align-items:center;padding:16px 8px 4px;font-size:12px;line-height:16px;font-weight:600;color:var(--ink3)}
+.nv-sec button{margin-left:auto;display:grid;place-items:center;width:20px;height:20px;color:var(--ink3)}
+.side .tags{display:flex;flex-wrap:wrap;gap:6px;padding:4px 8px}
+.side .acc{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+.acc .ac{display:flex;align-items:center;gap:10px;height:44px;padding:0 8px;border-radius:8px}
+.acc .ac .av{--s:28px}.acc .ac div{flex:1;min-width:0;line-height:16px}
+.acc .ac b{display:block;font-size:12.5px;font-weight:700}.acc .ac small{display:block;font-size:11px;color:var(--ink3)}
+.acc .ac .cnt{height:18px;min-width:18px;font-size:11px;line-height:18px}
+
+/* ---- list column ---- */
+.list{width:var(--list-w);flex:none;background:var(--surface);display:flex;flex-direction:column;position:relative;min-height:0}
+.lh{display:flex;align-items:center;padding:12px 16px 4px 20px;height:56px}
+.lh h2{font-family:var(--f-disp);font-size:22px;line-height:28px;font-weight:800;letter-spacing:-.02em}
+.lh .ico{margin-left:auto}
+.ico{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;color:var(--ink2)}
+.ico.on{background:var(--accent-soft);color:var(--accent)}
+.srch{white-space:nowrap;overflow:hidden;margin:8px 16px 8px;height:36px;border-radius:10px;background:var(--surf2);display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--ink3);font-size:13px}
+.srch kbd{margin-left:auto;font:600 11px/16px var(--f-ui);color:var(--ink3);background:var(--surface);padding:0 6px;border-radius:5px;box-shadow:0 0 0 1px var(--line)}
+.flt{display:flex;gap:4px;padding:0 16px 8px}
+.flt button{white-space:nowrap;height:28px;padding:0 10px;border-radius:14px;font-size:12.5px;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:6px}
+.flt button em{font-size:11px;color:var(--ink3);font-weight:600}
+.flt button.on{background:var(--ink);color:var(--surface)}.flt button.on em{color:inherit;opacity:.7}
+.req{display:flex;align-items:center;gap:12px;margin:0 8px;padding:8px 12px;height:56px;border-radius:12px}
+.req .rq-i{width:40px;height:40px;border-radius:50%;background:var(--surf2);display:grid;place-items:center;color:var(--ink2)}
+.req div{flex:1;min-width:0}.req b{display:block;font-size:14px;line-height:20px;font-weight:700}.req small{display:block;font-size:12.5px;line-height:16px;color:var(--ink3)}
+.req>svg.i{color:var(--ink3)}
+.sec{padding:12px 20px 4px;font-size:12px;line-height:16px;font-weight:600;color:var(--ink3)}
+.rows{flex:1;min-height:0;overflow:hidden;position:relative;padding:0 8px}
+.rows::after{content:"";position:absolute;inset:auto 0 0 0;height:56px;background:linear-gradient(transparent,var(--surface));pointer-events:none}
+
+.row{--ring:var(--surface);position:relative;display:flex;align-items:center;gap:12px;height:64px;padding:0 12px;border-radius:12px}
+.row.sel{--ring:var(--sel);background:var(--sel)}
+.row .ud{position:absolute;left:3px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--accent)}
+.rb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.r1,.r2{display:flex;align-items:center;gap:6px;min-width:0}
+.nm{font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.row.unread .nm{font-weight:800}
+.r1 .tgs{display:flex;gap:4px;flex:none}
+.r1 time{margin-left:auto;flex:none;font-size:12px;line-height:16px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.row.unread .r1 time{color:var(--accent);font-weight:700}
+.pv{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;line-height:20px;color:var(--ink2)}
+.row.unread .pv{color:var(--ink)}
+.ind{display:flex;align-items:center;gap:6px;flex:none;color:var(--ink3)}
+.ind svg.i{width:15px;height:15px}
+.pv .dr{color:var(--danger);font-weight:600;margin-right:4px}
+.pv .typ{color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.pv .rcpt{display:inline-block;vertical-align:-3px;margin-right:4px;color:var(--ink3)}
+.pv .rcpt.read{color:var(--accent)}
+.pv svg.i{width:16px;height:16px}
+
+/* ---- chat column ---- */
+.chat{flex:1;min-width:0;background:var(--surface);position:relative;display:flex;flex-direction:column;box-shadow:inset 1px 0 0 var(--line)}
+.ch{display:flex;align-items:center;gap:12px;height:64px;padding:0 16px 0 20px;flex:none;box-shadow:0 1px 0 var(--line);position:relative;z-index:2;background:var(--surface)}
+.ci{flex:1;min-width:0;line-height:20px}
+.ci b{display:block;font-size:15px;line-height:20px;font-weight:700;letter-spacing:-.01em}
+.ci span{display:flex;align-items:center;gap:6px;font-size:12.5px;line-height:16px;color:var(--ink3)}
+.ci span.typ{color:var(--accent);font-weight:600}
+.ci .live{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.act{display:flex;align-items:center;gap:2px}
+.act .sep{width:1px;height:20px;background:var(--line);margin:0 6px}
+.act .ico{width:36px;height:36px;border-radius:10px;color:var(--ink2)}
+.sum{display:flex;align-items:flex-start;gap:8px;margin:12px 20px 0;padding:8px 12px;border-radius:12px;background:var(--accent-soft);color:var(--ink);font-size:13px;line-height:20px}
+.sum svg.i{color:var(--accent);margin-top:2px}.sum b{font-weight:700}
+.sum .x{margin-left:auto;color:var(--ink3)}
+.msgs{-webkit-mask-image:linear-gradient(transparent 0,transparent 8px,#000 56px);mask-image:linear-gradient(transparent 0,transparent 8px,#000 56px);flex:1;min-height:0;overflow:hidden;padding:12px 20px 120px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;position:relative}
+.day{display:flex;justify-content:center;padding:12px 0 8px}
+.day span{font-size:12px;line-height:16px;font-weight:600;color:var(--ink3)}
+.mg{display:flex;gap:8px;align-items:flex-end;margin-top:6px;max-width:100%}
+.mg.out{justify-content:flex-end}
+.mg .bs{display:flex;flex-direction:column;gap:2px;max-width:70%;min-width:0}
+.mg.out .bs{align-items:flex-end}
+.mg .av{--s:28px;margin-bottom:0}
+.b{position:relative;padding:8px 12px;border-radius:var(--bub-r,18px);background:var(--bub-in);color:var(--bub-in-ink,var(--ink));font-size:14px;line-height:20px;width:fit-content;max-width:100%}
+.mg.out .b{background:var(--bub-out);color:var(--bub-out-ink,#fff)}
+.b.file{display:flex;gap:12px;align-items:center;padding:8px 12px 8px 8px;min-width:240px}
+.b.file .fi{width:40px;height:40px;border-radius:10px;background:var(--surface);display:grid;place-items:center;color:var(--danger);box-shadow:0 0 0 1px var(--line)}
+.b.file b{display:block;font-size:13px;line-height:18px;font-weight:700}.b.file small{display:block;font-size:12px;line-height:16px;color:var(--ink3)}
+.b.voice{display:flex;align-items:center;gap:10px;min-width:244px;padding:8px 14px 8px 8px}
+.b.voice .pl{width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+.b.voice .pl svg{width:16px;height:16px}
+.wv{display:flex;align-items:center;gap:2px;height:24px;flex:1}
+.wv i{width:3px;border-radius:2px;background:var(--ink3);opacity:.5}.wv i.p{background:var(--accent);opacity:1}
+.b.voice small{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.b.reply{padding-top:6px}
+.b .q{display:block;margin:0 -2px 4px;padding:2px 8px;border-left:3px solid currentColor;border-radius:2px;font-size:12.5px;line-height:16px;opacity:.78}
+.b .q b{display:block;font-weight:700;font-size:12px}
+.rx{position:absolute;right:8px;bottom:-12px;height:22px;padding:0 6px;border-radius:11px;background:var(--surface);box-shadow:0 0 0 1px var(--line),0 2px 6px rgba(0,0,0,.08);font-size:12px;line-height:22px;display:flex;gap:2px}
+.mg .b.hasrx{margin-bottom:12px}
+.rc{font-size:11.5px;line-height:16px;color:var(--ink3);margin-top:2px;display:flex;gap:4px;align-items:center}
+.rc svg{width:14px;height:14px;color:var(--accent)}
+.b.typ{padding:12px 14px;color:var(--ink3)}
+
+/* composer + suggestions */
+.cmp-wrap{position:absolute;left:0;right:0;bottom:0;padding:0 16px 16px;z-index:3;display:flex;flex-direction:column;gap:8px}
+.sug{display:flex;gap:8px;align-items:center;padding:0 4px;flex-wrap:nowrap;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}.sug>*{flex:none}
+.sug .sl{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent);margin-right:2px}
+.sug button{height:32px;padding:0 12px;border-radius:16px;background:var(--surface);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.04);font-size:13px;font-weight:500;color:var(--ink)}
+.cmp{display:flex;align-items:center;gap:4px;min-height:48px;padding:6px;border-radius:24px;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);box-shadow:0 0 0 1px var(--line2),0 8px 24px -8px rgba(15,20,50,.18)}
+.cmp .ico{width:36px;height:36px;border-radius:18px;color:var(--ink2)}
+.cmp .in{flex:1;padding:0 8px;font-size:14px;line-height:20px;color:var(--ink3);min-width:0}
+.cmp .in.typed{color:var(--ink)}
+.cmp .caret{display:inline-block;width:1.5px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:1px;animation:caret 1.1s steps(2,jump-none) infinite}
+@keyframes caret{50%{opacity:0}}
+.cmp .send{width:36px;height:36px;border-radius:18px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+.cmp .send.off{background:var(--fill);color:var(--ink3)}
+.cmp .later{display:flex;align-items:center;gap:4px;height:36px;padding:0 10px;border-radius:18px;color:var(--ink2);font-size:12.5px;font-weight:600}
+
+/* empty state */
+.empty{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:var(--surface);z-index:4}
+.is-empty .empty{display:flex}
+.empty svg.mas{width:72px;height:72px}
+.empty h3{font-family:var(--f-disp);font-size:20px;line-height:28px;font-weight:800;letter-spacing:-.02em}
+.empty p{max-width:320px;color:var(--ink2);font-size:13.5px;line-height:20px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:18px;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:13.5px}
+.btn kbd{font:600 11px/16px var(--f-ui);padding:0 6px;border-radius:5px;background:rgba(255,255,255,.2)}
+
+/* details pane */
+.det{position:absolute;top:var(--tbh);right:0;bottom:0;width:var(--det-w);background:var(--surface);z-index:5;display:none;flex-direction:column;box-shadow:-1px 0 0 var(--line),-24px 0 48px -24px rgba(10,14,40,.25)}
+.show-det .det{display:flex}
+.det .dh{display:flex;align-items:center;height:56px;padding:0 8px 0 20px;font-weight:700;font-size:15px}
+.det .dh .ico{margin-left:auto}
+.det .who{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 20px 16px;text-align:center}
+.det .who b{font-size:17px;line-height:24px;font-weight:800;letter-spacing:-.01em;margin-top:8px}
+.det .who span{font-size:12.5px;color:var(--ink3);line-height:16px}
+.dtabs{display:flex;gap:2px;padding:0 12px;box-shadow:0 1px 0 var(--line)}
+.dtabs button{height:36px;padding:0 10px;font-size:13px;font-weight:600;color:var(--ink3);position:relative}
+.dtabs button.on{color:var(--ink)}.dtabs button.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2px;border-radius:1px;background:var(--accent)}
+.dbody{flex:1;min-height:0;overflow:hidden;padding:12px 20px;display:flex;flex-direction:column;gap:4px}
+.drow{display:flex;align-items:center;gap:12px;min-height:44px;font-size:13.5px}
+.drow>svg.i{color:var(--ink3)}.drow span{flex:1}.drow small{color:var(--ink3);font-size:12.5px}
+.tgl-sw{width:36px;height:22px;border-radius:11px;background:var(--fill);position:relative;flex:none}
+.tgl-sw::after{content:"";position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tgl-sw.on{background:var(--accent)}.tgl-sw.on::after{left:16px}
+.dsec{font-size:12px;line-height:16px;font-weight:600;color:var(--ink3);padding:12px 0 4px}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.mgrid i{aspect-ratio:1;border-radius:8px;background:hsl(var(--h) 70% 85%)}
+html[data-theme=dark] .mk .mgrid i{background:hsl(var(--h) 35% 30%)}
+
+/* incoming call banner */
+.call{display:flex;align-items:center;gap:12px;padding:10px 10px 10px 12px;border-radius:20px;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);box-shadow:0 0 0 1px var(--line2),0 16px 40px -12px rgba(10,14,40,.4);width:400px}
+.call .av{--s:44px}
+.call .ct{flex:1;min-width:0;line-height:18px}.call .ct b{display:block;font-size:14px;font-weight:700}.call .ct span{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)}
+.call .cb{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
+.call .cb.dec{background:#c8323c}.call .cb.dec svg{transform:rotate(135deg)}.call .cb.ans{background:#1a7a46}
+.call .ring{position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent);opacity:.5;animation:ring 1.8s var(--ease) infinite}
+@keyframes ring{0%{transform:scale(.9);opacity:.6}100%{transform:scale(1.25);opacity:0}}
+.m .callpos{position:absolute;top:calc(var(--tbh) + 8px);left:50%;margin-left:-200px;z-index:9;display:none}
+.show-call .callpos{display:block}
+
+@media (prefers-reduced-motion:reduce){.mk *{animation:none!important}}
+
+/* ---- narrow frames (<720px) ---- */
+.nf{position:relative;width:390px;height:760px;border-radius:28px;overflow:hidden;background:var(--surface);box-shadow:0 0 0 1px var(--frame),0 30px 70px -30px rgba(10,12,30,.45);flex:none;isolation:isolate}
+.nf .ntb{height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink3);gap:6px}
+.nf .lh{padding-left:20px}
+.nf .rows{padding:0 8px}
+.nf .flt{overflow:hidden}
+.nf .plat-chips{display:flex;gap:6px;padding:0 16px 8px;overflow:hidden}
+.nf .plat-chips button{height:30px;padding:0 10px 0 6px;border-radius:15px;display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--surf2);flex:none}
+.nf .plat-chips button .pd{--s:20px}
+.nf .plat-chips button.on{background:var(--ink);color:var(--surface)}
+.nf .ch{height:60px;padding:0 8px 0 4px}
+.nf .ch .back{display:flex;align-items:center;gap:0;height:36px;padding:0 6px 0 0;color:var(--accent);font-weight:600}
+.nf .msgs{padding:8px 12px 112px}
+.nf .mg .bs{max-width:78%}
+.nf .b.file,.nf .b.voice{min-width:0;width:230px}
+.nf .cmp-wrap{padding:0 10px 12px}
+.nf .cmp .ico.hide-n{display:none}
+.nf .sug{flex-wrap:nowrap;overflow:hidden}.nf .sug button{flex:none}
+
+.nf .ci{min-width:0}.nf .ci b,.nf .ci span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-b.nf .ch{height:64px;padding:0 10px 0 4px;gap:10px}.m-b.nf .ci b{font-size:20px;line-height:24px}
+.m-c.nf .ch{height:72px;padding:0 10px 0 4px;gap:8px}.m-c.nf .ci b{font-size:14px}.m-c.nf .act{gap:6px}.m-c.nf .act .ico,.m-c.nf .act .dtl{width:40px;height:40px;padding:0;justify-content:center}
+
+.nv,.row,.ico,.flt button,.sug button,.tgl-sb{transition:background-color 140ms cubic-bezier(.2,.8,.2,1),color 140ms cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.nv,.row,.ico,.flt button,.sug button{transition:none}}
+
+/* ============ DIRECTION A — Quiet Glass ============ */
+.m-a{
+  --bg:#f1f3f8;--surface:#ffffff;--surf2:#eef0f5;--ink:#12141c;--ink2:#4b5163;--ink3:#646b7e;
+  --line:rgba(18,20,28,.08);--line2:rgba(18,20,28,.14);--fill:rgba(18,20,28,.10);
+  --accent:#2f5fe0;--on-accent:#fff;--accent-soft:rgba(47,95,224,.10);--sel:#eaf0ff;--nv-on:rgba(18,20,28,.06);
+  --bub-in:#eef0f5;--bub-out:#2f5fe0;--danger:#c8323c;--ok:#1e8a54;
+  --glass:rgba(255,255,255,.74);--frame:rgba(0,0,0,.10);
+  --tbh:44px;--side-w:232px;--list-w:332px;--det-w:304px;--win-r:14px;
+}
+html[data-theme=dark] .m-a{
+  --bg:#0d0f14;--surface:#16181f;--surf2:#20232d;--ink:#eceef4;--ink2:#a4a9b8;--ink3:#8b91a3;
+  --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.13);--fill:rgba(255,255,255,.12);
+  --accent:#86a4ff;--on-accent:#0b1020;--accent-soft:rgba(134,164,255,.14);--sel:#222a45;--nv-on:rgba(255,255,255,.07);
+  --bub-in:#20232d;--bub-out:#3a62e0;--danger:#ff8a92;--ok:#5fd09a;
+  --glass:rgba(32,35,46,.74);--frame:rgba(255,255,255,.08);
+}
+.m-a.m .bg{background:
+  radial-gradient(700px 320px at 8% -8%,#dbe4ff 0,transparent 70%),
+  radial-gradient(560px 280px at 96% -12%,#ece2ff 0,transparent 70%),var(--bg)}
+html[data-theme=dark] .m-a.m .bg{background:
+  radial-gradient(700px 320px at 8% -8%,#1a2447 0,transparent 70%),
+  radial-gradient(560px 280px at 96% -12%,#2a1f4a 0,transparent 70%),var(--bg)}
+.m-a .tb{padding:0 0 0 12px;gap:8px;background:var(--glass);backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5);box-shadow:0 1px 0 var(--line)}
+.m-a .tb .jump{position:absolute;left:50%;top:7px;width:360px;margin-left:-180px;height:30px;border-radius:15px;background:var(--fill);color:var(--ink3);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:12.5px}
+.m-a .tb .jump kbd{margin-left:auto;font:600 11px/16px var(--f-ui)}
+.m-a .list{border-radius:0}
+.m-a .tgl-sb{width:32px;height:32px;display:grid;place-items:center;color:var(--ink2);border-radius:8px}
+/* sidebar sits on the tinted window; list and chat are flat paper */
+.m-a .side{padding-top:4px}
+.m-a .nv:hover,.m-a .row:hover{background:var(--nv-on)}
+
+/* row anatomy detail: unread dot / pin / mute / typing / draft */
+.m-a .row.sel .nm{font-weight:700}
+.m-a .row .tgs .tg:nth-child(n+2){display:none}
+.m-a .row.muted .nm{color:var(--ink2)}
+.m-a .row.muted.unread .nm{font-weight:700}
+
+/* the single accent: outgoing bubbles, unread, selection. Platform colour appears only on avatar badges. */
+.m-a .ch .av{--s:36px}
+.m-a .msgs{padding-left:24px;padding-right:24px}
+.m-a .mg.in .b{border-bottom-left-radius:6px}
+.m-a .mg.out .b{border-bottom-right-radius:6px}
+.m-a .mg.in + .mg.in .b,.m-a .mg.out + .mg.out .b{margin-top:0}
+
+/* calm detail: very light glass on composer only */
+.m-a .cmp-wrap::before{content:"";position:absolute;inset:-48px 0 0 0;background:linear-gradient(transparent,var(--surface) 70%);pointer-events:none;z-index:-1}
+.m-a .cmp-wrap{padding-bottom:20px}
+
+/* ============ DIRECTION B — Editorial ============ */
+.m-b{
+  --f-ui:'Be Vietnam Pro','Plus Jakarta Sans',system-ui,sans-serif;--f-disp:'Newsreader','Iowan Old Style',Georgia,serif;
+  --bg:#f4f5f7;--surface:#ffffff;--surf2:#eceef1;--ink:#111318;--ink2:#454a56;--ink3:#5f6572;
+  --line:#e4e7ec;--line2:#cfd3da;--fill:rgba(17,19,24,.10);
+  --accent:#1d4ed8;--on-accent:#fff;--accent-soft:rgba(29,78,216,.08);--sel:#f3f5fa;--nv-on:#111318;
+  --bub-in:#eceef1;--bub-out:#1b1e26;--danger:#b3261e;--ok:#1a7f4b;--bub-r:14px;
+  --glass:#ffffff;--frame:rgba(0,0,0,.12);--tg-r:4px;--ctl:#8a909c;
+  --tbh:40px;--side-w:64px;--list-w:352px;--det-w:296px;--win-r:10px;
+}
+html[data-theme=dark] .m-b{
+  --bg:#0c0d10;--surface:#14161a;--surf2:#1e2126;--ink:#f1f2f4;--ink2:#aab0bb;--ink3:#8d94a1;
+  --line:#24272d;--line2:#353941;--fill:rgba(255,255,255,.12);
+  --accent:#8aa9ff;--on-accent:#0a1330;--accent-soft:rgba(138,169,255,.12);--sel:#1b1e24;--nv-on:#f1f2f4;
+  --bub-in:#1e2126;--bub-out:#f1f2f4;--bub-out-ink:#0c0d10;--danger:#ff9a93;--ok:#62d19a;
+  --glass:#14161a;--frame:rgba(255,255,255,.08);--ctl:#6f7686;
+}
+.m-b .tb{padding:0 0 0 20px;background:var(--bg);box-shadow:0 1px 0 var(--line);font-family:var(--f-disp);font-style:italic;font-size:14px;color:var(--ink2);gap:12px}
+.m-b .tb .dt{font-size:14px}
+.m-b .tb .ed{margin-left:12px;font:500 12px/16px var(--f-ui);font-style:normal;color:var(--ink3)}
+
+/* rail */
+.m-b .rail{width:var(--side-w);flex:none;background:var(--bg);box-shadow:inset -1px 0 0 var(--line);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0}
+.m-b .rail .mas{width:32px;height:32px;margin:4px 0 12px}
+.m-b .ri{position:relative;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--ink2)}
+.m-b .ri.on{background:var(--ink);color:var(--surface)}
+.m-b .ri .pd{--pc:var(--ink);--s:26px}
+.m-b .ri.on .pd{--pc:var(--surface)}.m-b .ri.on .pd svg{filter:invert(1)}html[data-theme=dark] .m-b .ri .pd svg{filter:invert(1)}html[data-theme=dark] .m-b .ri.on .pd svg{filter:none}
+.m-b .ri em{position:absolute;top:1px;right:0;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--surface);box-shadow:0 0 0 1.5px var(--bg);font:700 10.5px/16px var(--f-ui);color:var(--accent);text-align:center;font-variant-numeric:tabular-nums}
+.m-b .ri.on em{background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 1.5px var(--bg)}
+.m-b .rail hr{width:24px;height:1px;border:0;background:var(--line2);margin:8px 0}
+.m-b .rail .sp{flex:1}
+.m-b .ri .av{--s:30px}
+
+/* list */
+.m-b .list{background:var(--surface);box-shadow:inset -1px 0 0 var(--line)}
+.m-b .lh{height:auto;display:flex;align-items:baseline;gap:12px;padding:20px 20px 4px}
+.m-b .lh h2{font-size:32px;line-height:36px;font-weight:500;letter-spacing:-.02em}
+.m-b .lh .sub{font-size:12px;line-height:16px;color:var(--ink3)}
+.m-b .lh .ico{align-self:center}
+.m-b .srch{margin:8px 20px 4px;padding:0;border-radius:0;background:none;box-shadow:0 1px 0 var(--line2);height:36px}
+.m-b .flt{padding:4px 20px 0;gap:16px;box-shadow:0 1px 0 var(--line)}
+.m-b .flt button{height:32px;padding:0;border-radius:0;font-size:13px;color:var(--ink3);font-weight:500}
+.m-b .flt button.on{background:none;color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink);font-weight:600}
+.m-b .req{margin:0;border-radius:0;padding:12px 20px;height:auto;box-shadow:0 1px 0 var(--line)}
+.m-b .req .rq-i{border-radius:10px}
+.m-b .req b{font-family:var(--f-disp);font-size:16px;font-weight:600}
+.m-b .rows{padding:0}
+.m-b .sec{font-family:var(--f-disp);font-style:italic;font-size:13px;font-weight:400;padding:12px 20px 4px}
+.m-b .row{height:auto;align-items:flex-start;gap:12px;padding:12px 20px 12px 20px;border-radius:0;box-shadow:0 1px 0 var(--line)}
+.m-b .row.sel{background:var(--sel);box-shadow:inset 2px 0 0 var(--ink),0 1px 0 var(--line);--ring:var(--sel)}
+.m-b .row .ud{left:8px;top:22px;margin:0;width:6px;height:6px}
+.m-b .row .av{margin-top:2px}
+.m-b .nm{font-family:var(--f-disp);font-size:17px;line-height:22px;font-weight:600;letter-spacing:-.01em}
+.m-b .row.unread .nm{font-weight:700}
+.m-b .r2.plat{font-size:12px;line-height:16px;color:var(--ink3);gap:6px}
+.m-b .r2.plat .dot{width:8px;height:8px;border-radius:2px;background:var(--pc);flex:none}
+.m-b .r2.plat .pn{font-weight:600;color:var(--ink2)}
+.m-b .r3{display:flex;gap:8px;align-items:flex-start}
+.m-b .r3 .pv{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13px;line-height:18px}
+.m-b .r3 .ind{padding-top:1px}
+.m-b .rb{gap:1px}
+.m-b .cnt{background:none;color:var(--accent);padding:0;min-width:0;height:18px;font-size:13px;line-height:18px;font-weight:700}
+.m-b .cnt.mute{background:none;color:var(--ink3);font-weight:600}
+.m-b .row .tgs .tg:nth-child(n+3){display:none}
+.m-b .row .r1 time{font-family:var(--f-ui)}
+
+/* chat */
+.m-b .chat{box-shadow:none;background:var(--surface)}
+.m-b .ch{height:72px;padding:0 20px 0 32px;box-shadow:0 1px 0 var(--line);gap:14px}
+.m-b .ci b{font-family:var(--f-disp);font-size:24px;line-height:28px;font-weight:500;letter-spacing:-.02em}
+.m-b .ci span{font-size:12.5px}
+.m-b .act .ico{border-radius:8px}
+.m-b .act .dtl{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px 0 10px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink2);box-shadow:0 0 0 1px var(--line2)}
+.m-b .act .dtl.on{background:var(--ink);color:var(--surface);box-shadow:none}
+.m-b .sum{margin:0 32px;padding:12px 0;border-radius:0;background:none;border-bottom:1px solid var(--line);font-family:var(--f-disp);font-style:italic;font-size:15px;line-height:22px;color:var(--ink2)}
+.m-b .sum b{font-family:var(--f-ui);font-style:normal;font-size:12px;font-weight:600;color:var(--accent);margin-right:6px}
+.m-b .sum svg.i{display:none}
+.m-b .msgs{padding:8px 32px 128px}
+.m-b .day{align-items:center;gap:16px;padding:16px 0 8px}
+.m-b .day::before,.m-b .day::after{content:"";flex:1;height:1px;background:var(--line2)}
+.m-b .day span{font-family:var(--f-disp);font-style:italic;font-weight:400;font-size:13px}
+.m-b .mg .bs{max-width:62%}
+.m-b .b{font-size:14.5px;line-height:22px;padding:8px 14px}
+.m-b .mg.in .b{border-bottom-left-radius:4px}.m-b .mg.out .b{border-bottom-right-radius:4px}
+.m-b .rx{box-shadow:0 0 0 1px var(--line2)}
+.m-b .b.voice .pl{background:var(--ink);color:var(--surface)}
+.m-b .mg.out .b.voice .pl{background:var(--surface);color:var(--ink)}
+.m-b .cmp-wrap{padding:0 32px 24px}
+.m-b .sug{padding:0}
+.m-b .sug .sl{font-family:var(--f-disp);font-style:italic;font-weight:400;font-size:13px;color:var(--ink3)}
+.m-b .sug .sl svg{display:none}
+.m-b .sug button{height:32px;border-radius:6px;background:var(--surface);box-shadow:0 0 0 1px var(--line2);font-size:13px}
+.m-b .cmp{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:28px;min-height:56px;padding:8px 8px 8px 12px;box-shadow:0 0 0 1px var(--ctl),0 18px 36px -20px rgba(17,19,24,.45)}
+.m-b .cmp .in{font-size:14.5px}
+.m-b .cmp .send{width:40px;height:40px;border-radius:20px;background:var(--ink);color:var(--surface)}
+.m-b .cmp .send.off{background:var(--surf2);color:var(--ink3)}
+.m-b .cmp .ico{width:40px;height:40px;border-radius:20px}
+.m-b .cmp .caret{background:var(--ink)}
+.m-b .det{position:static;display:none;width:var(--det-w);flex:none;box-shadow:inset 1px 0 0 var(--line);background:var(--surface)}
+.m-b.show-det .det{display:flex}
+.m-b .det .dh{font-family:var(--f-disp);font-size:18px;font-weight:500}
+.m-b .det .who b{font-family:var(--f-disp);font-size:24px;font-weight:500;line-height:28px}
+.m-b .dtabs{padding:0 20px;gap:12px}.m-b .dtabs button{padding:0}.m-b .dtabs button.on::after{left:0;right:0;background:var(--ink)}
+.m-b .dsec{font-family:var(--f-disp);font-style:italic;font-weight:400;font-size:13px}
+.m-b .tgl-sw.on{background:var(--ink)}
+.m-b .mgrid i{border-radius:4px}
+
+/* empty */
+.m-b .empty{align-items:flex-start;justify-content:flex-end;text-align:left;padding:0 64px 96px;background:var(--surface)}
+.m-b .empty h3{font-size:56px;line-height:60px;font-weight:400;letter-spacing:-.03em;max-width:560px}
+.m-b .empty h3 em{font-style:italic}
+.m-b .empty p{font-size:15px;line-height:22px}
+.m-b .empty .btn{background:var(--ink);color:var(--surface);border-radius:6px}
+.m-b .empty svg.mas{width:40px;height:40px}
+
+/* call: a single ink strip, words not circles */
+.m-b .callpos{margin-left:-320px;top:calc(var(--tbh) + 12px)}
+.m-b .call{width:640px;border-radius:10px;background:var(--ink);color:var(--surface);backdrop-filter:none;box-shadow:0 24px 50px -16px rgba(0,0,0,.5);padding:12px 12px 12px 16px;gap:14px}
+.m-b .call .av{--s:40px;--av-bg:var(--surface);--av-fg:var(--ink)}
+.m-b .call .ct b{font-family:var(--f-disp);font-size:18px;font-weight:500;line-height:22px}
+.m-b .call .ct span{color:inherit;opacity:.72}
+.m-b .call .tx{height:36px;padding:0 16px;border-radius:6px;font-size:13px;font-weight:600;display:grid;place-items:center}
+.m-b .call .tx.dec{box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 50%,transparent);color:var(--surface)}
+.m-b .call .tx.ans{background:var(--surface);color:var(--ink)}
+.m-b .call .cb{display:none}
+.m-b .call .ring{display:none}
+
+/* narrow */
+.m-b.nf .lh h2{font-size:34px}
+.m-b.nf .row{padding-left:16px;padding-right:16px}
+
+/* ============ DIRECTION C — Playful Pals+ ============ */
+.m-c{
+  --f-ui:'Plus Jakarta Sans',system-ui,sans-serif;--f-disp:'Unbounded','Plus Jakarta Sans',system-ui,sans-serif;
+  --bg:#ebe7f4;--surface:#ffffff;--surf2:#f3f0fa;--ink:#000000;--ink2:rgba(0,0,0,.68);--ink3:rgba(0,0,0,.6);
+  --line:rgba(0,0,0,.07);--line2:rgba(0,0,0,.14);--fill:rgba(0,0,0,.08);
+  --accent:#000;--on-accent:#fff;--candy:#c3adff;--accent-soft:#f0eaff;--sel:#ffffff;--nv-on:#000;
+  --bub-in:#f3f0fa;--bub-out:#000;--danger:#b3261e;--ok:#1a7f4b;--bub-r:22px;
+  --glass:#ffffff;--frame:rgba(0,0,0,.08);--tg-r:999px;
+  --pk:#ffb3c7;--mt:#9fe8c8;--yl:#ffdc5e;--sk:#a9d4ff;--pc2:#ffc9a3;
+  --tbh:52px;--side-w:256px;--list-w:344px;--det-w:312px;--win-r:20px;
+}
+html[data-theme=dark] .m-c{
+  --bg:#19181d;--surface:#25242b;--surf2:#302f38;--ink:#f2eff8;--ink2:rgba(242,239,248,.7);--ink3:rgba(242,239,248,.6);
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.16);--fill:rgba(255,255,255,.12);
+  --accent:#f2eff8;--on-accent:#000;--accent-soft:#34304a;--sel:#2c2b34;--nv-on:#f2eff8;
+  --bub-in:#34333d;--bub-out:#f2eff8;--bub-out-ink:#000;--danger:#ff9a93;--ok:#62d19a;
+  --glass:#25242b;--frame:rgba(255,255,255,.08);
+}
+.m-c.m .bg{background:var(--bg)}
+.m-c .tb{padding:0 0 0 20px;gap:12px}
+.m-c .tb .greet{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.m-c .tb .greet svg{width:28px;height:28px}
+.m-c .tb .greet em{font-weight:500;color:var(--ink2)}
+.m-c .win i{color:var(--ink)}
+
+/* sidebar */
+.m-c .side{padding:0 12px 12px 16px;gap:2px}
+.m-c .brand{height:44px}
+.m-c .brand svg.mas{width:32px;height:32px}
+.m-c .brand b{font-family:var(--f-disp);font-size:18px;font-weight:700;letter-spacing:-.04em}
+.m-c .nv{height:44px;border-radius:22px;padding:0 14px 0 10px;font-size:14px;font-weight:600;color:var(--ink)}
+.m-c .nv>svg.i{color:var(--ink)}
+.m-c .nv em{font-size:12px;font-weight:800;min-width:24px;height:24px;line-height:24px;border-radius:12px;text-align:center;color:var(--ink);background:var(--candy)}
+.m-c .nv.on{background:var(--ink);color:var(--surface)}
+.m-c .nv.on>svg.i{color:var(--surface)}
+.m-c .nv.on em{background:var(--surface);color:var(--ink)}
+.m-c .nv .pd{--s:28px;--pc:inherit}
+.m-c .nv-sec{font-family:var(--f-disp);font-size:11px;font-weight:600;letter-spacing:-.01em;padding:18px 10px 6px;color:var(--ink2)}
+.m-c .side .tags{padding:2px 4px;gap:6px}
+.m-c .tg{height:28px;padding:0 12px;font-size:12.5px;font-weight:700;gap:5px}
+.m-c .tg svg{width:14px;height:14px}
+.m-c .acc{margin-top:auto;padding-top:8px}.m-c .acc .ac{height:52px;border-radius:26px;padding:0 10px}
+.m-c .acc .ac .av{--s:36px}
+
+/* list lives on the paper */
+.m-c .list{background:transparent;padding:0}
+.m-c .lh{height:60px;padding:8px 12px 0 8px}
+.m-c .lh h2{font-size:24px;font-weight:700;letter-spacing:-.05em}
+.m-c .ico{width:44px;height:44px;border-radius:22px;color:var(--ink)}
+.m-c .lh .ico{background:var(--ink);color:var(--surface)}
+.m-c .srch{margin:8px 12px 8px 0;height:44px;border-radius:22px;background:var(--surface);font-size:14px;color:var(--ink3)}
+.m-c .srch{margin-left:0}
+.m-c .flt{padding:0 12px 8px 0;flex-wrap:nowrap;gap:4px}
+.m-c .flt button{height:36px;padding:0 11px;border-radius:18px;background:var(--surface);color:var(--ink);font-size:13px;font-weight:700}
+.m-c .flt button em{font-size:12px;font-weight:800;color:var(--ink)}
+.m-c .flt button.on{background:var(--ink);color:var(--surface)}
+.m-c .flt button.on em{color:var(--surface)}
+.m-c .req{margin:0 12px 0 0;height:68px;border-radius:24px;background:var(--surface);padding:0 16px 0 10px}
+.m-c .req .rq-i{width:48px;height:48px;background:var(--yl);color:#000;border-radius:48% 52% 50% 50%/55% 45% 55% 45%}
+.m-c .req b{font-weight:800;font-size:14.5px}
+.m-c .sec{font-family:var(--f-disp);font-size:11px;font-weight:600;color:var(--ink2);padding:14px 12px 4px 8px}
+.m-c .rows{padding:0 12px 0 0}
+.m-c .rows::after{background:linear-gradient(transparent,var(--bg))}
+.m-c .row{--ring:var(--bg);height:auto;min-height:72px;padding:12px 14px 12px 8px;border-radius:24px;gap:12px;align-items:center}
+.m-c .row:hover{background:rgba(255,255,255,.5)}
+.m-c .row.sel{background:var(--sel);--ring:var(--sel)}
+.m-c .row .ud{display:none}
+.m-c .nm{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.m-c .row.unread .nm{font-weight:800}
+.m-c .pv{font-size:13.5px}
+.m-c .r3{display:flex;gap:4px;margin-top:4px}
+.m-c .r3 .tg{height:22px;font-size:11.5px}
+.m-c .cnt{background:var(--candy);color:#000;height:24px;min-width:24px;border-radius:12px;line-height:24px;font-weight:800}
+.m-c .cnt.mute{background:var(--fill);color:var(--ink2)}
+.m-c .row.unread .r1 time{color:var(--ink);font-weight:800}
+.m-c .pv .typ{color:var(--ink)}
+.m-c .pv .dr{color:var(--danger)}
+.m-c .pv .rcpt.read{color:#0f7a4e}
+.m-c .av{--s:48px}
+.m-c .av>b{border-radius:50%;background:var(--bl);color:#000}
+.m-c .av.blob>b{border-radius:var(--br,50%);position:relative;background:var(--bl);color:transparent;font-size:0;overflow:hidden}
+.m-c .av.blob>b::before{content:"";position:absolute;left:24%;top:36%;width:14%;height:20%;border-radius:50%;background:#000;box-shadow:calc(var(--s)*.28) 0 0 #000}
+.m-c .av.blob>b::after{content:"";position:absolute;left:36%;top:58%;width:28%;height:14%;border-bottom:calc(var(--s)*.05) solid #000;border-radius:0 0 50% 50%}
+.m-c .av.blob.v2>b{--br:62% 38% 55% 45%/50% 55% 45% 50%}
+.m-c .av.blob.v3>b{--br:44% 56% 40% 60%/58% 42% 58% 42%}
+.m-c .av.blob.v4>b{--br:55% 45% 62% 38%/42% 58% 42% 58%}
+.m-c .av.blob.v5>b{--br:48% 52% 46% 54%/60% 40% 60% 40%}
+.m-c .av.sm{--s:44px}.m-c .av.xs{--s:32px}.m-c .av.lg{--s:88px}
+html[data-theme=dark] .m-c .av.blob{--av-bg:var(--bl)}
+.m-c .pb{box-shadow:0 0 0 3px var(--ring,var(--surface))}
+
+/* chat = the white sheet */
+.m-c .chat{margin:0 12px 12px 0;border-radius:32px;box-shadow:none;background:var(--surface);overflow:hidden}
+.m-c .ch{height:80px;padding:0 16px 0 20px;box-shadow:none;gap:14px}
+.m-c .ci b{font-family:var(--f-disp);font-size:16px;line-height:22px;font-weight:700;letter-spacing:-.04em}
+.m-c .ci span{font-size:13px}
+.m-c .act{gap:8px}
+.m-c .act .ico{width:44px;height:44px;border-radius:22px;background:var(--surf2);color:var(--ink)}
+.m-c .act .ico.call-v{background:var(--mt);color:#000}.m-c .act .ico.call-m{background:var(--sk);color:#000}
+.m-c .act .dtl{height:44px;padding:0 16px 0 12px;border-radius:22px;background:var(--ink);color:var(--surface);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.m-c .act .dtl.off{background:var(--surf2);color:var(--ink)}
+.m-c .sum{margin:0 20px;border-radius:22px;background:#f0eaff;padding:10px 16px 10px 12px;align-items:center}
+html[data-theme=dark] .m-c .sum{background:#34304a}
+.m-c .sum svg.i{color:var(--ink)}
+.m-c .sum b{font-weight:800}
+.m-c .msgs{padding:8px 24px 148px}
+.m-c .day{padding:12px 0 8px}
+.m-c .day span{background:var(--yl);color:#000;border-radius:14px;padding:2px 12px;font-weight:700;font-size:12px}
+.m-c .mg .bs{max-width:68%}
+.m-c .b{font-size:14.5px;line-height:22px;padding:10px 16px}
+.m-c .mg.in .b{border-bottom-left-radius:8px}.m-c .mg.out .b{border-bottom-right-radius:8px}
+.m-c .b.file .fi{background:var(--pk);color:#000;box-shadow:none;border-radius:50% 50% 48% 52%/52% 48% 52% 48%}
+.m-c .b.voice .pl{background:var(--ink);color:var(--surface);width:36px;height:36px}
+.m-c .mg.out .b.voice .pl{background:var(--surface);color:#000}
+.m-c .mg.out .b .wv i{background:#fff}.m-c .mg.out .b.voice small{color:rgba(255,255,255,.8)}
+html[data-theme=dark] .m-c .mg.out .b .wv i{background:#000}html[data-theme=dark] .m-c .mg.out .b.voice small{color:rgba(0,0,0,.7)}
+.m-c .wv i.p{background:var(--ink)}.m-c .mg.out .wv i.p{background:var(--candy)}
+.m-c .rx{background:var(--yl);color:#000;box-shadow:none;height:24px;line-height:24px;padding:0 8px;border-radius:12px;font-size:13px}
+.m-c .rc svg{color:#0f7a4e}
+.m-c .cmp-wrap{padding:0 16px 16px;gap:10px}
+.m-c .sug button{height:40px;padding:0 14px;border-radius:20px;box-shadow:none;font-weight:700;color:#000;font-size:13.5px}
+.m-c .sug button:nth-of-type(1){background:var(--mt)}.m-c .sug button:nth-of-type(2){background:var(--pc2)}.m-c .sug button:nth-of-type(3){background:var(--sk)}
+.m-c .sug .sl{color:var(--ink);font-weight:800}.m-c .sug .sl .t{display:none}.m-c .sug{gap:6px}
+.m-c .cmp{min-height:60px;border-radius:30px;background:var(--surf2);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;padding:8px;gap:2px}
+.m-c .cmp .ico{width:44px;height:44px;border-radius:22px;color:var(--ink)}
+.m-c .cmp .ico.mic{background:var(--candy);color:#000}
+.m-c .cmp .in{font-size:15px;padding:0 10px}
+.m-c .cmp .send{width:44px;height:44px;border-radius:22px;background:var(--ink);color:var(--surface)}
+.m-c .cmp .send.off{background:var(--fill);color:var(--ink2)}
+.m-c .cmp .caret{background:var(--ink)}
+.m-c .cmp .later{height:44px;border-radius:22px;background:var(--surface);color:#000;font-weight:700}
+html[data-theme=dark] .m-c .cmp .later{color:var(--ink)}
+
+/* details */
+.m-c .det{border-radius:32px 0 0 32px;box-shadow:-20px 0 50px -20px rgba(52,30,110,.35);background:var(--surface)}
+.m-c .det .dh{height:64px;font-family:var(--f-disp);font-size:14px;font-weight:700;letter-spacing:-.03em}
+.m-c .dtabs{box-shadow:none;flex-wrap:wrap;gap:6px;padding:0 20px 8px}
+.m-c .dtabs button{height:36px;padding:0 14px;border-radius:18px;background:var(--surf2);color:var(--ink);font-weight:700}
+.m-c .dtabs button.on{background:var(--ink);color:var(--surface)}.m-c .dtabs button.on::after{display:none}
+.m-c .tgl-sw.on{background:var(--ink)}
+html[data-theme=dark] .m-c .tgl-sw.on::after{background:#000}
+.m-c .mgrid i,html[data-theme=dark] .m-c .mgrid i{border-radius:16px;background:var(--bl)}
+.m-c .drow{min-height:52px}
+.m-c .dsec{font-family:var(--f-disp);font-size:11px;font-weight:600;color:var(--ink2)}
+
+/* empty: mascot + paper blobs */
+.m-c .empty{background:var(--surface);gap:16px}
+.m-c .empty .bl{position:absolute;border-radius:50%;opacity:.9}
+.m-c .empty svg.mas{width:120px;height:120px;position:relative;animation:bob 3.4s var(--ease) infinite}
+@keyframes bob{50%{transform:translateY(-6px)}}
+.m-c .empty h3{font-size:22px;line-height:30px;font-weight:700;letter-spacing:-.05em;position:relative}
+.m-c .empty p{font-size:14px;position:relative}
+.m-c .empty .btn{background:var(--ink);color:var(--surface);height:48px;padding:0 24px;border-radius:24px;font-size:14px;position:relative}
+.m-c .empty .btn kbd{background:var(--candy);color:#000}
+
+/* call */
+.m-c .callpos{margin-left:-230px;top:calc(var(--tbh) + 4px)}
+.m-c .call{width:460px;border-radius:36px;background:var(--ink);color:var(--surface);backdrop-filter:none;box-shadow:0 24px 50px -14px rgba(52,30,110,.55);padding:10px 10px 10px 10px}
+.m-c .call .av{--s:56px}
+.m-c .call .ct b{font-family:var(--f-disp);font-size:14px;letter-spacing:-.03em}
+.m-c .call .ct span{color:inherit;opacity:.75;font-size:13px}
+.m-c .call .cb{width:56px;height:56px;color:#000}
+.m-c .call .cb.dec{background:var(--pk)}.m-c .call .cb.ans{background:var(--mt)}
+.m-c .call .ring{border-color:var(--candy);opacity:.9;inset:-5px}
+.m-c .call .wave{display:inline-flex;gap:2px;align-items:center;height:14px}
+.m-c .call .wave i{width:3px;border-radius:2px;background:var(--candy);animation:wv 1s var(--ease) infinite}
+.m-c .call .wave i:nth-child(1){height:6px}.m-c .call .wave i:nth-child(2){height:12px;animation-delay:.1s}.m-c .call .wave i:nth-child(3){height:8px;animation-delay:.2s}.m-c .call .wave i:nth-child(4){height:12px;animation-delay:.3s}
+@keyframes wv{50%{transform:scaleY(.4)}}
+
+.m-c.nf{background:var(--bg)}
+.m-c.nf .list{padding:0 0 0 12px}
+.m-c.nf .rows{padding:0 8px 0 0}
+.m-c.nf .srch{margin-right:12px}
+.m-c.nf .flt{padding-right:12px}
+.m-c.nf .chat{margin:0;border-radius:28px 28px 0 0}
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M5.2 3.8h3l1.6 4-2 1.5a11 11 0 0 0 5.9 5.9l1.5-2 4 1.6v3a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 3.200 6a2 2 0 0 1 2-2.200z"/></symbol>
+<symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.500" height="11" rx="2.800"/><path d="M15.500 10.500l5-2.800v8.600l-5-2.800"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11.200v5M12 7.800v.1"/></symbol>
+<symbol id="i-panel-r" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="3.200"/><path d="M15 4.500v15"/></symbol>
+<symbol id="i-panel-l" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="3.200"/><path d="M9 4.500v15"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.500l-7.600 7.600a4.500 4.500 0 0 1-6.400-6.400l8-8a3 3 0 0 1 4.200 4.200l-8 8a1.500 1.500 0 0 1-2.100-2.100L16 7.600"/></symbol>
+<symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.500 14.200a4 4 0 0 0 7 0M9 9.800v.1M15 9.800v.1"/></symbol>
+<symbol id="i-sticker" viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v8l-6 6H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M20 14h-4.500a1.500 1.500 0 0 0-1.500 1.500V20"/></symbol>
+<symbol id="i-gif" viewBox="0 0 24 24"><rect x="2.800" y="6" width="18.400" height="12" rx="3.600"/><text x="12" y="14.800" text-anchor="middle" font-size="7.600" font-weight="800" font-family="Plus Jakarta Sans,system-ui,sans-serif" fill="currentColor" stroke="none">GIF</text></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.500" width="6" height="11" rx="3"/><path d="M5.500 11.500a6.500 6.500 0 0 0 13 0M12 18v3"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5.500M6 11.500l6-6 6 6"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-.8 5 3 3.200V14H6.800v-1.800L9.800 9 9 4zM12 14v6"/></symbol>
+<symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6.500 16.500V11a5.500 5.500 0 0 1 9-4.200M17.500 11v5.500l1.500 1.500H5M10 20.500a2.200 2.200 0 0 0 4 0M4 4l16 16"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></symbol>
+<symbol id="i-checks" viewBox="0 0 24 24"><path d="M2.500 12.500L7 17l9.500-9.500M12 15l1.500 1.500L22 8"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.500l1.900 5.100 5.100 1.900-5.100 1.900L11 17.500l-1.900-5.100L4 10.500l5.100-1.900L11 3.500zM18.500 15.500l.8 2.200 2.200.8-2.200.8-.8 2.200-.8-2.200-2.200-.8 2.200-.8.8-2.200z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.200 2"/></symbol>
+<symbol id="i-reply" viewBox="0 0 24 24"><path d="M10 7L4.500 12.500 10 18M5 12.500h8.500a6 6 0 0 1 6 6"/></symbol>
+<symbol id="i-fwd" viewBox="0 0 24 24"><path d="M14 7l5.500 5.500L14 18M19 12.500h-8.500a6 6 0 0 0-6 6"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-min" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+<symbol id="i-max" viewBox="0 0 24 24"><rect x="6.500" y="6.500" width="11" height="11" rx="1.800"/></symbol>
+<symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.500 6l6 6-6 6"/></symbol>
+<symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.500 6l-6 6 6 6"/></symbol>
+<symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M6 9.500l6 6 6-6"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.100 2.100 0 0 0-3-3L5 17v3zM14.500 7.500l3 3"/></symbol>
+<symbol id="i-userplus" viewBox="0 0 24 24"><circle cx="9.500" cy="8.500" r="3.500"/><path d="M3 19.500a6.500 6.500 0 0 1 13 0M19 8v5M16.500 10.500h5"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13.500l2.400-7.500h11.200l2.400 7.500v5a1.500 1.500 0 0 1-1.500 1.500h-13A1.500 1.500 0 0 1 4 18.500v-5zM4 13.500h4.500l1 2.500h5l1-2.500H20"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><path d="M4.500 7l1.800 1.800L9.500 5.500M4.500 16l1.800 1.800 3.200-3.300M13 7.500h7M13 16.500h7"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.500-4.600-7.500-10.200A4.300 4.300 0 0 1 12 7.400a4.300 4.300 0 0 1 7.500 2.400C19.500 15.400 12 20 12 20z"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.500v2.300M12 18.200v2.300M3.500 12h2.300M18.200 12h2.300M6 6l1.600 1.600M16.400 16.400L18 18M18 6l-1.600 1.600M7.600 16.400L6 18"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.500 12.200V4.500h7.700l9.300 9.300-7.700 7.700-9.300-9.300z"/><circle cx="8" cy="9" r="1"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.500" cy="12" r="1.300"/><circle cx="12" cy="12" r="1.300"/><circle cx="18.500" cy="12" r="1.300"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3.500h6.500l5 5v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zM13.500 3.500v5h5"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.600"/><path d="M4 17.500l4.500-4 3.500 3 3-2.500 5 4"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8.500 5.500v13l10.500-6.500z" fill="currentColor"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.600 5.600L7 7M17 17l1.400 1.400M18.400 5.600L17 7M7 17l-1.400 1.400"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.500 14.500A7.500 7.500 0 0 1 9.500 4.500a8 8 0 1 0 10 10z"/></symbol>
+<symbol id="i-search-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.500-4.500"/></symbol>
+<symbol id="i-kbd" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6z"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M14.500 5.500l-6.500 6.500 6.500 6.500"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.500h4V7M7 7l.8 12.500h8.400L17 7"/></symbol>
+
+<!-- platform glyphs, white on coloured disc (--pc supplies the disc colour for cut-outs) -->
+<symbol id="p-msg" viewBox="0 0 24 24"><path fill="#fff" d="M12 3C7 3 3.200 6.700 3.200 11.400c0 2.600 1.200 4.900 3.100 6.400V21l3-1.700c.8.200 1.700.3 2.700.3 5 0 8.800-3.700 8.800-8.400S17 3 12 3z"/><path style="fill:var(--pc,#0a7cff)" d="M6.700 13.800l3.600-3.800 2.400 2.200 3.500-2.200-3.600 3.800-2.400-2.200-3.500 2.200z"/></symbol>
+<symbol id="p-ig" viewBox="0 0 24 24"><rect x="4.500" y="4.500" width="15" height="15" rx="4.500" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.400" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16.500" cy="7.500" r="1.100" fill="#fff"/></symbol>
+<symbol id="p-tg" viewBox="0 0 24 24"><path fill="#fff" d="M19.800 5L3.900 11.200c-.9.400-.9 1.500.1 1.800l3.900 1.200 1.500 4.500c.3.800 1.200 1 1.800.4l2.100-2 4 2.900c.7.500 1.600.1 1.800-.7L21.600 6.300c.2-1-.8-1.700-1.800-1.300zM9.300 13.500l7.800-5-6 5.800-.3 2.900-1.500-3.700z"/></symbol>
+<symbol id="p-zl" viewBox="0 0 24 24"><text x="12" y="17.200" text-anchor="middle" font-size="14.500" font-weight="800" font-family="Plus Jakarta Sans,system-ui,sans-serif" fill="#fff">Z</text></symbol>
+<symbol id="p-wa" viewBox="0 0 24 24"><path d="M12 4a8 8 0 0 0-6.900 12L4 20l4.100-1.100A8 8 0 1 0 12 4z" fill="none" stroke="#fff" stroke-width="1.900" stroke-linejoin="round"/><path fill="#fff" d="M9.200 8.600c.2 2.700 2.500 5.100 5.400 5.600l1.100-1.300-1.800-.9-.9.800a4 4 0 0 1-1.800-1.800l.8-.8-.9-1.800z"/></symbol>
+<symbol id="p-gm" viewBox="0 0 24 24"><rect x="4.200" y="6.200" width="15.600" height="11.600" rx="2.200" fill="none" stroke="#fff" stroke-width="2"/><path d="M5 8l7 5.200L19 8" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="p-sl" viewBox="0 0 24 24"><path d="M9.800 4.500L8.500 19.500M15.500 4.500l-1.300 15M4.800 9.200h14.500M4.200 14.800h14.500" fill="none" stroke="#fff" stroke-width="2.100" stroke-linecap="round"/></symbol>
+
+<!-- Moshi mascot: scalloped orange speech bubble with eyes -->
+<symbol id="mascot" viewBox="0 0 64 64">
+  <g fill="#ff5a1f"><circle cx="32" cy="12" r="9"/><circle cx="46" cy="17" r="9"/><circle cx="53" cy="30" r="9"/><circle cx="48" cy="44" r="9"/><circle cx="16" cy="17" r="9"/><circle cx="10" cy="30" r="9"/><circle cx="15" cy="44" r="9"/><circle cx="32" cy="48" r="9"/><circle cx="32" cy="30" r="21"/><path d="M13 46L7 60l17-8z"/></g>
+  <g><ellipse cx="23" cy="29" rx="6.200" ry="7.200" fill="#fff"/><ellipse cx="41" cy="29" rx="6.200" ry="7.200" fill="#fff"/><circle cx="24.200" cy="30" r="3.200" fill="#1b1220"/><circle cx="42.200" cy="30" r="3.200" fill="#1b1220"/><circle cx="25.300" cy="28.600" r="1" fill="#fff"/><circle cx="43.300" cy="28.600" r="1" fill="#fff"/><path d="M27 40.500q5 3.800 10 0" fill="none" stroke="#1b1220" stroke-width="2.200" stroke-linecap="round"/></g>
+</symbol>
+<symbol id="mascot-sleepy" viewBox="0 0 64 64">
+  <g fill="#ff5a1f"><circle cx="32" cy="12" r="9"/><circle cx="46" cy="17" r="9"/><circle cx="53" cy="30" r="9"/><circle cx="48" cy="44" r="9"/><circle cx="16" cy="17" r="9"/><circle cx="10" cy="30" r="9"/><circle cx="15" cy="44" r="9"/><circle cx="32" cy="48" r="9"/><circle cx="32" cy="30" r="21"/><path d="M13 46L7 60l17-8z"/></g>
+  <g fill="none" stroke="#1b1220" stroke-width="2.400" stroke-linecap="round"><path d="M17.500 30q5.500 4.500 11 0M35.500 30q5.500 4.500 11 0"/><path d="M27.500 40.500q4.500 3 9 0"/></g>
+</symbol>
+</svg>
+
+<div class="pg-top"><span class="pg-brand"><svg viewBox="0 0 64 64"><use href="#mascot"/></svg>Moshi UI proposals</span>
+<nav aria-label="Jump"><a href="#where">Hiện trạng</a><a href="#dir-a">A · Quiet Glass</a><a href="#dir-b">B · Editorial</a><a href="#dir-c">C · Playful Pals+</a><a href="#compare">So sánh</a><a href="#recommend">Đề xuất</a></nav>
+<button id="themeBtn" aria-pressed="false" aria-label="Toggle light or dark theme"><svg class="sun" viewBox="0 0 24 24"><use href="#i-sun"/></svg><svg class="moon" viewBox="0 0 24 24"><use href="#i-moon"/></svg><span>Light</span></button></div>
+<main class="pg-wrap">
+<header class="pg-hero"><h1>Moshi: đề xuất làm lại giao diện</h1>
+<p>Ba hướng thiết kế, vẽ bằng HTML/CSS thật ở 1240×800, để bạn xem trước khi động vào code. Mọi mockup đều bấm được: bật Details, cuộc gọi đến, trạng thái trống, và đổi sáng/tối ở thanh trên.</p>
+<p>Tên, tin nhắn là tiếng Việt như dữ liệu thật; chữ trong giao diện (nút, nhãn) giữ tiếng Anh như app hiện tại.</p>
+<span class="pg-flag">Chưa có DESIGN.md nên mọi token ở đây là <b>đề xuất tạm</b> (provisional). Không có file nào trong src/ bị thay đổi.</span></header>
+<section class="pg-sec" id="where"><h2>Hiện trạng: 10 điều cần sửa</h2>
+<p class="pg-lede">Ảnh crop lấy từ <code>current-*.png</code> cùng thư mục. Điều đáng giữ: mascot cam, tag pastel không viền, avatar blob có mặt, và giọng vui của câu chào. Phần còn lại cần kỷ luật.</p>
+<div class="pg-crit"><div class="pg-ci"><div class="pg-crop" data-src="current-home.png" style="background-image:url(current-home.png);background-position:-6px -108px" role="img" aria-label="Crop of current-home.png"></div><div><h4>Thứ bậc phẳng, nhãn IN HOA tranh chú ý</h4><p>Ba panel kính cùng độ sáng, cùng viền, cùng độ mờ: mắt không biết bắt đầu từ đâu. Nhãn sidebar IN HOA (INBOXES, TAGS, ACCOUNTS) nặng ngang tên chat.</p><p class="pg-fix"><b>Hướng sửa:</b> Một bề mặt trội (chat), nhãn viết thường 12/16, sidebar lùi về nền.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-home.png" style="background-image:url(current-home.png);background-position:-258px -320px" role="img" aria-label="Crop of current-home.png"></div><div><h4>Hàng danh sách khó quét</h4><p>Chưa đọc, ghim, đang gõ, tắt thông báo gần như cùng một dáng: tên đậm + pill tím. Ghim chỉ là icon xám 12px nằm cạnh số. Không có dấu hiệu ở mép hàng.</p><p class="pg-fix"><b>Hướng sửa:</b> Chấm chưa đọc ở mép, giờ đổi màu, "typing…" thay preview, "Draft" màu đỏ, hàng 64px.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-home.png" style="background-image:url(current-home.png);background-position:-430px -258px" role="img" aria-label="Crop of current-home.png"></div><div><h4>Tương phản chữ trắng trên accent</h4><p>Chữ trắng trên #4f7df3 chỉ đạt 3,78:1; pill đếm tím nhạt khoảng 3,5:1 (đo từ ảnh). Chữ 11–13px đậm cần 4,5:1. Giờ và chip "Today" nằm trên kính nên tương phản đổi theo nền.</p><p class="pg-fix"><b>Hướng sửa:</b> Accent #2f5fe0 (trắng trên đó 5,48:1) hoặc nền đen/chữ trắng 21:1 (hướng C).</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-home.png" style="background-image:url(current-home.png);background-position:-250px -48px" role="img" aria-label="Crop of current-home.png"></div><div><h4>Thang chữ quá sát nhau</h4><p>11 / 12 / 13,5 / 15 / 17 / 24 / 32: các bậc chỉ cách nhau 1–1,5px nên phân cấp dựa vào độ đậm 800. "Messages" 24px gần với tiêu đề chat 17px. Chưa có nhịp 4/8.</p><p class="pg-fix"><b>Hướng sửa:</b> Thang 12·13·14·15·17·22·28 với line-height 16/20/24/28/32.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-chat.png" style="background-image:url(current-chat.png);background-position:-1000px -50px" role="img" aria-label="Crop of current-chat.png"></div><div><h4>Icon thiếu nhất quán</h4><p>Header chat dùng icon nét mảnh (panel, đồng hồ báo thức, info) khác nét với sidebar; badge nền tảng vuông bo, avatar tròn, sticker dạng emoji. "Send later" dùng đồng hồ báo thức dễ lẫn với nhắc việc.</p><p class="pg-fix"><b>Hướng sửa:</b> Một bộ icon nét 1,75px, bo tròn; badge nền tảng đều tròn 46% kích thước avatar.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-chat.png" style="background-image:url(current-chat.png);background-position:-940px -340px" role="img" aria-label="Crop of current-chat.png"></div><div><h4>Kính dùng quá tay</h4><p>List, chat, composer và cả bubble đều có blur hoặc glow; composer có vòng sáng khi focus, bubble gửi có quầng sáng. Ranh giới panel mờ và tốn GPU.</p><p class="pg-fix"><b>Hướng sửa:</b> Kính chỉ ở thanh tiêu đề và composer (A); còn lại là bề mặt đặc.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-chat.png" style="background-image:url(current-chat.png);background-position:-596px -700px" role="img" aria-label="Crop of current-chat.png"></div><div><h4>Composer chưa đủ affordance</h4><p>Emoji, sticker, GIF, mic, gửi: năm icon cùng trọng lượng, vùng bấm ~28px. Nút gửi xám trông như đang tải. Không có chỗ cho gợi ý trả lời AI, hẹn giờ gửi, ghi âm.</p><p class="pg-fix"><b>Hướng sửa:</b> Chip gợi ý phía trên, "Send later" xuất hiện khi có chữ, mic là nút duy nhất còn lại khi trống.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-home.png" style="background-image:url(current-home.png);background-position:-790px -318px" role="img" aria-label="Crop of current-home.png"></div><div><h4>Empty state nhỏ, CTA ồn</h4><p>Mascot 64px giữa khoảng trống lớn; nút gradient có glow cộng nhãn Ctrl+N cạnh tranh với mascot. Không gợi ý gì tiếp theo (chat gần đây, phím tắt).</p><p class="pg-fix"><b>Hướng sửa:</b> Mascot lớn hơn, một câu hướng dẫn, một nút; hướng C thêm các "blob" kẹo.</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-narrow.png" style="background-image:url(current-narrow.png);background-position:-8px -36px" role="img" aria-label="Crop of current-narrow.png"></div><div><h4>Narrow mode mất định hướng</h4><p>Mất sidebar nên không còn bộ lọc nền tảng, không thấy tài khoản; preview bị cắt, ghim + số chen giờ; không có đường vào To-dos hay Close friends.</p><p class="pg-fix"><b>Hướng sửa:</b> Hàng chip nền tảng dưới ô tìm kiếm + tab bar 4 mục; ghim chuyển sang nhóm "Pinned".</p></div></div>
+<div class="pg-ci"><div class="pg-crop" data-src="current-picker.png" style="background-image:url(current-picker.png);background-position:-770px -352px" role="img" aria-label="Crop of current-picker.png"></div><div><h4>Picker che ngữ cảnh</h4><p>Emoji picker phủ lên đúng đoạn tin nhắn đang trả lời; tab danh mục 24px; thiếu recents, skin tone, xem trước.</p><p class="pg-fix"><b>Hướng sửa:</b> Picker neo vào composer, mở lên trên 320px, tab 36–44px, hàng "Recent" đầu tiên.</p></div></div></div></section>
+<section class="pg-sec" id="dir-a">
+ <div class="pg-dhead"><div><h2>Hướng A: Quiet Glass</h2><p class="pg-th">Một màu nhấn, ít kính, chữ làm việc. Cảm giác Mail và Messages của Apple: bình tĩnh đến mức không để ý tới giao diện.</p></div><ul><li><b>Một accent duy nhất</b> #2f5fe0: chưa đọc, đang chọn, nút gửi. Màu nền tảng chỉ xuất hiện ở badge 18px trên avatar.</li><li><b>Kính chỉ ở hai nơi</b>: thanh tiêu đề và composer. List, chat là bề mặt đặc, ngăn bằng hairline.</li><li><b>Lưới 8pt</b>: hàng 64, header 64, composer 48, avatar 40; thang chữ 12·13·14·15·22 (Plus Jakarta Sans, tracking -1%).</li><li><b>Trạng thái đọc được trong 1 giây</b>: chấm chưa đọc ở mép, giờ đổi màu, typing thay preview, Draft màu đỏ.</li></ul></div>
+ <div class="pg-ctl" role="group" aria-label="Điều khiển mockup A"><span>Trạng thái:</span>
+  <button class="pg-btn" data-tog="show-det" data-target="scr-a">Details pane</button>
+  <button class="pg-btn" data-tog="show-call" data-target="scr-a">Incoming call</button>
+  <button class="pg-btn" data-tog="is-empty" data-target="scr-a">No chat selected</button>
+  <span style="margin-left:8px">Nút sáng/tối ở thanh trên áp dụng cho mọi mockup.</span></div>
+ <div class="stage" id="scr-a"><div class="stage-in"><div data-mount="screen" data-dir="a"></div></div></div>
+
+ <h3>Chat header: Call, Video và nút Details</h3>
+ <p class="pg-sub">Hai trạng thái: đang rảnh và đang gõ + Details đang mở. Nút Call/Video là chỗ dự trữ cho tính năng sắp ra mắt.</p>
+ <div class="spec"><div class="demo-col" data-mount="headers" data-dir="a"></div><div class="notes"><ul><li><b>Call</b> và <b>Video</b> là hai nút 36px đầu nhóm; khi tính năng chưa bật, nút mờ 40% và tooltip "Calls are coming soon".</li><li><b>Details</b> là nút toggle cuối; trạng thái bật = nền accent 10% + icon accent (4,8:1).</li><li>Dòng phụ đổi từ "Messenger · Active now" sang "typing…" bằng màu accent.</li><li>Header cao 64, không viền dưới đậm: chỉ hairline 8%.</li></ul></div></div>
+
+ <h3>Giải phẫu hàng hội thoại</h3>
+ <p class="pg-sub">Tag chỉ hiện 1 chip trong hàng (chip thứ hai nằm trong Details) để hàng luôn đúng 64px.</p>
+ <div class="pg-two" data-mount="anatomy" data-dir="a"></div>
+
+ <h3>Composer: đính kèm, emoji, sticker, GIF, voice và gợi ý AI</h3>
+ <p class="pg-sub">Bốn trạng thái từ trên xuống. Emoji/sticker ẩn khỏi khung hẹp (còn trong menu +).</p>
+ <div class="spec one"><div class="demo-col" data-mount="composer" data-dir="a"></div><div class="notes"><ul><li>Viên thuốc kính 48px là phần tử kính duy nhất của vùng chat; tin nhắn trượt phía dưới có thể thấy mờ.</li><li>Chip gợi ý nằm trên, tối đa 3, viền hairline, bấm = điền vào ô (không gửi ngay).</li><li>"Send later" chỉ hiện khi có chữ. Ghi âm: thùng rác, độ cao sóng, "Slide to cancel".</li></ul></div></div>
+
+ <h3>Banner cuộc gọi đến</h3>
+ <div class="spec"><div data-mount="call" data-dir="a"></div><div class="notes"><ul><li>Thanh kính 400×64 treo dưới title bar; nút từ chối đỏ #c8323c, nghe xanh #1e8a54 (chữ trắng 5,3:1 và 5,4:1).</li><li><b>Motion</b>: banner trượt xuống 240ms; vòng ring quanh avatar nở 1,8s lặp lại, dừng khi reduce motion.</li></ul></div></div>
+
+ <h3>Narrow mode (cửa sổ hẹp hơn 720px)</h3>
+ <p class="pg-sub">Tiêu đề lớn 22px, chip nền tảng thay sidebar, tab bar kính 4 mục. Chat narrow: nút Back mang số chưa đọc còn lại (24).</p>
+ <div class="pg-narrow" data-mount="narrow" data-dir="a"></div>
+
+ <h3>Token và chuyển động</h3><div class="pg-tok"><div><h5>Palette (sáng · tối)</h5><div class="pg-sw"><div><i style="background:#2f5fe0"></i><span><b>Accent</b>#2f5fe0 · #86a4ff</span></div><div><i style="background:#12141c"></i><span><b>Ink</b>#12141c · #eceef4</span></div><div><i style="background:#ffffff"></i><span><b>Surface</b>#ffffff · #16181f</span></div><div><i style="background:#f1f3f8"></i><span><b>Window</b>#f1f3f8 · #0d0f14</span></div><div><i style="background:#eaf0ff"></i><span><b>Selection</b>#eaf0ff · #222a45</span></div><div><i style="background:#c8323c"></i><span><b>Danger</b>#c8323c · #ff8a92</span></div></div></div><div><h5>Type scale</h5><table><tr><td>Display</td><td>22/28 · 800 · -2%</td></tr><tr><td>Chat title</td><td>15/20 · 700</td></tr><tr><td>Row name</td><td>14/20 · 600 (800 unread)</td></tr><tr><td>Body</td><td>14/20 · 400</td></tr><tr><td>Preview</td><td>13/20 · 400</td></tr><tr><td>Meta · labels</td><td>12/16 · 600</td></tr></table></div><div><h5>Motion</h5><p>Hover và chọn hàng: 140ms nền chuyển màu, không dịch chuyển, không scale.</p><p>Chip gợi ý và nút "Send later" hiện 200ms (opacity + 4px).</p><p>Chat mở: nội dung cross-fade 160ms. Đang gõ: 3 chấm 1,2s.</p><p>Reduce motion: tất cả còn fade 1 bước.</p></div></div>
+ <hr class="pg-hr">
+</section>
+<section class="pg-sec" id="dir-b">
+ <div class="pg-dhead"><div><h2>Hướng B: Editorial</h2><p class="pg-th">Báo chí hiện đại: tên người viết bằng serif, nội dung bằng sans; bề mặt gần đặc, lề rộng, đường kẻ mảnh thay cho hộp.</p></div><ul><li><b>Rail nền tảng 64px</b> với số chưa đọc; mọi thứ khác trong hai cột. Một màu nhấn ink-blue #1d4ed8 + mực đen.</li><li><b>Hàng danh sách 3 dòng</b>: tên (Newsreader 17), chip nền tảng nội dòng, preview 2 dòng. Chậm hơn nhưng đọc được.</li><li><b>Chat</b>: ngày là đường kẻ mảnh, bubble gửi màu mực, composer là viên thuốc nổi.</li><li><b>Details gắn cố định</b> bên phải (không overlay) để người dùng so sánh với chat.</li></ul></div>
+ <div class="pg-ctl" role="group" aria-label="Điều khiển mockup B"><span>Trạng thái:</span>
+  <button class="pg-btn" data-tog="show-det" data-target="scr-b">Details pane</button>
+  <button class="pg-btn" data-tog="show-call" data-target="scr-b">Incoming call</button>
+  <button class="pg-btn" data-tog="is-empty" data-target="scr-b">No chat selected</button>
+  <span style="margin-left:8px">Nút sáng/tối ở thanh trên áp dụng cho mọi mockup.</span></div>
+ <div class="stage" id="scr-b"><div class="stage-in"><div data-mount="screen" data-dir="b"></div></div></div>
+
+ <h3>Chat header: Call, Video và nút Details</h3>
+ <p class="pg-sub">Hai trạng thái: đang rảnh và đang gõ + Details đang mở. Nút Call/Video là chỗ dự trữ cho tính năng sắp ra mắt.</p>
+ <div class="spec"><div class="demo-col" data-mount="headers" data-dir="b"></div><div class="notes"><ul><li>Tên chat Newsreader 24px; nút Call/Video đứng riêng, ngăn khỏi "Details" bằng một vạch.</li><li><b>Details</b> có nhãn chữ vì là điều khiển bố cục, không chỉ icon: bật = nền mực, chữ trắng 16,7:1.</li><li>Chiều cao 72, lề trái 32 thẳng hàng với cột tin nhắn.</li></ul></div></div>
+
+ <h3>Giải phẫu hàng hội thoại</h3>
+ <p class="pg-sub">Chip nền tảng đứng nội dòng ("● Telegram") thay cho badge trên avatar, nên avatar giữ nguyên sạch; hàng cao ~88px nên danh sách thấy 6 chat thay vì 9.</p>
+ <div class="pg-two" data-mount="anatomy" data-dir="b"></div>
+
+ <h3>Composer: đính kèm, emoji, sticker, GIF, voice và gợi ý AI</h3>
+ <p class="pg-sub">Bốn trạng thái từ trên xuống. Emoji/sticker ẩn khỏi khung hẹp (còn trong menu +).</p>
+ <div class="spec one"><div class="demo-col" data-mount="composer" data-dir="b"></div><div class="notes"><ul><li>Viên thuốc nổi 56px, gần đặc, viền 3:1 (#8a909c) để thấy rõ trên giấy trắng; đổ bóng nhẹ.</li><li>Gợi ý trả lời dạng hộp chữ nhật bo 6px, nhãn "Suggested" bằng serif nghiêng.</li><li>Nút gửi mực đen; trạng thái trống là nền xám.</li></ul></div></div>
+
+ <h3>Banner cuộc gọi đến</h3>
+ <div class="spec"><div data-mount="call" data-dir="b"></div><div class="notes"><ul><li>Dải mực 640×64: "Lan Phương is calling" bằng serif, hai nút chữ "Decline" / "Answer" (không dùng hai vòng màu).</li><li><b>Motion</b>: dải trượt xuống 200ms; không có vòng ring, thay bằng hai chấm nhấp nháy sau chữ.</li></ul></div></div>
+
+ <h3>Narrow mode (cửa sổ hẹp hơn 720px)</h3>
+ <p class="pg-sub">Rail biến mất; "Inbox" 34px; chip nền tảng và tab bar chữ. Hàng 3 dòng giữ nguyên nên chỉ thấy 5 chat trong 760px.</p>
+ <div class="pg-narrow" data-mount="narrow" data-dir="b"></div>
+
+ <h3>Token và chuyển động</h3><div class="pg-tok"><div><h5>Palette (sáng · tối)</h5><div class="pg-sw"><div><i style="background:#111318"></i><span><b>Ink</b>#111318 · #f1f2f4</span></div><div><i style="background:#f4f5f7"></i><span><b>Paper</b>#f4f5f7 · #0c0d10</span></div><div><i style="background:#ffffff"></i><span><b>Surface</b>#ffffff · #14161a</span></div><div><i style="background:#1d4ed8"></i><span><b>Ink blue</b>#1d4ed8 · #8aa9ff</span></div><div><i style="background:#e4e7ec"></i><span><b>Hairline</b>#e4e7ec · #24272d</span></div><div><i style="background:#8a909c"></i><span><b>Control edge</b>#8a909c · #6f7686</span></div></div></div><div><h5>Type scale</h5><table><tr><td>Inbox title</td><td>Newsreader 32/36 · 500</td></tr><tr><td>Chat title</td><td>Newsreader 24/28 · 500</td></tr><tr><td>Row name</td><td>Newsreader 17/22 · 600</td></tr><tr><td>Body</td><td>Be Vietnam Pro 14.5/22</td></tr><tr><td>Preview</td><td>Be Vietnam Pro 13/18</td></tr><tr><td>Meta</td><td>Be Vietnam Pro 12/16</td></tr></table></div><div><h5>Motion</h5><p>Gần như không chuyển động: cross-fade 120ms khi đổi chat.</p><p>Đường kẻ ngày vẽ ra 240ms khi cuộn tới (một lần).</p><p>Details đóng/mở: chiều rộng chat co lại 200ms, không đàn hồi.</p><p>Reduce motion: không còn animation.</p></div></div>
+ <hr class="pg-hr">
+</section>
+<section class="pg-sec" id="dir-c">
+ <div class="pg-dhead"><div><h2>Hướng C: Playful Pals+</h2><p class="pg-th">Giữ bản sắc kẹo của Moshi nhưng có kỷ luật: đen là màu cấu trúc, màu kẹo chỉ thuộc về nhân vật, số đếm và tag.</p></div><ul><li><b>Đen = nơi bạn đang đứng</b>: mục sidebar đang chọn, bubble gửi, nút chính. Kẹo (lilac, mint, vàng, hồng, sky, đào) chỉ cho avatar blob, số đếm, tag, chip gợi ý.</li><li><b>Vùng bấm 44–48px</b> cho mọi nút lặp lại; hàng 72–96px; chữ 14–15px.</li><li><b>Mascot có việc để làm</b>: empty state, loader, cuộc gọi đến. Unbounded chỉ cho tiêu đề ngắn (Vietnamese dấu vẫn đủ nhờ subset vietnamese).</li><li><b>Chat là một tờ giấy trắng</b> bo 32px đặt trên nền lilac; list nằm thẳng trên nền, không panel.</li></ul></div>
+ <div class="pg-ctl" role="group" aria-label="Điều khiển mockup C"><span>Trạng thái:</span>
+  <button class="pg-btn" data-tog="show-det" data-target="scr-c">Details pane</button>
+  <button class="pg-btn" data-tog="show-call" data-target="scr-c">Incoming call</button>
+  <button class="pg-btn" data-tog="is-empty" data-target="scr-c">No chat selected</button>
+  <span style="margin-left:8px">Nút sáng/tối ở thanh trên áp dụng cho mọi mockup.</span></div>
+ <div class="stage" id="scr-c"><div class="stage-in"><div data-mount="screen" data-dir="c"></div></div></div>
+
+ <h3>Chat header: Call, Video và nút Details</h3>
+ <p class="pg-sub">Hai trạng thái: đang rảnh và đang gõ + Details đang mở. Nút Call/Video là chỗ dự trữ cho tính năng sắp ra mắt.</p>
+ <div class="spec"><div class="demo-col" data-mount="headers" data-dir="c"></div><div class="notes"><ul><li>Call = nút mint 44px, Video = nút sky 44px: tách khỏi icon trung tính nên tìm thấy ngay.</li><li>Details là viên thuốc có nhãn: bật = nền đen, tắt = nền lilac nhạt.</li><li>Avatar blob 44px có mặt cười; tên dùng Unbounded 16px.</li></ul></div></div>
+
+ <h3>Giải phẫu hàng hội thoại</h3>
+ <p class="pg-sub">Tag là viên thuốc pastel không viền, nằm dòng thứ ba chỉ khi có; số đếm là pill lilac chữ đen (10,7:1). Tin tắt tiếng chuyển sang xám trung tính.</p>
+ <div class="pg-two" data-mount="anatomy" data-dir="c"></div>
+
+ <h3>Composer: đính kèm, emoji, sticker, GIF, voice và gợi ý AI</h3>
+ <p class="pg-sub">Bốn trạng thái từ trên xuống. Emoji/sticker ẩn khỏi khung hẹp (còn trong menu +).</p>
+ <div class="spec one"><div class="demo-col" data-mount="composer" data-dir="c"></div><div class="notes"><ul><li>Viên thuốc 60px nền lilac nhạt, nút 44px; mic là nút kẹo lilac (nổi duy nhất khi ô trống).</li><li>Ba chip gợi ý mỗi chip một màu kẹo (mint, đào, sky), chữ đen 13,5px đậm; bấm điền vào ô.</li><li>Send later hiện cạnh nút gửi đen; ghi âm hiện chấm đỏ + sóng.</li></ul></div></div>
+
+ <h3>Banner cuộc gọi đến</h3>
+ <div class="spec"><div data-mount="call" data-dir="c"></div><div class="notes"><ul><li>Viên thuốc đen 460×76; hai nút 56px (hồng = từ chối, mint = nghe) chữ đen ≥ 12,5:1; avatar blob có ring lilac và sóng âm 4 vạch.</li><li><b>Motion</b>: viên thuốc rơi từ trên xuống 280ms với overshoot nhẹ, ring 1,6s, sóng âm 1s; mascot trên title bar chớp mắt nhanh hơn.</li></ul></div></div>
+
+ <h3>Narrow mode (cửa sổ hẹp hơn 720px)</h3>
+ <p class="pg-sub">Tab bar viên thuốc nổi (đen = mục đang chọn), chip nền tảng nền trắng. Header chat narrow giữ hai nút Call/Video 44px; Details chỉ còn icon.</p>
+ <div class="pg-narrow" data-mount="narrow" data-dir="c"></div>
+
+ <h3>Token và chuyển động</h3><div class="pg-tok"><div><h5>Palette (sáng · tối)</h5><div class="pg-sw"><div><i style="background:#ebe7f4"></i><span><b>Paper</b>#ebe7f4 · #19181d</span></div><div><i style="background:#ffffff"></i><span><b>Sheet</b>#ffffff · #25242b</span></div><div><i style="background:#000000"></i><span><b>Ink</b>#000000 · #f2eff8</span></div><div><i style="background:#c3adff"></i><span><b>Lilac</b>#c3adff</span></div><div><i style="background:#9fe8c8"></i><span><b>Mint · Sky</b>#9fe8c8 · #a9d4ff</span></div><div><i style="background:#ffdc5e"></i><span><b>Yellow · Pink</b>#ffdc5e · #ffb3c7</span></div></div></div><div><h5>Type scale</h5><table><tr><td>List title</td><td>Unbounded 24 · 700 · -5%</td></tr><tr><td>Chat title</td><td>Unbounded 16/22 · 700</td></tr><tr><td>Section</td><td>Unbounded 11 · 600</td></tr><tr><td>Row name</td><td>Jakarta 15/20 · 700 (800)</td></tr><tr><td>Body</td><td>Jakarta 14.5/22 · 400</td></tr><tr><td>Preview</td><td>Jakarta 13.5/20</td></tr></table></div><div><h5>Motion</h5><p><b>Bubble</b> mới vào: nở từ 92% → 100% trong 220ms (cubic .2,.8,.2,1), chỉ khi tin đến, không phải hover.</p><p><b>Mascot</b> chớp mắt mỗi 6s; trong empty state nhún 6px/3,4s.</p><p><b>Gửi</b>: mũi tên bay lên 8px rồi nút quay lại, 180ms. <b>Reaction</b>: nảy 1 lần khi thêm.</p><p><b>Cuộc gọi</b>: vòng ring + sóng âm 4 vạch. Reduce motion: chỉ fade và không chớp mắt.</p></div></div>
+ <hr class="pg-hr">
+</section><section class="pg-sec" id="compare"><h2>So sánh</h2><p class="pg-lede">Tỉ lệ tương phản là số đo thật trên màu đề xuất (công thức WCAG, tính bằng script). Chữ cần 4,5:1, icon và đường viền điều khiển cần 3:1.</p>
+<table class="pg-cmp"><thead><tr><th></th><th>Hiện tại</th><th>A: Quiet Glass</th><th>B: Editorial</th><th>C: Playful Pals+</th></tr></thead><tbody>
+<tr><th>Thứ bậc</th><td>Ba panel kính ngang hàng; phân cấp dựa vào độ đậm 800.</td><td>Một bề mặt trội (chat), sidebar lùi về nền; accent chỉ cho thứ cần hành động.</td><td>Phân cấp bằng chữ: serif cho tên, đường kẻ cho nhịp; rail tách điều hướng khỏi nội dung.</td><td>Đen là nơi đang đứng; kẹo là nhân vật. Hai tầng rõ nhưng nhiều màu hơn A/B.</td></tr>
+<tr><th>Mật độ</th><td>9 hàng / màn hình (hàng ~64px, tag chiếm sidebar).</td><td><b>9–10 hàng</b> (64px) + trạng thái đầy đủ trong cùng dòng.</td><td><b>~6 hàng</b> (~88px, 3 dòng); đọc tốt hơn nhưng quét chậm hơn.</td><td><b>~7 hàng</b> (72–96px); vùng bấm lớn đổi lấy mật độ.</td></tr>
+<tr><th>Khả năng tiếp cận<br><small>chữ ≥ 4,5:1 · icon ≥ 3:1</small></th>
+ <td>Trắng/accent <b class="pg-bad">3,78</b>; pill đếm <b class="pg-bad">~3,5</b>; chữ tertiary tối 5,4; đích bấm ~28px.</td>
+ <td>Ink 18,4 · ink2 7,9 · ink3 5,3 (4,9 trên nền); accent/trắng <b class="pg-ok">5,48</b>; accent trên Selection 4,8; tối: ink3 5,6, accent 7,4, on-accent 7,9; tag 5,8–7,4. Icon dùng ink3 ≥ 5,3 (≥ 3 ✓). Đích bấm 32–36px.</td>
+ <td>Ink 18,6 · ink2 8,9 · ink3 5,9 (5,45 trên giấy); accent 6,7; trắng trên bubble mực 16,7; tối: ink3 5,9, accent 7,9. Viền điều khiển #8a909c = 3,2 (hairline #e4e7ec chỉ trang trí, 1,4). Đích bấm 36–44px.</td>
+ <td>Ink 21 · ink2 7,8 · ink3 5,7 (5,4 trên giấy); chữ đen trên kẹo lilac 10,7; tag 5,8–7,4 sáng, 6,8–7,6 tối; tối: ink 13,9, ink3 5,9. Đích bấm 44–48px.</td></tr>
+<tr><th>Chuyển động</th><td>Lò xo 140–380ms, glow, nhiều trạng thái chồng.</td><td>140–220ms ease-out, không lò xo; chỉ chuyển nền/opacity.</td><td>Gần như tĩnh: fade 120ms, đường kẻ vẽ 240ms.</td><td>Có nghĩa: bubble nở, mascot chớp, ring cuộc gọi. Luôn tắt khi reduce motion.</td></tr>
+<tr><th>Chi phí triển khai</th><td>-</td><td><b>Thấp–vừa</b> (1–2 tuần): style mới <code>data-style="quiet"</code>; đổi token (accent, glass → surface), hàng 64, thang chữ, nhãn sidebar; thêm Chip gợi ý, Call banner.</td><td><b>Cao</b> (3–4 tuần): đổi cấu trúc (Sidebar → Rail), ConversationRow 3 dòng, Details cố định, Composer nổi, tải thêm font serif.</td><td><b>Vừa</b> (2 tuần): mở rộng <code>pals.css</code> sẵn có; nâng vùng bấm, tag slab, chip kẹo, mascot loader, bộ motion.</td></tr>
+<tr><th>Rủi ro người dùng hiện tại</th><td>-</td><td><b>Thấp</b>: cùng bố cục 3 cột, cùng vị trí mọi thứ; chỉ nhìn "sạch" hơn. Rủi ro: ít bản sắc nếu bỏ hết kẹo.</td><td><b>Cao</b>: điều hướng đổi (sidebar có chữ → rail icon), danh sách thấy ít chat hơn; phải học lại nhãn nền tảng.</td><td><b>Vừa–thấp</b>: quen màu sắc; rủi ro là Unbounded rộng làm tên tiếng Việt dài bị cắt, và độ ồn thị giác nếu lạm dụng kẹo.</td></tr>
+</tbody></table></section><section class="pg-sec" id="recommend"><h2>Đề xuất và lộ trình</h2>
+<div class="pg-rec"><div>
+<p><strong>Đề xuất: A làm nền, C làm lớp bản sắc (không chọn B làm mặc định).</strong></p>
+<p>A cho Moshi thứ nó đang thiếu: thứ bậc rõ, tương phản đạt chuẩn, trạng thái đọc được trong một giây, mà vẫn là bố cục 3 cột người dùng đã quen. Chi phí thấp, rủi ro thấp, và gần với "chuẩn Apple" nhất.</p>
+<p>Moshi có bốn style trong <code>data-style</code>, nên không cần chọn một. Đề xuất: <strong>style mặc định "Moshi" lấy cấu trúc và token của A</strong>; style "Pals" nâng lên Pals+ (C) với vùng bấm 44px, tag slab, chip kẹo, mascot có việc. Giữ màu vui cho ai muốn, nhưng không bắt mọi người trả giá bằng độ ồn.</p>
+<p>B không bỏ đi: rail nền tảng và hàng 3 dòng là ý hay cho chế độ "Compact/Reading" tùy chọn sau này (power user có 7 nền tảng), nhưng thay điều hướng mặc định quá rủi ro lúc này.</p>
+</div><div>
+<div class="pg-phase"><span class="pg-ph">Pha 0</span><h4>1–2 ngày, không đổi bố cục</h4><p>Sửa tương phản (accent #2f5fe0, pill đếm), bỏ glow bubble/composer, nhãn sidebar viết thường, thống nhất nét icon 1,75px.</p></div>
+<div class="pg-phase"><span class="pg-ph">Pha 1</span><h4>Tuần 1: thang chữ và hàng</h4><p>Token type 12·13·14·15·17·22, lưới 8pt, hàng 64 với chấm chưa đọc, typing, Draft, ghim, tắt tiếng; badge nền tảng thống nhất.</p></div>
+<div class="pg-phase"><span class="pg-ph">Pha 2</span><h4>Tuần 2: header + composer + gọi</h4><p>Nút Call/Video sau feature flag, toggle Details, chip gợi ý AI, Send later, ghi âm; component Banner cuộc gọi đến (cần cho Call dù chọn hướng nào).</p></div>
+<div class="pg-phase"><span class="pg-ph">Pha 3</span><h4>Tuần 3: bớt kính + narrow</h4><p>Panel đặc, kính chỉ ở title bar + composer; narrow có chip nền tảng và tab bar.</p></div>
+<div class="pg-phase"><span class="pg-ph">Pha 4</span><h4>Viết lại lớn, làm sau</h4><p>Pals+ (motion pack, empty state mascot, blob avatar mới), Details cố định/Compact layout kiểu B (cần đo hành vi trước), rail nền tảng như tùy chọn.</p></div>
+</div></div></section>
+<footer class="pg-foot">Moshi design proposal · 10 Oct 2026 · mockup only, no application code changed.</footer></main>
+<script>/* Moshi proposals: data + renderers. Pure DOM strings; no dependencies. */
+(function(){
+const I=(n,c='')=>`<svg class="i ${c}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const PL={
+  msg:{n:'Messenger',c:'#0a7cff',g:'p-msg',k:7},ig:{n:'Instagram',c:'#d62976',g:'p-ig',k:4,cls:'ig'},
+  tg:{n:'Telegram',c:'#1d8fc7',g:'p-tg',k:4},zl:{n:'Zalo',c:'#0068ff',g:'p-zl',k:2},
+  wa:{n:'WhatsApp',c:'#1fa855',g:'p-wa',k:2},gm:{n:'Gmail',c:'#d93025',g:'p-gm',k:3},sl:{n:'Slack',c:'#611f69',g:'p-sl',k:2}};
+const pb=p=>`<i class="pb ${PL[p].cls||''}" style="--pc:${PL[p].c}"><svg aria-hidden="true"><use href="#${PL[p].g}"/></svg></i>`;
+const pd=(p,col)=>`<i class="pd ${col&&PL[p].cls?PL[p].cls:''}" ${col?`style="--pc:${PL[p].c}"`:''}><svg aria-hidden="true"><use href="#${PL[p].g}"/></svg></i>`;
+
+const TAGS={Work:['work','tag'],Family:['family','heart'],VIP:['vip','spark'],'Best friend':['bf','heart'],Love:['love','heart'],Fun:['fun','spark']};
+const tag=(t,icon)=>`<span class="tg ${TAGS[t][0]}">${icon?I(TAGS[t][1]):''}${t}</span>`;
+
+const CV={
+  lan:{n:'Lan Phương',p:'msg',h:262,t:'14:36',pre:'Chị duyệt giúp em trước 5h nhé 🙏',pin:1,tags:['Work'],sel:1,typing:1,bl:'#ffb3c7',v:2},
+  dev:{n:'Moshi Dev Team',p:'tg',h:24,t:'14:21',pre:'Priya: Release notes đã xong, review giúp nhé',u:4,pin:1,bl:'#c3adff',v:3,grp:1},
+  han:{n:'Chị Hạnh – Khách sỉ',p:'zl',h:152,t:'14:12',pre:'Chuyển khoản rồi nha em',u:1,bl:'#ffc9a3',v:4},
+  mkt:{n:'Team Marketing 3HVN',p:'msg',h:200,t:'13:58',pre:'Quốc: Em ok ạ',u:5,muted:1,bl:'#9fe8c8',v:5,grp:1},
+  aur:{n:'Aurora Skincare',p:'ig',h:330,t:'13:40',draft:'Em gửi brief chi tiết trong chiều nay ạ, chị…',tags:['VIP'],bl:'#a9d4ff',v:2},
+  lin:{n:'linh.ng',p:'ig',h:48,t:'13:12',pre:'Chị rep em với nha',u:3,bl:'#ffdc5e',v:3},
+  me:{n:'Mẹ',p:'zl',h:350,t:'12:47',pre:'Con ăn cơm chưa? Tối về sớm nha con',u:1,tags:['Family'],close:1,bl:'#ffb3c7',v:4},
+  emm:{n:'Emma Watson (Client)',p:'wa',h:140,t:'11:30',pre:'Bạn: Dạ em gửi báo giá chiều nay ạ',mine:'read',bl:'#9fe8c8',v:5},
+  duy:{n:'Duy · #design-review',p:'sl',h:290,t:'11:02',pre:'Duy: Đã cập nhật file Figma, xem giúp mình',u:2,bl:'#c3adff',v:2},
+  inv:{n:'Hoá đơn tháng 10 – 3HVN',p:'gm',h:6,t:'09:15',pre:'Kính gửi anh/chị, hoá đơn điện tử số 0001245 đã được phát hành…',u:1,bl:'#ffc9a3',v:3},
+  tuk:{n:'Anh Tuấn Kiệt',p:'tg',h:210,t:'Yesterday',pre:'Bạn: Ok anh, 3h họp nhé',mine:'sent',bl:'#a9d4ff',v:4},
+  ngo:{n:'Bảo Ngọc',p:'msg',h:310,t:'Yesterday',pre:'Hihi tối nay đi cà phê không bà 😆',tags:['Best friend','Fun'],close:1,bl:'#ffdc5e',v:5}
+};
+const ini=n=>{const w=n.replace(/[^\p{L}\p{N}\s.]/gu,' ').split(/[\s.]+/).filter(Boolean);return ((w[0]||'')[0]+(w.length>1?w[w.length-1][0]:'')).toUpperCase()};
+const avatar=(d,c,sz='',badge=true)=> d==='c'
+  ? `<span class="av blob v${c.v} ${sz}" style="--bl:${c.bl}"><b></b>${badge?pb(c.p):''}</span>`
+  : `<span class="av ${sz}" style="--h:${c.h}"><b>${ini(c.n)}</b>${badge?pb(c.p):''}</span>`;
+
+/* ---------- list rows ---------- */
+function pv(c){
+  if(c.typing) return `<span class="typ"><span class="dots"><i></i><i></i><i></i></span>typing…</span>`;
+  if(c.draft) return `<span class="dr">Draft</span>${c.draft}`;
+  if(c.mine) return `<span class="rcpt ${c.mine==='read'?'read':''}">${I(c.mine==='read'?'checks':'check')}</span>${c.pre}`;
+  return c.pre;
+}
+function ind(c,d){
+  let s='';
+  if(c.pin) s+=I('pin');
+  if(c.muted) s+=I('bell-off');
+  if(c.close) s+=I('heart');
+  if(c.u) s+=`<span class="cnt ${c.muted?'mute':''}">${c.u}</span>`;
+  return s?`<span class="ind">${s}</span>`:'';
+}
+function row(d,c,o={}){
+  const cls=`row ${c.u&&!c.muted?'unread':''} ${c.sel?'sel':''} ${c.muted?'muted':''}`;
+  const ud=(c.u&&!c.muted&&d!=='c')?'<i class="ud"></i>':'';
+  const tg=(c.tags||[]).map(t=>tag(t,d==='c')).join('');
+  if(d==='b') return `<div class="${cls}">${ud}${avatar('b',c,'',false)}<div class="rb">
+    <div class="r1"><b class="nm">${c.n}</b><time>${c.t}</time></div>
+    <div class="r2 plat"><i class="dot" style="--pc:${PL[c.p].c}"></i><span class="pn">${PL[c.p].n}</span>${c.grp?'<span>· group</span>':''}${tg}</div>
+    <div class="r3"><span class="pv">${pv(c)}</span>${ind(c,d)}</div></div></div>`;
+  if(d==='c') return `<div class="${cls}">${avatar('c',c)}<div class="rb">
+    <div class="r1"><b class="nm">${c.n}</b><time>${c.t}</time></div>
+    <div class="r2"><span class="pv">${pv(c)}</span>${ind(c,d)}</div>${tg?`<div class="r3">${tg}</div>`:''}</div></div>`;
+  return `<div class="${cls}">${ud}${avatar('a',c)}<div class="rb">
+    <div class="r1"><b class="nm">${c.n}</b><span class="tgs">${tg}</span><time>${c.t}</time></div>
+    <div class="r2"><span class="pv">${pv(c)}</span>${ind(c,d)}</div></div></div>`;
+}
+const reqRow=d=>`<div class="req"><span class="rq-i">${I('userplus')}</span><div><b>Message requests</b><small>3 people you may not know</small></div>${I('chev-r','s')}</div>`;
+
+/* ---------- sidebar / rail ---------- */
+const WIN=`<div class="win"><i>${I('min')}</i><i>${I('max')}</i><i>${I('x')}</i></div>`;
+const allTags=d=>Object.keys(TAGS).map(t=>tag(t,d==='c')).join('');
+function side(d){
+  const plats=Object.keys(PL).map(p=>`<a class="nv"><span class="pdw">${pd(p,d==='c')}</span><span>${PL[p].n}</span><em>${PL[p].k}</em></a>`).join('');
+  const acc=`<div class="acc"><div class="ac">${avatar(d,CV.me&&{n:'Nguyễn Minh Anh',p:'msg',h:222,bl:'#c3adff',v:3},'xs',false)}<div><b>Nguyễn Minh Anh</b><small>minhanh.nguyen · Messenger</small></div><span class="cnt">7</span></div>${d==='c'?'':`<div class="ac">${avatar(d,{n:'minhanh creates',p:'ig',h:12,bl:'#ffc9a3',v:4},'xs',false)}<div><b>minhanh.creates</b><small>Instagram</small></div><span class="cnt mute">4</span></div>`}</div>`;
+  return `<aside class="side"><div class="brand"><svg class="mas"><use href="#mascot"/></svg><b>Moshi</b><span class="tgl">${I('panel-l','s')}</span></div>
+  <a class="nv on">${I('inbox')}<span>All inboxes</span><em>24</em></a>${plats}
+  <a class="nv">${I('todo')}<span>To-dos</span><em>3</em></a><a class="nv">${I('heart')}<span>Close friends</span></a>
+  <div class="nv-sec">Tags<button aria-label="New tag">${I('plus','s')}</button></div><div class="tags">${allTags(d)}</div>
+  ${acc}<a class="nv">${I('gear')}<span>Settings</span></a></aside>`;
+}
+function rail(){
+  const ri=(p)=>`<a class="ri" title="${PL[p].n}">${pd(p,false)}<em>${PL[p].k}</em></a>`;
+  return `<aside class="rail"><svg class="mas"><use href="#mascot"/></svg>
+  <a class="ri on" title="All inboxes">${I('inbox','l')}<em>24</em></a>${Object.keys(PL).map(ri).join('')}<hr>
+  <a class="ri" title="To-dos">${I('todo')}<em>3</em></a><a class="ri" title="Close friends">${I('heart')}</a><a class="ri" title="Tags">${I('tag')}</a>
+  <span class="sp"></span><a class="ri" title="Settings">${I('gear')}</a><a class="ri">${avatar('b',{n:'Nguyễn Minh Anh',p:'msg',h:222},'',false)}</a></aside>`;
+}
+function titlebar(d){
+  if(d==='a') return `<div class="tb"><div class="jump">${I('search-sm','s')}Search or jump to…<kbd>Ctrl K</kbd></div>${WIN}</div>`;
+  if(d==='b') return `<div class="tb"><span class="dt">Saturday, 10 October</span><span class="ed">11 unread · 3 requests</span>${WIN}</div>`;
+  return `<div class="tb"><div class="greet"><svg class="mas"><use href="#mascot"/></svg>Hey Anh, <em>11 unread today. Clear a few?</em></div>${WIN}</div>`;
+}
+
+/* ---------- list ---------- */
+function listHead(d){
+  const filt=`<div class="flt"><button class="on">All<em>24</em></button><button>Unread<em>11</em></button><button>Needs reply<em>8</em></button><button>Groups</button></div>`;
+  const srch=`<div class="srch">${I('search-sm','s')}<span>Search conversations…</span></div>`;
+  const sub=d==='b'?`<span class="sub">24 conversations</span>`:'';
+  return `<header class="lh"><h2>${d==='b'?'Inbox':'Messages'}</h2>${sub}<button class="ico" aria-label="New message">${I('edit')}</button></header>${srch}${filt}`;
+}
+function list(d){
+  const R=(k)=>row(d,CV[k]);
+  return `<section class="list">${listHead(d)}<div class="rows">${reqRow(d)}<div class="sec">Pinned</div>${R('lan')}${R('dev')}<div class="sec">Today</div>${R('han')}${R('mkt')}${R('aur')}${R('lin')}${R('me')}${R('emm')}${R('duy')}${R('inv')}${R('tuk')}</div></section>`;
+}
+
+/* ---------- chat ---------- */
+function chatHead(d,o={}){
+  const st=o.typing?`<span class="typ">typing…</span>`:`<span><i class="live"></i>Messenger · Active now</span>`;
+  const av=avatar(d,CV.lan,'sm',false);
+  const back=o.narrow?`<button class="back" aria-label="Back">${I('back')}<span>24</span></button>`:'';
+  let act;
+  if(d==='b') act=`<button class="ico" aria-label="Voice call">${I('phone')}</button><button class="ico" aria-label="Video call">${I('video')}</button><i class="sep"></i><button class="dtl ${o.det?'on':''}" data-act="det" aria-label="Details">${I('panel-r','s')}${o.narrow?'':'Details'}</button>`;
+  else if(d==='c') act=`<button class="ico call-v" aria-label="Voice call">${I('phone')}</button><button class="ico call-m" aria-label="Video call">${I('video')}</button>${o.narrow?'':`<button class="ico" aria-label="Search">${I('search')}</button>`}<button class="dtl ${o.det?'':'off'}" data-act="det">${I('panel-r','s')}${o.narrow?'':'Details'}</button>`;
+  else act=`<button class="ico" aria-label="Voice call">${I('phone')}</button><button class="ico" aria-label="Video call">${I('video')}</button>${o.narrow?'':`<i class="sep"></i><button class="ico" aria-label="Search">${I('search')}</button>`}<button class="ico ${o.det?'on':''}" data-act="det" aria-label="Details">${I('panel-r')}</button>`;
+  return `<header class="ch">${back}${av}<div class="ci"><b>${CV.lan.n}</b>${st}</div><div class="act">${act}</div></header>`;
+}
+const SUM=`<div class="sum">${I('spark','s')}<div><b>AI summary</b> Lan nhờ bạn duyệt Aurora Deck v3 trước 17:00 và kiểm tra màu in có bị lệch không.</div></div>`;
+const day=t=>`<div class="day"><span>${t}</span></div>`;
+function msgs(d,narrow){
+  const av=avatar(d,CV.lan,'xs',false);
+  const wave=[6,10,16,12,20,14,8,18,22,12,16,9,14,20,11,7,13,18,10,6].map((h,i)=>`<i class="${i<8?'p':''}" style="height:${h}px"></i>`).join('');
+  return `<div class="msgs">${day('Yesterday')}
+  <div class="mg in">${av}<div class="bs"><div class="b">Chị ơi, mai em gửi deck cho khách được không ạ?</div></div></div>
+  <div class="mg out"><div class="bs"><div class="b">Được em, nhớ gửi chị duyệt trước nhé 👍</div></div></div>
+  ${day('Today')}
+  <div class="mg in">${av}<div class="bs"><div class="b file"><span class="fi">${I('file')}</span><div><b>Aurora_Deck_v3.pdf</b><small>PDF · 4,2 MB</small></div></div>
+    <div class="b">Chị xem giúp em màu in có bị lệch không nhé</div>
+    <div class="b voice"><span class="pl">${I('play')}</span><span class="wv">${wave}</span><small>0:18</small></div></div></div>
+  <div class="mg out"><div class="bs"><div class="b reply hasrx"><span class="q"><b>Lan Phương</b>Chị xem giúp em màu in có bị…</span>Để chị check lại bảng màu CMYK rồi báo em nha<span class="rx">❤️</span></div><div class="rc">${I('checks')}Seen 14:31</div></div></div>
+  <div class="mg in">${av}<div class="bs"><div class="b">Chị duyệt giúp em trước 5h nhé 🙏</div></div></div>
+  <div class="mg in">${av}<div class="bs"><div class="b typ"><span class="dots"><i></i><i></i><i></i></span></div></div></div></div>`;
+}
+function composer(d,st='sug'){
+  const sug=st==='sug'?`<div class="sug"><span class="sl" aria-label="Suggested replies">${I('spark','xs')}<span class="t">Suggested</span></span><button>Chị xem rồi, ổn nhé 👍</button><button>Cho chị 15 phút nha</button><button>Chiều gửi bản sửa</button></div>`:'';
+  const L=`<button class="ico" aria-label="Attach">${I('clip')}</button>`;
+  const T=`<button class="ico hide-n" aria-label="Emoji">${I('smile')}</button><button class="ico hide-n" aria-label="Sticker">${I('sticker')}</button><button class="ico" aria-label="GIF">${I('gif')}</button>`;
+  let mid;
+  if(st==='typed') mid=`${L}<div class="in typed">Để chị check lại bảng màu CMYK rồi báo em nha<i class="caret"></i></div>${T}<button class="later" aria-label="Send later">${I('clock','s')}Send later</button><button class="send" aria-label="Send">${I('send')}</button>`;
+  else if(st==='rec') mid=`<button class="ico" aria-label="Cancel recording" style="color:var(--danger)">${I('trash')}</button><div class="in typed" style="display:flex;align-items:center;gap:10px"><i style="width:8px;height:8px;border-radius:50%;background:var(--danger)"></i><span style="font-variant-numeric:tabular-nums;font-weight:600">0:07</span><span class="wv" style="flex:1">${[8,14,10,20,16,8,12,22,14,9,18,12,7,15,20,11,8,13].map(h=>`<i class="p" style="height:${h}px"></i>`).join('')}</span><span style="color:var(--ink3);font-size:12.5px">Slide to cancel</span></div><button class="send" aria-label="Stop and send">${I('send')}</button>`;
+  else mid=`${L}<div class="in">Message Lan Phương…</div>${T}<button class="ico mic" aria-label="Voice message">${I('mic')}</button><button class="send off" aria-label="Send" disabled>${I('send')}</button>`;
+  return `<div class="cmp-wrap">${sug}<div class="cmp">${mid}</div></div>`;
+}
+function detailsPane(d){
+  const g=[262,24,152,330,200,48].map(h=>`<i style="--h:${h}"></i>`).join('');
+  const cols=['#ffb3c7','#9fe8c8','#ffdc5e','#c3adff','#a9d4ff','#ffc9a3'];
+  const grid=d==='c'?cols.map(c=>`<i style="--bl:${c}"></i>`).join(''):g;
+  return `<aside class="det"><div class="dh">Details<button class="ico" data-act="det" aria-label="Close">${I('x','s')}</button></div>
+  <div class="who">${avatar(d,CV.lan,'lg')}<b>Lan Phương</b><span>Messenger · lan.phuong.design</span></div>
+  <div class="dtabs"><button class="on">Info</button><button>Search</button><button>Media</button><button>Links</button><button>Files</button></div>
+  <div class="dbody"><div class="dsec">Tags</div><div style="display:flex;gap:6px;padding:4px 0">${tag('Work',d==='c')}<span class="tg" style="--tgb:var(--surf2);--ti:var(--ink2)">${I('plus','xs')}Add</span></div>
+  <div class="drow">${I('heart')}<span>Close friend</span><i class="tgl-sw on"></i></div>
+  <div class="drow">${I('bell-off')}<span>Mute</span><i class="tgl-sw"></i></div>
+  <div class="drow">${I('clock')}<span>Send later</span><small>Tomorrow 08:00</small></div>
+  <div class="drow">${I('todo')}<span>Duyệt Aurora Deck v3</span><small>17:00</small></div>
+  <div class="dsec">Media</div><div class="mgrid">${grid}</div></div></aside>`;
+}
+function callBanner(d){
+  const av=`<span class="av" style="--h:262;position:relative">${d==='c'?'':''}<b>${ini('Lan Phương')}</b><i class="ring"></i></span>`;
+  const cav=`<span class="av blob v2" style="--bl:#ffb3c7;position:relative"><b></b><i class="ring"></i></span>`;
+  if(d==='b') return `<div class="call">${avatar('b',CV.lan,'',false)}<div class="ct"><b>Lan Phương is calling</b><span>Messenger · voice call</span></div><button class="tx dec">Decline</button><button class="tx ans">Answer</button></div>`;
+  return `<div class="call">${d==='c'?cav:av}<div class="ct"><b>${CV.lan.n}</b><span>${d==='c'?'<span class="wave"><i></i><i></i><i></i><i></i></span>':''}Messenger · incoming voice call</span></div><button class="cb dec" aria-label="Decline">${I('phone')}</button><button class="cb ans" aria-label="Answer">${I('phone')}</button></div>`;
+}
+function emptyState(d){
+  if(d==='b') return `<div class="empty"><svg class="mas"><use href="#mascot-sleepy"/></svg><h3>Nothing open. <em>Pick a conversation</em> to begin.</h3><p>Everything from Messenger, Instagram, Telegram, Zalo, WhatsApp, Gmail and Slack, in one inbox.</p><span class="btn">New message</span></div>`;
+  if(d==='c') return `<div class="empty"><i class="bl" style="left:54px;top:70px;width:120px;height:120px;background:var(--pk);border-radius:55% 45% 50% 50%/50% 55% 45% 50%"></i><i class="bl" style="right:70px;top:150px;width:90px;height:90px;background:var(--sk);border-radius:48% 52% 60% 40%/52% 48% 52% 48%"></i><i class="bl" style="left:120px;bottom:90px;width:70px;height:70px;background:var(--yl);border-radius:50%"></i><i class="bl" style="right:100px;bottom:70px;width:130px;height:130px;background:var(--mt);border-radius:60% 40% 50% 50%/45% 55% 45% 55%"></i><svg class="mas"><use href="#mascot-sleepy"/></svg><h3>Pick a chat to wake me up</h3><p>All of your Messenger, Instagram, Telegram, Zalo, WhatsApp, Gmail and Slack messages live here.</p><span class="btn">New message <kbd>Ctrl N</kbd></span></div>`;
+  return `<div class="empty"><svg class="mas"><use href="#mascot-sleepy"/></svg><h3>Select a conversation</h3><p>All of your Messenger, Instagram, Telegram, Zalo, WhatsApp, Gmail and Slack messages, in one place.</p><span class="btn">New message <kbd>Ctrl N</kbd></span></div>`;
+}
+function bg(d){return '<div class="bg"></div>'}
+function screen(d,o={}){
+  const cls=`mk m m-${d} ${o.det?'show-det':''} ${o.call?'show-call':''} ${o.empty?'is-empty':''}`;
+  const left=d==='b'?rail():side(d);
+  return `<div class="${cls}" data-dir="${d}">${bg(d)}${titlebar(d)}<div class="bd">${left}${list(d)}<section class="chat">${chatHead(d,{typing:1,det:o.det})}${SUM}${msgs(d)}${composer(d,'sug')}${emptyState(d)}</section>${detailsPane(d)}</div><div class="callpos">${callBanner(d)}</div></div>`;
+}
+
+/* ---------- fragments ---------- */
+const frag=(d,inner,cls='')=>`<div class="mk m-${d} frag ${cls}">${inner}</div>`;
+function headerFrags(d){
+  return frag(d,chatHead(d,{typing:0}),'wide')+frag(d,chatHead(d,{typing:1,det:1}),'wide');
+}
+function anatomyFrags(d){
+  const N={
+   a:['Unread + pinned: unread dot at the edge, bold name, time in accent, count, pin','Selected + typing: live dots replace the preview; pin stays','Muted: bell-off icon, count turns neutral, no unread dot','Draft: "Draft" in danger colour keeps the unsent line findable','Tag chip + close friend: pastel slab, no outline; heart marks close friends','My last message: read receipt in accent (sent = grey single check)','Platform badge on the avatar: Slack, Gmail, WhatsApp share one 46% badge'],
+   b:['Unread + pinned: dot at the edge, bold serif name, count as accent number (no pill), pin','Selected + typing: ink bar at the edge, live dots replace the preview','Muted: bell-off icon, count turns neutral grey, no unread dot','Draft: "Draft" in danger colour, preview runs to two lines','Tag slab sits on the platform line; close friends carry a heart','My last message: read receipt in accent (sent = grey single check)','Inline platform chip replaces the avatar badge; Slack, Gmail stay legible at 12px'],
+   c:['Unread + pinned: bold name, time in black, lilac count pill, pin. Colour does the job, so no dot','Selected + typing: the row lifts onto a white sheet; live dots replace the preview','Muted: bell-off icon, count turns neutral grey','Draft: "Draft" in danger colour, tag slab drops to its own line','Tag slab on its own third line; close friends carry a heart','My last message: read receipt in green (sent = grey single check)','Platform badge on the blob avatar, 46% of its size, 3px paper ring']}[d];
+  const set=[['dev',N[0]],['lan',N[1]],['mkt',N[2]],['aur',N[3]],['me',N[4]],['emm',N[5]],['duy',N[6]]];
+  return set.map(([k,t],i)=>{const c=Object.assign({},CV[k]);if(k==='lan')c.sel=1;if(k!=='lan')c.sel=0;
+    return `<div class="an">${frag(d,`<div class="rows" style="padding:${d==='c'?'0':'0 8px'}">${row(d,c)}</div>`,'rowf')}<p class="pg-note"><b>${i+1}</b>${t}</p></div>`}).join('');
+}
+function composerFrags(d){
+  const f=(st,lab)=>`<div class="cf">${frag(d,`<div class="cwrap">${composer(d,st)}</div>`,'compf')}<p class="pg-note"><b>${lab[0]}</b>${lab[1]}</p></div>`;
+  return f('sug',['1','Idle + AI reply suggestions: three chips above the pill, generated from the last incoming message'])+
+         f('typed',['2','Typing: send becomes primary, "Send later" surfaces beside it (clock)'])+
+         f('rec',['3','Voice note recording: delete, live level, slide to cancel, stop-and-send'])+
+         f('none',['4','Empty field: send is visibly disabled; mic is the one affordance that stays'].concat());
+}
+function narrowFrames(d){
+  const rows=['dev','lan','han','mkt','aur','lin'].map(k=>row(d,CV[k])).join('');
+  const chips=`<div class="plat-chips"><button class="on">All 24</button>${['msg','ig','tg','zl'].map(p=>`<button>${pd(p,d==='c')}${PL[p].n}</button>`).join('')}</div>`;
+  const tab=`<nav class="tabbar"><a class="on">${I('inbox')}<span>Chats</span></a><a>${I('todo')}<span>To-dos</span></a><a>${I('heart')}<span>Close</span></a><a>${I('gear')}<span>Settings</span></a></nav>`;
+  const L=`<div class="nf mk m-${d}"><div class="ntb">Moshi · window narrower than 720 px</div><section class="list" style="height:calc(100% - 36px)"><header class="lh"><h2>${d==='b'?'Inbox':'Messages'}</h2><button class="ico">${I('edit')}</button></header><div class="srch">${I('search-sm','s')}<span>Search conversations</span></div>${chips}<div class="rows">${reqRow(d)}${rows}</div></section>${tab}</div>`;
+  const C=`<div class="nf mk m-${d}"><div class="ntb">Moshi · conversation</div><section class="chat" style="height:calc(100% - 36px);box-shadow:none">${chatHead(d,{narrow:1})}${msgs(d,1)}${composer(d,'sug')}</section></div>`;
+  return L+C;
+}
+
+const R={screen:(el)=>screen(el.dataset.dir,{det:el.dataset.det==='1',call:el.dataset.call==='1',empty:el.dataset.empty==='1'}),
+  headers:el=>headerFrags(el.dataset.dir),anatomy:el=>anatomyFrags(el.dataset.dir),composer:el=>composerFrags(el.dataset.dir),
+  call:el=>frag(el.dataset.dir,`<div class="callwrap">${callBanner(el.dataset.dir)}</div>`,'callf'),narrow:el=>narrowFrames(el.dataset.dir)};
+document.querySelectorAll('[data-mount]').forEach(el=>{el.innerHTML=R[el.dataset.mount](el)});
+
+/* ---------- interactions ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act="det"]');
+  if(t){const m=t.closest('.m');if(m){m.classList.toggle('show-det');const b=document.querySelector('[data-tog=show-det][data-target="'+m.parentElement.parentElement.id+'"]');if(b)b.setAttribute('aria-pressed',String(m.classList.contains('show-det')))}}
+  const tg=e.target.closest('[data-tog]');
+  if(tg){const m=document.getElementById(tg.dataset.target).querySelector('.m');m.classList.toggle(tg.dataset.tog);tg.setAttribute('aria-pressed',String(m.classList.contains(tg.dataset.tog)))}
+});
+document.querySelectorAll('[data-tog]').forEach(b=>b.setAttribute('aria-pressed','false'));
+
+/* fit stages to the available width */
+function fit(){document.querySelectorAll('.stage').forEach(s=>{const k=Math.min(1,s.clientWidth/1240);s.style.setProperty('--k',k);s.style.height=(800*k)+'px';})}
+addEventListener('resize',fit);fit();document.fonts&&document.fonts.ready.then(fit);
+
+/* theme toggle */
+const root=document.documentElement;
+function setTheme(t){root.dataset.theme=t;const b=document.getElementById('themeBtn');if(b){b.setAttribute('aria-pressed',String(t==='dark'));b.querySelector('span').textContent=t==='dark'?'Dark':'Light'}try{localStorage.setItem('moshi-prop-theme',t)}catch(e){}}
+let saved=null;try{saved=localStorage.getItem('moshi-prop-theme')}catch(e){}
+setTheme(saved||'light');
+document.getElementById('themeBtn').addEventListener('click',()=>setTheme(root.dataset.theme==='dark'?'light':'dark'));
+})();
+</script></body></html>
