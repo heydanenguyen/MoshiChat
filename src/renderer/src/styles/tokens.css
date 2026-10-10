@@ -249,3 +249,27 @@
   --bubble-out-shadow: 0 0 0 0 transparent;
   --row-selected: rgba(134, 164, 255, 0.12);
 }
+
+/* phase 3: solid panels. Neutral colours of the Moshi look (any accent): the window, the paper of the list, chat and details,
+   the incoming bubble / search fill, the two window tints, the bottom tab bar of a narrow window. A dark base the person
+   picked (App.tsx sets --dark-*) moves them along. Only the Quiet Glass rules read them. */
+:root {
+  --bg: #f1f3f8;
+  --surface: #ffffff;
+  --bub-in: #eef0f5;
+  --tint-a: #dbe4ff;
+  --tint-b: #ece2ff;
+  --tabbar-height: 64px;
+}
+:root[data-theme='dark'] {
+  --bg: var(--dark-base, #0d0f14);
+  --surface: var(--dark-surface, #16181f);
+  --bub-in: var(--dark-bub-in, #20232d);
+  --tint-a: #1a2447;
+  --tint-b: #2a1f4a;
+}
+/* incoming bubbles take the flat fill, with no hairline (the fill reads on paper by itself) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) {
+  --bubble-in: var(--bub-in);
+  --bubble-in-ring: inset 0 0 0 0 transparent;
+}

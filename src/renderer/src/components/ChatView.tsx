@@ -1,12 +1,12 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { isPendingRequest } from '@shared/inbox'
+import { isChatMuted, isPendingRequest } from '@shared/inbox'
 import { BellOff, Check, ChevronDown, ChevronLeft, Columns2, Copy, File, Forward, Info, Languages, ListTodo, MoreHorizontal, Pause, Phone, Play, Plus, Reply, SmilePlus, Sparkles, Undo2, UserRoundPlus, Video, Volume2, X } from 'lucide-react'
 import type { Account, Attachment, BubbleAction, Conversation, Message, Platform } from '@shared/types'
 import { BUBBLE_ACTIONS } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
-import { anchorFor, bubbleVarsOf, useSendVia, useShownConversations, useStore, useT, useThread } from '../store'
+import { anchorFor, bubbleVarsOf, unreadCounts, useSendVia, useShownConversations, useStore, useT, useThread } from '../store'
 import { canCall } from '../calls'
 import { PlatformIcon } from './PlatformIcon'
 import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, relayReason, sectionize, tip, withStickers, type MessageGroup } from '../utils'
@@ -43,6 +43,8 @@ import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
 import { nextPinned } from '../scrollPin'
 import { isQuietStyle } from '../rowState'
+import { remainingUnread } from '../narrowNav'
+import { formatBadge } from '../quickFilter'
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏']
 
@@ -224,6 +226,11 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   const addDroppedFiles = useStore((s) => s.addDroppedFiles)
   const narrow = useStore((s) => s.narrow)
   const select = useStore((s) => s.select)
+  // Narrow Moshi look: the Back button carries what is still unread elsewhere (a number, so only a change redraws the header).
+  const trimmed = quiet && narrow
+  const unreadAll = useStore((s) => (trimmed ? unreadCounts(s.conversations, s.settings.tags, s.settings.muted, s.settings.markedUnread, s.settings.mentionsOnly, s.settings.acceptedRequests, s.settings.people).total : 0))
+  const mutedHere = useStore((s) => trimmed && isChatMuted({ muted: s.settings.muted, tags: s.settings.tags }, conversation))
+  const backCount = remainingUnread(unreadAll, mutedHere ? 0 : conversation.unreadCount)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   useScrollFade(scrollRef)
@@ -496,8 +503,9 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
       {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
       <header className="chat-header drag">
         {narrow && (
-          <button className="icon-btn no-drag" onClick={() => withViewTransition('to-list', () => select(undefined))} title={t('back')}>
+          <button className={quiet ? 'icon-btn no-drag chat-back' : 'icon-btn no-drag'} onClick={() => withViewTransition('to-list', () => select(undefined))} title={t('back')} aria-label={trimmed && backCount > 0 ? `${t('back')}, ${backCount}` : undefined}>
             <ChevronLeft size={20} strokeWidth={2.4} />
+            {trimmed && backCount > 0 && <span className="chat-back-count">{formatBadge(backCount)}</span>}
           </button>
         )}
         <Avatar name={conversation.title} url={conversation.avatarUrl} size={quiet ? 36 : 34} onClick={() => withViewTransition('details', () => toggleDetails('info'))} />
@@ -514,8 +522,8 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
               <Columns2 size={18} strokeWidth={2} />
             </button>
           )}
-          {laterOn && <LaterButton conversationId={conversation.id} />}
-          <SummaryButton conversationId={conversation.id} />
+          {laterOn && !trimmed && <LaterButton conversationId={conversation.id} />}
+          {!trimmed && <SummaryButton conversationId={conversation.id} />}
           <CallButtons conversationId={viaConversation.id} features={features} status={account?.status} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => withViewTransition('details', () => toggleDetails())} title={t('details')}>
             <Info size={18} strokeWidth={2} />

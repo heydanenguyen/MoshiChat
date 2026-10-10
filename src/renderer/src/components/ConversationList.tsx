@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { createPortal } from 'react-dom'
 import { useScrollFade } from '../scrollFade'
@@ -18,17 +18,20 @@ import {
   Columns2,
   EyeOff,
   Heart,
+  Inbox,
+  ListTodo,
   MoreHorizontal,
   Pin,
   PinOff,
   Search,
+  Settings,
   Link2,
   SquarePen,
   UserRoundPlus,
   X
 } from 'lucide-react'
 import { PLATFORMS, type Conversation, type Language, type MessageStatus, type Platform, type TagMeta } from '@shared/types'
-import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs } from '../store'
+import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { PlatformIcon } from './PlatformIcon'
 import { formatBadge, isUnread } from '../quickFilter'
 import { formatListTime, modKey, shortcutLabel } from '../utils'
@@ -39,6 +42,7 @@ import { withViewTransition } from '../viewTransition'
 import { flipMoves, reordered } from '../flip'
 import { icon } from '../icons'
 import { isQuietStyle, rowState } from '../rowState'
+import { narrowChips, toolbarStep } from '../narrowNav'
 
 /** Drag payload type for a chat row (dropped onto a pane of the chat area). */
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
@@ -356,6 +360,7 @@ export function ConversationList(): JSX.Element {
   const drafts = useStore((s) => s.drafts)
   const pals = useStore((s) => s.settings.style === 'pals')
   const quiet = useStore((s) => isQuietStyle(s.settings.style))
+  const narrow = useStore((s) => s.narrow)
   // How my last message stands, for the chats that were opened (message id -> status). One string, so the list only
   // redraws when a receipt changes; the Moshi look is the only one that shows it.
   const receiptKey = useStore((s) => {
@@ -628,6 +633,7 @@ export function ConversationList(): JSX.Element {
         )}
       </div>
 
+      {quiet && narrow && listView === 'inbox' && <NarrowChips />}
       {!searching && listView === 'inbox' && <AccountFilters />}
       {!searching && listView === 'inbox' && (counts.all > 0 || quickFilter !== 'all') && <QuickFilters counts={counts} />}
       {!searching && listView === 'requests' && <p className="requests-note">{t('requestsNote')}</p>}
@@ -750,6 +756,15 @@ export function ConversationList(): JSX.Element {
           </>
         )}
       </div>
+
+      {quiet && narrow && (
+        <NarrowTabs
+          onChats={() => {
+            setListView('inbox')
+            listRef.current?.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+          }}
+        />
+      )}
 
       {/* Rendered at the document root: the glass column would otherwise clip a fixed menu. */}
       {menuMounted &&
@@ -931,6 +946,71 @@ export function ConversationList(): JSX.Element {
           document.body
         )}
     </section>
+  )
+}
+
+/**
+ * Narrow Moshi look: the sidebar is gone below 720 px, so its app filter comes back as a row of chips under the search.
+ * A toolbar of toggle buttons: one tab stop, the arrow keys move between the chips.
+ */
+function NarrowChips(): JSX.Element {
+  const t = useT()
+  const accounts = useStore((s) => s.accounts)
+  const filter = useStore((s) => s.filter)
+  const setFilter = useStore((s) => s.setFilter)
+  const unread = useUnreadCounts()
+  const chips = useMemo(() => narrowChips(Object.values(accounts), unread.byPlatform, t('quickAll')), [accounts, unread.byPlatform, t])
+  const picked = chips.findIndex((chip) => chip.id === filter)
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button')]
+    const next = toolbarStep(e.key, buttons.indexOf(document.activeElement as HTMLButtonElement), buttons.length)
+    if (next === undefined) return
+    e.preventDefault()
+    buttons[next].focus()
+    buttons[next].scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }
+  return (
+    <div className="plat-chips" role="toolbar" aria-label={t('inboxes')} onKeyDown={onKeyDown}>
+      {chips.map((chip, i) => (
+        <button key={chip.id} type="button" className={`plat-chip ${filter === chip.id ? 'on' : ''}`} aria-pressed={filter === chip.id} tabIndex={i === Math.max(0, picked) ? 0 : -1} onClick={() => setFilter(chip.id)}>
+          {chip.id !== 'all' && <PlatformIcon platform={chip.id} size={20} />}
+          <span className="plat-chip-label">{chip.label}</span>
+          {chip.count > 0 && <em>{formatBadge(chip.count)}</em>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Narrow Moshi look: the bottom bar of the list screen, standing in for the sidebar's other entries. */
+function NarrowTabs({ onChats }: { onChats: () => void }): JSX.Element {
+  const t = useT()
+  const openSheet = useStore((s) => s.openSheet)
+  const todosOn = useStore((s) => s.settings.todosOn !== false)
+  const closeFriends = useStore((s) => s.settings.closeFriends !== false)
+  return (
+    <nav className="narrow-tabs" aria-label={t('appName')}>
+      <button type="button" className="narrow-tab on" aria-current="page" onClick={onChats}>
+        <Inbox {...icon(22)} aria-hidden />
+        <span>{t('tabChats')}</span>
+      </button>
+      {todosOn && (
+        <button type="button" className="narrow-tab" onClick={() => openSheet({ kind: 'todos' })}>
+          <ListTodo {...icon(22)} aria-hidden />
+          <span>{t('tabTodos')}</span>
+        </button>
+      )}
+      {closeFriends && (
+        <button type="button" className="narrow-tab" aria-label={t('insights')} onClick={() => openSheet({ kind: 'insights' })}>
+          <Heart {...icon(22)} aria-hidden />
+          <span>{t('tabClose')}</span>
+        </button>
+      )}
+      <button type="button" className="narrow-tab" onClick={() => openSheet({ kind: 'settings' })}>
+        <Settings {...icon(22)} aria-hidden />
+        <span>{t('tabSettings')}</span>
+      </button>
+    </nav>
   )
 }
 

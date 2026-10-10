@@ -94,7 +94,10 @@ export function darkBaseVars(hex: string): Record<string, string> {
     '--dark-glass': `rgba(${glass}, 0.62)`,
     '--dark-glass-strong': `rgba(${glass}, 0.82)`,
     '--dark-elevated': `rgba(${lift(base, 19).join(', ')}, 0.96)`,
-    '--dark-ring-gap': toHex(lift(base, 11))
+    '--dark-ring-gap': toHex(lift(base, 11)),
+    // the flat paper of the Moshi look's list and chat (with no base picked it is #16181f over the #0d0f14 window)
+    '--dark-surface': toHex(lift(base, 9)),
+    '--dark-bub-in': toHex(lift(base, 19))
   }
 }
 

@@ -13015,6 +13015,7 @@ button.moment-card:hover {
   :root {
     --glass: #f8f9fc !important;
     --glass-strong: #ffffff !important;
+    --glass-pill: #f8f9fc !important;
     --liquid-pane: #eef0f6 !important;
     --bg-elevated: #ffffff !important;
     --bg-input: #ffffff !important;
@@ -13023,6 +13024,7 @@ button.moment-card:hover {
   :root[data-theme='dark'] {
     --glass: var(--bg-sidebar-solid) !important;
     --glass-strong: color-mix(in srgb, var(--bg-sidebar-solid) 90%, white 6%) !important;
+    --glass-pill: var(--bg-sidebar-solid) !important;
     --liquid-pane: var(--bg-window) !important;
     --bg-elevated: color-mix(in srgb, var(--bg-sidebar-solid) 92%, white 5%) !important;
     --bg-input: color-mix(in srgb, var(--bg-sidebar-solid) 88%, white 8%) !important;
@@ -16646,5 +16648,340 @@ html[data-vt='details']::view-transition-new(vt-chat) {
 @keyframes quiet-call-fade-out {
   to {
     opacity: 0;
+  }
+}
+
+/* ================================================================== Quiet Glass (UI direction A, phase 3)
+   Solid columns: the window is a flat colour with two soft tints, the sidebar sits straight on it, the list, chat and
+   details are flat paper split by hairlines, and glass is left in two places only (the title bar and the composer pill).
+   Pickers, menus, sheets, toasts and the call card float above the paper and keep their own glass. */
+
+/* window: the default backdrop (no mesh picked) becomes --bg with the two tints; a mesh the person picked keeps its blobs */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh {
+  background:
+    radial-gradient(700px 320px at 8% -8%, var(--tint-a) 0, transparent 70%),
+    radial-gradient(560px 280px at 96% -12%, var(--tint-b) 0, transparent 70%),
+    var(--bg);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh-blob {
+  display: none;
+}
+
+/* the title bar: the one glass bar, a hairline under it */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .titlebar {
+  background: var(--glass-pill);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+  box-shadow: 0 1px 0 var(--separator);
+}
+
+/* columns touch: no gutter, no rounded panels, no blur, no border (the hairlines are box-shadows, so widths do not change) */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .app,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .app.sidebar-collapsed {
+  gap: 0;
+  padding: 0;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .sidebar {
+  padding-top: 4px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-area {
+  gap: 0;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.list-col, .chat-col, .details-col) {
+  background: var(--surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.chat-col, .details-col) {
+  box-shadow: -1px 0 0 var(--separator);
+}
+/* a wallpaper still paints inside the chat column; its header only needs the tint, nothing sits behind it to blur */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-col.has-wallpaper .chat-header {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* the details float over the chat on mid-width windows (and beside a split): a card edge, flush with the window */
+@media (max-width: 1229px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .details-col {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    box-shadow:
+      -16px 0 40px -16px rgba(15, 20, 50, 0.28),
+      -1px 0 0 var(--separator);
+  }
+}
+@media (max-width: 1600px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .app.split .details-col {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    box-shadow:
+      -16px 0 40px -16px rgba(15, 20, 50, 0.28),
+      -1px 0 0 var(--separator);
+  }
+}
+@media (max-width: 720px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .details-col {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+}
+
+/* the search field needs a fill of its own on paper */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .search-field input {
+  background: var(--bub-in);
+}
+
+/* the thread: 24 at the sides in a wide chat (narrow chats keep their own padding), flat bubbles, plain day labels */
+@container chat (width > 620px) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-scroll {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble {
+  border-radius: 18px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.in {
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.out {
+  box-shadow: var(--bubble-out-ring, 0 0 0 0 transparent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.in:is(.first:not(.last), .middle),
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.in:is(.last, .single) {
+  border-bottom-left-radius: 6px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.in:is(.last:not(.first), .middle) {
+  border-top-left-radius: 6px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.out:is(.first:not(.last), .middle),
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.out:is(.last, .single) {
+  border-bottom-right-radius: 6px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .bubble.out:is(.last:not(.first), .middle) {
+  border-top-right-radius: 6px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-bubble {
+  border-radius: 18px 18px 18px 6px;
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .day-sep {
+  padding: 0;
+  margin: 12px 0 8px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+/* nothing selected: paper, the mascot at 72, one accent button */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-state {
+  gap: 12px;
+  background: var(--surface);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-buddy {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 0;
+  filter: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-body {
+  max-width: 320px;
+  font-size: 13.5px;
+  line-height: 20px;
+  color: var(--text-secondary);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-cta {
+  height: 36px;
+  margin-top: 4px;
+  padding: 0 16px;
+  border-radius: 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-cta:hover {
+  background: var(--accent-hover);
+  box-shadow: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-cta:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .empty-cta kbd {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  opacity: 1;
+}
+
+/* narrow window (<= 720 px): the sidebar is gone, so its app filter becomes chips under the search ... */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chips {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 0 16px 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chips::-webkit-scrollbar {
+  display: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 6px;
+  border-radius: 15px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-spring),
+    color var(--duration-fast) var(--ease-spring);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip:first-child {
+  padding-left: 10px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip:hover {
+  background: var(--bg-active);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip.on,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip.on:hover {
+  background: var(--text-primary);
+  color: var(--surface);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+/* ... and the other entries become a tab bar on glass at the foot of the list */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tabs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: var(--tabbar-height);
+  padding: 0 8px 6px;
+  background: var(--glass-pill);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 -1px 0 var(--separator);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 64px;
+  height: 48px;
+  padding: 0 8px;
+  border-radius: 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-spring),
+    color var(--duration-fast) var(--ease-spring);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab:hover {
+  background: var(--nv-on);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab.on {
+  color: var(--accent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip:focus-visible,
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .app.narrow .conv-list {
+  padding-bottom: calc(var(--space-2) + 70px);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .plat-chip,
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .narrow-tab {
+    transition: none;
+  }
+}
+
+/* narrow chat: a 60 high header, Back with what is unread elsewhere beside the chevron */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .app.narrow .chat-header {
+  height: 60px;
+  gap: 8px;
+  padding: 0 8px 0 4px;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-back {
+  width: auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-radius: 18px;
+  color: var(--accent);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 600;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-back:hover {
+  color: var(--accent);
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-back:active {
+  transform: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .chat-back-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced transparency paints every incoming bubble white; on phase 3's white paper that would vanish, so the
+   default style keeps its own incoming tint (the dark branch is already distinguishable). */
+@media (prefers-reduced-transparency: reduce) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) {
+    --bubble-in: var(--bub-in) !important;
   }
 }
