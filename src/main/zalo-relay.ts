@@ -12,6 +12,7 @@ import {
   RELAY_DAYS,
   RELAY_MAX_BYTES,
   RELAY_MEDIA_MAX,
+  RELAY_SEND_TIMEOUT_MS,
   RELAY_VERSION,
   extFor,
   mediaUrlOf,
@@ -43,8 +44,8 @@ const STATE_FULL_EVERY_MS = 30 * 60_000
 const STATE_DEBOUNCE_MS = 15_000
 const WATCH_MS = 5_000
 const OUTBOX_EVERY_MS = 20_000
-/** A queued message older than this is not sent any more: the reader gave up on it long ago, and sending now would duplicate. */
-const OUTBOX_EXPIRES_MS = 30 * 60_000
+/** A queued message older than this is not sent any more: the reader already marked it failed (same constant), and sending now would duplicate. */
+const OUTBOX_EXPIRES_MS = RELAY_SEND_TIMEOUT_MS
 /** One send (or upload) may take this long before it is answered with a timeout and the next item goes on. */
 const SEND_TIMEOUT_MS = 60_000
 /** Acks older than this are forgotten (a queued message that old is expired anyway). */

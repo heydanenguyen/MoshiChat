@@ -570,6 +570,18 @@ describe('relay writer in a sync folder', () => {
     expect(acks['f-2']).toMatchObject({ msgId: 'z-ok' })
   })
 
+  it('expires a queued message after the 10 minute send timeout the reader uses, not later', async () => {
+    const { relay, zalo, key, ownerDir } = await setup()
+    await relay.enable()
+    writeOutbox(ownerDir, key, 'home', [
+      { ...queued('h-old'), at: Date.now() - 11 * 60_000 },
+      { ...queued('h-new'), at: Date.now() - 9 * 60_000 }
+    ])
+    await relay.pollNow()
+    expect(zalo.sent).toHaveLength(1)
+    expect(readAcks(ownerDir, key)['h-old']).toMatchObject({ error: 'expired' })
+  })
+
   it('does not expire a seen mark, and expires a message whose time is not a number', async () => {
     const { relay, zalo, key, ownerDir } = await setup()
     await relay.enable()

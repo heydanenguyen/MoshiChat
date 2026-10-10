@@ -10,3 +10,6 @@ design/mito/giphy
 # The macOS cut-out helper, built from scripts/mac-cutout by scripts/build-mac-cutout.mjs
 resources/bin
 __pycache__/
+
+# Subagent-driven-development working notes
+.superpowers/

@@ -207,6 +207,53 @@ describe('A Zalo socket that drops', () => {
     }
   })
 
+  it('waits out Zalo holding the web session for a minute after a call, then takes a 3000 for a sign-out', () => {
+    vi.useFakeTimers()
+    try {
+      const { emitted, listener, api } = setup()
+      const adapter = lastAdapter as unknown as { api: unknown; account: { status: string }; pauseForCall(): void; resumeAfterCall(): void }
+      adapter.api = api
+      const start = vi.fn()
+      Object.assign(listener, { stop: vi.fn(), start })
+      adapter.pauseForCall()
+      adapter.account.status = 'connecting'
+      adapter.resumeAfterCall()
+      // more than three 3000s inside the minute (the old count would have given up): still connecting, still restarting
+      for (let i = 0; i < 5; i++) {
+        listener.emit('closed', 3000, '')
+        expect(statusOf(emitted)).toBe('connecting')
+        vi.advanceTimersByTime(8_000)
+      }
+      expect(start).toHaveBeenCalled()
+      listener.emit('closed', 3003, '')
+      expect(statusOf(emitted)).toBe('connecting')
+      // past the minute the usual rule applies
+      vi.advanceTimersByTime(30_000)
+      listener.emit('closed', 3000, '')
+      expect(statusOf(emitted)).toBe('needs_auth')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ends the post-call grace once a socket really comes up', () => {
+    vi.useFakeTimers()
+    try {
+      const { emitted, listener, api } = setup()
+      const adapter = lastAdapter as unknown as { api: unknown; account: { status: string }; pauseForCall(): void; resumeAfterCall(): void }
+      adapter.api = api
+      Object.assign(listener, { stop: vi.fn(), start: vi.fn() })
+      adapter.pauseForCall()
+      adapter.account.status = 'connecting'
+      adapter.resumeAfterCall()
+      listener.emit('cipher_key', 'key')
+      listener.emit('closed', 3000, '')
+      expect(statusOf(emitted)).toBe('needs_auth')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('is not started again when Zalo signed the session out', () => {
     vi.useFakeTimers()
     try {

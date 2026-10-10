@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Settings } from '../src/shared/types'
-import { orphanedSettingsPatch, stripMainOwned } from '../src/main/settings-guard'
+import { orphanedSettingsPatch, shouldQuitOnMainClose, stripMainOwned } from '../src/main/settings-guard'
 
 const base = { theme: 'system', language: 'vi', notifications: true, sendOnEnter: true } as Settings
 
@@ -68,5 +68,16 @@ describe('orphanedSettingsPatch', () => {
     expect(patch.tags).toEqual({ 'telegram:1/a': ['x'] })
     expect(patch.muted).toMatchObject({ conversations: ['telegram:1/a'], accounts: [] })
     expect(patch.acceptedRequests).toEqual({})
+  })
+})
+
+describe('shouldQuitOnMainClose', () => {
+  it('quits on Windows/Linux only when keep-running is switched off and the app is not already quitting', () => {
+    expect(shouldQuitOnMainClose('win32', false, false)).toBe(true)
+    expect(shouldQuitOnMainClose('linux', false, false)).toBe(true)
+    expect(shouldQuitOnMainClose('win32', false, true)).toBe(false)
+    expect(shouldQuitOnMainClose('win32', false, undefined)).toBe(false)
+    expect(shouldQuitOnMainClose('win32', true, false)).toBe(false)
+    expect(shouldQuitOnMainClose('darwin', false, false)).toBe(false)
   })
 })

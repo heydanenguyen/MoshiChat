@@ -57,3 +57,11 @@ export function orphanedSettingsPatch(settings: Settings, accountIds: ReadonlySe
   }
   return patch
 }
+
+/**
+ * Windows/Linux: whether closing the main window should quit. The hidden presence/realtime windows keep window-all-closed from
+ * firing, so with keep-running off the app would otherwise stay alive with no UI.
+ */
+export function shouldQuitOnMainClose(platform: string, quitting: boolean, keepRunning: boolean | undefined): boolean {
+  return platform !== 'darwin' && !quitting && keepRunning === false
+}

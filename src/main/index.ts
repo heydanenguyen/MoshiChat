@@ -742,7 +742,11 @@ function createWindow(): void {
       w.setFullScreen(false)
     } else w.hide()
   })
-  window.on('closed', () => (window = undefined))
+  window.on('closed', () => {
+    window = undefined
+    // Hidden helper windows would keep the app alive with no UI (window-all-closed never fires), so quit here.
+    if (shouldQuitOnMainClose(process.platform, quitting, storage.settings.keepRunning)) app.quit()
+  })
   // Kept out of screen sharing and screenshots when asked; and hidden long enough counts as away for the lock.
   window.setContentProtection(!!storage.settings.hideFromScreenShare)
   window.on('hide', () => appLock.windowHidden(true))
@@ -856,7 +860,7 @@ function registerMediaProxy(): void {
 
 import { IMAGE_HOSTS } from '@shared/media'
 import { externalUrl, fileInside, isAppNavigation, isExecutableName, isPrivateHost, proxyAllowed } from './safety'
-import { orphanedSettingsPatch, stripMainOwned } from './settings-guard'
+import { orphanedSettingsPatch, shouldQuitOnMainClose, stripMainOwned } from './settings-guard'
 
 /**
  * A sticker's background taken away: macOS lifts the subject itself when it can (fast and light); otherwise, or for

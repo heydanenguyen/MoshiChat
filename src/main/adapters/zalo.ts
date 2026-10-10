@@ -30,6 +30,8 @@ const GROUP_BACKFILL = 40
 
 /** Socket restarts that fail in a row before asking Zalo whether the session itself still exists. */
 const RESTARTS_BEFORE_PROBE = 8
+/** After a call Zalo may keep the web session this long; a 3000/3003 inside that window is not yet a sign-out. */
+const CALL_GRACE_MS = 60_000
 /** At most one round of asking groups for their latest messages this often (a flapping socket gets a key each time). */
 const GROUP_BACKFILL_EVERY = 10 * 60_000
 /** After a round that found nothing, groups are not asked again for this long (a dropped socket cancels it). */
@@ -131,8 +133,8 @@ export class ZaloAdapter implements PlatformAdapter {
   private sessionEnded = false
   /** A call window is using this login (Zalo allows one web session): the socket stays down and being kicked off is not a sign-out. */
   private callActive = false
-  /** After a call: how many more times Zalo may still hold the web session (code 3000) before it counts as signed out. */
-  private callGrace = 0
+  /** After a call: until when Zalo may still hold the web session (code 3000/3003) without it counting as signed out. */
+  private callGraceUntil = 0
 
   constructor(
     initialId: string,
@@ -256,7 +258,7 @@ export class ZaloAdapter implements PlatformAdapter {
     if (!api || this.sessionEnded) return
     // connect() ran during the call and has a socket of its own again: nothing to restart.
     if (this.account.status === 'connected') return
-    this.callGrace = 2
+    this.callGraceUntil = Date.now() + CALL_GRACE_MS
     this.restartAttempts = 0
     this.setStatus('connecting', 'call')
     this.scheduleRestart(api)
@@ -716,7 +718,7 @@ export class ZaloAdapter implements PlatformAdapter {
         this.restartTimer = undefined
         this.restartAttempts = 0
         this.rejectedProbes = 0
-        this.callGrace = 0
+        this.callGraceUntil = 0
         if (this.account.status === 'connecting') this.setStatus('connected')
       }
       this.startSync(api)
@@ -827,8 +829,8 @@ export class ZaloAdapter implements PlatformAdapter {
       // 3000: the same session was opened somewhere else; 3003: Zalo kicked it (signed in on another computer).
       if (Number(code) === 3000 || Number(code) === 3003) {
         // Just after a call Zalo can take a moment to let go of the web session: ask again before taking it for a sign-out.
-        if (this.callGrace > 0) {
-          this.callGrace -= 1
+        // Time-based (not a count): Zalo can hold the session for a minute, and the back-off alone would burn a count in seconds.
+        if (Date.now() < this.callGraceUntil) {
           this.setStatus('connecting', 'call')
           this.scheduleRestart(api)
           return
