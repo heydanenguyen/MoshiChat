@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ZaloRelayOwner, ZaloRelayStatus, ZaloShareStatus } from '@shared/bridge'
+import type { ProbeReport, ProbeVariant, ZaloRelayOwner, ZaloRelayStatus, ZaloShareStatus } from '@shared/bridge'
 import { BirthdayDemo, FeatureCard, FeatureGrid, FriendsDemo, LaterDemo, NoteDemo, ScheduleDemo, TodosDemo } from './FeatureCards'
 import { ArchiveRestore, Bell, BellOff, ChevronRight, CloudOff, Database, FileArchive, FolderOpen, FolderSync, History, MessageSquare, Minus, Palette, Plus, RefreshCw, Settings2, Sparkles, Tag, Trash2, Users, X } from 'lucide-react'
 import { PrivacySettings } from './PrivacySettings'
@@ -1173,12 +1173,55 @@ function SyncSettings(): JSX.Element {
   )
 }
 
+/** Owner-run experiment: one sync-from-phone request over the live Zalo socket, and what Zalo answered (the phone shows a prompt). */
+function ZaloSyncProbeSettings(): JSX.Element | null {
+  const t = useT()
+  const showToast = useStore((s) => s.showToast)
+  const account = useStore((s) => Object.values(s.accounts).find((a) => a.platform === 'zalo' && !a.demo && !a.id.startsWith('zalo:relay-') && a.status === 'connected'))
+  const hasZalo = useStore((s) => Object.values(s.accounts).some((a) => a.platform === 'zalo' && !a.demo))
+  const [busy, setBusy] = useState(false)
+  const [report, setReport] = useState<ProbeReport>()
+  if (!hasZalo) return null
+  const run = async (variant: ProbeVariant): Promise<void> => {
+    if (!account || busy) return
+    setBusy(true)
+    setReport(undefined)
+    try {
+      setReport(await window.unison.zaloSync2.probe(account.id, variant))
+    } catch (err) {
+      showToast((err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Group>
+      <Row title={t('zaloSync2Title')} sub={account ? t('zaloSync2Hint') : t('zaloSync2NeedZalo')} stack>
+        <div className="backup-buttons">
+          <button className="btn" disabled={busy || !account} onClick={() => void run('default')}>
+            {busy ? t('zaloSync2Running') : t('zaloSync2Button')}
+          </button>
+          <button className="btn" disabled={busy || !account} onClick={() => void run('spike')}>
+            {busy ? t('zaloSync2Running') : t('zaloSync2ButtonSpike')}
+          </button>
+        </div>
+        {report && (
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 11, maxHeight: 240, overflow: 'auto', userSelect: 'text', margin: '8px 0 0' }}>
+            {[`verdict: ${report.verdict}`, ...report.notes, ...report.frames.map((f) => `+${f.at} ms cmd ${f.cmd}/${f.subCmd}: ${f.json}`), t('zaloSync2Saved')].join('\n')}
+          </pre>
+        )}
+      </Row>
+    </Group>
+  )
+}
+
 function DataPage(): JSX.Element {
   const t = useT()
   const openSheet = useStore((s) => s.openSheet)
   return (
     <>
       <SyncSettings />
+      <ZaloSyncProbeSettings />
       <Group>
         <Row title={t('backupSectionTitle')} sub={t('backupSectionHint')} />
         <div className="settings-row backup-buttons">

@@ -1,4 +1,5 @@
 import { copyFile, readFile, rename, writeFile } from 'fs/promises'
+import { hostname } from 'os'
 import { isStrangerChat } from '@shared/inbox'
 import { join } from 'path'
 import type { API, Credentials, Message as ZMessage, MessageContent, TMessage, GroupInfo, User, Reaction as ZReaction } from 'zca-js'
@@ -9,6 +10,8 @@ import { tally, zaloCode, zaloEmoji } from '@shared/reactions'
 import { imageMetadata } from '../media/image-size'
 import { outgoingStickerGif } from '../media/sticker-gif'
 import { sendPhotoSticker } from './zalo-photo-sticker'
+import { runProbe, type ProbeListener } from './zalo-sync2-probe'
+import type { ProbeReport, ProbeVariant } from '@shared/bridge'
 import { isProbeRejected, isSessionRejected, nextSyncStep, savedCursor, type SyncCursor, type SyncWalk } from './zalo-sync'
 import { ZaloArchive } from './zalo-archive'
 import { STICKER_PICTURE_VERSION, attachmentsOf, loopSeconds, mapMessage, stickerIdOf, textOf, type StickerPicture } from './zalo-map'
@@ -238,6 +241,26 @@ export class ZaloAdapter implements PlatformAdapter {
         })
         .then(resolve, reject)
     })
+  }
+
+  /**
+   * Owner-triggered, one-off: asks the phone to sync its messages over the live socket and reports what Zalo answered
+   * (zalo-sync2-probe.ts). Only listens besides sending; the phone shows a prompt, so it is never started by anything else.
+   */
+  async probePhoneSync(variant: ProbeVariant = 'default'): Promise<ProbeReport> {
+    const api = this.api
+    if (!api || this.account.status !== 'connected' || this.sessionEnded) throw new Error('Zalo is not connected')
+    if (this.callActive) throw new Error('A call is in progress')
+    // One probe at a time across all accounts is enforced inside runProbe.
+    const report = await runProbe(api.listener as unknown as ProbeListener, { hostname: hostname(), variant, log: (...args) => this.ctx.log(...args) })
+    this.ctx.log('zalo sync2 probe report', JSON.stringify(report))
+    try {
+      await writeFile(join(this.ctx.dataDir(), `sync2-probe-${variant}-${report.sentAt}.json`), JSON.stringify(report, null, 2))
+    } catch (err) {
+      // Only the copy shown in Settings can say so: the file is the thing that failed.
+      report.notes.push(`report file not saved: ${(err as Error).message}`)
+    }
+    return report
   }
 
   /** Steps aside for a call: Zalo's web app is about to use this login, which closes the socket here (code 3000). */

@@ -209,6 +209,10 @@ export interface MoshiBridge {
     /** Add the relay of `ownerId` as a Zalo account on this computer. */
     connect(ownerId: string): Promise<Account>
   }
+  /** One-off probe of Zalo's phone-to-computer sync (see main/adapters/zalo-sync2-probe.ts). The phone shows a prompt. */
+  zaloSync2: {
+    probe(accountId: string, variant: ProbeVariant): Promise<ProbeReport>
+  }
   sync: {
     status(): Promise<SyncStatus>
     /** Ask for a folder a cloud drive syncs (OneDrive, Google Drive, Dropbox...) and start syncing there. Null when cancelled. */
@@ -364,6 +368,7 @@ export const IPC = {
   zaloRelayDisable: 'zalo-relay:disable',
   zaloRelayOwners: 'zalo-relay:owners',
   zaloRelayConnect: 'zalo-relay:connect',
+  zaloSync2Probe: 'zalo-sync2:probe',
   syncChoose: 'sync:choose',
   syncDisable: 'sync:disable',
   syncNow: 'sync:now',
@@ -453,6 +458,32 @@ export interface ZaloRelayStatus {
   /** Items from other computers' outboxes carried out since Moshi started. */
   processed: number
   errors: string[]
+}
+
+export type ProbeVerdict = 'accepted-waiting-confirm' | 'confirmed' | 'rejected' | 'server-error' | 'silent' | 'upload_batch' | 'ack-only' | 'other-status'
+
+/** Which request body the probe sends: 'default' (the brief's guess) or 'spike' (the spike's values: syncType 0, partition -1, batchSize 2000). */
+export type ProbeVariant = 'default' | 'spike'
+
+export interface ProbeFrame {
+  /** Milliseconds after the request was sent. */
+  at: number
+  cmd: number
+  subCmd: number
+  /** Frame body size in bytes (frames on cmds the probe does not know). */
+  size?: number
+  /** Raw JSON (cut at 4 KB, signed links left out). */
+  json: string
+}
+
+/** What the Zalo sync-from-phone probe sent and got back. */
+export interface ProbeReport {
+  sentAt: number
+  /** The exact JSON of the cmd-590 request. */
+  payload: string
+  frames: ProbeFrame[]
+  verdict: ProbeVerdict
+  notes: string[]
 }
 
 export interface ZaloShareStatus {

@@ -1711,6 +1711,11 @@ function registerIpc(): void {
     if (typeof ownerId !== 'string' || !/^[\w-]{1,40}$/.test(ownerId)) throw new Error('Unknown Zalo owner')
     return manager.addRelayAccount(ownerId)
   })
+  handle(IPC.zaloSync2Probe, (_e, accountId: unknown, variant: unknown) => {
+    const adapter = manager.zaloAdapters().find((a) => a.account.id === accountId)
+    if (!adapter) throw new Error('Unknown Zalo account')
+    return adapter.probePhoneSync(variant === 'spike' ? 'spike' : 'default')
+  })
   handle(IPC.syncChoose, async () => {
     const vi = storage.settings.language === 'vi'
     const options: Electron.OpenDialogOptions = {

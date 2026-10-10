@@ -99,6 +99,9 @@ const bridge: MoshiBridge = {
     owners: () => ipcRenderer.invoke(IPC.zaloRelayOwners),
     connect: (ownerId: string) => ipcRenderer.invoke(IPC.zaloRelayConnect, ownerId)
   },
+  zaloSync2: {
+    probe: (accountId: string, variant) => ipcRenderer.invoke(IPC.zaloSync2Probe, accountId, variant)
+  },
   calls: {
     start: (conversationId, kind) => ipcRenderer.invoke(IPC.callsStart, conversationId, kind),
     end: (id) => ipcRenderer.invoke(IPC.callsEnd, id),
