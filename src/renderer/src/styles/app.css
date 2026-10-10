@@ -16985,3 +16985,10 @@ html[data-vt='details']::view-transition-new(vt-chat) {
     --bubble-in: var(--bub-in) !important;
   }
 }
+
+/* Frameless bubbles stay frameless: the flat-bubble rules above outrank `.bubble.sticker` and `.bubble.media.grid-only`,
+   which once pulled a pale accent's hairline ring around sent stickers and photo grids. */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.bubble.sticker, .bubble.media.grid-only) {
+  background: transparent;
+  box-shadow: none;
+}
