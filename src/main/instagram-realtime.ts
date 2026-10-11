@@ -14,6 +14,36 @@ export interface RealtimeHandlers {
 const KIND_RE = /SlideUQPP(NewMessage|NewRavenMessage|ReadReceipt|CreateReaction|DeleteReaction|DeleteMessage|EditMessage|MarkRead|AdminTextMessage)\b/g
 const TYPING_RE = /\/direct_v2\/threads\/(\d+)\/activity_indicator_id[^"]*"[\s\S]{0,60}?"value"\s*:\s*"((?:[^"\\]|\\.)*)"/g
 const RELOAD_EVERY = 30 * 60_000
+/** Longer than everything the in-page script can wait for (10 s for tokens, 25 s for the request). */
+const SCRIPT_DEADLINE = 45_000
+
+/**
+ * `task`, unless `abort` is called first (through the subscriber, which returns its unsubscribe) or `deadlineMs`
+ * pass: then it rejects with that reason and the task's own outcome is dropped. For promises that may never settle.
+ */
+export function settleOrAbort<T>(task: Promise<T>, subscribe: (abort: (reason: string) => void) => () => void, deadlineMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false
+    let unsubscribe = (): void => undefined
+    const finish = (fn: () => void): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      try {
+        unsubscribe()
+      } catch {
+        // a web contents that is already gone cannot be unsubscribed from; the outcome still stands
+      }
+      fn()
+    }
+    const timer = setTimeout(() => finish(() => reject(new Error(`Execution context was destroyed (no answer in ${Math.round(deadlineMs / 1000)} s)`))), deadlineMs)
+    unsubscribe = subscribe((reason) => finish(() => reject(new Error(reason))))
+    task.then(
+      (value) => finish(() => resolve(value)),
+      (err) => finish(() => reject(err))
+    )
+  })
+}
 /** Last seen persisted query ids, used when the module registry lookup fails. */
 /** Last ids seen on instagram.com (October 2026), used only when the page's module registry does not name them. */
 const KNOWN_DOC_IDS: Record<string, string> = {
@@ -77,6 +107,10 @@ export class InstagramRealtime implements RingSource {
   readonly key: string
   readonly homeUrl = 'https://www.instagram.com/direct/inbox/'
   private reloadTimer?: NodeJS.Timeout
+  /** A reload asked for while a query was in flight: tried again shortly. */
+  private reloadRetry?: NodeJS.Timeout
+  /** GraphQL queries running inside the page right now (a reload waits for them). */
+  private inflight = 0
   private seenKinds = new Set<string>()
   private stopped = true
 
@@ -126,15 +160,38 @@ export class InstagramRealtime implements RingSource {
     void win.loadURL(this.homeUrl).catch(() => undefined)
     // start() runs again after the window closes on its own, without stop(): never keep two reload timers.
     if (this.reloadTimer) clearInterval(this.reloadTimer)
-    this.reloadTimer = setInterval(() => {
-      if (this.window && !this.window.isDestroyed() && !this.inCall) this.window.webContents.reload()
-    }, RELOAD_EVERY)
+    this.reloadTimer = setInterval(() => this.reload('scheduled'), RELOAD_EVERY)
+  }
+
+  /**
+   * Reload the hidden page: on the timer, or at once when its tokens are gone (an error page after the network
+   * dropped, say) instead of waiting out the timer. A query in flight is let finish first (a navigation under it
+   * would leave its script unanswered); a call carried by the page is never reloaded under.
+   */
+  reload(reason: string): void {
+    const win = this.getWindow()
+    if (!win || this.inCall) return
+    if (this.inflight > 0) {
+      if (!this.reloadRetry) {
+        this.reloadRetry = setTimeout(() => {
+          this.reloadRetry = undefined
+          this.reload(reason)
+        }, 2_000)
+      }
+      return
+    }
+    if (this.reloadRetry) clearTimeout(this.reloadRetry)
+    this.reloadRetry = undefined
+    if (reason !== 'scheduled') this.handlers.log('instagram realtime: reloading the inbox page', `(${reason})`)
+    win.webContents.reload()
   }
 
   stop(): void {
     this.stopped = true
     if (this.reloadTimer) clearInterval(this.reloadTimer)
     this.reloadTimer = undefined
+    if (this.reloadRetry) clearTimeout(this.reloadRetry)
+    this.reloadRetry = undefined
     ringHooks?.detach(this)
     if (this.window && !this.window.isDestroyed()) this.window.destroy()
     this.window = undefined
@@ -189,8 +246,17 @@ export class InstagramRealtime implements RingSource {
       })
     }
     const payload = JSON.stringify({ operation, variables, fallback: KNOWN_DOC_IDS[operation] ?? '' })
-    const result = (await win.webContents.executeJavaScript(
-      `(async () => {
+    // executeJavaScript never settles when the page navigates (or reloads) while its script is still running
+    // (Electron 44, checked): the inbox poll once waited on one forever and every later poll was skipped as
+    // "already polling". So the promise is given up on a navigation, the window going away, or a deadline past
+    // the script's own waits (10 s for tokens + 25 s for the request); the caller's retry runs it again.
+    const contents = win.webContents
+    this.inflight += 1
+    let result: { status?: number; text?: string; error?: string; docId?: string }
+    try {
+      result = (await settleOrAbort(
+        contents.executeJavaScript(
+          `(async () => {
         const req = ${payload};
         const need = (name) => { try { return window.require(name) } catch (e) { return undefined } };
         for (let i = 0; i < 40 && !need('DTSGInitialData'); i++) await new Promise((r) => setTimeout(r, 250));
@@ -218,8 +284,27 @@ export class InstagramRealtime implements RingSource {
           clearTimeout(timer);
         }
       })()`,
-      true
-    )) as { status?: number; text?: string; error?: string; docId?: string }
+          true
+        ),
+        (abort) => {
+          // Only a real navigation of the top frame loses the script; the web client's own pushState routing does not.
+          const onNavigate = (event: { isSameDocument?: boolean; isMainFrame?: boolean }): void => {
+            if (event.isMainFrame && !event.isSameDocument) abort('Execution context was destroyed (the page navigated)')
+          }
+          const onGone = (): void => abort('Execution context was destroyed (the page closed)')
+          contents.on('did-start-navigation', onNavigate)
+          contents.on('destroyed', onGone)
+          return () => {
+            if (contents.isDestroyed()) return
+            contents.off('did-start-navigation', onNavigate)
+            contents.off('destroyed', onGone)
+          }
+        },
+        SCRIPT_DEADLINE
+      )) as { status?: number; text?: string; error?: string; docId?: string }
+    } finally {
+      this.inflight -= 1
+    }
     if (result.error) throw new Error(`Instagram ${operation}: ${result.error}`)
     if (result.docId && result.docId !== KNOWN_DOC_IDS[operation] && !this.seenKinds.has('doc:' + operation)) {
       this.seenKinds.add('doc:' + operation)

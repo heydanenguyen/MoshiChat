@@ -12,7 +12,7 @@ import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
 import { legacyPartition } from '../web-partitions'
 import { DirectComposer } from '../direct-composer'
-import { InstagramRealtime, RefreshThrottle, type RealtimeKind } from '../instagram-realtime'
+import { InstagramRealtime, RefreshThrottle, settleOrAbort, type RealtimeKind } from '../instagram-realtime'
 
 export interface InstagramPersonalSecret {
   cookies: WebCookie[]
@@ -85,6 +85,13 @@ interface CrawlState {
   shared: Message[]
 }
 const MAX_BACKOFF = 8
+/**
+ * A backstop for a poll round that never ends: each page query already gives up after 45 s and retries 3 times, and
+ * a round reads the inbox plus a few chats, so a real round is well under this.
+ */
+const POLL_DEADLINE = 5 * 60_000
+/** A page with no tokens is reloaded at most this often (a page that stays tokenless is not worth hammering). */
+const FORCED_RELOAD_GAP = 5 * 60_000
 const HISTORY_LIMIT = 300
 /** Chats whose newest page is kept on disk for an instant first open. */
 const THREAD_CACHE_CHATS = 60
@@ -140,6 +147,12 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private aliases = new Map<string, string>()
   private timer?: NodeJS.Timeout
   private polling = false
+  /** Rounds failed in a row (logged once more when a round succeeds again), and of those, rounds with no page tokens. */
+  private pollFailures = 0
+  private tokenFailures = 0
+  private forcedReloadAt = 0
+  /** Bumped per poll round; a round given up on (deadline) sees a newer number and stops touching state. */
+  private pollGen = 0
   private crawls = new Map<string, CrawlState>()
   /** Threads with crawl work queued or running (drives the "pending" flag). */
   private crawling = new Set<string>()
@@ -987,60 +1000,11 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     this.polling = true
     try {
-      const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
-      const activity = new Map([...this.threads].map(([k, t]) => [k, String(t.last_activity_at ?? '')]))
-      const threads = await this.inbox(1)
-      const sweep = this.reactionSweep
-      this.reactionSweep = false
-      const refreshed = new Set<string>()
-      for (const thread of threads) {
-        const id = conversationId(this.account.id, thread.thread_id)
-        const lastId = (thread.last_permanent_item ?? thread.items?.[0])?.item_id
-        if (before.get(thread.thread_id) === lastId) {
-          // No new message, but something happened (a reaction, taken back, an edit): refresh what is on screen.
-          const moved = activity.has(thread.thread_id) && activity.get(thread.thread_id) !== String(thread.last_activity_at ?? '')
-          if (moved && this.history.get(id)?.length) {
-            const res = { thread: { items: (await this.page(thread.thread_id)).items } }
-            this.syncReactions(id, res.thread.items ?? [])
-            refreshed.add(thread.thread_id)
-          }
-          continue
-        }
-        this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
-        const known = this.history.get(id)
-        if (!known || !lastId || known.some((m) => m.id === lastId)) continue
-        const res = { thread: { items: (await this.page(thread.thread_id)).items } }
-        await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
-        this.syncReactions(id, res.thread.items ?? [])
-        refreshed.add(thread.thread_id)
-        const fresh = (res.thread.items ?? [])
-          .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
-          .map((item) => this.toMessage(item, id))
-          .sort((a, b) => a.sentAt - b.sentAt)
-        this.remember(id, fresh)
-        const state = this.crawls.get(thread.thread_id)
-        if (state?.newestAt !== undefined) {
-          for (const item of res.thread.items ?? []) if (Number(item.timestamp) / 1000 > state.newestAt) this.absorbItem(state, item, id)
-          this.scheduleSave()
-        }
-        // Includes messages the user sent from another device; the app dedupes by id.
-        for (const message of fresh) this.ctx.emit({ type: 'message:new', message })
-      }
-      if (sweep) {
-        // The three chats active last (the reaction is almost always in one of them), if they are on screen at all.
-        const recent = threads
-          .filter((t) => !refreshed.has(t.thread_id) && this.history.get(conversationId(this.account.id, t.thread_id))?.length)
-          .sort((a, b) => Number(b.last_activity_at ?? 0) - Number(a.last_activity_at ?? 0))
-          .slice(0, 3)
-        for (const thread of recent) {
-          const res = { thread: { items: (await this.page(thread.thread_id)).items } }
-          this.syncReactions(conversationId(this.account.id, thread.thread_id), res.thread.items ?? [])
-        }
-      }
-      await this.refreshRequests().catch((err) => {
-        if (err instanceof SessionExpiredError) throw err
-        this.ctx.log('instagram requests failed', (err as Error).message)
-      })
+      // A round that never ends (a page query left unanswered) would otherwise block every later round for good.
+      await settleOrAbort(this.pollRound(), () => () => undefined, POLL_DEADLINE)
+      if (this.pollFailures) this.ctx.log('instagram poll recovered after', this.pollFailures, 'failed rounds')
+      this.pollFailures = 0
+      this.tokenFailures = 0
       this.backoff = 1
     } catch (err) {
       if (err instanceof SessionExpiredError) {
@@ -1048,9 +1012,17 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         return
       }
       const message = (err as Error).message
+      this.pollFailures += 1
       if (/429|wait a few minutes|rate/i.test(message)) {
         this.skip = this.backoff
         this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF)
+      }
+      // The page has no tokens for a second round running (an error page after the network dropped, say): a reload
+      // now beats waiting for its half-hourly one.
+      if (/no token/i.test(message) && ++this.tokenFailures >= 2 && Date.now() - this.forcedReloadAt >= FORCED_RELOAD_GAP) {
+        this.tokenFailures = 0
+        this.forcedReloadAt = Date.now()
+        this.realtime.reload('no tokens on two rounds')
       }
       this.ctx.log('instagram poll failed', message)
     } finally {
@@ -1060,6 +1032,73 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
         setTimeout(() => void this.poll(), 200)
       }
     }
+  }
+
+  /** One inbox read: new messages, moved threads, reactions, the requests folder. */
+  private async pollRound(): Promise<void> {
+    const gen = ++this.pollGen
+    // Given up on by the deadline: a newer round owns the state now; this one must not emit or overwrite anything.
+    const abandoned = (): boolean => gen !== this.pollGen
+    const before = new Map([...this.threads].map(([k, t]) => [k, (t.last_permanent_item ?? t.items?.[0])?.item_id]))
+    const activity = new Map([...this.threads].map(([k, t]) => [k, String(t.last_activity_at ?? '')]))
+    const threads = await this.inbox(1)
+    if (abandoned()) return
+    const sweep = this.reactionSweep
+    this.reactionSweep = false
+    const refreshed = new Set<string>()
+    for (const thread of threads) {
+      const id = conversationId(this.account.id, thread.thread_id)
+      const lastId = (thread.last_permanent_item ?? thread.items?.[0])?.item_id
+      if (before.get(thread.thread_id) === lastId) {
+        // No new message, but something happened (a reaction, taken back, an edit): refresh what is on screen.
+        const moved = activity.has(thread.thread_id) && activity.get(thread.thread_id) !== String(thread.last_activity_at ?? '')
+        if (moved && this.history.get(id)?.length) {
+          const res = { thread: { items: (await this.page(thread.thread_id)).items } }
+          if (abandoned()) return
+          this.syncReactions(id, res.thread.items ?? [])
+          refreshed.add(thread.thread_id)
+        }
+        continue
+      }
+      this.ctx.emit({ type: 'conversation:upserted', conversation: this.toConversation(thread) })
+      const known = this.history.get(id)
+      if (!known || !lastId || known.some((m) => m.id === lastId)) continue
+      const res = { thread: { items: (await this.page(thread.thread_id)).items } }
+      if (abandoned()) return
+      await this.resolveSlide(thread.thread_id, res.thread.items ?? [])
+      if (abandoned()) return
+      this.syncReactions(id, res.thread.items ?? [])
+      refreshed.add(thread.thread_id)
+      const fresh = (res.thread.items ?? [])
+        .filter((item) => !known.some((m) => m.id === item.item_id) && this.visible(item))
+        .map((item) => this.toMessage(item, id))
+        .sort((a, b) => a.sentAt - b.sentAt)
+      this.remember(id, fresh)
+      const state = this.crawls.get(thread.thread_id)
+      if (state?.newestAt !== undefined) {
+        for (const item of res.thread.items ?? []) if (Number(item.timestamp) / 1000 > state.newestAt) this.absorbItem(state, item, id)
+        this.scheduleSave()
+      }
+      // Includes messages the user sent from another device; the app dedupes by id.
+      for (const message of fresh) this.ctx.emit({ type: 'message:new', message })
+    }
+    if (sweep) {
+      // The three chats active last (the reaction is almost always in one of them), if they are on screen at all.
+      const recent = threads
+        .filter((t) => !refreshed.has(t.thread_id) && this.history.get(conversationId(this.account.id, t.thread_id))?.length)
+        .sort((a, b) => Number(b.last_activity_at ?? 0) - Number(a.last_activity_at ?? 0))
+        .slice(0, 3)
+      for (const thread of recent) {
+        const res = { thread: { items: (await this.page(thread.thread_id)).items } }
+        if (abandoned()) return
+        this.syncReactions(conversationId(this.account.id, thread.thread_id), res.thread.items ?? [])
+      }
+    }
+    if (abandoned()) return
+    await this.refreshRequests().catch((err) => {
+      if (err instanceof SessionExpiredError) throw err
+      this.ctx.log('instagram requests failed', (err as Error).message)
+    })
   }
 
   private onRealtimeActivity(): void {
