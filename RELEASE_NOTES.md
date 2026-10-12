@@ -1,3 +1,19 @@
+## Moshi 0.8.3
+
+**Cập nhật trong app cài được trở lại.** Từ bản này, bấm "Cập nhật" trong Moshi sẽ cài xong; bản 0.8.2 trở về trước cần cài tay một lần bằng file Moshi-Setup từ trang Releases.
+
+### Cập nhật
+- **Sửa lỗi "không cài được" khi cập nhật trong app:** trình cài bản mới gỡ bản cũ bằng bộ gỡ đang đăng ký trong Windows. Bộ gỡ của Moshi (cửa sổ tạm biệt) lại chạy bộ gỡ NSIS ngay trong thư mục cài, nên file của chính nó không dời đi được và cả bước cập nhật bị hủy (mã lỗi 2). Giờ trước khi cài, Moshi trỏ mục gỡ sang bộ gỡ NSIS như bộ cài đầy đủ vẫn làm; bộ gỡ của Moshi cũng chạy bản sao ở thư mục tạm và ghi một dòng vào %TEMP%\moshi-setup.log nếu có gì trục trặc.
+
+### Lưu ý
+- Bản 0.8.2 (hoặc cũ hơn) không tự cập nhật lên được vì lỗi nằm ở phía bản đang cài: tải Moshi-Setup-0.8.3.exe từ Releases và chạy một lần. Sau đó các bản sau cập nhật trong app bình thường.
+
+---
+
+### English
+- **In-app updates install again:** the installer removes the old version through the registered uninstaller; Moshi's branded uninstaller ran the NSIS one in place, which cannot move its own file, so the update's removal step failed (error code 2). Before installing, Moshi now points the entry at the NSIS uninstaller, as the full setup does; the branded uninstaller also runs a temp copy and notes problems in %TEMP%\moshi-setup.log.
+- Note: 0.8.2 and older cannot update themselves to this version (the bug is on the installed side): run Moshi-Setup-0.8.3.exe from Releases once; later versions update in-app.
+
 ## Moshi 0.8.2
 
 **Gửi tin Facebook được trở lại, giao diện mặc định mới "Quiet Glass" dễ đọc hơn, Instagram không còn tự dừng nhận tin.** Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
