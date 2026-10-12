@@ -1,3 +1,30 @@
+## Moshi 0.9.0
+
+**Gói chuyển động đợt 1 "Calm": app có khối lượng và nhịp, nhưng không ồn.** Mọi chuyển động chạy bằng lò xo thật (đường cong giảm chấn tính ra `linear()`), chỉ dùng transform và opacity, và đều có bản rút gọn khi hệ điều hành bật "giảm chuyển động". Áp dụng cho cả bốn giao diện; Mono không nảy.
+
+### Trong cuộc chat
+- **Gửi tin:** bubble bật lên từ ô soạn, vượt nhẹ rồi lắng; sticker xoay vào, ảnh hiện nét dần; ô soạn "thở ra" một nhịp. Gửi liên tiếp không bị nhảy lại.
+- **Tin đến:** bubble trượt lên có khối lượng, nhiều tin đến cùng lúc thì nối nhau 40 ms; avatar gật đầu đúng một lần.
+- **Đã xem:** dấu tích thứ hai tự vẽ ra và chuyển màu nhấn, ở cả bubble và hàng danh sách.
+- **Đang gõ:** ba chấm nhấc lên theo sóng, cả bubble thở nhẹ; dừng gõ thì chạy nốt nhịp rồi nghỉ; tạm dừng khi cửa sổ ẩn.
+
+### Bố cục
+- **Ô soạn tin (giao diện Moshi):** nút gửi xoay vào khi có chữ, mic xoay ra; "Gửi sau" mở từ biểu tượng ra đủ chữ.
+- **Details:** panel trượt vào bằng lò xo, cột chat lùi 24 px rồi nét dần, có chiều sâu.
+- **Skeleton:** lần mở chat đầu, ảnh và video đang tải, hàng danh sách khi tài khoản đang kết nối dùng khối vệt sáng chéo thay cho vòng xoay, chỉ hiện nếu tải lâu hơn 300 ms.
+- **Khởi động:** sidebar, danh sách rồi khung chat lần lượt hiện trong chưa đến 600 ms sau màn hình chào.
+
+### Lưu ý
+- Đợt 2 (reaction tung hạt, avatar bay lên header, đổi sáng/tối vòng tròn, tab bar chảy, viên cuộc gọi kiểu Island, cuộn có chiều sâu, nhấn lún) và đợt 3 (mascot Pals, ăn mừng) sẽ ra ở các bản sau.
+
+---
+
+### English
+- **Motion pack 1 "Calm":** real spring curves (damped springs rendered into CSS `linear()`), transform and opacity only, with a reduced-motion fallback for each; all four styles, Mono without overshoot.
+- Chat: sent bubbles pop from the composer and settle (sticker twist, photo un-blur, composer exhale; rapid sends resume mid-flight), incoming bubbles slide up with a stagger and one avatar nod, read receipts draw their second check, typing dots rise in a wave while the bubble breathes.
+- Layout: the send button springs in as the mic turns away and "Send later" unfolds (Moshi look); the Details pane slides in on a spring while the chat column eases back and un-blurs; skeleton shimmer for the thread's first load, media and list rows (only after 300 ms); a launch choreography under 600 ms.
+- Waves 2 and 3 of the motion catalogue follow in later releases.
+
 ## Moshi 0.8.3
 
 **Cập nhật trong app cài được trở lại.** Từ bản này, bấm "Cập nhật" trong Moshi sẽ cài xong; bản 0.8.2 trở về trước cần cài tay một lần bằng file Moshi-Setup từ trang Releases.
