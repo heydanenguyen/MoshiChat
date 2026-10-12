@@ -18,7 +18,10 @@ function selectors(text: string): string[] {
     if (open < 0) break
     let depth = 1
     let end = open + 1
-    while (depth && end < text.length) depth += text[end] === '{' ? 1 : text[end] === '}' ? -1 : 0, end++
+    while (depth && end < text.length) {
+      depth += text[end] === '{' ? 1 : text[end] === '}' ? -1 : 0
+      end++
+    }
     const head = text.slice(i, open).trim()
     if (/^@(media|container|supports)/.test(head)) out.push(...selectors(text.slice(open + 1, end - 1)))
     else if (!head.startsWith('@')) out.push(...head.split(/,(?![^(]*\))/).map((s) => s.trim()))

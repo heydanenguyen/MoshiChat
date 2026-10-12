@@ -1,4 +1,4 @@
-## Moshi 0.8.1
+## Moshi 0.8.2
 
 **Gửi tin Facebook được trở lại, giao diện mặc định mới "Quiet Glass" dễ đọc hơn, Instagram không còn tự dừng nhận tin.** Moshi tự tải bản này ở nền và chỉ hỏi bạn khởi động lại.
 
