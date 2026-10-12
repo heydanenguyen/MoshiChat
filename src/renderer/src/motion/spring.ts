@@ -46,7 +46,9 @@ const SPRINGS: Array<{ name: string; ms: number; overshoot: number }> = [
   { name: 'arrive', ms: 300, overshoot: 0.2 }, // a message arriving (idea 2)
   { name: 'soft', ms: 280, overshoot: 0.12 }, // general
   { name: 'exhale', ms: 360, overshoot: 0.2 }, // the composer breathing out after a send
-  { name: 'sticker', ms: 440, overshoot: 0.3 } // a sticker's twist as it lands
+  { name: 'sticker', ms: 440, overshoot: 0.3 }, // a sticker's twist as it lands
+  { name: 'pane', ms: 280, overshoot: 0.12 }, // the Details pane sliding in (idea 8)
+  { name: 'paneout', ms: 280, overshoot: 0.08 }, // ... and out
 ]
 
 /** The CSS custom properties for the root: `--spring-<name>` (a linear() easing) and `--spring-<name>-ms` (its duration). */

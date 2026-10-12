@@ -18,6 +18,7 @@ import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
 import { BuddyLoader } from './BuddyLoader'
+import { SKELETON_DELAY_MS, Skeleton, SkeletonThread } from './Skeleton'
 import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
 import { useWallpaper } from './Wallpaper'
 import { SummaryButton, SummaryCard, TranslationBlock, VoiceTranscript } from './AiParts'
@@ -202,6 +203,17 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   }, [stored, sentStickers, conversation.id, conversation.platform, members, rawConversations])
   const loading = thread.loading
   const hasMore = thread.hasMore
+  // A chat opening shows bubble skeletons; when the messages arrive they fade in once (280 ms), before the first paint of them.
+  const skeleton = loading && !messages
+  const hadSkeleton = useRef(false)
+  const [reveal, setReveal] = useState(false)
+  useLayoutEffect(() => {
+    if (skeleton) hadSkeleton.current = true
+    else if (hadSkeleton.current) {
+      hadSkeleton.current = false
+      setReveal(true)
+    }
+  }, [skeleton])
   const typing = useStore((s) => (members ?? [conversation.id]).map((id) => s.typing[id]).find(Boolean))
   // A merged person writes through one of its chats: that chat's account decides what the composer can do.
   const viaConversation = rawConversations[via] ?? conversation
@@ -515,7 +527,17 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
             {trimmed && backCount > 0 && <span className="chat-back-count">{formatBadge(backCount)}</span>}
           </button>
         )}
-        <Avatar name={conversation.title} url={conversation.avatarUrl} size={quiet ? 36 : 34} onClick={() => withViewTransition('details', () => toggleDetails('info'))} />
+        <Avatar
+          name={conversation.title}
+          url={conversation.avatarUrl}
+          size={quiet ? 36 : 34}
+          onClick={() => {
+            // Another tab of a pane that is already open only switches tab: nothing slides, so no transition.
+            const open = useStore.getState()
+            if (open.detailsOpen && open.detailsTab !== 'info') toggleDetails('info')
+            else withViewTransition('details', () => toggleDetails('info'))
+          }}
+        />
         <div className="chat-header-info">
           <div className="chat-header-title">
             {conversation.title}
@@ -547,14 +569,19 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
       <BirthdayBanner conversation={conversation} canSendStickers={features.attachments} onCelebrate={celebrate} />
       <div className="chat-scroll scroll edge-fade" ref={scrollRef}>
         <div className="chat-scroll-inner">
-          {loading && !messages && <BuddyLoader size={56} label={t('loadingMessages')} className="chat-loading" />}
+          {skeleton && <SkeletonThread label={t('loadingMessages')} />}
           {!hasMore && !loading && messages && messages.length > 0 && conversation.platform === 'zalo' && <div className="history-start">{t('zaloOlderOnPhone')}</div>}
           {hasMore && messages && (
             <button className="load-more" onClick={() => loadMore(conversation.id)} disabled={loading}>
               {loading ? <BuddyLoader size={20} inline /> : t('loadMore')}
             </button>
           )}
-          <div ref={rowsRef} className="chat-rows" style={{ height: virtualizer.getTotalSize() }}>
+          <div
+            ref={rowsRef}
+            className={`chat-rows ${reveal ? 'reveal' : ''}`}
+            style={{ height: virtualizer.getTotalSize() }}
+            onAnimationEnd={(e) => e.target === e.currentTarget && setReveal(false)}
+          >
             {virtualizer.getVirtualItems().map((v) => {
               const row = rows[v.index]
               return (
@@ -1566,6 +1593,10 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
   // A picture is tried as a light preview first (made once in the background), then as it is, then through the
   // app's session; only after all three a placeholder.
   const [imageLoad, setImageLoad] = useState<'preview' | 'direct' | 'proxy' | 'failed'>('preview')
+  // While a picture of a known shape loads, a skeleton of that shape stands in (it shows only if the load is not near-instant);
+  // a slow one then fades in over it. A cached one just appears.
+  const [shown, setShown] = useState<'fast' | 'slow' | undefined>()
+  const mountedAt = useRef(performance.now())
   const openLightbox = useStore((s) => s.openLightbox)
   const loadAttachment = useStore((s) => s.loadAttachment)
   const openAttachment = useStore((s) => s.openAttachment)
@@ -1585,17 +1616,22 @@ function AttachmentView({ attachment, message, platform }: { attachment: Attachm
       const preview = previewSrc(direct, 960)
       const stage = imageLoad === 'preview' && preview === direct ? 'direct' : imageLoad
       const src = stage === 'preview' ? preview : stage === 'proxy' && direct && /^https:/.test(direct) ? `unison-img://img/?u=${encodeURIComponent(direct)}` : direct
+      const shape = attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined
       return src && stage !== 'failed' ? (
-        <img
-          className="attachment-image"
-          src={src}
-          alt={t('photo')}
-          draggable={false}
-          decoding="async"
-          onError={() => setImageLoad(stage === 'preview' ? 'direct' : stage === 'direct' && /^https:/.test(direct ?? '') ? 'proxy' : 'failed')}
-          onClick={() => void viewImage()}
-          style={attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined}
-        />
+        <>
+          {shape && !shown && <Skeleton className="attachment-image attachment-skeleton" style={shape} />}
+          <img
+            className={`attachment-image ${shape && !shown ? 'pending' : ''} ${shown === 'slow' ? 'revealed' : ''}`}
+            src={src}
+            alt={t('photo')}
+            draggable={false}
+            decoding="async"
+            onLoad={() => setShown(performance.now() - mountedAt.current > SKELETON_DELAY_MS ? 'slow' : 'fast')}
+            onError={() => setImageLoad(stage === 'preview' ? 'direct' : stage === 'direct' && /^https:/.test(direct ?? '') ? 'proxy' : 'failed')}
+            onClick={() => void viewImage()}
+            style={shape}
+          />
+        </>
       ) : (
         <div className="attachment-image placeholder">{t('photo')}</div>
       )

@@ -76,7 +76,7 @@ describe('springEasing', () => {
 describe('springVars', () => {
   it('emits an easing and a duration for every spring', () => {
     const v = springVars(1)
-    for (const n of ['pop', 'settle', 'arrive', 'soft', 'exhale', 'sticker']) {
+    for (const n of ['pop', 'settle', 'arrive', 'soft', 'exhale', 'sticker', 'pane', 'paneout']) {
       expect(v[`--spring-${n}`]).toMatch(/^linear\(0, /)
       expect(v[`--spring-${n}-ms`]).toMatch(/^\d+ms$/)
     }
@@ -85,6 +85,8 @@ describe('springVars', () => {
     expect(v['--spring-arrive-ms']).toBe('300ms')
     expect(v['--spring-soft-ms']).toBe('280ms')
     expect(v['--spring-exhale-ms']).toBe('360ms')
+    expect(v['--spring-pane-ms']).toBe('280ms')
+    expect(v['--spring-paneout-ms']).toBe('280ms')
   })
 
   it('scales the overshoot by the bounce; at 0 nothing goes past 1', () => {

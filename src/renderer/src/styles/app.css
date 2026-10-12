@@ -15578,12 +15578,7 @@ html[data-vt='details'] .chat-area {
 html[data-vt='details'] .details-col {
   view-transition-name: vt-details;
 }
-html[data-vt='details']::view-transition-new(vt-details) {
-  animation: vt-in-right var(--duration-base) var(--ease-out) both;
-}
-html[data-vt='details']::view-transition-old(vt-details) {
-  animation: vt-out-right var(--duration-base) var(--ease-out) both;
-}
+/* the pane's own slide (and the chat column's depth) is in the Motion pack 1 section at the end of this file */
 /* a column that changes size shows its old and new picture cross-fading, not stretched */
 html[data-vt='sidebar']::view-transition-old(vt-chat),
 html[data-vt='sidebar']::view-transition-new(vt-chat),
@@ -17285,5 +17280,388 @@ html[data-vt='details']::view-transition-new(vt-chat) {
   33%,
   100% {
     opacity: 0.45;
+  }
+}
+
+/* ==== Motion pack 1 (ideas 6, 8, 15, 20) ====
+   Part B of the motion pack: the composer's send/mic swap and the "send later" pill (6), the Details pane in depth (8), skeletons (15)
+   and the launch choreography (20). Same rules as part A above: springs come from the root vars (--spring-pop, --spring-pane, ...,
+   none in Mono), only transform properties / opacity move (blur only for the 240 ms Details pass), no hover motion, and every
+   animation has a prefers-reduced-motion answer. The Quiet Glass scope test stops reading app.css at the first "Motion pack" marker,
+   so this section may use any selector; the swap is still Moshi-look only because only that look renders .composer-swap. */
+
+/* 6 · Composer: magnetic send. The mic and the send button share one 36 px slot; the one that leaves turns and shrinks away
+   (150 ms, ease-in), the one that arrives springs in turning from -90 deg. Nothing reflows. (The other looks keep both
+   buttons in the row; their send button just springs in when it fills.) */
+.composer-swap {
+  position: relative;
+  flex: none;
+  width: var(--ctl, 36px);
+  height: var(--ctl, 36px);
+}
+:root .composer-box .composer-swap > :is(.composer-send, .composer-mic) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  animation: none;
+  transform: none;
+  rotate: 0deg;
+  scale: 1;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    rotate var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    scale var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    opacity 120ms linear,
+    visibility 0s;
+}
+:root .composer-box .composer-swap > .composer-mic {
+  border-radius: 18px;
+  color: var(--text-secondary);
+}
+:root .composer-box .composer-swap > .composer-mic:hover {
+  background: var(--nv-on);
+}
+:root .composer-box .composer-swap > .composer-mic:active,
+:root .composer-box .composer-swap > .composer-send:active {
+  transform: none;
+}
+:root .composer-box .composer-swap > .composer-send.idle,
+:root .composer-box .composer-swap > .composer-mic.swap-off {
+  display: grid;
+  scale: 0.6;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    rotate 150ms ease-in,
+    scale 150ms ease-in,
+    opacity 150ms ease-in,
+    visibility 0s linear 150ms;
+}
+:root .composer-box .composer-swap > .composer-send.idle {
+  rotate: -90deg;
+}
+:root .composer-box .composer-swap > .composer-mic.swap-off {
+  rotate: 90deg;
+}
+/* a disabled mic or send keeps the global dimming (the 0.4 the fully-visible state above would otherwise override) */
+:root .composer-box .composer-swap > :is(.composer-send, .composer-mic):disabled:not(.idle, .swap-off) {
+  opacity: 0.4;
+}
+/* a chat without voice: with nothing to send there is no slot at all (it closes once the send button has left) */
+.composer-swap.no-mic:has(> .composer-send.idle) {
+  width: 0;
+  margin-left: -4px;
+  transition:
+    width 0s linear 150ms,
+    margin-left 0s linear 150ms;
+}
+/* narrow chats: the tools row puts the trailing control at the right (it was the mic's or the send button's own margin) */
+@container chat (width <= 560px) {
+  .composer-tools > .composer-swap {
+    margin-left: auto;
+  }
+}
+/* the other looks: the send button springs in when it gets its text (it is always in the row there) */
+:root:is([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box .composer-send:not(.idle) {
+  animation: send-magnet-in var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)) backwards;
+}
+@keyframes send-magnet-in {
+  from {
+    rotate: -90deg;
+    scale: 0.6;
+    opacity: 0;
+  }
+}
+/* send later: the pill unfolds from 36 px (motion/unfold.ts does the widths); a leaving pill takes no clicks */
+.composer-later {
+  white-space: nowrap;
+}
+.composer-later.leaving {
+  pointer-events: none;
+}
+/* reduced motion: an instant swap (opacity only, 100 ms), no turning, no width animation */
+@media (prefers-reduced-motion: reduce) {
+  :root .composer-box .composer-swap > :is(.composer-send, .composer-mic) {
+    rotate: 0deg !important;
+    scale: 1 !important;
+    transition: opacity 100ms linear, visibility 0s !important;
+  }
+  :root .composer-box .composer-swap > :is(.composer-send.idle, .composer-mic.swap-off) {
+    transition: opacity 100ms linear, visibility 0s linear 100ms !important;
+  }
+  :root:is([data-style='liquid'], [data-style='mono'], [data-style='pals']) .composer-box .composer-send:not(.idle) {
+    animation: motion-fade 100ms linear backwards !important;
+  }
+}
+
+/* 8 · Details: depth. The pane slides in on its own spring; the chat column is pulled a little to the left and comes back,
+   un-blurring (240 ms) and clearing a 6% dimming as it does (opening: 110 ms out to -24 px, then the settle spring back; closing: the spring only). viewTransition.ts sets html[data-vt='details'] and data-vt-dir. */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-vt='details']::view-transition-new(vt-details) {
+    animation: vt-pane-in var(--spring-pane-ms, 280ms) var(--spring-pane, var(--ease-out)) both;
+  }
+  html[data-vt='details']::view-transition-old(vt-details) {
+    animation: vt-pane-out var(--spring-paneout-ms, 280ms) var(--spring-paneout, var(--ease-out)) both;
+  }
+  html[data-vt='details']::view-transition-group(vt-chat) {
+    animation-duration: var(--spring-settle-ms, 360ms);
+    animation-timing-function: var(--spring-settle, var(--ease-out));
+  }
+  html[data-vt='details']::view-transition-old(vt-chat) {
+    animation: vt-fade-out 200ms linear both;
+  }
+  html[data-vt='details'][data-vt-dir='open']::view-transition-new(vt-chat) {
+    animation:
+      vt-fade-in 200ms linear both,
+      vt-chat-nudge 110ms var(--ease-out) both,
+      vt-chat-back var(--spring-settle-ms, 360ms) var(--spring-settle, var(--ease-out)) 110ms forwards,
+      vt-chat-clear 240ms ease-out both;
+  }
+  html[data-vt='details'][data-vt-dir='close']::view-transition-new(vt-chat) {
+    animation:
+      vt-fade-in 200ms linear both,
+      vt-chat-back var(--spring-settle-ms, 360ms) var(--spring-settle, var(--ease-out)) both,
+      vt-chat-clear 240ms ease-out both;
+  }
+}
+@keyframes vt-pane-in {
+  from {
+    translate: calc(100% + 28px) 0;
+  }
+}
+@keyframes vt-pane-out {
+  to {
+    translate: calc(100% + 28px) 0;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-chat-nudge {
+  to {
+    translate: -24px 0;
+  }
+}
+@keyframes vt-chat-back {
+  from {
+    translate: -24px 0;
+  }
+  to {
+    translate: 0 0;
+  }
+}
+@keyframes vt-chat-clear {
+  from {
+    filter: blur(3px) brightness(0.94);
+  }
+}
+/* reduced motion: the pane fades (140 ms), the columns do not move (the blanket rule above makes their group animations instant) */
+@media (prefers-reduced-motion: reduce) {
+  html[data-vt='details']::view-transition-new(vt-details) {
+    animation: vt-fade-in 140ms linear both !important;
+  }
+  html[data-vt='details']::view-transition-old(vt-details) {
+    animation: vt-fade-out 140ms linear both !important;
+  }
+}
+
+/* 15 · Skeletons. A grey block with a diagonal highlight sweeping across (1.4 s); it stands where the shape of the content is
+   known and goes when the content arrives, which then fades in (280 ms). Paused while the window is hidden. */
+:where(.skeleton) {
+  border-radius: 12px;
+}
+.skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--fill-tertiary);
+  pointer-events: none;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.55) 50%, transparent 80%);
+  translate: -100% 0;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+  animation-delay: calc(var(--sk-i, 0) * 120ms);
+}
+:root[data-theme='dark'] .skeleton::after {
+  background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.1) 50%, transparent 80%);
+}
+@keyframes skeleton-sweep {
+  to {
+    translate: 100% 0;
+  }
+}
+:root.window-hidden .skeleton::after {
+  animation-play-state: paused;
+}
+/* a chat opening: five bubbles, alternating sides */
+.skeleton-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+}
+.chat-scroll-inner:has(> .skeleton-thread) {
+  flex: 1;
+  margin-top: 0;
+  justify-content: flex-end;
+}
+.skeleton-bubble {
+  width: var(--w, 50%);
+  height: var(--h, 40px);
+  border-radius: 18px;
+}
+.skeleton-bubble.in {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+}
+.skeleton-bubble.out {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+}
+/* conversation rows while an account's first list is on its way */
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--row-height, 64px);
+  padding: 0 12px;
+}
+.skeleton-avatar {
+  flex: none;
+  width: var(--row-avatar, 40px);
+  height: var(--row-avatar, 40px);
+  border-radius: var(--radius-full);
+}
+.skeleton-lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-line {
+  width: var(--w, 60%);
+  height: 12px;
+  border-radius: 6px;
+}
+.skeleton-line.short {
+  height: 10px;
+}
+/* a photo or a video poster of a known shape: the skeleton has the picture's own box, the picture waits (display none) until it has
+   loaded; the skeleton shows only after 300 ms (SKELETON_DELAY_MS), so a cached picture never flashes it */
+.attachment-skeleton {
+  cursor: default;
+  animation: skeleton-appear 160ms linear 300ms backwards;
+}
+.attachment-image.pending {
+  display: none;
+}
+.attachment-image.revealed,
+.chat-rows.reveal {
+  animation: skeleton-reveal 280ms var(--ease-out) backwards;
+}
+.bubble.media .album + .attachment-skeleton {
+  margin-top: 3px;
+}
+@keyframes skeleton-appear {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes skeleton-reveal {
+  from {
+    opacity: 0;
+  }
+}
+/* reduced motion: no sweep; a slow pulse of the block instead (1.6 s, 0.6 to 1) */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    display: none;
+  }
+  .skeleton:not(.attachment-skeleton) {
+    animation: skeleton-pulse 1.6s ease-in-out infinite alternate !important;
+  }
+  .attachment-skeleton {
+    opacity: 0.8;
+  }
+  .attachment-image.revealed,
+  .chat-rows.reveal {
+    animation: skeleton-reveal 120ms linear backwards !important;
+  }
+}
+:root.window-hidden .skeleton:not(.attachment-skeleton) {
+  animation-play-state: paused !important;
+}
+@keyframes skeleton-pulse {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 20 · Launch choreography. App.tsx puts launch-wait on .app while the splash is up (the items wait invisible) and launch for
+   700 ms once it has gone: the sidebar items slide in from the left, the first list rows rise, the chat fades in last (under 600 ms
+   in all). The class is on once per start, so nothing replays later. Reduced motion: one 160 ms fade of the whole app. */
+@media (prefers-reduced-motion: no-preference) {
+  .app.launch-wait :is(.sidebar .nav-item, .sidebar .account-row, .conv-row > .conv-item, .chat-col) {
+    opacity: 0;
+  }
+  .app.launch :is(.sidebar .nav-item, .sidebar .account-row) {
+    animation: launch-in-left 240ms var(--ease-out) calc(min(var(--i, 0), 10) * 30ms) backwards;
+  }
+  .app.launch .conv-row[style*='--i'] > .conv-item {
+    animation: launch-in-up 240ms var(--ease-out) calc(80ms + var(--i, 0) * 24ms) backwards;
+  }
+  .app.launch .chat-col {
+    animation: launch-in-fade 260ms var(--ease-out) 280ms backwards;
+  }
+}
+@keyframes launch-in-left {
+  from {
+    opacity: 0;
+    translate: -12px 0;
+  }
+}
+@keyframes launch-in-up {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@keyframes launch-in-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app {
+    transition: opacity 160ms linear !important;
+  }
+  .app.launch-wait {
+    opacity: 0;
   }
 }

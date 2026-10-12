@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CircleDashed, Clapperboard, EyeOff, File, FileText, Image, ImagePlay, Info, Link2, Mic, Phone, PhoneMissed, Play, Sticker, Undo2, Video } from 'lucide-react'
 import type { Attachment, Message, Platform, PreviewKind } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
 import type { TKey } from '../i18n'
 import { mediaSrc, previewSrc } from '@shared/media'
+import { SKELETON_DELAY_MS, Skeleton } from './Skeleton'
 
 const formatClock = (seconds: number): string =>
   `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60)
@@ -206,6 +207,9 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
   const t = useT()
   const openLightbox = useStore((s) => s.openLightbox)
   const [failed, setFailed] = useState(false)
+  // The poster of a video of a known shape: a skeleton of that shape stands in while it loads (only if that is not near-instant).
+  const [posterShown, setPosterShown] = useState<'fast' | 'slow' | undefined>()
+  const mountedAt = useRef(performance.now())
   const playable = !!attachment.url && /^https?:|^file:|^data:/.test(attachment.url)
   const play = (): void => {
     if (playable && attachment.url)
@@ -227,7 +231,20 @@ export function VideoThumb({ attachment, onFallback }: { attachment: Attachment;
   return (
     <button className="video-thumb" onClick={play} title={t('video')}>
       {attachment.thumbnailUrl && !failed ? (
-        <img className="attachment-image" src={previewSrc(attachment.thumbnailUrl, 960)} alt={t('video')} draggable={false} onError={() => setFailed(true)} />
+        <>
+          {attachment.width && attachment.height && !posterShown && (
+            <Skeleton className="attachment-image attachment-skeleton" style={{ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties} />
+          )}
+          <img
+            className={`attachment-image ${attachment.width && attachment.height && !posterShown ? 'pending' : ''} ${posterShown === 'slow' ? 'revealed' : ''}`}
+            src={previewSrc(attachment.thumbnailUrl, 960)}
+            alt={t('video')}
+            draggable={false}
+            style={attachment.width && attachment.height ? ({ ['--ar' as string]: attachment.width / attachment.height } as CSSProperties) : undefined}
+            onLoad={() => setPosterShown(performance.now() - mountedAt.current > SKELETON_DELAY_MS ? 'slow' : 'fast')}
+            onError={() => setFailed(true)}
+          />
+        </>
       ) : playable && !failed ? (
         // No poster from the platform (a video sent as a file): its own first frame stands in.
         <video className="attachment-image" src={`${mediaSrc(attachment.url)}#t=0.1`} preload="metadata" muted playsInline onError={() => setFailed(true)} />

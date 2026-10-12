@@ -183,7 +183,18 @@ export default function App(): JSX.Element {
   const messageShadows = useStore((s) => s.settings.messageShadows)
   const textSize = useStore((s) => s.settings.textSize ?? 'md')
   const [splash, setSplash] = useState(true)
-  const hideSplash = useCallback(() => setSplash(false), [])
+  // Launch choreography (motion idea 20): once the splash is gone the sidebar items, the list rows and the chat come in one
+  // after the other. The class is on for the one run only, so a re-render or the sample-data button later never replays it.
+  const [launching, setLaunching] = useState(false)
+  const hideSplash = useCallback(() => {
+    setSplash(false)
+    setLaunching(true)
+  }, [])
+  useEffect(() => {
+    if (!launching) return
+    const timer = setTimeout(() => setLaunching(false), 700)
+    return () => clearTimeout(timer)
+  }, [launching])
 
   const narrow = useStore((s) => s.narrow)
   const setNarrow = useStore((s) => s.setNarrow)
@@ -547,7 +558,7 @@ export default function App(): JSX.Element {
       {ready && (
         <>
           <TitleBarPane />
-          <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${detailsOpen && selectedId ? 'details-open' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
+          <div className={`app ${splash ? 'launch-wait' : launching ? 'launch' : ''} ${collapsed ? 'sidebar-collapsed' : ''} ${split ? 'split' : ''} ${detailsOpen && selectedId ? 'details-open' : ''} ${narrow ? (selectedId ? 'narrow show-chat' : 'narrow show-list') : ''}`}>
             <div className="mesh" aria-hidden>
               <span className="mesh-blob b1" />
               <span className="mesh-blob b2" />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { BellOff, ChartNoAxesColumn, ChevronDown, Inbox, ListTodo, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from 'lucide-react'
 import type { SidebarSection } from '@shared/types'
@@ -161,6 +161,10 @@ export function Sidebar(): JSX.Element {
     setMenu({ target, label, x: e.clientX, y: e.clientY })
   }
 
+  // The launch choreography staggers the nav items and account rows by their position (--i, read by app.css only while the app is launching).
+  let slot = 0
+  const at = (): CSSProperties => ({ ['--i' as string]: slot++ })
+
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
@@ -180,7 +184,7 @@ export function Sidebar(): JSX.Element {
           {!collapsed && heading('inboxes', t('inboxes'), unread.total > 0 ? <span className="fold-count">{unread.total}</span> : undefined)}
           {!isFolded('inboxes') && (
           <>
-          <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')} title={withCount(t('allInboxes'), unread.total)}>
+          <button className={`nav-item ${filter === 'all' ? 'active' : ''}`} style={at()} onClick={() => setFilter('all')} title={withCount(t('allInboxes'), unread.total)}>
             {tiles ? (
               <GummyIcon kind={tiles} name="inbox" size={26} className="nav-item-icon" />
             ) : (
@@ -198,6 +202,7 @@ export function Sidebar(): JSX.Element {
               <button
                 key={platform}
                 className={`nav-item ${filter === platform ? 'active' : ''}`}
+                style={at()}
                 onClick={() => setFilter(platform)}
                 onContextMenu={contextFor(target, PLATFORMS[platform].name)}
                 title={withCount(PLATFORMS[platform].name, unread.byPlatform[platform])}
@@ -211,7 +216,7 @@ export function Sidebar(): JSX.Element {
             )
           })}
           {todosOn && (
-          <button className="nav-item" onClick={() => openSheet({ kind: 'todos' })} title={t('todos')}>
+          <button className="nav-item" style={at()} onClick={() => openSheet({ kind: 'todos' })} title={t('todos')}>
             {tiles ? (
               <GummyIcon kind={tiles} name="todos" size={26} className="nav-item-icon" />
             ) : (
@@ -225,7 +230,7 @@ export function Sidebar(): JSX.Element {
           </button>
           )}
           {closeFriends && (
-            <button className="nav-item" onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
+            <button className="nav-item" style={at()} onClick={() => openSheet({ kind: 'insights' })} title={t('insights')}>
               {tiles ? (
                 <GummyIcon kind={tiles} name="insights" size={26} className="nav-item-icon" />
               ) : (
@@ -297,6 +302,7 @@ export function Sidebar(): JSX.Element {
                 <button
                   key={account.id}
                   className={`account-row ${filter === `account:${account.id}` ? 'active' : ''}`}
+                  style={at()}
                   onClick={() => setFilter(`account:${account.id}`)}
                   onContextMenu={contextFor(target, account.displayName)}
                   title={`${account.displayName} · ${PLATFORMS[account.platform].name}${account.error ? ` · ${accountNote(account.error)}` : ''}`}

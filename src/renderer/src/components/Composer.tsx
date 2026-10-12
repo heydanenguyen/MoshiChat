@@ -16,6 +16,7 @@ import { Presence } from './Presence'
 import { Collapse } from './Collapse'
 import { isQuietStyle } from '../rowState'
 import { WAVE_BARS, waveLevels } from '../recordingWave'
+import { UNFOLD_MS, useExitDelay, useUnfold } from '../motion/unfold'
 
 interface Props {
   /** The chat this composer writes to (each pane of a split view has its own). */
@@ -505,8 +506,35 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   }
 
   const canSend = (text.trim().length > 0 || pendingFiles.length > 0) && !disabled
+  // The "send later" pill: unfolds when there is text, folds back when it is gone (it stays for the fold).
+  const showLater = scheduleOn && !!text.trim() && !pendingFiles.length
+  const laterMounted = useExitDelay(showLater && quiet, UNFOLD_MS + 20) || (showLater && !quiet)
+  const laterRef = useRef<HTMLButtonElement>(null)
+  const laterLabelRef = useRef<HTMLSpanElement>(null)
+  useUnfold(laterRef, laterLabelRef, showLater, quiet)
   const mm = Math.floor(elapsed / 60)
   const ss = Math.floor(elapsed % 60)
+
+  const micButton = canVoice && (
+    <button className={`icon-btn composer-mic ${canSend ? 'swap-off' : ''}`} onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
+      <Mic size={18} strokeWidth={2} />
+    </button>
+  )
+  const sendButton = (
+    <button
+      className={`composer-send visible ${canSend ? '' : 'idle'}`}
+      onClick={() => submit()}
+      onContextMenu={(e) => {
+        if (!text.trim() || pendingFiles.length) return
+        e.preventDefault()
+        setScheduleOpen(true)
+      }}
+      title={t('send')}
+      disabled={!canSend}
+    >
+      <ArrowUp size={18} strokeWidth={2.6} />
+    </button>
+  )
 
   return (
     <div className="composer">
@@ -674,11 +702,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 </Presence>
               </span>
             )}
-            {canVoice && (
-              <button className={`icon-btn composer-mic ${canSend ? 'swap-off' : ''}`} onClick={() => void startRecording()} title={t('recordVoice')} disabled={disabled}>
-                <Mic size={18} strokeWidth={2} />
-              </button>
-            )}
+            {!quiet && micButton}
             {(text.trim() || translateAuto) && (
               <span className="emoji-anchor">
                 <button
@@ -706,34 +730,34 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                 </Presence>
               </span>
             )}
-            {scheduleOn && text.trim() && !pendingFiles.length && (
+            {laterMounted && (
               <span className="emoji-anchor">
                 <button
-                  className={`icon-btn composer-later ${scheduleOpen ? 'active' : ''}`}
+                  ref={laterRef}
+                  className={`icon-btn composer-later ${scheduleOpen && showLater ? 'active' : ''} ${showLater ? '' : 'leaving'}`}
                   onMouseDown={(e) => scheduleOpen && e.stopPropagation()}
                   onClick={() => setScheduleOpen((o) => !o)}
                   title={t('scheduleSend')}
-                  disabled={disabled}
+                  disabled={disabled || !showLater}
                 >
                   {quiet ? <Clock size={18} strokeWidth={2} /> : <AlarmClock size={18} strokeWidth={2} />}
-                  {quiet && <span className="composer-later-label">{t('scheduleSend')}</span>}
+                  {quiet && (
+                    <span ref={laterLabelRef} className="composer-later-label">
+                      {t('scheduleSend')}
+                    </span>
+                  )}
                 </button>
-                <Presence modal={false}>{scheduleOpen && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}</Presence>
+                <Presence modal={false}>{scheduleOpen && showLater && <SchedulePicker onPick={scheduleCurrent} onClose={() => setScheduleOpen(false)} />}</Presence>
               </span>
             )}
-            <button
-              className={`composer-send visible ${canSend ? '' : 'idle'}`}
-              onClick={() => submit()}
-              onContextMenu={(e) => {
-                if (!text.trim() || pendingFiles.length) return
-                e.preventDefault()
-                setScheduleOpen(true)
-              }}
-              title={t('send')}
-              disabled={!canSend}
-            >
-              <ArrowUp size={18} strokeWidth={2.6} />
-            </button>
+            {quiet ? (
+              <span className={`composer-swap ${canVoice ? '' : 'no-mic'}`}>
+                {micButton}
+                {sendButton}
+              </span>
+            ) : (
+              sendButton
+            )}
           </div>
         </div>
       )}

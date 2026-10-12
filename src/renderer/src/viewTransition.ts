@@ -22,16 +22,21 @@ let running = false
  */
 export function withViewTransition<R>(kind: ViewTransitionKind, update: () => R extends PromiseLike<unknown> ? never : R): void {
   const start = (document as Document & { startViewTransition?: Starter }).startViewTransition?.bind(document)
-  if (!start || running || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  // Reduced motion: no view transition, except the Details pane, which still fades (140 ms) while the columns stay put.
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (!start || running || document.hidden || (reduced && kind !== 'details')) {
     update()
     return
   }
   running = true
   const root = document.documentElement
   root.dataset.vt = kind
+  // The Details pane has its own motion each way: open when no pane is on screen yet, close when one is.
+  if (kind === 'details') root.dataset.vtDir = document.querySelector('.details-col') ? 'close' : 'open'
   const done = (): void => {
     running = false
     delete root.dataset.vt
+    delete root.dataset.vtDir
   }
   let ran = false
   try {

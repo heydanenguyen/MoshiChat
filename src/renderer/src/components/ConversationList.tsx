@@ -47,6 +47,7 @@ import { narrowChips, toolbarStep } from '../narrowNav'
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
 import { Avatar } from './Avatar'
 import { Receipt } from './Receipt'
+import { SkeletonRows } from './Skeleton'
 import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
@@ -577,6 +578,9 @@ export function ConversationList(): JSX.Element {
                     ? undefined // only requests so far: the Requests row says it all
                     : 'no-chats'
 
+  // An account is still connecting and nothing has come in yet: rows of the shape the chats will have stand in for "no conversations".
+  const listLoading = empty === 'no-chats' && !searching && Object.values(accounts).some((a) => a.status === 'connecting' && (filter === 'all' || filter === a.platform || filter === `account:${a.id}`))
+
   return (
     <section className="list-col">
       <header className={`list-header drag ${listView !== 'inbox' ? 'in-archive' : ''}`}>
@@ -666,7 +670,8 @@ export function ConversationList(): JSX.Element {
         {empty === 'inbox-zero' && (
           <ListEmpty glyph="🌤️" title={t('inboxZero')} hint={t('inboxZeroHint')} action={{ label: t('archiveShow'), run: () => setListView('archive') }} />
         )}
-        {(empty === 'no-results' || empty === 'no-chats') && (
+        {empty === 'no-chats' && listLoading && <SkeletonRows label={t('loadingChats')} />}
+        {(empty === 'no-results' || (empty === 'no-chats' && !listLoading)) && (
           <div className="conv-empty">
             <strong>{searching ? t('noResults') : t('noConversations')}</strong>
             {!searching && !hasAccounts && t('noConversationsHint')}
@@ -690,7 +695,8 @@ export function ConversationList(): JSX.Element {
                 data-index={v.index}
                 ref={virtualizer.measureElement}
                 className="conv-row"
-                style={{ transform: `translateY(${v.start - virtualizer.options.scrollMargin}px)` }}
+                // --i: the first rows come in one after the other at launch (app.css, only while the app is launching)
+                style={{ transform: `translateY(${v.start - virtualizer.options.scrollMargin}px)`, ...(v.index < 12 ? { ['--i' as string]: v.index } : null) }}
               >
                 <ConversationRow
                   c={c}
