@@ -49,6 +49,17 @@ const SPRINGS: Array<{ name: string; ms: number; overshoot: number }> = [
   { name: 'sticker', ms: 440, overshoot: 0.3 }, // a sticker's twist as it lands
   { name: 'pane', ms: 280, overshoot: 0.12 }, // the Details pane sliding in (idea 8)
   { name: 'paneout', ms: 280, overshoot: 0.08 }, // ... and out
+  // pack 2 A
+  { name: 'pill', ms: 380, overshoot: 0.3 }, // a reaction pill scaling in from the tap (idea 3)
+  { name: 'rise', ms: 560, overshoot: 0.1 }, // a chat rising to the top of the list (idea 11)
+  { name: 'part', ms: 420, overshoot: 0.06 }, // the rows it passes parting
+  { name: 'dot', ms: 450, overshoot: 0.25 }, // the unread dot popping once the row has settled
+  // pack 2 C (island)
+  { name: 'isl-grow', ms: 380, overshoot: 0.16 }, // the call pill growing: width
+  { name: 'isl-grow-h', ms: 380, overshoot: 0.22 }, // ... height
+  { name: 'isl-shrink', ms: 380, overshoot: 0.08 }, // shrinking: width
+  { name: 'isl-shrink-h', ms: 380, overshoot: 0.1 }, // ... height
+  { name: 'isl-radius', ms: 380, overshoot: 0.12 }, // corner radius
 ]
 
 /** The CSS custom properties for the root: `--spring-<name>` (a linear() easing) and `--spring-<name>-ms` (its duration). */

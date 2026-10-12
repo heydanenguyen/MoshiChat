@@ -1,0 +1,406 @@
+/*
+ * Motion pack 2, part C: the call "island" (idea 16, CallIsland.tsx). One dark pill under the title bar that morphs between
+ * ring / live / open / end. The size, radius and springs are set from JS (motion/island.ts, `--spring-isl-*` on the root);
+ * this file draws the pill and the four content layers, which cross-fade with a blur while the pill grows or shrinks around them.
+ * Own stylesheet on purpose: it is not part of app.css. Every style gets the island; Mono and Liquid differ below.
+ */
+
+:root {
+  --isl: #12141c;
+  --isl-ink: #f4f5fa;
+  --isl-ink2: #a9aebd;
+  --isl-accent: #7aa2ff;
+  --isl-live: #4ade80;
+}
+:root[data-theme='dark'] {
+  --isl: #262a37;
+}
+
+/* Under the title bar, centred; above the sheets, below the toasts (95). The host never blocks a click, only the pill does. */
+.call-island-host {
+  position: fixed;
+  z-index: 90;
+  top: calc(var(--titlebar-height) + 8px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.call-island {
+  --w: 14px;
+  --h: 14px;
+  --rad: 7px;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--w);
+  height: var(--h);
+  max-width: calc(100vw - 32px);
+  border-radius: var(--rad);
+  background: var(--isl);
+  color: var(--isl-ink);
+  overflow: hidden;
+  contain: layout paint;
+  pointer-events: auto;
+  user-select: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 14px 30px -12px rgba(10, 14, 40, 0.55);
+}
+@supports (corner-shape: squircle) {
+  .call-island {
+    corner-shape: squircle;
+  }
+}
+.call-island:focus-visible {
+  outline: 2px solid var(--isl-accent);
+  outline-offset: 2px;
+}
+.call-island:is([data-s='live'], [data-s='open']) {
+  cursor: pointer;
+}
+
+/* Four layers of the size of their state, centred: the pill's edge moves over them, the text never does. */
+.isl-layer {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  box-sizing: border-box;
+  width: var(--sw);
+  height: var(--sh);
+  display: flex;
+  opacity: 0;
+  filter: blur(8px);
+  scale: 0.94;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  transition:
+    opacity 120ms ease-out,
+    filter 120ms ease-out,
+    scale 120ms ease-out;
+}
+.isl-layer.on {
+  opacity: 1;
+  filter: blur(0);
+  scale: 1;
+  pointer-events: auto;
+  transition:
+    opacity 240ms ease-out 90ms,
+    filter 240ms ease-out 90ms,
+    scale 280ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) 90ms;
+}
+.is-ring {
+  --sw: 264px;
+  --sh: 48px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+.is-live {
+  --sw: 172px;
+  --sh: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px 0 12px;
+}
+.is-open {
+  --sw: 340px;
+  --sh: 92px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.is-end {
+  --sw: 156px;
+  --sh: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.isl-text {
+  flex: 1;
+  min-width: 0;
+}
+.isl-nm {
+  display: block;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.isl-text small {
+  display: block;
+  font-size: 11.5px;
+  line-height: 14px;
+  color: var(--isl-ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.isl-tm {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.is-open small.isl-tm {
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.is-end .isl-tm {
+  font-size: 12.5px;
+}
+.isl-endicon {
+  flex: none;
+  color: var(--isl-live);
+}
+.isl-livel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.isl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--isl-live);
+  flex: none;
+}
+.isl-top,
+.isl-bot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.isl-bot {
+  gap: 8px;
+}
+
+/* The avatar with the expanding ring (ring state only). */
+.isl-rw {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+.isl-rw::before,
+.isl-rw::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--isl-accent);
+  opacity: 0;
+  pointer-events: none;
+}
+.is-ring.on .isl-rw::before {
+  animation: isl-ring 1.6s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
+}
+.is-ring.on .isl-rw::after {
+  animation: isl-ring 1.6s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) 0.5s infinite;
+}
+@keyframes isl-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.45); /* 32 px avatar: 7.2 px of halo, inside the 8 px between the avatar and the pill edge */
+    opacity: 0;
+  }
+}
+
+/* The five waveform bars, only while their layer is showing. */
+.isl-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  flex: none;
+}
+.isl-wave i {
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
+  background: var(--isl-accent);
+  transform: scaleY(0.3);
+}
+:is(.is-live, .is-open).on .isl-wave i {
+  animation: isl-wave 1s ease-in-out infinite;
+}
+:is(.is-live, .is-open).on .isl-wave i:nth-child(2) {
+  animation-delay: -0.2s;
+}
+:is(.is-live, .is-open).on .isl-wave i:nth-child(3) {
+  animation-delay: -0.45s;
+}
+:is(.is-live, .is-open).on .isl-wave i:nth-child(4) {
+  animation-delay: -0.65s;
+}
+:is(.is-live, .is-open).on .isl-wave i:nth-child(5) {
+  animation-delay: -0.85s;
+}
+@keyframes isl-wave {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Buttons: round, 32 in the ring, 40 in the open pill. */
+.isl-ib,
+.isl-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 120ms, filter 120ms;
+}
+.isl-ib {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+.isl-decline {
+  background: var(--danger-solid, #c8323c);
+}
+.isl-decline svg {
+  rotate: 135deg;
+}
+.isl-answer {
+  background: var(--ok-solid, #1a7a46);
+}
+.isl-end {
+  width: 40px;
+  height: 40px;
+  background: var(--danger-solid, #c8323c);
+}
+.isl-end svg {
+  rotate: 135deg;
+}
+.isl-ib:hover:not(:disabled) {
+  filter: brightness(1.14);
+}
+.isl-ib:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.isl-back {
+  flex: 1;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--isl-ink);
+  background: rgba(255, 255, 255, 0.12);
+}
+.isl-back:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.isl-back span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.call-island button:focus-visible {
+  outline: 2px solid var(--isl-accent);
+  outline-offset: 2px;
+}
+
+.isl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Older calls that still ring wait as cards under the pill. */
+:root .call-banners.call-overflow {
+  top: calc(var(--titlebar-height) + 72px);
+  left: 50%;
+  right: auto;
+  width: min(400px, calc(100vw - 32px));
+  transform: translateX(-50%);
+}
+
+/* Mono is flat: a hairline instead of the shadow, a small radius (set from JS), no squircle, a still ring. */
+html[data-style='mono'] .call-island {
+  corner-shape: round;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+html[data-style='mono'] .isl-rw::before,
+html[data-style='mono'] .is-ring.on .isl-rw::before {
+  animation: none;
+  opacity: 0.55;
+  transform: scale(1.12);
+}
+html[data-style='mono'] .is-ring.on .isl-rw::after {
+  animation: none;
+  display: none;
+}
+
+/* Liquid keeps its glass: the pill is the dark surface at partial opacity over a blur. */
+html[data-style='liquid'] .call-island {
+  background: color-mix(in srgb, var(--isl) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 14px 30px -12px rgba(10, 14, 40, 0.5);
+}
+
+/* The window is in the background: the ring and the bars rest. */
+:root.window-hidden .isl-wave i,
+:root.window-hidden .isl-rw::before,
+:root.window-hidden .isl-rw::after {
+  animation-play-state: paused !important;
+}
+
+/* Reduced motion: the pill changes size at once (JS), the layers only fade (140 ms), the bars stand still at 60 %. */
+@media (prefers-reduced-motion: reduce) {
+  .isl-layer,
+  .isl-layer.on {
+    filter: none;
+    scale: 1;
+    transition: opacity 140ms ease-out !important;
+  }
+  .isl-rw::before,
+  .isl-rw::after,
+  .is-ring.on .isl-rw::before,
+  .is-ring.on .isl-rw::after {
+    animation: none;
+  }
+  .isl-wave i,
+  :is(.is-live, .is-open).on .isl-wave i {
+    animation: none;
+    transform: scaleY(0.6);
+  }
+}

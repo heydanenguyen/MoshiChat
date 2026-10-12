@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Phone, PhoneCall, PhoneOff, Video } from 'lucide-react'
-import type { CallState, IncomingCall } from '@shared/types'
+import type { IncomingCall } from '@shared/types'
 import { PLATFORMS } from '@shared/types'
 import { useStore, useT } from '../store'
-import { callTimer, ringDeadline } from '../calls'
+import { ringDeadline } from '../calls'
 import { startRing } from '../sounds'
-import { usePresence, usePresenceList } from '../usePresence'
+import { usePresenceList } from '../usePresence'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
 import { isQuietStyle } from '../rowState'
+import { newestIncoming, pillCallId } from '../motion/island'
+import { CallIsland } from './CallIsland'
 
 const callKey = (call: IncomingCall): string => call.id
 
@@ -79,62 +81,33 @@ function CallCard({ call, closing }: { call: IncomingCall; closing: boolean }): 
   )
 }
 
-/** Every call that is ringing (usually one), top right, until it is answered, declined or gone; each plays its exit. */
-export function IncomingCallBanner(): JSX.Element | null {
+/**
+ * The call island (idea 16) shows the newest ringing call and the call in progress; any older ringing calls wait below it as cards.
+ * Also plays the ring while a call rings.
+ */
+export function IncomingCallBanner(): JSX.Element {
   const incoming = useStore((s) => s.calls.incoming)
   const entries = usePresenceList(incoming, callKey)
   useRing(incoming)
-  if (!entries.length) return null
+  // The pill shows the newest ringing call; one that leaves while it was the newest goes with the pill's own morph (no card exit).
+  const newestId = newestIncoming(incoming)?.id
+  const leavingId = pillCallId(entries.map((e) => e.item))
+  const overflow = entries.filter(({ item, closing }) => item.id !== newestId && !(closing && item.id === leavingId))
   return (
-    <div className="call-banners">
-      {entries.map(({ item, closing }) => (
-        <CallCard key={item.id} call={item} closing={closing} />
-      ))}
-    </div>
+    <>
+      <CallIsland />
+      {overflow.length > 0 && (
+        <div className="call-banners call-overflow">
+          {overflow.map(({ item, closing }) => (
+            <CallCard key={item.id} call={item} closing={closing} />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 
-/** The clock, ticking once a second. */
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
-  return now
-}
-
-function useConversationTitle(id: string | undefined): string | undefined {
-  return useStore((s) => (id ? s.conversations[id]?.title : undefined))
-}
-
-function StripBody({ call, closing }: { call: NonNullable<CallState['active']>; closing: boolean }): JSX.Element {
-  const t = useT()
-  const name = useConversationTitle(call.conversationId) ?? PLATFORMS[call.platform].name
-  const endCall = useStore((s) => s.endCall)
-  const quiet = useStore((s) => isQuietStyle(s.settings.style))
-  const now = useNow()
-  return (
-    <div className="call-strip" data-state={closing ? 'closing' : 'open'}>
-      <button type="button" className="call-strip-main" title={t('callBackTo')} onClick={() => void window.unison.calls.focus().catch(() => undefined)}>
-        <span className="call-strip-dot" aria-hidden />
-        <span className="call-strip-text">{t('callInCallWith', { name })}</span>
-        <span className="call-strip-time">{callTimer(call.startedAt, now)}</span>
-      </button>
-      <button type="button" className="call-strip-end" title={quiet ? t('callEnd') : undefined} disabled={closing} onClick={() => void endCall()}>
-        <PhoneOff size={14} strokeWidth={2.2} />
-        <span className="call-strip-end-text">{t('callEnd')}</span>
-      </button>
-    </div>
-  )
-}
-
-/** The call in progress as a slim strip above the conversation list: click to get back to its window, or end it. */
-export function ActiveCallStrip(): JSX.Element | null {
-  const active = useStore((s) => s.calls.active)
-  const last = useRef(active)
-  if (active) last.current = active
-  const { mounted, state } = usePresence(!!active)
-  if (!mounted || !last.current) return null
-  return <StripBody call={last.current} closing={state === 'closing'} />
+/** The in-call strip was folded into the island; this stays only so its mount point in the conversation list renders nothing. */
+export function ActiveCallStrip(): null {
+  return null
 }
