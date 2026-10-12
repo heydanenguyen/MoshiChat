@@ -23,6 +23,9 @@ export interface FacebookPersonalSecret {
   partition?: string
 }
 
+/** How long a message sent over the realtime connection waits for Messenger's echo before it is shown as sent anyway. */
+const ECHO_WAIT_MS = 8_000
+
 type FcaModule = typeof import('ws3-fca')
 type FcaApi = import('ws3-fca').API
 type FcaThread = import('ws3-fca').ThreadInfo
@@ -63,6 +66,8 @@ const HISTORY_LIMIT = 300
  * resulting session cookies, never the password.
  */
 export class FacebookPersonalAdapter implements PlatformAdapter {
+  /** Messages sent over the realtime connection waiting for their echo (which carries the id), per thread. */
+  private pendingSends = new Map<string, Array<{ text: string; done(messageID: string, timestamp: number): void }>>()
   readonly account: Account
   private api?: FcaApi
   private meId = ''
@@ -187,11 +192,22 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
     )
     const attachment = paths.map((path) => createReadStream(path))
     const payload = attachment.length ? { body: text, attachment } : { body: text }
+    const replyTo = options.replyToId ? String(options.replyToId) : undefined
+    // Text goes the way Messenger's web app sends it, over the realtime connection: the old HTTP endpoint ws3-fca
+    // used (/messaging/send/) began answering 500 to every message. Files still take that endpoint (ws3-fca's realtime
+    // upload marks every file a voice clip); if the connection is not up yet, text falls back to it too.
+    if (!attachment.length) {
+      const sent = await this.sendOverRealtime(api, payload, threadId, replyTo).catch((err: Error) => {
+        this.ctx.log('facebook realtime send unavailable, using the old endpoint:', err.message)
+        return undefined
+      })
+      if (sent) return this.sentMessage(id, text, options, sent)
+    }
     // ws3-fca's sendMessage returns a promise and takes the replied-to message third: a callback in that place
     // made it throw outside our reach, so the send never finished ("reply was never sent").
     const send = api.sendMessage as unknown as (m: unknown, t: string, replyTo?: string) => Promise<{ messageID?: string; timestamp?: number | string } | null>
     const result =
-      (await send(payload, threadId, options.replyToId ? String(options.replyToId) : undefined).catch((err: Error & { statusCode?: number }) => {
+      (await send(payload, threadId, replyTo).catch((err: Error & { statusCode?: number }) => {
         // ws3-fca retries a server error from Facebook five times, then gives up with a technical message.
         if (err.statusCode && err.statusCode >= 500) {
           this.ctx.log('facebook send failed after retries', err.statusCode)
@@ -199,6 +215,39 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
         }
         throw err
       })) ?? {}
+    return this.sentMessage(id, text, options, result)
+  }
+
+  /** Sends over the realtime connection, then waits (briefly) for Messenger's echo of it to learn its id. */
+  private async sendOverRealtime(api: FcaApi, payload: { body: string }, threadId: string, replyTo?: string): Promise<{ messageID?: string; timestamp?: number }> {
+    const mqtt = (api as unknown as { sendMessageMqtt?: (m: unknown, t: string, replyTo?: string) => Promise<unknown> }).sendMessageMqtt
+    const ctx = (api as unknown as { ctx?: { mqttClient?: { connected?: boolean } } }).ctx
+    if (!mqtt || (ctx && ctx.mqttClient && ctx.mqttClient.connected === false)) throw new Error('not connected')
+    const echo = new Promise<{ messageID?: string; timestamp?: number }>((resolve) => {
+      let echoed = false
+      const entry = {
+        text: payload.body,
+        done: (messageID: string, timestamp: number): void => {
+          echoed = true
+          resolve({ messageID, timestamp })
+        }
+      }
+      this.pendingSends.set(threadId, [...(this.pendingSends.get(threadId) ?? []), entry])
+      setTimeout(() => {
+        if (echoed) return
+        const list = this.pendingSends.get(threadId)?.filter((p) => p !== entry) ?? []
+        if (list.length) this.pendingSends.set(threadId, list)
+        else this.pendingSends.delete(threadId)
+        // Sent, but Messenger never echoed it: worth knowing if messages go missing this way.
+        this.ctx.log('facebook realtime send: no echo within', ECHO_WAIT_MS, 'ms')
+        resolve({})
+      }, ECHO_WAIT_MS)
+    })
+    await mqtt(payload, threadId, replyTo)
+    return echo
+  }
+
+  private sentMessage(id: string, text: string, options: SendOptions, result: { messageID?: string; timestamp?: number | string }): Message {
     const message: Message = {
       id: result.messageID ?? `local-${Date.now()}`,
       conversationId: id,
@@ -363,6 +412,16 @@ export class FacebookPersonalAdapter implements PlatformAdapter {
       case 'message':
       case 'message_reply': {
         const message = this.toMessage(event as unknown as FcaMessage, id)
+        // The echo of a message sent from here over the realtime connection: sendMessage returns it (with this id).
+        const pending = message.isOutgoing ? this.pendingSends.get(event.threadID) : undefined
+        const mine = pending?.find((p) => p.text === message.text)
+        if (pending && mine) {
+          const rest = pending.filter((p) => p !== mine)
+          if (rest.length) this.pendingSends.set(event.threadID, rest)
+          else this.pendingSends.delete(event.threadID)
+          mine.done(message.id, message.sentAt)
+          break
+        }
         this.remember(id, [message])
         if (!this.threads.has(event.threadID)) void this.discoverThread(event.threadID)
         const thread = this.threads.get(event.threadID)
