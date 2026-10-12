@@ -76,7 +76,7 @@ describe('springEasing', () => {
 describe('springVars', () => {
   it('emits an easing and a duration for every spring', () => {
     const v = springVars(1)
-    for (const n of ['pop', 'settle', 'arrive', 'soft', 'exhale', 'sticker', 'pane', 'paneout', 'pill', 'rise', 'part', 'dot']) {
+    for (const n of ['pop', 'settle', 'arrive', 'soft', 'exhale', 'sticker', 'pane', 'paneout', 'pill', 'rise', 'part', 'dot', 'lead', 'trail', 'peer']) {
       expect(v[`--spring-${n}`]).toMatch(/^linear\(0, /)
       expect(v[`--spring-${n}-ms`]).toMatch(/^\d+ms$/)
     }
@@ -95,6 +95,12 @@ describe('springVars', () => {
     expect(v['--spring-rise-ms']).toBe('560ms')
     expect(v['--spring-part-ms']).toBe('420ms')
     expect(v['--spring-dot-ms']).toBe('450ms')
+    expect(v['--spring-lead-ms']).toBe('280ms')
+    expect(v['--spring-trail-ms']).toBe('460ms')
+    expect(v['--spring-peer-ms']).toBe('420ms')
+    // the trailing edge is critically damped even at full bounce: no overshoot
+    expect(Math.max(...points(v['--spring-trail']))).toBeLessThanOrEqual(1)
+    expect(Math.max(...points(v['--spring-lead']))).toBeGreaterThan(1.03)
   })
 
   it('scales the overshoot by the bounce; at 0 nothing goes past 1', () => {

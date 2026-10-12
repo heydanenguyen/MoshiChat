@@ -46,6 +46,7 @@ import { useScrollFade } from '../scrollFade'
 import { Presence } from './Presence'
 import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
+import { closeChat } from '../motion/peer'
 import { nextPinned } from '../scrollPin'
 import { isQuietStyle } from '../rowState'
 import { remainingUnread } from '../narrowNav'
@@ -523,7 +524,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
       {wallpaper.attr && <div className="chat-wallpaper" data-wallpaper={wallpaper.attr} aria-hidden />}
       <header className="chat-header drag">
         {narrow && (
-          <button className={quiet ? 'icon-btn no-drag chat-back' : 'icon-btn no-drag'} onClick={() => withViewTransition('to-list', () => select(undefined))} title={t('back')} aria-label={trimmed && backCount > 0 ? `${t('back')}, ${backCount}` : undefined}>
+          <button className={quiet ? 'icon-btn no-drag chat-back' : 'icon-btn no-drag'} onClick={() => void closeChat(conversation.id, () => select(undefined))} title={t('back')} aria-label={trimmed && backCount > 0 ? `${t('back')}, ${backCount}` : undefined}>
             <ChevronLeft size={20} strokeWidth={2.4} />
             {trimmed && backCount > 0 && <span className="chat-back-count">{formatBadge(backCount)}</span>}
           </button>
@@ -541,7 +542,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
         />
         <div className="chat-header-info">
           <div className="chat-header-title">
-            {conversation.title}
+            <span className="chat-header-name">{conversation.title}</span>
             {conversation.muted && <BellOff size={13} strokeWidth={2.2} style={{ opacity: 0.5 }} />}
           </div>
           <div className={`chat-header-sub ${isTyping ? 'typing' : ''}`}>{subtitle}</div>

@@ -27,7 +27,7 @@ import { cleanError } from './store'
 import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
 import { usePresenceList } from './usePresence'
-import { withViewTransition } from './viewTransition'
+import { takeThemeOrigin, withViewTransition } from './viewTransition'
 import { bounceOf, springVars } from './motion/spring'
 import { installPress } from './motion/press'
 import { Presence } from './components/Presence'
@@ -448,15 +448,21 @@ export default function App(): JSX.Element {
   // theme from the last run so the launch screen does not flash the wrong one.
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = (): void => {
+    const apply = (fromControl: boolean): void => {
       const cached = ready ? undefined : readSplashPrefs().theme
       const effective = cached ?? (theme === 'system' ? (media.matches ? 'dark' : 'light') : theme)
-      document.documentElement.dataset.theme = effective
+      const root = document.documentElement
+      // A switch the person made with a control (Settings, the command palette) opens as a circle from that control; the OS
+      // changing between light and dark, and the first application, just apply.
+      const origin = fromControl && ready && root.dataset.theme !== effective ? takeThemeOrigin() : undefined
+      if (origin) withViewTransition('theme', () => void (root.dataset.theme = effective), { origin })
+      else root.dataset.theme = effective
       if (ready) writeSplashPrefs({ theme: effective })
     }
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
+    apply(true)
+    const onSystem = (): void => apply(false)
+    media.addEventListener('change', onSystem)
+    return () => media.removeEventListener('change', onSystem)
   }, [theme, ready])
 
   useEffect(() => {

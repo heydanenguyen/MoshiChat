@@ -15,6 +15,7 @@ import { Pal } from './Pals'
 import { castById, specOf } from '@shared/pals-art'
 import { LOGOS, LOGO_ORDER, PAL_LOGO_ORDER, type LogoId } from '@shared/logos'
 import { useStore, useT, useTagDefs } from '../store'
+import { noteThemeOrigin } from '../viewTransition'
 import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
 import { PlatformIcon } from './PlatformIcon'
@@ -322,7 +323,14 @@ function AppearancePage(): JSX.Element {
         <Row title={t('themeMode')}>
           <div className="segmented">
             {(['system', 'light', 'dark'] as ThemePreference[]).map((theme) => (
-              <button key={theme} className={settings.theme === theme ? 'active' : ''} onClick={() => void setSettings({ theme })}>
+              <button
+                key={theme}
+                className={settings.theme === theme ? 'active' : ''}
+                onClick={(e) => {
+                  noteThemeOrigin(e.currentTarget)
+                  void setSettings({ theme })
+                }}
+              >
                 {theme === 'system' ? t('themeSystem') : theme === 'light' ? t('themeLight') : t('themeDark')}
               </button>
             ))}

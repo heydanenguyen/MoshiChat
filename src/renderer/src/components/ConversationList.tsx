@@ -40,6 +40,8 @@ import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
 import { PART_MS, RISE_MS, flipMoves, reordered, riseDelays, riseOf, riseOvershoot, type Rise, type RowMove } from '../flip'
 import { bounceOf, springEasing } from '../motion/spring'
+import { markSwap, openChatMotion } from '../motion/peer'
+import { usePill } from '../motion/pill'
 import { icon } from '../icons'
 import { isQuietStyle, rowState } from '../rowState'
 import { narrowChips, toolbarStep } from '../narrowNav'
@@ -489,9 +491,14 @@ export function ConversationList(): JSX.Element {
   const openRow = useCallback(
     (id: string, besideIt: boolean): void => {
       if (besideIt) return openBeside(id)
-      // On a phone-sized window the list slides away to the chat.
-      if (useStore.getState().narrow) withViewTransition('to-chat', () => select(id))
-      else select(id)
+      const { narrow, selectedId } = useStore.getState()
+      // On a phone-sized window the list slides away to the chat; on a wide one only the avatar and name fly (or, from one chat
+      // to another, cross-fade) and the thread fades up. The row's avatar and name are the shared elements (motion/peer.ts).
+      // A chat replacing another on a wide window gets no view transition (it would block the page for a moment on every click).
+      if (selectedId === id || (selectedId && !narrow)) {
+        if (selectedId !== id) markSwap()
+        select(id)
+      } else withViewTransition(narrow ? 'to-chat' : 'chat', () => select(id), openChatMotion(id, narrow))
     },
     [openBeside, select]
   )
@@ -1088,34 +1095,37 @@ function NarrowChips(): JSX.Element {
   )
 }
 
-/** Narrow Moshi look: the bottom bar of the list screen, standing in for the sidebar's other entries. */
+/**
+ * Narrow Moshi look: the bottom bar of the list screen, standing in for the sidebar's other entries. The tab whose sheet is open
+ * is the current one; a pill sits behind it and stretches from tab to tab (motion/pill.ts).
+ */
 function NarrowTabs({ onChats }: { onChats: () => void }): JSX.Element {
   const t = useT()
   const openSheet = useStore((s) => s.openSheet)
+  const sheetKind = useStore((s) => s.sheet.kind)
   const todosOn = useStore((s) => s.settings.todosOn !== false)
   const closeFriends = useStore((s) => s.settings.closeFriends !== false)
+  const tabs: Array<{ id: string; label: string; icon: JSX.Element; aria?: string; open: () => void }> = [
+    { id: 'chats', label: t('tabChats'), icon: <Inbox {...icon(22)} aria-hidden />, open: onChats },
+    ...(todosOn ? [{ id: 'todos', label: t('tabTodos'), icon: <ListTodo {...icon(22)} aria-hidden />, open: () => openSheet({ kind: 'todos' }) }] : []),
+    ...(closeFriends
+      ? [{ id: 'insights', label: t('tabClose'), icon: <Heart {...icon(22)} aria-hidden />, aria: t('insights'), open: () => openSheet({ kind: 'insights' }) }]
+      : []),
+    { id: 'settings', label: t('tabSettings'), icon: <Settings {...icon(22)} aria-hidden />, open: () => openSheet({ kind: 'settings' }) }
+  ]
+  const current = Math.max(0, tabs.findIndex((tab) => tab.id === sheetKind))
+  const bar = useRef<HTMLElement>(null)
+  const pill = useRef<HTMLSpanElement>(null)
+  usePill(bar, pill, current, tabs.map((tab) => tab.id).join())
   return (
-    <nav className="narrow-tabs" aria-label={t('appName')}>
-      <button type="button" className="narrow-tab on" aria-current="page" onClick={onChats}>
-        <Inbox {...icon(22)} aria-hidden />
-        <span>{t('tabChats')}</span>
-      </button>
-      {todosOn && (
-        <button type="button" className="narrow-tab" onClick={() => openSheet({ kind: 'todos' })}>
-          <ListTodo {...icon(22)} aria-hidden />
-          <span>{t('tabTodos')}</span>
+    <nav className="narrow-tabs" aria-label={t('appName')} ref={bar}>
+      <span className="narrow-pill" ref={pill} aria-hidden />
+      {tabs.map((tab, i) => (
+        <button key={tab.id} type="button" className={`narrow-tab ${i === current ? 'on' : ''}`} aria-current={i === current ? 'page' : undefined} aria-label={tab.aria} onClick={tab.open}>
+          {tab.icon}
+          <span>{tab.label}</span>
         </button>
-      )}
-      {closeFriends && (
-        <button type="button" className="narrow-tab" aria-label={t('insights')} onClick={() => openSheet({ kind: 'insights' })}>
-          <Heart {...icon(22)} aria-hidden />
-          <span>{t('tabClose')}</span>
-        </button>
-      )}
-      <button type="button" className="narrow-tab" onClick={() => openSheet({ kind: 'settings' })}>
-        <Settings {...icon(22)} aria-hidden />
-        <span>{t('tabSettings')}</span>
-      </button>
+      ))}
     </nav>
   )
 }

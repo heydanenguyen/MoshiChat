@@ -60,6 +60,10 @@ const SPRINGS: Array<{ name: string; ms: number; overshoot: number }> = [
   { name: 'isl-shrink', ms: 380, overshoot: 0.08 }, // shrinking: width
   { name: 'isl-shrink-h', ms: 380, overshoot: 0.1 }, // ... height
   { name: 'isl-radius', ms: 380, overshoot: 0.12 }, // corner radius
+  // pack 2 B
+  { name: 'lead', ms: 280, overshoot: 0.12 }, // the tab pill's leading edge (idea 10)
+  { name: 'trail', ms: 460, overshoot: 0 }, // ... and the trailing edge, which follows softly
+  { name: 'peer', ms: 420, overshoot: 0.06 }, // the row's avatar and name flying to the chat header (idea 7)
 ]
 
 /** The CSS custom properties for the root: `--spring-<name>` (a linear() easing) and `--spring-<name>-ms` (its duration). */

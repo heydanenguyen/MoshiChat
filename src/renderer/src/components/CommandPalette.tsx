@@ -36,7 +36,7 @@ import { isMac, shortcutLabel } from '../utils'
 import type { TKey } from '../i18n'
 import { Avatar } from './Avatar'
 import { isComposingEnter } from '../imeGuard'
-import { withViewTransition } from '../viewTransition'
+import { noteThemeOrigin, withViewTransition } from '../viewTransition'
 
 interface Command {
   id: string
@@ -196,7 +196,10 @@ function useCommands(): Command[] {
     add('new-chat', 'newChat', 'new message compose tin nhan moi', <SquarePen {...ICON} />, () => state.openSheet({ kind: 'new-chat' }), shortcutLabel('N'))
     add('archive-view', listView === 'archive' ? 'commandShowInbox' : 'commandShowArchive', 'archive archived inbox luu tru hop thu', listView === 'archive' ? <Inbox {...ICON} /> : <Archive {...ICON} />, () => state.setListView(listView === 'archive' ? 'inbox' : 'archive'), shortcutLabel(';'))
     const dark = document.documentElement.dataset.theme === 'dark'
-    add('theme', dark ? 'commandLightMode' : 'commandDarkMode', 'theme dark light mode giao dien toi sang', dark ? <Sun {...ICON} /> : <Moon {...ICON} />, () => void state.setSettings({ theme: dark ? 'light' : 'dark' }))
+    add('theme', dark ? 'commandLightMode' : 'commandDarkMode', 'theme dark light mode giao dien toi sang', dark ? <Sun {...ICON} /> : <Moon {...ICON} />, () => {
+      noteThemeOrigin()
+      void state.setSettings({ theme: dark ? 'light' : 'dark' })
+    })
     const liquid = settings.style === 'liquid'
     add('style', liquid ? 'commandMoshiLook' : 'commandLiquidGlass', 'liquid glass style moshi kinh', <Sparkles {...ICON} />, () => void state.setSettings({ style: liquid ? 'moshi' : 'liquid' }))
     if (wide) add('split', 'splitView', 'split two panes chia doi', <Columns2 {...ICON} />, () => state.toggleSplit(), shortcutLabel('\\'))
