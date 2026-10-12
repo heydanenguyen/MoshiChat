@@ -119,7 +119,7 @@ describe('photoStickerFiles at a size', () => {
     expect(files.webp).not.toBe(files.png)
     // the answer is remembered, so the next send does not redraw it all
     expect((await photoStickerFiles(source, { size: 512, maxBytes: 100 })).still).toBe(true)
-  })
+  }, 60_000) // several sharp redraws: the Intel mac runner needs more than the 15 s default
 })
 
 
