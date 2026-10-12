@@ -38,7 +38,8 @@ import { openIds } from '../panes'
 import { popoverShift } from '../popover'
 import { usePresence } from '../usePresence'
 import { withViewTransition } from '../viewTransition'
-import { flipMoves, reordered } from '../flip'
+import { PART_MS, RISE_MS, flipMoves, reordered, riseDelays, riseOf, riseOvershoot, type Rise, type RowMove } from '../flip'
+import { bounceOf, springEasing } from '../motion/spring'
 import { icon } from '../icons'
 import { isQuietStyle, rowState } from '../rowState'
 import { narrowChips, toolbarStep } from '../narrowNav'
@@ -317,6 +318,88 @@ const ConversationRow = memo(function ConversationRow({
   )
 })
 
+/** A named spring from the root's custom properties (motion/spring.ts), or an ease when it is not there. */
+function cssSpring(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(`--spring-${name}`).trim() || 'cubic-bezier(0.16, 1, 0.3, 1)'
+}
+
+/** Reduced motion: the row that moved up flashes the accent's wash once (200 ms) instead of travelling. */
+function flashRow(el: HTMLElement): void {
+  el.classList.remove('rise-flash')
+  void el.offsetWidth
+  el.classList.add('rise-flash')
+  setTimeout(() => el.classList.remove('rise-flash'), 260)
+}
+
+/**
+ * One row's move to its new place. Ordinary moves slide as before. The chat that rose (more than one place) lifts 2 px with
+ * a shadow (the `lift` class, 160 ms), then travels on the rise spring while the rows it passes part on the part spring,
+ * each 25 ms later per place from where it started (up to six); once it has settled the lift drops and a new unread dot pops.
+ */
+/** The springs and bounce for one reorder, read once (reading them row by row, after a row got its lift class, would force a style recalc each time). */
+interface RiseSprings {
+  part: string
+  rise: string
+  dot: string
+  bounce: number
+}
+
+function playRise(el: HTMLElement, move: RowMove, rise: Rise | undefined, newUnread: boolean, springs: RiseSprings): void {
+  // Moved again while still on its way (another message): carry on from where it is on screen, not from where it was laid out.
+  let fromY = move.from
+  const running = el.getAnimations()
+  // (it has been lifted and moving already: nothing waits again)
+  const delays = riseDelays(running.length > 0, rise?.steps ?? 0)
+  if (running.length) {
+    fromY = new DOMMatrixReadOnly(getComputedStyle(el).transform).m42
+    for (const a of running) a.cancel()
+  }
+  const from = `translateY(${fromY}px)`
+  const to = `translateY(${move.to}px)`
+  // Promoted for the slide only (a text layer kept promoted renders its text differently on Windows).
+  el.style.willChange = 'transform'
+  // (A cancelled slide reports after the next one has started: only the last one to end clears up.)
+  const done = (): void => {
+    if (el.getAnimations().length) return
+    el.style.willChange = ''
+    el.classList.remove('lift')
+  }
+  if (!rise || rise.role === 'plain') {
+    const slide = el.animate([{ transform: from }, { transform: to }], { duration: 220, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+    slide.onfinish = slide.oncancel = done
+    return
+  }
+  if (rise.role === 'part') {
+    const slide = el.animate([{ transform: from }, { transform: to }], {
+      duration: PART_MS,
+      delay: delays.part,
+      easing: springs.part,
+      fill: 'backwards'
+    })
+    slide.onfinish = slide.oncancel = done
+    return
+  }
+  const distance = Math.abs(fromY - move.to)
+  const bounce = springs.bounce
+  // The spring's 10 % overshoot is kept to 20 px however far the chat travels.
+  const capped = riseOvershoot(distance, bounce)
+  el.classList.add('lift')
+  const slide = el.animate([{ transform: from }, { transform: to }], {
+    duration: RISE_MS,
+    delay: delays.mover,
+    easing: capped < 0.1 * bounce ? springEasing(RISE_MS, capped) : springs.rise,
+    fill: 'backwards'
+  })
+  slide.onfinish = slide.oncancel = done
+  if (newUnread) {
+    // Held at nothing while the row travels, then it pops.
+    // (the default look has a dot and a count, the others one of them: every one pops)
+    for (const dot of el.querySelectorAll<HTMLElement>('.conv-dot, .unread-pill')) {
+      dot.animate([{ scale: '0' }, { scale: '1' }], { duration: 450, delay: delays.dot, easing: springs.dot, fill: 'backwards' })
+    }
+  }
+}
+
 export function ConversationList(): JSX.Element {
   const t = useT()
   const { conversations, counts, archivedCount, requestCount, snoozedCount } = useChatList()
@@ -438,27 +521,44 @@ export function ConversationList(): JSX.Element {
     if (top !== rowsOffset) setRowsOffset(top)
   }, [rowsOffset, requestCount, listView, quickFilter, search, conversations.length])
   // A chat that a new message moves up slides there (FLIP) instead of jumping: only the rows on screen both before and
-  // after, only when the order changed (not when a height was measured), and not under reduced motion.
-  const lastRows = useRef<{ ids: string[]; pos: Map<string, number> }>({ ids: [], pos: new Map() })
+  // after, only when the order changed (not when a height was measured). One that jumps up by more than a place also lifts
+  // and springs while the rows it passes part (playRise); under reduced motion nothing moves and the chat flashes once.
+  const lastRows = useRef<{ ids: string[]; pos: Map<string, number>; unread: Map<string, number> }>({ ids: [], pos: new Map(), unread: new Map() })
   useLayoutEffect(() => {
-    const rows = virtualizer.getVirtualItems().map((v) => ({ id: conversations[v.index]?.id ?? '', y: v.start - virtualizer.options.scrollMargin, size: v.size }))
+    const items = virtualizer.getVirtualItems()
+    const rows = items.map((v) => ({ id: conversations[v.index]?.id ?? '', y: v.start - virtualizer.options.scrollMargin, size: v.size }))
     const before = lastRows.current
     const ids = rows.map((row) => row.id)
-    lastRows.current = { ids, pos: new Map(rows.map((row) => [row.id, row.y])) }
+    lastRows.current = {
+      ids,
+      pos: new Map(rows.map((row) => [row.id, row.y])),
+      unread: new Map(items.map((v) => [conversations[v.index]?.id ?? '', conversations[v.index]?.unreadCount ?? 0]))
+    }
     const list = listRef.current
     const container = rowsTop.current
     if (!list || !container || !before.ids.length || !reordered(before.ids, ids)) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const top = list.scrollTop - rowsOffset
-    for (const move of flipMoves(before.pos, rows, { top, bottom: top + list.clientHeight })) {
-      const el = container.querySelector<HTMLElement>(`:scope > [data-id="${CSS.escape(move.id)}"]`)
+    const moves = flipMoves(before.pos, rows, { top, bottom: top + list.clientHeight })
+    const rise = riseOf(moves, rows[0]?.size ?? 68)
+    const rowOf = (id: string): HTMLElement | null => container.querySelector<HTMLElement>(`:scope > [data-id="${CSS.escape(id)}"]`)
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // Instant reorder: the one chat that moved up flashes once so the eye finds it.
+      const up = rise.filter((r) => r.distance >= 1)
+      const el = up.length === 1 ? rowOf(up[0].id) : null
+      if (el) flashRow(el)
+      return
+    }
+    const springs: RiseSprings = {
+      part: cssSpring('part'),
+      rise: cssSpring('rise'),
+      dot: cssSpring('dot'),
+      bounce: bounceOf(document.documentElement.dataset.style as Parameters<typeof bounceOf>[0])
+    }
+    for (const move of moves) {
+      const el = rowOf(move.id)
       if (!el) continue
-      // Promoted for the slide only (a text layer kept promoted renders its text differently on Windows).
-      el.style.willChange = 'transform'
-      const slide = el.animate([{ transform: `translateY(${move.from}px)` }, { transform: `translateY(${move.to}px)` }], { duration: 220, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
-      slide.onfinish = slide.oncancel = () => {
-        el.style.willChange = ''
-      }
+      const r = rise.find((x) => x.id === move.id)
+      playRise(el, move, r, (before.unread.get(move.id) ?? 0) < (lastRows.current.unread.get(move.id) ?? 0), springs)
     }
   })
   const hasAccounts = Object.keys(accounts).length > 0

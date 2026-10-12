@@ -14,6 +14,7 @@ import { Avatar } from './Avatar'
 import { Receipt } from './Receipt'
 import { useLinger } from '../motion/linger'
 import { noteSent, takeSent } from '../motion/handoff'
+import { burst, lastTap } from '../motion/burst'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
@@ -1184,14 +1185,56 @@ function BubbleView({
     const dy = Math.max(0, bounds.top + 8 - r.top)
     sheet.style.translate = `${dx}px ${dy}px`
   }, [])
-  const [burst, setBurst] = useState(0)
+  const [heartBurst, setHeartBurst] = useState(0)
+  // Reacting: the emoji's particles fly from the tap and the pill scales in from it (motion/burst.ts, app.css "Motion pack 2").
+  // Only for your own reactions, and only when you add or change one (taking yours back is quiet).
+  const rowRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<{ at: number; x?: number; y?: number } | undefined>(undefined)
+  const reactWith = (emoji: string, particles = true): void => {
+    if (mine !== emoji) {
+      const tap = lastTap()
+      const box = rowRef.current?.querySelector('.bubble')?.getBoundingClientRect()
+      const x = tap?.x ?? (box ? box.left + box.width / 2 : undefined)
+      const y = tap?.y ?? (box ? box.top + box.height / 2 : undefined)
+      popRef.current = { at: Date.now(), x: tap?.x, y: tap?.y }
+      if (particles && x !== undefined && y !== undefined) burst(x, y, emoji)
+    }
+    void react(message.conversationId, message.id, emoji)
+  }
+  // The pill (it appears when the reaction lands in the store) scales in from where the tap was.
+  useLayoutEffect(() => {
+    const pop = popRef.current
+    if (!pop) return
+    if (Date.now() - pop.at > 2000) {
+      popRef.current = undefined
+      return
+    }
+    const slot = rowRef.current?.querySelector<HTMLElement>('.react-slot')
+    const pill = slot?.querySelector<HTMLElement>('.zreact-pill, .reaction-chip.mine')
+    if (!slot || !pill) return
+    popRef.current = undefined
+    if (pop.x !== undefined && pop.y !== undefined) {
+      const r = pill.getBoundingClientRect()
+      // (kept within 48 px of the pill: from further away the overshoot would carry it that much further past its place)
+      const near = (v: number, size: number): number => Math.round(Math.max(-48, Math.min(size + 48, v)))
+      slot.style.setProperty('--pop-ox', `${near(pop.x - r.left, r.width)}px`)
+      slot.style.setProperty('--pop-oy', `${near(pop.y - r.top, r.height)}px`)
+    } else {
+      slot.style.removeProperty('--pop-ox')
+      slot.style.removeProperty('--pop-oy')
+    }
+    // (Left on: taking it off would bring the pill's own entrance animation back. The next reaction restarts it.)
+    delete slot.dataset.pop
+    void slot.offsetWidth
+    slot.dataset.pop = ''
+  }, [message.reactions])
   // Double-click a message to heart it (like Instagram).
   const heart = (e: React.MouseEvent): void => {
     if (!features.react || message.status === 'sending' || message.status === 'failed') return
     if ((e.target as HTMLElement).closest('a, button, img, video, audio, .album, .link-card, .post-card')) return
     window.getSelection()?.removeAllRanges()
-    if (mine !== '❤️') setBurst(Date.now())
-    void react(message.conversationId, message.id, '❤️')
+    if (mine !== '❤️') setHeartBurst(Date.now())
+    reactWith('❤️', false)
   }
   const direction = message.isOutgoing ? 'out' : 'in'
   // A sticker without a link (WhatsApp, Telegram) is one too: StickerImage fetches its picture.
@@ -1329,7 +1372,7 @@ function BubbleView({
             <button
               key={r.emoji}
               className={`reaction-chip ${r.byMe ? 'mine' : ''}`}
-              onClick={() => features.react && void react(message.conversationId, message.id, r.emoji)}
+              onClick={() => features.react && reactWith(r.emoji)}
               title={r.byMe ? t('removeReaction') : t('react')}
             >
               {r.emoji}
@@ -1344,13 +1387,14 @@ function BubbleView({
     <div
       className={`bubble-row ${fresh ? 'fresh' : ''} ${highlighted ? 'highlight' : ''} ${reactionSlot && placement === 'top' ? 'react-top' : ''}`}
       data-message-id={message.id}
+      ref={rowRef}
     >
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
           <div className={classes.join(' ')} style={entryStyle} onDoubleClick={heart}>
-            {burst > 0 && (
-              <span key={burst} className="heart-burst" aria-hidden onAnimationEnd={() => setBurst(0)}>
+            {heartBurst > 0 && (
+              <span key={heartBurst} className="heart-burst" aria-hidden onAnimationEnd={() => setHeartBurst(0)}>
                 ❤️
               </span>
             )}
@@ -1425,7 +1469,7 @@ function BubbleView({
                           title={mine === emoji ? t('removeReaction') : undefined}
                           onClick={() => {
                             setMoreOpen(false)
-                            void react(message.conversationId, message.id, emoji)
+                            reactWith(emoji)
                           }}
                         >
                           {emoji}
@@ -1491,7 +1535,7 @@ function BubbleView({
                   title={mine === emoji ? t('removeReaction') : undefined}
                   onClick={() => {
                     setPicker(false)
-                    void react(message.conversationId, message.id, emoji)
+                    reactWith(emoji)
                   }}
                 >
                   {emoji}
@@ -1519,7 +1563,7 @@ function BubbleView({
                     current={mine}
                     onPick={(emoji) => {
                       setMoreEmoji(false)
-                      void react(message.conversationId, message.id, emoji)
+                      reactWith(emoji)
                     }}
                     onClose={() => setMoreEmoji(false)}
                   />
@@ -1527,7 +1571,7 @@ function BubbleView({
                   <EmojiPicker
                     onPick={(emoji) => {
                       setMoreEmoji(false)
-                      void react(message.conversationId, message.id, emoji)
+                      reactWith(emoji)
                     }}
                     onClose={() => setMoreEmoji(false)}
                   />

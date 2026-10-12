@@ -29,6 +29,7 @@ import { useUpdate } from './updateStore'
 import { usePresenceList } from './usePresence'
 import { withViewTransition } from './viewTransition'
 import { bounceOf, springVars } from './motion/spring'
+import { installPress } from './motion/press'
 import { Presence } from './components/Presence'
 import { IncomingCallBanner } from './components/IncomingCallBanner'
 
@@ -324,6 +325,9 @@ export default function App(): JSX.Element {
       for (const name of Object.keys(springs)) root.style.removeProperty(name)
     }
   }, [mesh, style, darkBase, palsPaper, toneId, monoCanvas, iconStyle, accent, customAccents, font, messageShadows, textSize])
+
+  // Buttons dip when pressed (CSS); icon buttons also tilt toward the pointer (motion/press.ts).
+  useEffect(() => installPress(), [])
 
   // The native menu bar (macOS) sends its shortcuts here.
   useEffect(() => {

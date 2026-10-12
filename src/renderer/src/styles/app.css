@@ -17665,3 +17665,147 @@ html[data-vt='details']::view-transition-new(vt-chat) {
     opacity: 0;
   }
 }
+
+/* ==== Motion pack 2 (ideas 3, 11, 19) ====
+   3: the reaction burst (motion/burst.ts, the pill scales in from the tap), 19: press feel (motion/press.ts),
+   11: a chat rising to the top of the list (ConversationList.tsx playRise). Springs: --spring-pill, -rise, -part, -dot, -soft. */
+
+/* ---- 3: reaction burst. The particles live in a fixed layer at the document root: no bubble or row clips them, nothing is laid out. */
+.burst-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+  overflow: hidden;
+}
+.burst-particle {
+  position: absolute;
+  display: block;
+  line-height: 1;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.burst-particle.speck {
+  border-radius: 50%;
+}
+/* the pill (or the chip you just added) scales in from the tap; --pop-ox/--pop-oy are the tap relative to it, centre when it came from the keyboard */
+.react-slot[data-pop] :is(.zreact-pill, .reaction-chip.mine) {
+  transform-origin: var(--pop-ox, 50%) var(--pop-oy, 50%);
+  animation:
+    pill-pop var(--spring-pill-ms, 380ms) var(--spring-pill, var(--ease-spring)) backwards,
+    pill-fade 100ms linear backwards;
+}
+@keyframes pill-pop {
+  from {
+    scale: 0.2;
+  }
+}
+@keyframes pill-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- 19: press feel. Controls dip to .96 in 90 ms and spring back (transition on transform with --spring-soft); icon buttons also
+   tilt up to 2 degrees toward the pointer (--rx/--ry set by motion/press.ts), Space/Enter add .pressed. No transform on hover. Rows
+   (.conv-row) are large surfaces and do not dip. The list below is PRESSABLE in motion/press.ts. */
+:root:root :is(.icon-btn, .btn, .composer-send, .composer-mic, .nav-item, .quick-chip, .plat-chip, .narrow-tab, .suggest-chip, .conv-more, .chat-back, .empty-cta):not(.composer-swap > *, .composer-send.idle) {
+  transition:
+    transform var(--spring-soft-ms, 280ms) var(--spring-soft, var(--ease-spring)),
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease,
+    opacity var(--duration-fast) ease,
+    filter var(--duration-base) ease;
+}
+/* (!important only on the transform: the looks each zero or set their own :active transform with long selectors) */
+:root:root :is(.icon-btn, .btn, .composer-send, .composer-mic, .nav-item, .quick-chip, .plat-chip, .narrow-tab, .suggest-chip, .conv-more, .chat-back, .empty-cta):not(.composer-swap > *, .composer-send.idle, :disabled, [aria-disabled='true']):is(:active, .pressed) {
+  transform: perspective(240px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(0.96) !important;
+  transition:
+    transform 90ms ease-out,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-base) ease,
+    opacity var(--duration-fast) ease,
+    filter var(--duration-base) ease;
+}
+/* the Moshi look's mic/send slot animates rotate and scale; the dip uses transform, which composes with them */
+:root .composer-box .composer-swap > :is(.composer-send, .composer-mic):not(.idle, .swap-off) {
+  transition:
+    rotate var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    scale var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    opacity 120ms linear,
+    visibility 0s,
+    transform var(--spring-soft-ms, 280ms) var(--spring-soft, var(--ease-spring));
+}
+:root .composer-box .composer-swap > :is(.composer-send, .composer-mic):not(.idle, .swap-off, :disabled):is(:active, .pressed) {
+  transform: perspective(240px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(0.96) !important;
+  transition:
+    rotate var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    scale var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)),
+    opacity 120ms linear,
+    visibility 0s,
+    transform 90ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:root :is(.icon-btn, .btn, .composer-send, .composer-mic, .nav-item, .quick-chip, .plat-chip, .narrow-tab, .suggest-chip, .conv-more, .chat-back, .empty-cta):not(.composer-send.idle, :disabled, [aria-disabled='true']):is(:active, .pressed),
+  :root .composer-box .composer-swap > :is(.composer-send, .composer-mic):not(.idle, .swap-off, :disabled):is(:active, .pressed) {
+    transform: none !important;
+    opacity: 0.7;
+    transition: opacity 60ms linear !important;
+  }
+  /* 3: the pill only fades in */
+  .react-slot[data-pop] :is(.zreact-pill, .reaction-chip.mine) {
+    animation: motion-fade 140ms linear backwards !important;
+  }
+}
+
+/* ---- 11: rise to top. The chat that jumped up lifts 2 px with a shadow, travels on --spring-rise while the rows it passes part on
+   --spring-part, then drops. The slide itself is Web Animations on .conv-row (it already carries translateY). */
+.conv-row.lift {
+  z-index: 3;
+}
+:root:root .conv-row > .conv-item {
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow 160ms ease,
+    translate 160ms var(--ease-out);
+}
+:root:root .conv-row.lift > .conv-item {
+  translate: 0 -2px;
+  background: var(--glass-strong);
+  box-shadow:
+    0 8px 20px -6px rgba(31, 38, 135, 0.24),
+    0 2px 6px rgba(31, 38, 135, 0.1);
+}
+:root[data-theme='dark']:root .conv-row.lift > .conv-item {
+  box-shadow:
+    0 8px 20px -6px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* no lift; the reorder is instant and the chat's row flashes the accent wash once */
+  .conv-row.lift > .conv-item {
+    translate: none;
+  }
+  .conv-row.rise-flash::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    background: var(--accent-soft);
+    pointer-events: none;
+    animation: rise-flash 200ms linear both !important;
+  }
+}
+@keyframes rise-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
