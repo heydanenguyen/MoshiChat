@@ -1,3 +1,30 @@
+## Moshi 0.10.0
+
+**Gói chuyển động đợt 2 "Expressive": những chuyển cảnh có nhận diện.** Vẫn lò xo thật, chỉ transform và opacity, có bản rút gọn khi bật "giảm chuyển động"; cả bốn giao diện, Mono không nảy.
+
+### Cuộc gọi
+- **Viên cuộc gọi kiểu Dynamic Island:** cuộc gọi đến và cuộc gọi đang diễn ra nằm trong một viên dưới thanh tiêu đề, đổi hình bằng lò xo qua các trạng thái: đổ chuông (avatar có vòng sóng, nút nghe/từ chối) → đang gọi (đồng hồ + sóng âm) → mở rộng khi rê hoặc focus (quay lại cuộc gọi, kết thúc) → đã kết thúc. Nội dung mờ qua nhau giữa các trạng thái. Bấm vào viên để quay lại cửa sổ gọi. Mono giữ dạng phẳng, Liquid giữ kính.
+
+### Trong cuộc chat
+- **Thả cảm xúc:** pill phóng ra từ đúng điểm bấm, kèm tám hạt bay theo cung rồi tan.
+- **Nhấn nút:** mọi nút lún nhẹ khi nhấn rồi bật lại; nút icon nghiêng về phía điểm bấm. Không có hiệu ứng khi rê chuột.
+- **Danh sách:** chat có tin mới nhấc lên, trượt lên đầu trong khi các hàng khác tách ra, rồi chấm chưa đọc bật ra. Tin dồn dập không làm hàng khựng.
+- **Mở chat:** từ khung trống (và trên cửa sổ hẹp) avatar và tên bay từ hàng lên đầu khung chat; chuyển giữa hai chat đang mở thì tức thì, chỉ mờ nhẹ phần đầu khung.
+- **Cuộn:** chip ngày nhấc lên và mờ khi rời mép trên; bubble ở mép mờ dần thay vì bị cắt phẳng (tin dài vẫn đọc được).
+
+### Giao diện
+- **Đổi sáng/tối:** giao diện mới mở ra như một vòng tròn từ chính công tắc (đổi theo hệ thống thì không hiệu ứng).
+- **Tab bar cửa sổ hẹp:** viên chỉ báo giãn về phía tab đích rồi chốt lại.
+
+### Lưu ý
+- Đợt 3 (mascot Pals, gói ăn mừng, lò xo nảy hơn cho giao diện Pals) ra ở bản sau.
+
+---
+
+### English
+- **Motion pack 2 "Expressive":** a Dynamic-Island call pill that morphs on springs between ringing, live, open (hover/focus) and ended; reaction pills that scale from the tap with eight particles; press feel on every button (no hover transforms); chats that lift and travel to the top of the list; the row's avatar flying into the chat header when a chat opens from an empty column or on phone-sized windows (switching between open chats stays instant); day chips and edge bubbles that fade on a scroll-driven timeline; a circular light/dark reveal; a fluid tab-bar indicator. All four styles; Mono without overshoot; reduced-motion fallbacks throughout.
+- Wave 3 (Pals mascot behaviours, celebration pack, bouncier Pals) follows.
+
 ## Moshi 0.9.0
 
 **Gói chuyển động đợt 1 "Calm": app có khối lượng và nhịp, nhưng không ồn.** Mọi chuyển động chạy bằng lò xo thật (đường cong giảm chấn tính ra `linear()`), chỉ dùng transform và opacity, và đều có bản rút gọn khi hệ điều hành bật "giảm chuyển động". Áp dụng cho cả bốn giao diện; Mono không nảy.
