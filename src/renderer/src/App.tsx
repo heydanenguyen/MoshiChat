@@ -28,6 +28,7 @@ import { useAi } from './aiStore'
 import { useUpdate } from './updateStore'
 import { usePresenceList } from './usePresence'
 import { withViewTransition } from './viewTransition'
+import { bounceOf, springVars } from './motion/spring'
 import { Presence } from './components/Presence'
 import { IncomingCallBanner } from './components/IncomingCallBanner'
 
@@ -305,6 +306,12 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.font = font
     document.documentElement.dataset.messageShadows = messageShadows === false ? 'off' : 'on'
     document.documentElement.dataset.textSize = textSize
+    // The springs (send pop, arrival, exhale...) bounce as much as the style does: none in Mono.
+    const springs = springVars(bounceOf(style))
+    for (const [name, value] of Object.entries(springs)) root.style.setProperty(name, value)
+    return () => {
+      for (const name of Object.keys(springs)) root.style.removeProperty(name)
+    }
   }, [mesh, style, darkBase, palsPaper, toneId, monoCanvas, iconStyle, accent, customAccents, font, messageShadows, textSize])
 
   // The native menu bar (macOS) sends its shortcuts here.

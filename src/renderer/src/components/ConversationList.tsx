@@ -10,7 +10,6 @@ import {
   AtSign,
   BellOff,
   BellRing,
-  Check,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +46,7 @@ import { narrowChips, toolbarStep } from '../narrowNav'
 /** Drag payload type for a chat row (dropped onto a pane of the chat area). */
 export const CONVERSATION_DRAG = 'application/x-moshi-conversation'
 import { Avatar } from './Avatar'
+import { Receipt } from './Receipt'
 import { PreviewText } from './MessageParts'
 import { TagChip } from './Tag'
 import { ReconnectBanner } from './ChatView'
@@ -260,7 +260,7 @@ const ConversationRow = memo(function ConversationRow({
                 <>
                   {quiet && state.receipt && (
                     <span className={`conv-receipt ${state.receipt}`} role="img" aria-label={state.receipt === 'read' ? t('read') : t('delivered')}>
-                      {state.receipt === 'read' ? <CheckCheck {...icon(16)} /> : <Check {...icon(16)} />}
+                      <Receipt status={state.receipt === 'read' ? 'read' : 'sent'} />
                     </span>
                   )}
                   {prefix}

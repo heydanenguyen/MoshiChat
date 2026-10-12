@@ -37,6 +37,10 @@
   --details-width: 300px;
   --gutter: 10px;
 
+  /* The old bezier "spring", kept for rules that predate the real ones. Real damped springs (motion/spring.ts) are set on the
+     root by App.tsx, scaled by the style's bounce (none in Mono), as a linear() easing --spring-<name> plus its duration
+     --spring-<name>-ms: pop 320ms (a sent message), settle 360ms (rows making room), arrive 300ms (a message arriving),
+     soft 280ms (general), exhale 360ms (the composer after a send), sticker 440ms. Use  animation: x var(--spring-pop-ms) var(--spring-pop). */
   --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 140ms;

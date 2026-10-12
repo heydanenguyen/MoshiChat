@@ -11,6 +11,9 @@ import { canCall } from '../calls'
 import { PlatformIcon } from './PlatformIcon'
 import { formatBytes, formatDayLabel, formatTime, jumboEmojiCount, personLook, relayReason, sectionize, tip, withStickers, type MessageGroup } from '../utils'
 import { Avatar } from './Avatar'
+import { Receipt } from './Receipt'
+import { useLinger } from '../motion/linger'
+import { noteSent, takeSent } from '../motion/handoff'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
@@ -246,6 +249,10 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   const celebrate = useCallback(() => setEffect({ kind: 'birthday', key: `bday-${conversation.id}` }), [setEffect, conversation.id])
 
   const isTyping = !!typing && typing.until > Date.now()
+  // The bubble finishes its breathing cycle after the person stops typing (a message arriving ends it at once).
+  const lastTyping = useRef(typing)
+  if (typing) lastTyping.current = typing
+  const typingBubble = useLinger(isTyping, messages?.[messages.length - 1]?.id)
   const sections = useMemo(() => sectionize(messages ?? []), [messages])
   const lastOutgoing = useMemo(() => {
     for (let i = (messages?.length ?? 0) - 1; i >= 0; i--) if (messages![i].isOutgoing) return messages![i]
@@ -574,12 +581,12 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
               )
             })}
           </div>
-          {isTyping && (
+          {typingBubble.shown && (
             <div className="msg-group in">
               <div className="msg-avatar-slot">
-                <Avatar {...personLook(conversation, { name: typing.name })} size={28} />
+                <Avatar {...personLook(conversation, { name: (typing ?? lastTyping.current)?.name ?? '' })} size={28} />
               </div>
-              <div className="typing-bubble" aria-label={t('typing')}>
+              <div className="typing-bubble on" aria-label={t('typing')} onAnimationIteration={() => !isTyping && typingBubble.finish()}>
                 <span />
                 <span />
                 <span />
@@ -812,11 +819,19 @@ function GroupView({
   const platform = platformOf?.(group.messages[0]) ?? conversation.platform
   // Kept per run so a memoised album sees the same messages until the run changes.
   const items = useMemo(() => groupItems(group.messages), [group.messages])
+  // Messages of this run that have just arrived and have not been drawn yet: they stagger in (40 ms each) and the avatar nods once.
+  const drawn = useRef<Set<string>>(new Set())
+  const arrivals = group.isOutgoing ? NO_IDS : group.messages.filter((m) => !drawn.current.has(m.id) && isFresh(m.sentAt)).map((m) => m.id)
+  const [nodFor, setNodFor] = useState<string | undefined>(arrivals[0])
+  if (arrivals[0] && arrivals[0] !== nodFor) setNodFor(arrivals[0])
+  useEffect(() => {
+    for (const m of group.messages) drawn.current.add(m.id)
+  })
   if (group.system) return <SystemRow message={group.messages[0]} platform={platform} />
   return (
     <div className={`msg-group ${group.isOutgoing ? 'out' : 'in'}`}>
       {!group.isOutgoing && (
-        <div className="msg-avatar-slot">
+        <div className={`msg-avatar-slot ${nodFor ? 'nod' : ''}`} onAnimationEnd={(e) => e.target === e.currentTarget && setNodFor(undefined)}>
           <Avatar {...personLook(conversation, { id: group.senderId, name: group.senderName, avatarUrl: group.senderAvatarUrl })} size={28} />
         </div>
       )}
@@ -850,7 +865,15 @@ function GroupView({
           return (
             <div key={message.id} style={{ display: 'contents' }}>
               {/* the bubble draws its own reactions, wherever Settings > Chat puts them */}
-              <Bubble message={message} position={position} language={language} features={features} highlighted={message.id === highlightId} platform={platform} />
+              <Bubble
+                message={message}
+                position={position}
+                language={language}
+                features={features}
+                highlighted={message.id === highlightId}
+                platform={platform}
+                arrival={arrivals.indexOf(message.id)}
+              />
               {/* every failed bubble gets its line (with Send again / Delete), not only the last one */}
               {message.status === 'failed' ? (
                 <div className="status-line failed">
@@ -859,7 +882,10 @@ function GroupView({
                 </div>
               ) : (
                 message.id === lastOutgoingId && (
-                  <div className="status-line">{message.status === 'read' ? t('read') : message.status === 'sending' ? t('sending') : t('delivered')}</div>
+                  <div className="status-line">
+                    <Receipt status={message.status} size={16} />
+                    {message.status === 'read' ? t('read') : message.status === 'sending' ? t('sending') : t('delivered')}
+                  </div>
                 )
               )}
             </div>
@@ -1045,6 +1071,8 @@ function savedSetOf(list: Array<{ conversationId: string; messageId: string }> |
   return set
 }
 
+const NO_IDS: string[] = []
+
 /** A bubble re-renders only when its own message (or how it is shown) changes, not for every message in the thread. */
 const Bubble = memo(BubbleView)
 
@@ -1054,7 +1082,8 @@ function BubbleView({
   language,
   features,
   highlighted,
-  platform
+  platform,
+  arrival
 }: {
   message: Message
   position: 'single' | 'first' | 'middle' | 'last'
@@ -1062,6 +1091,8 @@ function BubbleView({
   features: Account['features']
   highlighted: boolean
   platform: Platform
+  /** Its place among the messages that arrived together (-1: not new). */
+  arrival: number
 }): JSX.Element {
   const t = useT()
   // The store's actions are stable functions: one shallow-compared pick instead of a subscription each.
@@ -1078,7 +1109,18 @@ function BubbleView({
   )
   const saved = useStore((s) => !!savedSetOf(s.settings.savedMessages)?.has(`${message.conversationId}|${message.id}`))
   // Slides in only when it is new, not each time scrolling remounts its row (decided once, at mount).
-  const [fresh] = useState(() => isFresh(message.sentAt))
+  // Its temporary bubble (a send is drawn at once, then replaced by the platform's message) has already started the entry: carry on from there.
+  const [entry] = useState(() => {
+    if (!isFresh(message.sentAt)) return { fresh: false, resumed: 0 }
+    if (!message.isOutgoing) return { fresh: true, resumed: 0 }
+    // Drawn again (its run was remounted when an earlier message of the run was confirmed): carry on, do not restart.
+    const resumed = message.status === 'sending' ? noteSent(message) : takeSent(message)
+    // (Under 30 ms is the same mount asked twice, as strict mode does, or an echo too quick to matter: start from the beginning.)
+    return resumed === undefined || resumed < 30 ? { fresh: true, resumed: 0 } : { fresh: resumed < 450, resumed }
+  })
+  const fresh = entry.fresh
+  // Several arriving together come in 40 ms apart (up to five), decided once like `fresh`.
+  const [stagger] = useState(() => Math.min(5, Math.max(0, arrival)))
   const [picker, setPicker] = useState(false)
   const [moreEmoji, setMoreEmoji] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
@@ -1182,7 +1224,10 @@ function BubbleView({
   // Only photos, no words: the grid stands on its own like an album (no bubble frame).
   if (gridded && !sticker && !message.text.trim() && !message.replyTo && inline.length === grid.length) classes.push('grid-only')
   if (message.status === 'failed') classes.push('failed')
+  // Its entry is already under way (carried over from the temporary bubble): reduced motion must not fade it in again.
+  if (fresh && entry.resumed > 0) classes.push('resumed')
   const mine = message.reactions.find((r) => r.byMe)?.emoji
+  const entryStyle = fresh && (stagger > 0 || entry.resumed > 0) ? ({ '--i': stagger || undefined, animationDelay: entry.resumed > 0 ? `-${entry.resumed}ms` : undefined } as CSSProperties) : undefined
 
   useEffect(() => {
     if (!picker && !confirmUnsend && !moreOpen) return
@@ -1276,7 +1321,7 @@ function BubbleView({
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
-          <div className={classes.join(' ')} onDoubleClick={heart}>
+          <div className={classes.join(' ')} style={entryStyle} onDoubleClick={heart}>
             {burst > 0 && (
               <span key={burst} className="heart-burst" aria-hidden onAnimationEnd={() => setBurst(0)}>
                 ❤️

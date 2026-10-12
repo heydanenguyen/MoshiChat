@@ -120,6 +120,8 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
   // The box changes height when the layout flips to two rows: it slides from the old height to the new one.
   const boxRef = useRef<HTMLDivElement>(null)
   const tallFrom = useRef(0)
+  // The box breathes out once when a message goes (a one-shot class, removed when the animation ends).
+  const [exhale, setExhale] = useState(false)
   const changeTall = useCallback((next: boolean): void => {
     tallFrom.current = boxRef.current?.offsetHeight ?? 0
     setTall(next)
@@ -343,6 +345,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
       void translateText(value, translateTarget!)
         .then((result) => {
           if (!result) return
+          setExhale(true)
           void send(conversationId, result.text.trim() ? result.text : value)
           setText('')
           setTranslated(undefined)
@@ -353,6 +356,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
         })
       return
     }
+    setExhale(true)
     void send(conversationId, value)
     setText('')
     setTranslated(undefined)
@@ -492,6 +496,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
         const bytes = new Uint8Array(await blob.arrayBuffer())
         const aac = session.aac?.chunks.length ? new Uint8Array(await new Blob(session.aac.chunks, { type: 'audio/mp4' }).arrayBuffer()) : undefined
         const voice = await window.unison.app.saveVoice(bytes, duration, aac)
+        setExhale(true)
         await send(conversationId, '', [voice])
       } catch (err) {
         showToast((err as Error).message, 'error')
@@ -578,7 +583,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
           </button>
         </div>
       ) : (
-        <div ref={boxRef} className={`composer-box ${tall ? 'tall' : ''}`}>
+        <div ref={boxRef} className={`composer-box ${tall ? 'tall' : ''} ${exhale ? 'exhale' : ''}`} onAnimationEnd={(e) => e.target === e.currentTarget && setExhale(false)}>
           {slash && <QuickReplyMenu items={slashItems} active={Math.min(slashIndex, Math.max(0, slashItems.length - 1))} onPick={insertQuickReply} onHover={setSlashIndex} />}
           {canAttach && (
             <button className="icon-btn composer-attach" onClick={() => void pick()} title={t('attach')} disabled={disabled}>
@@ -630,6 +635,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                         setStickersOpen(false)
                         void (async () => {
                           try {
+                            setExhale(true)
                             await send(conversationId, '', [await window.unison.app.sticker(id)])
                           } catch (err) {
                             showToast((err as Error).message, 'error')
@@ -659,6 +665,7 @@ export function Composer({ conversationId, active = true, disabled, canAttach, c
                       onClose={() => setGifsOpen(false)}
                       onPick={(item) => {
                         setGifsOpen(false)
+                        setExhale(true)
                         void sendGif(conversationId, item)
                         focusInput()
                       }}

@@ -7,7 +7,9 @@ const BASE = new Set(['.call-card-avatar', '.call-ring', '.call-card-glyph'])
 
 const css = readFileSync('src/renderer/src/styles/app.css', 'utf8')
 const start = css.indexOf('Quiet Glass (UI direction A, phases 0-1)')
-const section = css.slice(css.lastIndexOf('/*', start)).replace(/\/\*[\s\S]*?\*\//g, '')
+// The section ends where the first later motion section begins (the sections after it are not Quiet Glass rules).
+const end = css.indexOf('/* ==== Motion pack', start)
+const section = css.slice(css.lastIndexOf('/*', start), end < 0 ? undefined : end).replace(/\/\*[\s\S]*?\*\//g, '')
 
 /** Selector lists of every style rule in `text`, looking inside @media / @container (not @keyframes). */
 function selectors(text: string): string[] {

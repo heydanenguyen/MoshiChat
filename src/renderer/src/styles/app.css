@@ -1943,8 +1943,9 @@ mark {
   max-width: 100%;
 }
 
-/* Only a message that has just arrived slides in; rows the virtualizer remounts while scrolling stay still. */
-.bubble-row.fresh {
+/* Only a message that has just arrived slides in; rows the virtualizer remounts while scrolling stay still.
+   A row with a bubble animates the bubble itself (Motion pack 1, end of this file); an album or a bubbleless story keeps the row's slide. */
+.bubble-row.fresh:not(:has(.bubble)) {
   animation: bubble-in var(--duration-base) var(--ease-out);
 }
 
@@ -16991,4 +16992,298 @@ html[data-vt='details']::view-transition-new(vt-chat) {
 :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.bubble.sticker, .bubble.media.grid-only) {
   background: transparent;
   box-shadow: none;
+}
+
+/* ==== Motion pack 1 (ideas 1, 2, 4, 5) ====
+   Springs come from App.tsx (--spring-<name> + --spring-<name>-ms, scaled by the style's bounce, none in Mono). Everything animates
+   individual transform properties (scale, translate, rotate), opacity and, once, a photo's blur, on the .bubble INSIDE the measured
+   .chat-row: the row's own size never changes, so the virtualizer and the scroll pin see nothing. */
+
+/* 1 · Send: pop and settle. Outgoing, just sent. */
+.msg-group.out .bubble-row.fresh .bubble {
+  transform-origin: 100% 100%;
+  animation:
+    send-pop var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)) backwards,
+    send-rise 260ms var(--ease-out) backwards,
+    send-fade 110ms linear backwards;
+}
+.msg-group.out .bubble-row.fresh .bubble.sticker {
+  animation:
+    send-pop var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)) backwards,
+    send-rise 260ms var(--ease-out) backwards,
+    send-fade 110ms linear backwards,
+    send-twist var(--spring-sticker-ms, 440ms) var(--spring-sticker, var(--ease-spring)) backwards;
+}
+.msg-group.out .bubble-row.fresh .bubble.media {
+  animation:
+    send-pop var(--spring-pop-ms, 320ms) var(--spring-pop, var(--ease-spring)) backwards,
+    send-rise 260ms var(--ease-out) backwards,
+    send-fade 110ms linear backwards,
+    send-focus 340ms ease-out backwards;
+}
+@keyframes send-pop {
+  from {
+    scale: 0.92;
+  }
+}
+@keyframes send-rise {
+  from {
+    translate: 0 10px;
+  }
+}
+@keyframes send-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes send-twist {
+  from {
+    rotate: -9deg;
+  }
+}
+@keyframes send-focus {
+  from {
+    filter: blur(10px);
+  }
+}
+
+/* The composer breathes out once (class set in Composer.tsx, removed when this ends). */
+.composer-box.exhale {
+  animation: composer-exhale var(--spring-exhale-ms, 360ms) var(--spring-exhale, var(--ease-spring));
+}
+@keyframes composer-exhale {
+  from {
+    scale: 0.985;
+  }
+}
+
+/* 2 · Arrival: slide up with mass. --i (0-5) is the bubble's place among those that arrived together: 40 ms apart. */
+.msg-group.in .bubble-row.fresh .bubble {
+  transform-origin: 0 100%;
+  animation:
+    arrive-rise var(--spring-arrive-ms, 300ms) var(--spring-arrive, var(--ease-spring)) calc(var(--i, 0) * 40ms) backwards,
+    arrive-fade 150ms linear calc(var(--i, 0) * 40ms) backwards;
+}
+@keyframes arrive-rise {
+  from {
+    translate: 0 8px;
+  }
+}
+@keyframes arrive-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* The avatar nods once with the first new message of the run. */
+.msg-avatar-slot.nod {
+  transform-origin: 50% 100%;
+  animation: avatar-nod 440ms ease-out;
+}
+@keyframes avatar-nod {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  33% {
+    rotate: 2deg;
+  }
+  67% {
+    rotate: -0.7deg;
+  }
+}
+
+/* 4 · Read receipt: the second check is drawn, both turn accent. The second stroke is always there, undrawn. */
+.receipt {
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+  vertical-align: -1px;
+  color: var(--text-tertiary);
+}
+.receipt path {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.receipt-a {
+  stroke: currentColor;
+  transition: stroke 200ms ease-out;
+}
+.receipt-b {
+  stroke: var(--accent);
+  stroke-dasharray: 10;
+  stroke-dashoffset: 10;
+  opacity: 0;
+}
+.receipt.read .receipt-a {
+  stroke: var(--accent);
+}
+.receipt.read .receipt-b {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition:
+    stroke-dashoffset 200ms ease-out 20ms,
+    opacity 30ms linear;
+}
+.status-line .receipt {
+  margin-right: 5px;
+}
+.conv-receipt .receipt {
+  display: block;
+}
+
+/* 5 · Typing: the bubble breathes, the dots rise in a wave (one 1.6 s cycle). The bubble stays for the cycle that is running
+   when typing stops (ChatView, useLinger), so it comes to rest instead of cutting off mid-rise. */
+.typing-bubble.on {
+  transform-origin: 0 100%;
+  animation:
+    bubble-in var(--duration-base) var(--ease-out),
+    typing-breathe 1.6s ease-in-out infinite;
+}
+.typing-bubble.on span {
+  opacity: 0.45;
+  animation: dw1 1.6s ease-in-out infinite;
+}
+.typing-bubble.on span:nth-child(2) {
+  animation-name: dw2;
+  animation-delay: 0s;
+}
+.typing-bubble.on span:nth-child(3) {
+  animation-name: dw3;
+  animation-delay: 0s;
+}
+@keyframes typing-breathe {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.03;
+  }
+}
+@keyframes dw1 {
+  0%,
+  100% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+  12% {
+    translate: 0 calc(var(--dw-rise, 4px) * -1);
+    opacity: 1;
+  }
+  28%,
+  32% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+}
+@keyframes dw2 {
+  0%,
+  10%,
+  100% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+  24% {
+    translate: 0 calc(var(--dw-rise, 4px) * -1);
+    opacity: 1;
+  }
+  40% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+}
+@keyframes dw3 {
+  0%,
+  22%,
+  100% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+  36% {
+    translate: 0 calc(var(--dw-rise, 4px) * -1);
+    opacity: 1;
+  }
+  52% {
+    translate: 0 0;
+    opacity: 0.45;
+  }
+}
+/* The same wave on the dots in the chat list (no breathing there). */
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i {
+  --dw-rise: 3px;
+  opacity: 0.45;
+  animation: dw1 1.6s ease-in-out infinite;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(2) {
+  animation-name: dw2;
+  animation-delay: 0s;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(3) {
+  animation-name: dw3;
+  animation-delay: 0s;
+}
+/* Nobody is looking while the window is hidden. */
+:root.window-hidden .typing-bubble.on,
+:root.window-hidden .typing-bubble.on span,
+:root.window-hidden .typing-dots i {
+  animation-play-state: paused !important;
+}
+
+/* Reduced motion. The rule near the top of this file shortens every animation to one frame; these say what is left instead. */
+@media (prefers-reduced-motion: reduce) {
+  /* a sent or arriving message only fades in (no slide, no stagger, no twist, no blur) */
+  .msg-group .bubble-row.fresh .bubble:not(.resumed) {
+    animation: motion-fade 120ms linear backwards !important;
+  }
+  .msg-avatar-slot.nod {
+    animation: none !important;
+  }
+  .composer-box.exhale {
+    animation: none;
+  }
+  /* the check is coloured at once, the second one not drawn */
+  .receipt-a,
+  .receipt.read .receipt-b {
+    transition: none !important;
+  }
+  /* the dots light up one after the other, nothing moves */
+  .typing-bubble.on {
+    animation: none !important;
+  }
+  .typing-bubble.on span,
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i {
+    animation: motion-dot 1.6s steps(1, end) infinite !important;
+  }
+  .typing-bubble.on span:nth-child(2),
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(2) {
+    animation-delay: 0.53s !important;
+  }
+  .typing-bubble.on span:nth-child(3),
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i:nth-child(3) {
+    animation-delay: 1.06s !important;
+  }
+}
+/* The list's dots pause with the hidden window also under reduced motion (same specificity as the stepped rule above, so later). */
+:root.window-hidden:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) .typing-dots i {
+  animation-play-state: paused !important;
+}
+/* A sticker's own landing pop would stack on the bubble's entry (a Zalo sprite keeps its frame loop). */
+.bubble-row.fresh .bubble.sticker .attachment-sticker:not(.sprite) {
+  animation: none;
+}
+@keyframes motion-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes motion-dot {
+  0% {
+    opacity: 1;
+  }
+  33%,
+  100% {
+    opacity: 0.45;
+  }
 }
