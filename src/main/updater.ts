@@ -2,6 +2,7 @@ import { app, shell } from 'electron'
 import { execFile } from 'child_process'
 import { autoUpdater, type UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '@shared/types'
+import { pointUninstallEntryAtCore } from './update-registry'
 
 /** Where people get a build by hand (also what an unsigned macOS build points to). */
 export const RELEASES_URL = 'https://github.com/heydanenguyen/MoshiChat/releases/latest'
@@ -146,9 +147,14 @@ export class Updater {
   async install(prepare?: () => Promise<void>): Promise<void> {
     if (this.state.phase !== 'ready' || this.installing) return
     this.installing = true
+    // The installer removes the old version through the registered uninstaller: that must be the NSIS one (the new
+    // package's own .onInit does this too, see build/installer.nsh; this covers it from the app's side). Bounded,
+    // alongside the shutdown: nothing here may keep the installer from starting.
+    const repoint = Promise.race([pointUninstallEntryAtCore(this.log), new Promise((r) => setTimeout(r, 8_000))])
     if (prepare) {
       await Promise.race([prepare().catch((err: Error) => this.log('[update] preparing to install:', err.message)), new Promise((r) => setTimeout(r, 10_000))])
     }
+    await repoint
     setImmediate(() => autoUpdater.quitAndInstall(false, true))
   }
 

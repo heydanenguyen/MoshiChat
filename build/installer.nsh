@@ -39,6 +39,37 @@
     Sleep 300
 !macroend
 
+; The branded setup (setup/MoshiSetup.cs) registers its own "Moshi Uninstall.exe" (the goodbye window) as the uninstaller
+; and keeps the NSIS uninstaller command in MoshiCoreUninstall. Removing the old version through the branded one failed
+; (it ran the NSIS uninstaller in place, which cannot move its own file out), so an update points the entry at the NSIS
+; uninstaller first, as the branded setup itself does. Runs in .onInit before installUtil.nsh, so the quotes are stripped here.
+!macro customInit
+  Push $1
+  Push $2
+  Push $3
+  ReadRegStr $1 SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" MoshiCoreUninstall
+  StrCpy $2 $1 1
+  ${if} $2 == '"'
+    StrCpy $3 1
+    ${Do}
+      StrCpy $2 $1 1 $3
+      ${if} $2 == '"'
+      ${orIf} $2 == ""
+        ${ExitDo}
+      ${endif}
+      IntOp $3 $3 + 1
+    ${Loop}
+    IntOp $3 $3 - 1
+    StrCpy $2 $1 $3 1
+    ${if} ${FileExists} "$2"
+      WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" UninstallString "$1"
+    ${endif}
+  ${endif}
+  Pop $3
+  Pop $2
+  Pop $1
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 
 ; ---------------------------------------------------------------- welcome

@@ -70,9 +70,9 @@ namespace MoshiSetup
             {
                 var entry = InstallEntry.Find();
                 string core = entry?.Get("MoshiCoreUninstall") ?? entry?.Get("QuietUninstallString");
-                if (string.IsNullOrEmpty(core)) return 0;
+                if (string.IsNullOrEmpty(core)) { Note("silent uninstall: no NSIS uninstaller registered, nothing to remove"); return 0; }
                 string exe = core.StartsWith("\"") ? core.Substring(1, core.IndexOf('"', 1) - 1) : core.Split(' ')[0];
-                if (!File.Exists(exe)) return 0;
+                if (!File.Exists(exe)) { Note("silent uninstall: " + exe + " is gone, nothing to remove"); return 0; }
                 // "_?=<dir>" is unquoted and must stay last (NSIS reads everything after it as the path), so take
                 // it from the raw command line rather than from the split-up args.
                 string cmd = Environment.CommandLine;
@@ -83,14 +83,36 @@ namespace MoshiSetup
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (!flags.Any(f => f.Equals("/S", StringComparison.OrdinalIgnoreCase))) flags.Insert(0, "/S");
-                var p = Process.Start(new ProcessStartInfo(exe, string.Join(" ", flags) + " _?=" + dir) { UseShellExecute = false, CreateNoWindow = true });
-                p.WaitForExit();
-                return p.ExitCode;
+                // Run a copy from %TEMP%, as electron-builder itself does: an NSIS uninstaller running in place
+                // cannot move its own file out of the folder, and an update's removal step ("move everything
+                // out, then install") fails on exactly that file.
+                string copy = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "moshi-core-uninstall-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
+                File.Copy(exe, copy, true);
+                int code;
+                try
+                {
+                    var p = Process.Start(new ProcessStartInfo(copy, string.Join(" ", flags) + " _?=" + dir) { UseShellExecute = false, CreateNoWindow = true });
+                    p.WaitForExit();
+                    code = p.ExitCode;
+                }
+                finally
+                {
+                    try { File.Delete(copy); } catch { }
+                }
+                Note("silent uninstall " + string.Join(" ", flags) + " _?=" + dir + " -> " + code);
+                return code;
             }
-            catch
+            catch (Exception ex)
             {
+                Note("silent uninstall failed: " + ex.Message);
                 return 1;
             }
+        }
+
+        /// <summary>One line to %TEMP%\moshi-setup.log, for when an update does not go through.</summary>
+        static void Note(string line)
+        {
+            try { File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "moshi-setup.log"), DateTime.Now.ToString("s") + " " + line + Environment.NewLine); } catch { }
         }
     }
 
