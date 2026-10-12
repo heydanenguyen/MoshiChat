@@ -1,3 +1,24 @@
+## Moshi 0.11.0
+
+**Gói chuyển động đợt 3 "Pals+ vui nhộn": mascot có việc để làm, ăn mừng có vật lý.** Đợt cuối của ba đợt chuyển động; vẫn chỉ transform/opacity (và một canvas cho hạt), có bản rút gọn khi bật "giảm chuyển động".
+
+### Mascot (khi chọn logo Pals ở bất kỳ giao diện nào, hoặc đang dùng giao diện Pals)
+- Mắt nhìn theo con trỏ (ở logo sidebar và màn hình trống).
+- Nhún một nhịp khi có tin mới trong chat đang mở.
+- Buồn ngủ sau 30 giây không động vào app ở màn hình trống; chạm là tỉnh.
+- Ló đầu từ mép thanh tiêu đề khi có cuộc gọi đến, rút lại khi nghe hoặc hết chuông.
+
+### Ăn mừng
+- Sinh nhật và hiệu ứng tin nhắn: confetti 60 mảnh có trọng lực và lực cản, tim bay lắc lư; sticker gửi xong có vệt sáng và vài tia lấp lánh đúng theo hình sticker.
+
+### Giao diện Pals
+- Lò xo nảy hơn (1,6×) cho mọi chuyển động đã có, trong giới hạn không cắt hình.
+
+---
+
+### English
+- **Motion pack 3 "Pals+":** with a Pals logo in any style, or in the Pals style, the mascot's eyes follow the pointer, it hops when a message lands in the open chat, dozes after 30 s in the empty state and peeks from the title bar when a call rings; birthdays and message effects draw confetti with physics, swaying hearts and a sparkle pass over a landed sticker (masked to its artwork) on one canvas; the Pals style's springs bounce more (1.6×) within the clamp. Reduced-motion fallbacks throughout.
+
 ## Moshi 0.10.0
 
 **Gói chuyển động đợt 2 "Expressive": những chuyển cảnh có nhận diện.** Vẫn lò xo thật, chỉ transform và opacity, có bản rút gọn khi bật "giảm chuyển động"; cả bốn giao diện, Mono không nảy.
