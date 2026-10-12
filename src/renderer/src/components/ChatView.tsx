@@ -20,7 +20,8 @@ import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
 import { BuddyLoader } from './BuddyLoader'
 import { SKELETON_DELAY_MS, Skeleton, SkeletonThread } from './Skeleton'
-import { BirthdayBanner, EffectLayer, ScheduledStrip, useMessageEffects } from './ChatExtras'
+import { BirthdayBanner, EffectLayer, ScheduledStrip, StickerShine, useMessageEffects } from './ChatExtras'
+import { useIncomingHop } from '../motion/useMascot'
 import { useWallpaper } from './Wallpaper'
 import { SummaryButton, SummaryCard, TranslationBlock, VoiceTranscript } from './AiParts'
 import { LaterButton } from './LaterPicker'
@@ -259,6 +260,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
   const prevFirstId = useRef<string | undefined>(undefined)
   const [dragging, setDragging] = useState(0)
   const [effect, setEffect] = useMessageEffects(messages)
+  useIncomingHop(conversation.id, messages)
   const wallpaper = useWallpaper(conversation.id)
   const celebrate = useCallback(() => setEffect({ kind: 'birthday', key: `bday-${conversation.id}` }), [setEffect, conversation.id])
 
@@ -1148,6 +1150,8 @@ function BubbleView({
     return resumed === undefined || resumed < 30 ? { fresh: true, resumed: 0 } : { fresh: resumed < 450, resumed }
   })
   const fresh = entry.fresh
+  // A sticker that has just landed gets a gloss sweep and a few sparkles; -1 = it did not just land.
+  const [shine] = useState(() => (isFresh(message.sentAt) ? Math.max(0, Date.now() - message.sentAt) : -1))
   // Several arriving together come in 40 ms apart (up to five), decided once like `fresh`.
   const [stagger] = useState(() => Math.min(5, Math.max(0, arrival)))
   const [picker, setPicker] = useState(false)
@@ -1426,6 +1430,7 @@ function BubbleView({
               ) : (
                 <StickerImage src={imageSrc(sticker.url)} attachment={sticker} message={message} flattened={sticker.flattened} />
               ))}
+            {sticker && shine >= 0 && <StickerShine elapsed={shine} />}
             {!sticker && gridded && <MediaGrid conversationId={message.conversationId} tiles={grid.map((attachment) => ({ id: attachment.id, messageId: message.id, attachment }))} />}
             {!sticker &&
               inline

@@ -1,4 +1,6 @@
 import { PenSquare } from 'lucide-react'
+import { isPalLogo } from '../motion/mascot'
+import { useSleepy } from '../motion/useMascot'
 import { useStore, useT } from '../store'
 import { shortcutLabel } from '../utils'
 import { LogoHero, LogoMark } from './Logo'
@@ -37,7 +39,7 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
     <section className="chat-col">
       <div className="drag" style={{ height: 'var(--titlebar-height)', flexShrink: 0 }} />
       <div className="empty-state">
-        {style === 'pals' ? <PalStage greeting={hello} /> : style === 'mono' ? <MonoStage /> : <LogoMark size={92} mood="calm" className="empty-buddy" title="" />}
+        {style === 'pals' ? <PalStage greeting={hello} /> : style === 'mono' ? <MonoStage /> : <EmptyBuddy />}
         <div className="empty-title">{t('selectConversation')}</div>
         <div className="empty-body">{t('selectConversationHint')}</div>
         <button className="btn primary empty-cta" onClick={() => openSheet({ kind: 'new-chat' })}>
@@ -47,5 +49,27 @@ export function EmptyState({ kind }: { kind: 'no-selection' | 'welcome' }): JSX.
         </button>
       </div>
     </section>
+  )
+}
+
+/**
+ * The calm mark of the empty chat in the Moshi and Liquid looks. A Pals logo is a mascot here too: its eyes follow the pointer
+ * (LogoMark does that) and after 30 s without the pointer or the keyboard it sinks slowly and three z drift up (its eyes are
+ * already shut in the calm mood); any activity wakes it.
+ */
+function EmptyBuddy(): JSX.Element {
+  const pal = useStore((s) => isPalLogo(s.settings.logo))
+  const asleep = useSleepy(pal)
+  return (
+    <span className="empty-buddy-wrap">
+      <LogoMark size={92} mood="calm" className={`empty-buddy${asleep ? ' sleepy' : ''}`} title="" />
+      {asleep && (
+        <>
+          <span className="pals-z z1">z</span>
+          <span className="pals-z z2">z</span>
+          <span className="pals-z z3">z</span>
+        </>
+      )}
+    </span>
   )
 }

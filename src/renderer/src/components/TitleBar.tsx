@@ -3,6 +3,7 @@ import type { WeatherInfo } from '@shared/types'
 import { useStore, useT, useUnreadCounts } from '../store'
 import { isMac } from '../utils'
 import { firstNameOf, greetingFor, weatherLabel } from '../greetings'
+import { MascotPeek } from './MascotPeek'
 
 const ROTATE_MS = 90_000
 
@@ -32,6 +33,7 @@ export function TitleBar(): JSX.Element {
       <span className="titlebar-title">
         <Greeting />
       </span>
+      <MascotPeek />
       {isMac ? (
         <span className="titlebar-right" />
       ) : (

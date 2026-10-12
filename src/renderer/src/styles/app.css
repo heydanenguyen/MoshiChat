@@ -9624,72 +9624,6 @@ button.moment-card:hover {
   overflow: hidden;
   container-type: size;
 }
-.fx-confetti {
-  position: absolute;
-  top: -16px;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  opacity: 0;
-  will-change: transform, opacity;
-  animation: fx-fall var(--dur) cubic-bezier(0.3, 0.1, 0.6, 1) var(--delay) forwards;
-}
-.fx-confetti.s0 {
-  border-radius: 50%;
-}
-.fx-confetti.s1 {
-  width: 11px;
-  height: 4px;
-}
-.fx-confetti.s2 {
-  width: 7px;
-  height: 7px;
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
-@keyframes fx-fall {
-  0% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) rotate(0);
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(var(--drift), 105cqh, 0) rotate(var(--spin));
-  }
-}
-.fx-heart {
-  position: absolute;
-  bottom: -40px;
-  width: var(--size);
-  height: var(--size);
-  opacity: 0;
-  will-change: transform, opacity;
-  animation: fx-rise var(--dur) cubic-bezier(0.2, 0.6, 0.4, 1) var(--delay) forwards;
-}
-.fx-heart svg {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 4px 8px rgba(255, 80, 120, 0.3));
-}
-@keyframes fx-rise {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 0, 0) scale(0.6);
-  }
-  15% {
-    opacity: 1;
-    transform: translate3d(calc(var(--sway) * 0.3), -15cqh, 0) scale(1);
-  }
-  60% {
-    transform: translate3d(calc(var(--sway) * -0.5), -60cqh, 0) scale(1.05);
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(var(--sway), -100cqh, 0) scale(0.9);
-  }
-}
 .fx-burst {
   position: absolute;
   width: 0;
@@ -9926,8 +9860,6 @@ button.moment-card:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fx-confetti,
-  .fx-heart,
   .fx-burst i {
     display: none;
   }
@@ -18049,5 +17981,303 @@ html[data-vt='theme'] *::after {
       animation-timeline: view();
       animation-range: exit -40px exit 100%;
     }
+  }
+}
+
+/* ==== Motion pack 3 (ideas 14, 21) ====
+   14 · The Pals as mascots (motion/mascot.ts, useMascot.ts): eyes follow the pointer, the logo hops, the empty-state pals fall
+   asleep, a pal peeks over the title bar at a ring. 21 · The celebration pack (motion/celebrate.ts): a canvas shower per chat
+   column, and a gloss and sparkles over a sticker that has just landed. The mascot is the Pals look (its cast) and a Pals logo in any look. */
+
+/* eyes: JS sets --look-x / --look-y (in the drawing's units); translate composes with the blink's transform */
+.unison-mark.mascot .buddy-eyes,
+.pals-stage.mascot .pal-eyes,
+.peek-pal .buddy-eyes,
+.peek-pal .pal-eyes {
+  translate: var(--look-x, 0px) var(--look-y, 0px);
+  transition: translate 90ms linear;
+}
+.peek-pal .buddy-eyes,
+.peek-pal .pal-eyes {
+  --look-x: -2px;
+}
+
+/* the mascot logo blinks and glances on its own clock (useMascot.ts), not the root-wide one */
+:root[data-blink] .unison-mark.mascot:not(.m-blink) .buddy-eyes {
+  animation: none;
+}
+:root .unison-mark.mascot.m-blink .buddy-eyes {
+  animation: buddy-blink 0.32s ease-in-out;
+}
+.unison-mark.mascot {
+  transform-origin: 50% 100%;
+}
+
+/* the empty state falls asleep: eyes shut, a slow sink, three z drifting up */
+.pals-stage.sleepy .pal-eyes {
+  animation: none;
+  transform: scaleY(0.14);
+  transition: transform 280ms ease-out;
+}
+.pals-stage.sleepy .stage-pal svg {
+  transform-origin: 50% 100%;
+  animation: mascot-sink 3.2s ease-in-out infinite;
+  animation-delay: var(--blink-delay, 0s);
+}
+@keyframes mascot-sink {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(3px) scaleY(0.97);
+  }
+}
+/* waking: the eyes open, shut once, open again */
+.pals-stage.waking .pal-eyes {
+  animation: mascot-wake 420ms ease-out;
+}
+@keyframes mascot-wake {
+  0% {
+    transform: scaleY(0.14);
+  }
+  35% {
+    transform: scaleY(1);
+  }
+  60% {
+    transform: scaleY(0.12);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+.pals-say {
+  transition: filter 360ms ease;
+}
+.pals-stage.sleepy .pals-say {
+  filter: opacity(0);
+}
+.pals-z {
+  position: absolute;
+  left: calc(50% + 46px);
+  top: calc(50% - 74px);
+  font-family: var(--font-pop, var(--font-display));
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  animation: mascot-z 3s ease-in-out infinite;
+}
+.pals-z.z2 {
+  font-size: 13px;
+  animation-delay: 1s;
+}
+.pals-z.z3 {
+  font-size: 11px;
+  animation-delay: 2s;
+}
+@keyframes mascot-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 6px);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(10px, -22px);
+  }
+}
+
+/* the empty chat's mark, when it is a Pals logo: asleep it sinks slowly and the z drift up (its eyes are shut already) */
+.empty-buddy-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.empty-buddy-wrap .pals-z {
+  left: calc(50% + 36px);
+  top: -6px;
+}
+.empty-buddy.sleepy .buddy-body {
+  animation: mascot-sink 3.2s ease-in-out infinite;
+}
+
+/* a pal peeks over the title bar's right edge at a ring; the box clips it, the pal slides down into it */
+.mascot-peek {
+  position: absolute;
+  right: 56px;
+  top: 100%;
+  width: 72px;
+  height: 44px;
+  overflow: hidden;
+  z-index: 5;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+.mascot-peek-pal {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  translate: 0 -100%;
+  transform-origin: 50% 90%;
+}
+.mascot-peek-pal .unison-mark,
+.mascot-peek-pal .pal svg {
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.18));
+}
+
+/* loops rest with the window; reduced motion: eyes shut and that is all (no sink, no z; JS adds no follow, hop or peek) */
+:root.window-hidden .pals-stage.sleepy .stage-pal svg,
+:root.window-hidden .pals-z {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pals-stage.sleepy .stage-pal svg,
+  .pals-stage.waking .pal-eyes,
+  .empty-buddy.sleepy .buddy-body,
+  .pals-z {
+    animation: none;
+  }
+  .pals-z {
+    display: none;
+  }
+  .pals-stage.sleepy .pal-eyes {
+    transition: none;
+  }
+  .mascot-peek {
+    display: none;
+  }
+}
+/* the ring pill (264 px, 326 px at its overshoot) would reach the peek in a narrow window: leave the peek out */
+@media (max-width: 600px) {
+  .mascot-peek {
+    display: none;
+  }
+}
+
+/* ---- 21 · celebration ---- */
+
+.fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* reduced motion: one still bundle, in and out */
+@media (prefers-reduced-motion: reduce) {
+  .fx-canvas {
+    opacity: 0;
+    transition: opacity 0.5s linear;
+  }
+  .fx-canvas.show {
+    opacity: 1;
+    transition-duration: 0.25s;
+  }
+}
+
+/* a sticker that has just landed: one gloss sweep, then three sparkles (delays are set inline from motion/celebrate.ts) */
+.sticker-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* the gloss is masked by the sticker's own picture (set inline), so it never leaves the artwork */
+.sticker-shine .shine-mask {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.sticker-shine .shine-gloss {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  translate: -174% 0;
+  skew: -18deg;
+  opacity: 0;
+  animation: shine-gloss 560ms ease-in-out both;
+}
+@keyframes shine-gloss {
+  0% {
+    translate: -174% 0;
+    opacity: 0;
+  }
+  30%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    translate: 370% 0;
+    opacity: 0;
+  }
+}
+.sticker-shine .shine-spark {
+  position: absolute;
+  width: 16.7%;
+  aspect-ratio: 1;
+  scale: 0;
+  color: #ffd45c;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9));
+  animation: shine-spark 520ms ease-out both;
+  --peak: 1.15;
+}
+:root[data-style='mono'] .sticker-shine .shine-spark {
+  --peak: 1;
+}
+.sticker-shine .shine-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+.sticker-shine .shine-spark.s0 {
+  left: 11.7%;
+  top: 13.3%;
+}
+.sticker-shine .shine-spark.s1 {
+  right: 10%;
+  top: 25%;
+}
+.sticker-shine .shine-spark.s2 {
+  left: 36.7%;
+  bottom: 10%;
+}
+@keyframes shine-spark {
+  0% {
+    scale: 0;
+    rotate: 0deg;
+    opacity: 1;
+  }
+  45% {
+    scale: var(--peak, 1.15);
+    rotate: 45deg;
+    opacity: 1;
+  }
+  100% {
+    scale: 0;
+    rotate: 90deg;
+    opacity: 0;
+  }
+}
+:root.window-hidden .sticker-shine * {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sticker-shine {
+    display: none;
   }
 }

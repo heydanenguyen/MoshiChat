@@ -1,17 +1,23 @@
+import { useRef } from 'react'
 import { logoHero, logoMarkInner, type LogoId, type LogoMood } from '@shared/logos'
 import { useStore } from '../store'
+import { useMascotLogo } from '../motion/useMascot'
 
 /**
  * The logo character (see src/shared/logos.ts). Uses the logo picked in Settings unless one is
  * passed. Markup comes from static strings in logos.ts (no user input). Eyes blink and glance;
- * motion stops under prefers-reduced-motion.
+ * motion stops under prefers-reduced-motion. With a Pals logo (in any look) the sidebar's mark is a mascot: its eyes follow
+ * the pointer and it hops when a message arrives in the open chat; the empty chat's mark follows too (see motion/mascot.ts).
  */
 export function LogoMark({ size = 28, mood = 'happy', logo, className = '', title = 'Moshi' }: { size?: number; mood?: LogoMood; logo?: LogoId; className?: string; title?: string }): JSX.Element {
   const chosen = useStore((s) => s.settings.logo)
   const id = logo ?? chosen ?? 'buddies'
+  const ref = useRef<SVGSVGElement>(null)
+  const mascot = useMascotLogo(ref)
   return (
     <svg
-      className={`unison-mark ${mood} ${className}`}
+      ref={ref}
+      className={`unison-mark ${mood} ${className}${mascot ? ' mascot' : ''}`}
       width={size}
       height={size}
       viewBox="0 0 64 64"

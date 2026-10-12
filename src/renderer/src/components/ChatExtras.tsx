@@ -5,6 +5,7 @@ import { detectEffect, fillQuickReply, givenName, isBirthdayToday, type EffectKi
 import type { StickerId } from '@shared/stickers'
 import { useStore, useT } from '../store'
 import { formatListTime, formatTime } from '../utils'
+import { SHINE, drawStatic, resolveColor, shineDelay, shineEnd, startShower, type CelebrationKind } from '../motion/celebrate'
 import { LogoMark } from './Logo'
 import { StickerArt } from './StickerPicker'
 
@@ -50,76 +51,71 @@ export function useMessageEffects(messages: Message[] | undefined): [{ kind: Eff
   return [effect, setEffect]
 }
 
-/** Confetti, hearts or fireworks over the chat, with the chosen logo character popping up to cheer. */
+/**
+ * Confetti, hearts or fireworks over the chat, with the logo character popping up to cheer. Confetti and hearts are drawn on one
+ * canvas per chat column (motion/celebrate.ts: real physics, rAF only while pieces live, 2.5 s at most); fireworks stay as
+ * small DOM bursts. Reduced motion: one still bundle fades in and out.
+ */
 export function EffectLayer({ kind, seed, onDone }: { kind: EffectKind; seed: string; onDone(): void }): JSX.Element {
   const t = useT()
   const quiet = reducedMotion()
+  const shower: CelebrationKind | undefined = kind === 'love' ? 'hearts' : kind === 'newyear' ? undefined : 'confetti'
+  const cheer = kind === 'birthday' ? t('effectBirthday') : kind === 'newyear' ? t('effectNewYear') : kind === 'congrats' ? t('effectCongrats') : undefined
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const [painting, setPainting] = useState(!!shower)
+  // The caller passes a new onDone every render: keep the latest without restarting the shower.
+  const done = useRef(onDone)
+  done.current = onDone
+
+  // The layer stays for the cheering character (3.6 s); with nothing to cheer it goes when the last piece has.
   useEffect(() => {
-    const timer = setTimeout(onDone, quiet ? 1800 : 3600)
+    if (!cheer && shower && !quiet) return
+    const timer = setTimeout(() => done.current(), quiet ? 1800 : 3600)
     return () => clearTimeout(timer)
-  }, [onDone, quiet])
+  }, [cheer, shower, quiet])
+
+  useEffect(() => {
+    const el = canvas.current
+    if (!el || !shower) return
+    const accent = resolveColor('var(--accent)', el)
+    if (quiet) {
+      drawStatic(el, shower, { seed, accent })
+      el.classList.add('show')
+      const fade = setTimeout(() => el.classList.remove('show'), 900)
+      return () => clearTimeout(fade)
+    }
+    const run = startShower(el, shower, {
+      seed,
+      accent,
+      onEnd: () => {
+        setPainting(false)
+        if (!cheer) done.current()
+      }
+    })
+    return run.stop
+  }, [shower, seed, quiet, cheer])
 
   const pieces = useMemo(() => {
+    if (kind !== 'newyear' || quiet) return []
     const rnd = seeded([...seed].reduce((a, c) => a + c.charCodeAt(0), 7))
-    if (quiet) return []
-    if (kind === 'love') {
-      return Array.from({ length: 22 }, (_, i) => (
-        <span
-          key={i}
-          className="fx-heart"
-          style={
-            {
-              left: `${4 + rnd() * 92}%`,
-              '--size': `${14 + rnd() * 18}px`,
-              '--delay': `${rnd() * 900}ms`,
-              '--dur': `${2200 + rnd() * 1200}ms`,
-              '--sway': `${(rnd() - 0.5) * 60}px`,
-              color: ['#FF4F7B', '#FF7AC0', '#FF5B1F', '#E0457B'][i % 4]
-            } as CSSProperties
-          }
-        >
-          <svg viewBox="0 0 24 22" aria-hidden>
-            <path d="M12 21.4 10.3 19.9C4.4 14.5.5 11 .5 6.6.5 3 3.3.3 6.8.3c2 0 3.9.9 5.2 2.4C13.3 1.2 15.2.3 17.2.3c3.5 0 6.3 2.7 6.3 6.3 0 4.4-3.9 7.9-9.8 13.3Z" fill="currentColor" />
-          </svg>
+    return Array.from({ length: 5 }, (_, b) => {
+      const x = 12 + rnd() * 76
+      const y = 12 + rnd() * 45
+      const color = COLORS[b % COLORS.length]
+      return (
+        <span key={b} className="fx-burst" style={{ left: `${x}%`, top: `${y}%`, '--delay': `${b * 380}ms` } as CSSProperties}>
+          {Array.from({ length: 14 }, (_, i) => (
+            <i key={i} style={{ '--angle': `${(i / 14) * 360}deg`, '--dist': `${46 + rnd() * 26}px`, background: color } as CSSProperties} />
+          ))}
         </span>
-      ))
-    }
-    if (kind === 'newyear') {
-      return Array.from({ length: 5 }, (_, b) => {
-        const x = 12 + rnd() * 76
-        const y = 12 + rnd() * 45
-        const color = COLORS[b % COLORS.length]
-        return (
-          <span key={b} className="fx-burst" style={{ left: `${x}%`, top: `${y}%`, '--delay': `${b * 380}ms` } as CSSProperties}>
-            {Array.from({ length: 14 }, (_, i) => (
-              <i key={i} style={{ '--angle': `${(i / 14) * 360}deg`, '--dist': `${46 + rnd() * 26}px`, background: color } as CSSProperties} />
-            ))}
-          </span>
-        )
-      })
-    }
-    return Array.from({ length: 80 }, (_, i) => (
-      <span
-        key={i}
-        className={`fx-confetti s${i % 3}`}
-        style={
-          {
-            left: `${rnd() * 100}%`,
-            background: COLORS[i % COLORS.length],
-            '--delay': `${rnd() * 700}ms`,
-            '--dur': `${1900 + rnd() * 1500}ms`,
-            '--drift': `${(rnd() - 0.5) * 160}px`,
-            '--spin': `${(rnd() > 0.5 ? 1 : -1) * (360 + rnd() * 540)}deg`
-          } as CSSProperties
-        }
-      />
-    ))
+      )
+    })
   }, [kind, seed, quiet])
 
-  const cheer = kind === 'birthday' ? t('effectBirthday') : kind === 'newyear' ? t('effectNewYear') : kind === 'congrats' ? t('effectCongrats') : undefined
   return (
     <div className={`fx-layer fx-${kind}`} aria-hidden>
       {pieces}
+      {shower && painting && <canvas ref={canvas} className="fx-canvas" />}
       {cheer && (
         <div className="fx-buddy">
           <div className="fx-buddy-bubble">{cheer}</div>
@@ -127,6 +123,78 @@ export function EffectLayer({ kind, seed, onDone }: { kind: EffectKind; seed: st
         </div>
       )}
     </div>
+  )
+}
+
+interface ShineBox {
+  left: number
+  top: number
+  width: number
+  height: number
+  /** The sticker's own picture, to mask the gloss with (undefined: no gloss, sparkles only). */
+  mask?: string
+}
+
+/** Where the sticker sits in its bubble, and its picture as a URL: an image's own, or an inline drawing serialised once. */
+function measureSticker(host: HTMLElement): ShineBox | undefined {
+  const art = host.parentElement?.querySelector<HTMLElement>('.attachment-sticker')
+  if (!art) return undefined
+  const box = { left: art.offsetLeft, top: art.offsetTop, width: art.offsetWidth, height: art.offsetHeight }
+  // A sprite sheet is several frames side by side: one mask cannot follow it.
+  if (art.classList.contains('sprite')) return box
+  const img = art.tagName === 'IMG' ? (art as HTMLImageElement) : art.querySelector('img')
+  if (img?.currentSrc) return { ...box, mask: img.currentSrc }
+  const svg = art.querySelector('svg')
+  if (svg) return { ...box, mask: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}` }
+  return undefined
+}
+
+/**
+ * Over a sticker that has just landed: one gloss sweep, masked by the sticker's own picture so it never leaves the artwork,
+ * and three sparkles (timing from motion/celebrate.ts, drawing in app.css). `elapsed` = ms since it landed, so a bubble that
+ * was drawn again mid-way carries on instead of starting over. Gone after its last sparkle.
+ */
+export function StickerShine({ elapsed = 0 }: { elapsed?: number }): JSX.Element | null {
+  const [gone, setGone] = useState(false)
+  const [box, setBox] = useState<ShineBox | undefined>()
+  const host = useRef<HTMLSpanElement>(null)
+  const mounted = useRef(performance.now())
+  useEffect(() => {
+    const timer = setTimeout(() => setGone(true), Math.max(0, shineEnd() - elapsed) + 120)
+    return () => clearTimeout(timer)
+  }, [elapsed])
+  // The picture may arrive a little after the bubble (a sticker fetched from the platform): look again once.
+  useEffect(() => {
+    const el = host.current
+    if (!el) return
+    setBox(measureSticker(el))
+    const again = setTimeout(() => setBox((b) => (b?.mask ? b : measureSticker(el))), 350)
+    return () => clearTimeout(again)
+  }, [])
+  if (gone) return null
+  const passed = elapsed + (performance.now() - mounted.current)
+  const at = (i: number): CSSProperties => ({ animationDelay: `${shineDelay(i, passed)}ms` })
+  const mask = box?.mask ? `url("${box.mask}")` : undefined
+  return (
+    <span
+      className="sticker-shine"
+      ref={host}
+      aria-hidden
+      style={box ? { left: box.left, top: box.top, width: box.width, height: box.height } : undefined}
+    >
+      {mask && (
+        <span className="shine-mask" style={{ maskImage: mask, WebkitMaskImage: mask }}>
+          <i className="shine-gloss" style={at(-1)} />
+        </span>
+      )}
+      {Array.from({ length: SHINE.sparks }, (_, i) => (
+        <span key={i} className={`shine-spark s${i}`} style={at(i)}>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 0c.8 6.5 3.5 10.2 12 12-8.5 1.8-11.2 5.5-12 12-.8-6.5-3.5-10.2-12-12C8.5 10.2 11.2 6.5 12 0z" />
+          </svg>
+        </span>
+      ))}
+    </span>
   )
 }
 

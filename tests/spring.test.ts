@@ -117,11 +117,11 @@ describe('springVars', () => {
 })
 
 describe('bounceOf', () => {
-  it('Moshi and Liquid and Pals bounce, Mono does not', () => {
+  it('Moshi and Liquid bounce, Pals bounces more, Mono does not', () => {
     expect(bounceOf(undefined)).toBe(1)
     expect(bounceOf('moshi')).toBe(1)
     expect(bounceOf('liquid')).toBe(1)
-    expect(bounceOf('pals')).toBe(1)
+    expect(bounceOf('pals')).toBe(1.6)
     expect(bounceOf('mono')).toBe(0)
   })
 })
@@ -182,5 +182,33 @@ describe('send hand-off (the platform echo of a temporary bubble carries on its 
     noteSent({ ...temp, id: 'temp-2' }, 100)
     expect(takeSent(real, 150)).toBe(150)
     expect(takeSent({ ...real, id: 'real-10' }, 160)).toBe(60)
+  })
+})
+
+describe('pack 3: bouncier Pals', () => {
+  const peak = (css: string): number => Math.max(...css.slice(7, -1).split(',').map(Number))
+  it('every curve at the Pals bounce stays inside the 0.5 overshoot clamp, and is bouncier than Moshi', () => {
+    const pals = springVars(bounceOf('pals'))
+    const moshi = springVars(bounceOf('moshi'))
+    const names = Object.keys(pals).filter((k) => !k.endsWith('-ms'))
+    expect(names.length).toBeGreaterThan(20)
+    for (const name of names) {
+      expect(peak(pals[name])).toBeLessThanOrEqual(1.5001)
+      expect(peak(pals[name])).toBeGreaterThanOrEqual(peak(moshi[name]))
+    }
+    expect(peak(pals['--spring-pop'])).toBeGreaterThan(peak(moshi['--spring-pop']) + 0.1)
+    // the three other looks are unchanged
+    expect(bounceOf('moshi')).toBe(1)
+    expect(bounceOf('liquid')).toBe(1)
+    expect(bounceOf('mono')).toBe(0)
+  })
+  it('the Details pane does not bounce more in Pals than in Moshi (it would pull past its edge)', () => {
+    expect(springVars(1.6)['--spring-pane']).toBe(springVars(1)['--spring-pane'])
+    expect(springVars(1.6)['--spring-lead']).not.toBe(springVars(1)['--spring-lead'])
+  })
+  it('the peek spring is a .30 spring over 420 ms (Mono: none)', () => {
+    expect(springVars(1)['--spring-peek-ms']).toBe('420ms')
+    expect(peak(springVars(1)['--spring-peek'])).toBeCloseTo(1.3, 1)
+    expect(peak(springVars(0)['--spring-peek'])).toBeLessThanOrEqual(1)
   })
 })

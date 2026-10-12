@@ -2,8 +2,9 @@
  * Pals on screen: the inline characters of the empty screens (which can blink) and their stage. The drawings
  * themselves (bodies, faces, the cast, avatars) live in @shared/pals-art, shared with the sticker pack.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { castById, palSvg, specOf, type PalSpec } from '@shared/pals-art'
+import { useEyeFollow, useMascotOn, useSleepy } from '../motion/useMascot'
 
 export { palAvatarUrl } from '@shared/pals-art'
 
@@ -25,10 +26,30 @@ const STAGE: Array<{ spec: PalSpec; size: number; at: [number, number]; delay: s
   { spec: specOf(castById('giot'), 'sleepy', 'zz'), size: 70, at: [166, -60], delay: '3s' }
 ]
 
-/** The cluster on the empty chat and welcome screens, with an ink speech bubble. */
+/**
+ * The cluster on the empty chat and welcome screens, with an ink speech bubble. In the Pals look they are
+ * mascots (whatever the logo): the eyes (pal-eyes, one group per pal) follow the pointer, and after 30 s without the pointer or the keyboard
+ * they fall asleep (eyes shut, a slow sink, three drifting z) and wake with a blink.
+ */
 export function PalStage({ greeting }: { greeting: string }): JSX.Element {
+  const mascot = useMascotOn()
+  const ref = useRef<HTMLDivElement>(null)
+  useEyeFollow(ref, '.pal-eyes', mascot)
+  const asleep = useSleepy(mascot)
+  // Waking up is a blink (the eyes open, shut once, open again).
+  const [waking, setWaking] = useState(false)
+  const was = useRef(false)
+  useEffect(() => {
+    if (was.current && !asleep) {
+      setWaking(true)
+      const timer = setTimeout(() => setWaking(false), 440)
+      was.current = asleep
+      return () => clearTimeout(timer)
+    }
+    was.current = asleep
+  }, [asleep])
   return (
-    <div className="pals-stage" aria-hidden>
+    <div ref={ref} className={`pals-stage${mascot ? ' mascot' : ''}${asleep ? ' sleepy' : ''}${waking ? ' waking' : ''}`} aria-hidden>
       {STAGE.map((p, i) => (
         <Pal
           key={i}
@@ -41,6 +62,13 @@ export function PalStage({ greeting }: { greeting: string }): JSX.Element {
         />
       ))}
       <span className="pals-say">{greeting}</span>
+      {asleep && (
+        <>
+          <span className="pals-z z1">z</span>
+          <span className="pals-z z2">z</span>
+          <span className="pals-z z3">z</span>
+        </>
+      )}
     </div>
   )
 }
