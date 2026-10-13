@@ -46,11 +46,11 @@ export const LOGOS: Record<LogoId, LogoMeta> = {
 export const isLogoId = (value: unknown): value is LogoId => typeof value === 'string' && ALL_LOGOS.includes(value as LogoId)
 
 /** A pal on the 64 × 64 logo canvas: its body, and its face (smiling, or asleep for the calm mood) in a blinking group. */
-function palCharacter(id: PalLogoId): Character | undefined {
+function palCharacter(id: PalLogoId, colors?: { color: string; color2?: string }): Character | undefined {
   const member = CAST.find((c) => `pal-${c.id}` === id)
   if (!member) return undefined
   const art = (face: 'smile' | 'sleepy'): { body: string; face: string } => {
-    const p = palParts(specOf(member, face), `logo-${member.id}`)
+    const p = palParts({ ...specOf(member, face), ...colors }, `logo-${member.id}${colors ? '-icon' : ''}`)
     const put = (inner: string): string => `<g transform="scale(${64 / 120})">${inner}</g>`
     return {
       body: put(`<defs>${p.defs}</defs>${p.behind}<g fill="url(#${p.fill})">${p.body}</g>${p.over}`),
@@ -181,10 +181,31 @@ export function logoIconSvg(id: LogoId, small = false): string {
     )
   }
   const scale = small ? 1 : 0.84
+  const look = ICON_LOOKS[id]
+  const character = look && palCharacter(id as PalLogoId, look)
+  if (look && character) {
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="tile-${id}" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="${look.tile[0]}"/><stop offset="1" stop-color="${look.tile[1]}"/></linearGradient></defs>` +
+      `<rect width="64" height="64" rx="15" fill="url(#tile-${id})"/>` +
+      `<g transform="translate(32 32) scale(${scale}) translate(-32 -32)"><g class="buddy-body">${character.body}${character.happy}</g></g></svg>`
+    )
+  }
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="${meta.background}"/>` +
     `<g transform="translate(32 32) scale(${scale}) translate(-32 -32)">${logoMarkInner(id)}</g></svg>`
   )
+}
+
+/** Moshi's app icon (Finder, Launchpad, the installer, the Dock unless a logo is picked): Mây, the blue Pal. */
+export const APP_ICON_LOGO: LogoId = 'pal-may'
+
+/**
+ * Icons drawn in colours of their own (the mark in the app keeps the character's): Mây's icon is a light cloud on a deep
+ * blue tile, which stands out among the pale icons of a Dock or a taskbar.
+ */
+const ICON_LOOKS: Partial<Record<LogoId, { tile: [string, string]; color: string; color2?: string }>> = {
+  'pal-may': { tile: ['#4F7BFF', '#2F55E8'], color: '#eaf4ff', color2: '#b9d6ff' }
 }
 
 /** A character's body without its face (stickers draw their own expressions on it). */

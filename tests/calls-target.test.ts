@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CALL_ORIGINS, PROBE_VERDICT_MS, callFeatureOf, isLoginPage, callPlatformOf, callUrl, onDomain, recordProbe, threadIdOf } from '../src/main/calls/target'
+import { CALL_ORIGINS, PROBE_VERDICT_MS, callFeatureOf, isLoginPage, callPlatformOf, callUrl, onDomain, recordProbe, threadIdOf, zaloDesktopLink } from '../src/main/calls/target'
 
 const account = (id: string, platform: 'messenger' | 'instagram' | 'zalo' | 'telegram', demo?: boolean, call?: 'none') =>
   ({ id, platform, demo, features: { reply: true, react: true, attachments: true, call } })
@@ -25,7 +25,6 @@ describe('call targets', () => {
     expect(callUrl('messenger', '100023')).toBe('https://www.facebook.com/messages/t/100023')
     expect(callUrl('messenger', 'a b')).toBe('https://www.facebook.com/messages/t/a%20b')
     expect(callUrl('instagram', '340')).toBe('https://www.instagram.com/direct/t/340/')
-    expect(callUrl('zalo', 'whatever')).toBe('https://chat.zalo.me/')
   })
 
   it('matches only https pages on a domain or its subdomains', () => {
@@ -35,8 +34,8 @@ describe('call targets', () => {
     expect(onDomain('https://evilfacebook.com/', ['facebook.com'])).toBe(false)
     expect(onDomain('https://facebook.com.evil.io/', ['facebook.com'])).toBe(false)
     expect(onDomain('not a url', ['facebook.com'])).toBe(false)
-    expect(onDomain('https://chat.zalo.me/', CALL_ORIGINS)).toBe(true)
-    expect(onDomain('https://id.zalo.me/', CALL_ORIGINS)).toBe(false)
+    // Zalo's calls are made in Zalo PC: its web app gets no camera or microphone.
+    expect(onDomain('https://chat.zalo.me/', CALL_ORIGINS)).toBe(false)
   })
 })
 
@@ -78,10 +77,19 @@ describe('Instagram call probe', () => {
     expect(recordProbe({ misses: 2, at: 1000 }, false, 2000).misses).toBe(3)
   })
 
-  it('offers calls on Messenger and Zalo, and leaves other accounts as their adapter set them', () => {
+  it('offers calls on Messenger, Zalo through Zalo PC only, and leaves other accounts as their adapter set them', () => {
     expect(callFeatureOf(account('messenger:fb-1', 'messenger'), undefined)).toBe('both')
-    expect(callFeatureOf(account('zalo:77', 'zalo'), undefined)).toBe('both')
+    expect(callFeatureOf(account('zalo:77', 'zalo'), undefined)).toBe('none')
+    expect(callFeatureOf(account('zalo:77', 'zalo'), undefined, Date.now(), true)).toBe('audio')
     expect(callFeatureOf(account('demo-zalo', 'zalo', true, 'none'), undefined)).toBe('none')
     expect(callFeatureOf(account('telegram:1', 'telegram'), undefined)).toBeUndefined()
+  })
+})
+
+describe('the Zalo PC link', () => {
+  it('opens a one-to-one chat by its user id, and makes none for a group or anything else', () => {
+    expect(zaloDesktopLink('7712345')).toBe('zalo://conversation?id=7712345')
+    expect(zaloDesktopLink('g/5')).toBeUndefined()
+    expect(zaloDesktopLink('77&x=1')).toBeUndefined()
   })
 })

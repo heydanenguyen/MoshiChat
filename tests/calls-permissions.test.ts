@@ -6,7 +6,7 @@ const ask = (permission: string, over: Partial<Parameters<typeof permissionAllow
 
 describe('permission decisions', () => {
   it('lets a call origin use the camera and microphone only in the own pages of a call', () => {
-    for (const url of ['https://www.facebook.com/messages/t/1', 'https://www.messenger.com/call', 'https://www.instagram.com/direct/t/2/', 'https://chat.zalo.me/']) {
+    for (const url of ['https://www.facebook.com/messages/t/1', 'https://www.messenger.com/call', 'https://www.instagram.com/direct/t/2/']) {
       expect(ask('media', { url })).toBe(true)
       expect(ask('media', { url, ownCall: false })).toBe(false)
     }
@@ -20,7 +20,8 @@ describe('permission decisions', () => {
     expect(ask('media', { url: 'https://evil.example/' })).toBe(false)
     expect(ask('media', { url: 'https://facebook.com.evil.example/' })).toBe(false)
     expect(ask('media', { url: 'http://www.facebook.com/' })).toBe(false)
-    expect(ask('media', { url: 'https://id.zalo.me/' })).toBe(false)
+    // Zalo's calls are made in Zalo PC: its web app gets no camera or microphone.
+    expect(ask('media', { url: 'https://chat.zalo.me/' })).toBe(false)
   })
 
   it('also lets a call page pick its speakers', () => {

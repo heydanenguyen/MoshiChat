@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // The pieces of the manager that touch the OS are replaced: a window that says it is closed a tick after close() is asked,
-// and a launcher that (like Zalo's) wipes what the window stored from the window's own closed handler.
+// and a launcher that wipes what the window stored from the window's own closed handler (as every launcher's window does).
 const wipes: Array<{ started: boolean; finished: boolean }> = []
 const launched: number[] = []
 
-vi.mock('electron', () => ({ ipcMain: { on: vi.fn() }, BrowserWindow: class {} }))
+vi.mock('electron', () => ({ ipcMain: { on: vi.fn() }, BrowserWindow: class {}, shell: { openExternal: vi.fn() } }))
 
 vi.mock('../src/main/calls/call-window', () => ({
   CallWindow: class {
@@ -44,11 +44,11 @@ vi.mock('../src/main/calls/call-window', () => ({
   }
 }))
 
-vi.mock('../src/main/calls/launchers/zalo', () => ({
-  zaloLauncher: {
+vi.mock('../src/main/calls/launchers/messenger', () => ({
+  messengerLauncher: {
     async start(_target: unknown, _kind: unknown, env: { open(o: unknown): { onClosed(h: () => void): void; close(): void }; track(w: Promise<unknown>): void }) {
       launched.push(Date.now())
-      const win = env.open({ partition: 'p', userAgent: 'ua', hosts: [], info: { name: 'x', platform: 'zalo', kind: 'audio' } })
+      const win = env.open({ partition: 'p', userAgent: 'ua', hosts: [], info: { name: 'x', platform: 'messenger', kind: 'audio' } })
       win.onClosed(() => {
         const wipe = { started: true, finished: false }
         wipes.push(wipe)
@@ -58,33 +58,59 @@ vi.mock('../src/main/calls/launchers/zalo', () => ({
     }
   }
 }))
-vi.mock('../src/main/calls/launchers/messenger', () => ({ messengerLauncher: {} }))
 vi.mock('../src/main/calls/launchers/instagram', () => ({ instagramLauncher: {} }))
 
 import { CallManager } from '../src/main/calls/manager'
 
-function manager() {
-  const account = { id: 'zalo:1', platform: 'zalo', displayName: 'Z', status: 'connected', features: { reply: true, react: true, attachments: true } }
-  const conversation = { id: 'zalo:1:42', accountId: 'zalo:1', title: 'Lan' }
+const MESSENGER = { id: 'messenger:fb-1', platform: 'messenger', displayName: 'M', status: 'connected', features: { reply: true, react: true, attachments: true } }
+const ZALO = { id: 'zalo:1', platform: 'zalo', displayName: 'Z', status: 'connected', features: { reply: true, react: true, attachments: true } }
+
+function manager(account: typeof MESSENGER = MESSENGER, zaloDesktop = true) {
+  const conversations: Record<string, { id: string; accountId: string; title: string }> = {
+    'messenger:fb-1/42': { id: 'messenger:fb-1/42', accountId: 'messenger:fb-1', title: 'Lan' },
+    'zalo:1/77': { id: 'zalo:1/77', accountId: 'zalo:1', title: 'Đức' },
+    'zalo:1/g/5': { id: 'zalo:1/g/5', accountId: 'zalo:1', title: 'Nhóm' }
+  }
   const events: Array<{ type: string }> = []
+  const opened: string[] = []
   const calls = new CallManager({
-    backend: { account: () => account, conversation: () => conversation, partition: () => 'p', zaloCredentials: () => undefined, zalo: () => undefined } as never,
+    backend: { account: () => account, conversation: (id: string) => conversations[id], partition: () => 'p' } as never,
     emit: (e) => events.push(e),
     log: () => undefined,
     language: () => 'en',
     background: () => '#000',
     icon: () => undefined,
     probeFile: 'does-not-exist.json',
-    callSettings: () => ({ incomingMessenger: true, incomingInstagram: true, ring: true })
+    callSettings: () => ({ incomingMessenger: true, incomingInstagram: true, ring: true }),
+    zaloDesktop: () => zaloDesktop,
+    openZaloDesktop: async (link) => void opened.push(link)
   })
-  return { calls, events }
+  return { calls, events, opened }
 }
+
+describe('Zalo calls', () => {
+  it('open the one-to-one chat in Zalo PC, with no call window', async () => {
+    const { calls, opened } = manager(ZALO)
+    await expect(calls.start('zalo:1/77', 'audio')).resolves.toBe('handed-off')
+    expect(opened).toEqual(['zalo://conversation?id=77'])
+    expect(calls.state().active).toBeUndefined()
+    expect(calls.features('zalo:1')).toBe('audio')
+  })
+
+  it('say what is missing: Zalo PC, or a one-to-one chat', async () => {
+    await expect(manager(ZALO).calls.start('zalo:1/g/5', 'audio')).rejects.toThrow(/one-to-one/)
+    const without = manager(ZALO, false)
+    await expect(without.calls.start('zalo:1/77', 'audio')).rejects.toThrow(/Install Zalo PC/)
+    expect(without.calls.features('zalo:1')).toBe('none')
+    expect(without.opened).toEqual([])
+  })
+})
 
 describe('CallManager shutdown', () => {
   it('waits for the window to be closed, and then for the wipe its closed handler starts', async () => {
     wipes.length = 0
     const { calls } = manager()
-    await calls.start('zalo:1:42', 'audio')
+    await calls.start('messenger:fb-1/42', 'audio')
     expect(calls.state().active).toBeDefined()
     await calls.shutdown()
     // Without waiting for 'closed', pending was empty here and the wipe was still running (or never tracked).
@@ -99,14 +125,14 @@ describe('back-to-back calls', () => {
     wipes.length = 0
     launched.length = 0
     const { calls } = manager()
-    await calls.start('zalo:1:42', 'audio')
+    await calls.start('messenger:fb-1/42', 'audio')
     const id = calls.state().active!.id
     calls.end(id)
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(calls.state().active).toBeUndefined()
     expect(wipes[0]!.finished).toBe(false)
-    // The window is gone but its wipe (and, for Zalo, the connection coming back) is not done: the next start waits.
-    await calls.start('zalo:1:42', 'audio')
+    // The window is gone but its wipe is not done: the next start waits.
+    await calls.start('messenger:fb-1/42', 'audio')
     expect(launched).toHaveLength(2)
     expect(wipes[0]!.finished).toBe(true)
     await calls.shutdown()
@@ -114,8 +140,8 @@ describe('back-to-back calls', () => {
 
   it('refuses a second start while one is under way', async () => {
     const { calls } = manager()
-    await calls.start('zalo:1:42', 'audio')
-    await expect(calls.start('zalo:1:42', 'audio')).rejects.toThrow(/already open/)
+    await calls.start('messenger:fb-1/42', 'audio')
+    await expect(calls.start('messenger:fb-1/42', 'audio')).rejects.toThrow(/already open/)
     await calls.shutdown()
   })
 })

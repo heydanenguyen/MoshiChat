@@ -1,8 +1,8 @@
 // Renders every icon from the logo characters in src/shared/logos.ts (single source of truth).
-//   build/icon.svg, build/icon-small.svg   reference SVGs of the default logo (Buddies)
-//   build/icon.png (1024), build/icon.ico  installer / executable icon (Buddies)
-//   resources/icon.png (256)               fallback window icon
-//   resources/icons/<logo>.png (256)       window/taskbar icon for each logo picked in Settings
+//   build/icon.svg, build/icon-small.svg   reference SVGs of the app icon (Mây, see APP_ICON_LOGO)
+//   build/icon.png (1024), build/icon.ico  installer / executable icon (Mây)
+//   resources/icon.png (512)               fallback window icon
+//   resources/icons/<logo>.png (512)       window/taskbar/Dock icon for each logo picked in Settings
 // Run: npm run icons
 import { buildSync } from 'esbuild'
 import sharp from 'sharp'
@@ -16,7 +16,7 @@ const load = async (entry) => {
   await rm(bundle, { force: true })
   return mod
 }
-const { ALL_LOGOS, logoIconSvg } = await load('src/shared/logos.ts')
+const { ALL_LOGOS, APP_ICON_LOGO, logoIconSvg } = await load('src/shared/logos.ts')
 const { stickerIds, stickerSvg } = await load('src/shared/stickers.ts')
 
 /** Rasterise an SVG string at 2x the target size, then downsample (density is relative to its viewBox). */
@@ -50,19 +50,20 @@ function ico(images) {
   return Buffer.concat([header, ...entries, ...images.map((i) => i.data)])
 }
 
-const large = logoIconSvg('buddies')
-const small = logoIconSvg('buddies', true)
+const large = logoIconSvg(APP_ICON_LOGO)
+const small = logoIconSvg(APP_ICON_LOGO, true)
 await writeFile('build/icon.svg', large + '\n')
 await writeFile('build/icon-small.svg', small + '\n')
 await writeFile('build/icon.png', await render(large, 1024))
-await writeFile('resources/icon.png', await render(large, 256))
+await writeFile('resources/icon.png', await render(large, 512))
 const icoSizes = [16, 24, 32, 48, 64, 128, 256]
 const images = []
 for (const size of icoSizes) images.push({ size, data: await render(size <= 48 ? small : large, size) })
 await writeFile('build/icon.ico', ico(images))
 
 await mkdir('resources/icons', { recursive: true })
-for (const id of ALL_LOGOS) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 256))
+// 512: the Dock shows the picked logo too, and magnifies it on a Retina screen.
+for (const id of ALL_LOGOS) await writeFile(`resources/icons/${id}.png`, await render(logoIconSvg(id), 512))
 // Stickers: transparent PNG plus a copy on white (Instagram/Telegram flatten transparency).
 await mkdir('resources/stickers', { recursive: true })
 for (const id of stickerIds()) {

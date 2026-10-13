@@ -188,10 +188,13 @@ export interface MoshiBridge {
     enable(passphrase: string): Promise<ZaloShareStatus>
     disable(): Promise<ZaloShareStatus>
   }
-  /** In-app calls (Messenger, Instagram, Zalo): the call itself runs in a window the main process opens. */
+  /** In-app calls (Messenger, Instagram): the call itself runs in a window the main process opens. Zalo's go to Zalo PC. */
   calls: {
-    /** Ring the other side / open the call window for this chat. Rejects with a readable reason when it cannot. */
-    start(conversationId: string, kind: 'audio' | 'video'): Promise<void>
+    /**
+     * Ring the other side / open the call window for this chat; a Zalo chat is opened in Zalo PC instead ('handed-off').
+     * Rejects with a readable reason when it cannot.
+     */
+    start(conversationId: string, kind: 'audio' | 'video'): Promise<'handed-off' | void>
     end(id: string): Promise<void>
     answer(id: string): Promise<void>
     decline(id: string): Promise<void>

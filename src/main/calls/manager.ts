@@ -10,12 +10,11 @@ import { IncomingCalls, type IncomingPort, type RingHost } from './incoming'
 import { FRAME_IPC } from './ipc'
 import { instagramLauncher } from './launchers/instagram'
 import { messengerLauncher } from './launchers/messenger'
-import { zaloLauncher } from './launchers/zalo'
 import { callTexts } from './strings'
-import { callFeatureOf, callPlatformOf, recordProbe, type CallFeature, type CallKind, type CallPlatform, type ProbeRecord } from './target'
+import { callFeatureOf, callPlatformOf, recordProbe, threadIdOf, zaloDesktopLink, type CallFeature, type CallKind, type CallPlatform, type ProbeRecord, type WebCallPlatform } from './target'
 import type { CallBackend, CallHandle, CallSession, CallTarget, LaunchEnv, Launcher } from './types'
 
-const LAUNCHERS: Record<CallPlatform, Launcher> = { messenger: messengerLauncher, instagram: instagramLauncher, zalo: zaloLauncher }
+const LAUNCHERS: Record<WebCallPlatform, Launcher> = { messenger: messengerLauncher, instagram: instagramLauncher }
 
 export interface CallManagerOptions {
   backend: CallBackend
@@ -29,9 +28,13 @@ export interface CallManagerOptions {
   probeFile: string
   /** Settings -> Calls, defaults filled in. */
   callSettings(): CallSettings
+  /** Whether Zalo PC is installed (it takes zalo:// links): Zalo's calls are made there. */
+  zaloDesktop(): boolean
+  /** Opens a zalo:// link in Zalo PC. */
+  openZaloDesktop(link: string): Promise<void>
 }
 
-/** Longest a start waits for the last call's tidying (its Zalo connection comes back only after the wipe): a call must not begin before that. */
+/** Longest a start waits for the last call's tidying (wiping what its window stored): a call must not begin before that. */
 const SETTLE_MS = 5000
 
 interface ActiveCall {
@@ -131,16 +134,20 @@ export class CallManager {
   /** `features.call` for an account as the chat header should see it (Instagram drops to 'none' once the web app proved to have no calls). */
   features(accountId: string): CallFeature | undefined {
     const account = this.options.backend.account(accountId)
-    return account && callFeatureOf(account, this.probes[accountId])
+    return account && callFeatureOf(account, this.probes[accountId], Date.now(), this.options.zaloDesktop())
   }
 
   /** The account with its call feature settled; for every account the renderer is told about. */
   decorate(account: Account): Account {
-    const call = callFeatureOf(account, this.probes[account.id])
+    const call = callFeatureOf(account, this.probes[account.id], Date.now(), this.options.zaloDesktop())
     return call === account.features.call ? account : { ...account, features: { ...account.features, call } }
   }
 
-  async start(conversationId: string, kind: CallKind): Promise<void> {
+  /**
+   * Starts a call. Messenger and Instagram run theirs in Moshi's call window; Zalo's web app has none, so a Zalo chat is
+   * opened in Zalo PC to call from there ('handed-off', which the renderer says in a toast).
+   */
+  async start(conversationId: string, kind: CallKind): Promise<'handed-off' | void> {
     const { backend } = this.options
     const text = callTexts(this.options.language())
     if (this.current || this.starting) throw new Error(text.busy)
@@ -149,13 +156,19 @@ export class CallManager {
     const account = backend.account(conversation.accountId)
     const platform = account && callPlatformOf(account)
     if (!account || !platform) throw new Error(text.unavailable)
+    if (platform === 'zalo') {
+      if (!this.options.zaloDesktop()) throw new Error(text.zaloDesktopMissing)
+      const link = zaloDesktopLink(threadIdOf(conversation.id))
+      if (!link) throw new Error(text.zaloGroup)
+      await this.options.openZaloDesktop(link)
+      return 'handed-off'
+    }
     if (account.status === 'needs_auth') throw new Error(text.needsSignIn)
 
     this.starting = true
     const target: CallTarget = { account, conversation, platform }
     try {
-      // The last call's window is still being tidied (a Zalo connection comes back after its wipe): that must be over first,
-      // or the late resume would clear the pause of this call.
+      // The last call's window is still being tidied (what it stored is wiped): that must be over first.
       await this.settled()
       const session = await LAUNCHERS[platform].start(target, kind, this.launchEnv(target, kind))
       const call = this.currentCall()
@@ -192,7 +205,7 @@ export class CallManager {
     return this.rings.decline(id)
   }
 
-  /** Quitting: the call window goes with the app (Zalo's connection need not come back); what the window stored is wiped first. */
+  /** Quitting: the call window goes with the app; what the window stored is wiped first. */
   async shutdown(): Promise<void> {
     this.closing = true
     this.rings.shutdown()
@@ -252,14 +265,7 @@ export class CallManager {
         const done: Promise<unknown> = work.catch(() => undefined).finally(() => this.pending.delete(done))
         this.pending.add(done)
       },
-      backend: {
-        ...backend,
-        // A shut-down app has no use for the connection coming back.
-        zalo: (id) => {
-          const control = backend.zalo(id)
-          return control && { pauseForCall: () => control.pauseForCall(), resumeAfterCall: () => !this.closing && control.resumeAfterCall() }
-        }
-      },
+      backend,
       open: ({ info, ...rest }) => {
         const startedAt = Date.now()
         const avatar = info.avatarUrl && /^https:/.test(info.avatarUrl) ? `unison-img://img/?u=${encodeURIComponent(info.avatarUrl)}` : undefined

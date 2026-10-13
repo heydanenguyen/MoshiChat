@@ -1,9 +1,8 @@
 import type { WebContents } from 'electron'
-import type { Credentials } from 'zca-js'
 import type { Account, Conversation, Language } from '@shared/types'
 import type { CallWindow } from './call-window'
 import type { FrameInfo } from './ipc'
-import type { CallKind, CallPlatform } from './target'
+import type { CallKind, WebCallPlatform } from './target'
 
 /** What the call code needs from the account manager (and nothing more, so it can be tested apart). */
 export interface CallBackend {
@@ -11,20 +10,12 @@ export interface CallBackend {
   conversation(conversationId: string): Conversation | undefined
   /** The browser session a personal Messenger / Instagram account is signed in with. */
   partition(accountId: string, platform: 'messenger' | 'instagram'): string
-  zaloCredentials(accountId: string): Credentials | undefined
-  /** The account's live Zalo connection, which must make way for Zalo's web app while a call is open. */
-  zalo(accountId: string): ZaloCallControl | undefined
-}
-
-export interface ZaloCallControl {
-  pauseForCall(): void
-  resumeAfterCall(): void
 }
 
 export interface CallTarget {
   account: Account
   conversation: Conversation
-  platform: CallPlatform
+  platform: WebCallPlatform
 }
 
 /** What a launcher gets to work with. */

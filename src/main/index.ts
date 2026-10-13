@@ -37,7 +37,6 @@ import { MessengerPresence } from './calls/messenger-presence'
 import { callPlatformOf } from './calls/target'
 import type { RingHost } from './calls/incoming'
 import { setRingHooks } from './instagram-realtime'
-import type { ZaloSecret } from './adapters/zalo'
 import { ZaloRelay } from './zalo-relay'
 import { setRelayEnv } from './adapters/zalo-relay-adapter'
 import { listRelayOwners } from './adapters/zalo-relay-files'
@@ -546,6 +545,16 @@ function appIcon(logo: Settings['logo'] = storage.settings.logo): Electron.Nativ
     if (!image.isEmpty()) return image
   }
   return undefined
+}
+
+/**
+ * macOS: the Dock shows the logo picked in Settings while Moshi runs (a window's own icon is not shown there). Until one
+ * is picked it keeps the app's icon (Mây, the blue Pal).
+ */
+function applyDockIcon(): void {
+  if (!isMac || !storage.settings.logo) return
+  const icon = appIcon()
+  if (icon) app.dock?.setIcon(icon)
 }
 
 /**
@@ -1556,6 +1565,7 @@ function registerIpc(): void {
     if (patch.logo) {
       const icon = appIcon(settings.logo)
       if (icon && window && !window.isDestroyed()) window.setIcon(icon)
+      applyDockIcon()
     }
     return settings
   })
@@ -1856,9 +1866,7 @@ function registerIpc(): void {
     backend: {
       account: (id) => manager.listAccounts().find((a) => a.id === id),
       conversation: (id) => manager.listConversations().find((c) => c.id === id),
-      partition: (id, platform) => manager.storedPartition(id, platform),
-      zaloCredentials: (id) => storage.readSecret<ZaloSecret>(id)?.credentials,
-      zalo: (id) => manager.zaloAdapters().find((a) => a.account.id === id)
+      partition: (id, platform) => manager.storedPartition(id, platform)
     },
     emit,
     log,
@@ -1866,7 +1874,10 @@ function registerIpc(): void {
     background: windowColorFor,
     icon: () => appIcon(),
     probeFile: join(app.getPath('userData'), 'calls-probe.json'),
-    callSettings: () => ({ ...DEFAULT_SETTINGS.calls!, ...storage.settings.calls })
+    callSettings: () => ({ ...DEFAULT_SETTINGS.calls!, ...storage.settings.calls }),
+    // Zalo's calls are made in Zalo PC (its web app has none): it is there when something takes zalo:// links.
+    zaloDesktop: () => !!app.getApplicationNameForProtocol('zalo://'),
+    openZaloDesktop: (link) => shell.openExternal(link)
   })
   calls = calling
   // Incoming calls: Messenger gets a hidden page of its own per account; Instagram's realtime page doubles as its listener.
@@ -1959,6 +1970,7 @@ if (!gotLock) {
     registerMediaProxy()
     registerIpc()
     installMenu()
+    applyDockIcon()
     createWindow()
     await manager.restore()
     presence?.sync()

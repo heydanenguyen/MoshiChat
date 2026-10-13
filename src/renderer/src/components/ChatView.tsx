@@ -557,7 +557,7 @@ function ThreadPane({ conversation, pane, split, active }: { conversation: Conve
           )}
           {laterOn && !trimmed && <LaterButton conversationId={conversation.id} />}
           {!trimmed && <SummaryButton conversationId={conversation.id} />}
-          <CallButtons conversationId={viaConversation.id} features={features} status={account?.status} />
+          <CallButtons conversationId={viaConversation.id} features={features} status={account?.status} platform={account?.platform} />
           <button className={`icon-btn ${detailsOpen && active ? 'active' : ''}`} onClick={() => withViewTransition('details', () => toggleDetails())} title={t('details')}>
             <Info size={18} strokeWidth={2} />
           </button>
@@ -1062,7 +1062,7 @@ function MediaGrid({ tiles, className = '', conversationId }: { tiles: Tile[]; c
 type ChatRow = { key: string; kind: 'day'; day: number } | { key: string; kind: 'via'; conversation: Conversation } | { key: string; kind: 'group'; group: MessageGroup }
 
 /** Voice and video call buttons for the account this chat writes through; off while a call is on or the account cannot connect. */
-function CallButtons({ conversationId, features, status }: { conversationId: string; features: Account['features']; status?: Account['status'] }): JSX.Element | null {
+function CallButtons({ conversationId, features, status, platform }: { conversationId: string; features: Account['features']; status?: Account['status']; platform?: Account['platform'] }): JSX.Element | null {
   const t = useT()
   const busy = useStore((s) => !!s.calls.active)
   const startCall = useStore((s) => s.startCall)
@@ -1081,7 +1081,8 @@ function CallButtons({ conversationId, features, status }: { conversationId: str
   )
   return (
     <>
-      {audio && button('audio', t('callVoice'), <Phone size={18} strokeWidth={2} />)}
+      {/* Zalo's one button opens the chat in Zalo PC (its web app has no calls). */}
+      {audio && button('audio', platform === 'zalo' ? t('callZalo') : t('callVoice'), <Phone size={18} strokeWidth={2} />)}
       {video && button('video', t('callVideo'), <Video size={18} strokeWidth={2} />)}
     </>
   )

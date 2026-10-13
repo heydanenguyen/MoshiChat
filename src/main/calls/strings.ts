@@ -18,6 +18,9 @@ type Texts = {
   noChat: string
   /** Said for a caller whose name the dialog did not show. */
   someone: string
+  /** Zalo calls are made in Zalo PC (Zalo's web app has none). */
+  zaloDesktopMissing: string
+  zaloGroup: string
 }
 
 const EN: Texts = {
@@ -35,7 +38,9 @@ const EN: Texts = {
   unavailable: 'Calls are not available for this account.',
   needsSignIn: 'Sign in to this account again before calling.',
   noChat: 'That chat is not available.',
-  someone: 'Someone'
+  someone: 'Someone',
+  zaloDesktopMissing: 'Zalo calls are made in Zalo PC. Install Zalo PC on this computer to call from Moshi.',
+  zaloGroup: 'Zalo PC can be opened on a one-to-one chat only. Call this group from Zalo PC.'
 }
 
 const VI: Texts = {
@@ -53,7 +58,9 @@ const VI: Texts = {
   unavailable: 'Tài khoản này chưa gọi được.',
   needsSignIn: 'Hãy đăng nhập lại tài khoản này trước khi gọi.',
   noChat: 'Không tìm thấy hội thoại này.',
-  someone: 'Ai đó'
+  someone: 'Ai đó',
+  zaloDesktopMissing: 'Cuộc gọi Zalo được thực hiện trong Zalo PC. Hãy cài Zalo PC trên máy này để gọi từ Moshi.',
+  zaloGroup: 'Moshi chỉ mở được Zalo PC ở chat 1-1. Hãy gọi nhóm này từ Zalo PC.'
 }
 
 export const callTexts = (language: Language): Texts => (language === 'en' ? EN : VI)

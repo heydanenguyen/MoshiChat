@@ -2,11 +2,12 @@ import { randomUUID } from 'crypto'
 import { net } from 'electron'
 import { readFile as readFileAsync, writeFile as writeFileAsync } from 'fs/promises'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import type { Account, Conversation, ConversationStats, Message, Peer, PeerProfile, PreviewKind, SendOptions, SharedKind } from '@shared/types'
 import type { AdapterContext, FetchMessagesOptions, PlatformAdapter } from './types'
 import { conversationId, externalIdOf, isShared, matchesQuery, unsentCopy } from './types'
 import { mapIgItem, type IgItem, type MappedItem } from './instagram-items'
-import { mapSlideNode, slideNodesOf, type SlideNode } from './instagram-slide'
+import { mapSlideNode, shapeOf, slideNodesOf, withGiphy, type SlideNode } from './instagram-slide'
 import { INBOX_QUERY, MESSAGE_PAGE_QUERY, THREAD_DETAIL_QUERY, THREAD_LIST_PAGE_QUERY, convertThread, messagePageOf, slideItem, threadDetailOf, threadListOf, type GqlThread } from './instagram-graphql'
 import type { WebCookie } from './facebook-personal'
 import { SessionExpiredError, WebClient } from '../web-client'
@@ -125,6 +126,10 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   /** Placeholder items ("update to the latest version") resolved through the web client's GraphQL. */
   private slideResolved = new Map<string, MappedItem>()
   private slideCache = new Map<string, { at: number; nodes: Map<string, SlideNode> }>()
+  /** What this computer sent, by item id, for when Instagram's copy is of a kind Moshi cannot read yet. */
+  private sentHere = new Map<string, MappedItem>()
+  /** Content kinds already written to the log as unreadable (once each). */
+  private unknownKinds = new Set<string>()
   private v2Ids = new Map<string, string>()
   /** The GraphQL mailbox (inbox) id, for its later pages and the requests folder. */
   private mailboxId?: string
@@ -376,7 +381,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     const items = nodes.map((node) => {
       const item = slideItem(node, this.fbidPk)
-      this.slideResolved.set(item.item_id, mapSlideNode(node, item.item_id))
+      this.slideResolved.set(item.item_id, this.mapSlide(node, item.item_id))
       return item
     })
     return { items, cursor: next.cursor, hasOlder: next.hasOlder }
@@ -516,6 +521,19 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
       }
     }
     if (!sent) throw new Error('Instagram did not confirm the upload yet. Check the conversation before sending again')
+    // Our own copy, in case Instagram's is of a kind Moshi cannot read yet: a sticker shows from its own file, so a
+    // cut-out stays see-through here even though Instagram received it on white.
+    const kept: MappedItem = {
+      text: '',
+      attachments: (options.attachments ?? []).map((f, i) => ({
+        id: `${sent.item_id}-l${i}`,
+        kind: f.sticker ? 'sticker' : f.mime.startsWith('video/') ? 'video' : 'image',
+        url: f.sticker && f.mime.startsWith('image/') ? pathToFileURL(f.path).href : f.preview
+      })),
+      preview: only?.sticker ? 'sticker' : only?.mime.startsWith('video/') ? 'video' : 'photo'
+    }
+    this.sentHere.set(sent.item_id, kept)
+    if (this.slideResolved.get(sent.item_id)?.system?.kind === 'unavailable') this.slideResolved.set(sent.item_id, kept)
     await this.resolveSlide(threadId, [sent])
     const message = this.toMessage(sent, id)
     this.remember(id, [message])
@@ -908,7 +926,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
   private absorbGraphqlThread(t: GqlThread): IgThread {
     const converted = convertThread(t, this.mePk)
     for (const [fbid, pk] of converted.fbids) this.fbidPk.set(fbid, pk)
-    for (const [itemId, node] of converted.nodes) this.slideResolved.set(itemId, mapSlideNode(node, itemId))
+    for (const [itemId, node] of converted.nodes) this.slideResolved.set(itemId, this.mapSlide(node, itemId))
     const thread = converted.thread as IgThread
     if (thread.thread_v2_id) this.v2Ids.set(thread.thread_id, thread.thread_v2_id)
     return thread
@@ -1214,11 +1232,29 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * One Slide message as a bubble. A kind Moshi cannot read yet is written to the log once (field names only), and
+   * a message sent from this computer then keeps the copy it sent (a cut-out sticker stays see-through here).
+   */
+  private mapSlide(node: SlideNode, itemId: string): MappedItem {
+    const mapped = mapSlideNode(node, itemId)
+    const unreadable = mapped.system?.kind === 'unavailable'
+    // Shown only through the picture found by guessing: worth learning its real shape too.
+    const guessed = mapped.attachments.some((a) => a.id === `${itemId}-i`)
+    if (!unreadable && !guessed) return mapped
+    const kind = node.content?.__typename ?? node.content_type ?? 'none'
+    if (!this.unknownKinds.has(kind)) {
+      this.unknownKinds.add(kind)
+      this.ctx.log(unreadable ? 'instagram slide: cannot read' : 'instagram slide: guessed', kind, JSON.stringify({ content_type: node.content_type, content: shapeOf(node.content) }).slice(0, 1500))
+    }
+    return unreadable ? (this.sentHere.get(itemId) ?? mapped) : mapped
+  }
+
   private mapped(item: IgItem): ReturnType<typeof mapIgItem> {
     const resolved = this.slideResolved.get(item.item_id)
     if (resolved) return resolved
     this.mapContext.mePk = this.mePk
-    return mapIgItem(item, this.mapContext)
+    return withGiphy(mapIgItem(item, this.mapContext))
   }
 
   /**
@@ -1275,7 +1311,12 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     this.threadCacheFile = join(this.ctx.dataDir(), `threads-v2-${this.mePk}.json`)
     try {
       const raw = JSON.parse(await readFileAsync(this.threadCacheFile, 'utf8')) as Record<string, Message[]>
-      for (const [id, list] of Object.entries(raw)) if (!this.history.has(id) && Array.isArray(list)) this.history.set(id, list)
+      // Copies saved by older versions may hold GIPHY stickers as proxied stills: point them at GIPHY's files.
+      const fresh = (m: Message): Message => {
+        const fixed = withGiphy({ text: m.text, attachments: m.attachments ?? [] })
+        return fixed.attachments === m.attachments ? m : { ...m, attachments: fixed.attachments }
+      }
+      for (const [id, list] of Object.entries(raw)) if (!this.history.has(id) && Array.isArray(list)) this.history.set(id, list.map(fresh))
     } catch {
       /* first run */
     }
@@ -1313,7 +1354,7 @@ export class InstagramPersonalAdapter implements PlatformAdapter {
     }
     for (const item of pending) {
       const node = cached.nodes.get(item.message_id!)
-      if (node) this.slideResolved.set(item.item_id, mapSlideNode(node, item.item_id))
+      if (node) this.slideResolved.set(item.item_id, this.mapSlide(node, item.item_id))
     }
   }
 

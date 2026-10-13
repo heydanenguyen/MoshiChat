@@ -1660,7 +1660,8 @@ export const useStore = create<State>((set, get) => ({
   async startCall(conversationId, kind) {
     if (get().calls.active) return
     try {
-      await window.unison.calls.start(conversationId, kind)
+      // A Zalo chat goes to Zalo PC (Zalo's web app has no calls): say where to press call.
+      if ((await window.unison.calls.start(conversationId, kind)) === 'handed-off') get().showToast(translate(get().settings.language, 'callZaloOpened'), 'info')
     } catch (err) {
       get().showToast(cleanError(err), 'error')
     }

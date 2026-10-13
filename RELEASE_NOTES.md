@@ -1,3 +1,26 @@
+## Moshi 0.12.0
+
+**Icon mới, sticker Instagram hiện đúng, và nút gọi Zalo mở Zalo PC.**
+
+### Icon
+- Icon app mới: **Mây**, bạn Pal xanh, màu trắng trên nền xanh dương đậm. Đổi trên Finder, Launchpad, file cài (Mac và Windows).
+- Dock trên Mac giờ theo logo chọn trong Cài đặt (trước đây luôn là icon gốc). Icon các logo nét gấp đôi cho màn Retina.
+
+### Instagram
+- Sticker GIPHY (bạn bè gửi hay mình gửi) hiện đúng cỡ sticker, nền trong suốt và chuyển động. Trước đây hiện thành ảnh tĩnh nền trắng trong khung to.
+- Tin nhắn kiểu mới của Instagram có ảnh nhưng Moshi chưa quen giờ hiện ảnh thay vì "không xem được"; tin nhắn thoại kiểu mới cũng nghe được.
+- Sticker tự cắt gửi đi vẫn hiện trong suốt trong Moshi (người nhận trên Instagram vẫn thấy nền trắng: Instagram đổi ảnh gửi qua web thành JPEG).
+
+### Zalo
+- **Gọi Zalo:** Zalo web không còn tính năng gọi, nên nút gọi Zalo giờ mở thẳng cuộc chat 1-1 trong Zalo PC để bấm gọi ở đó. Máy chưa cài Zalo PC thì nút ẩn đi; chat nhóm thì gọi từ Zalo PC. Moshi không còn mở Zalo web khi bấm gọi, nên kết nối Zalo không bị ngắt tạm nữa.
+
+---
+
+### English
+- **New icon:** Mây, the blue Pal, light on a deep blue tile (Finder, Launchpad, installers on Mac and Windows). The macOS Dock now follows the logo picked in Settings; logo icons are rendered at 512 px for Retina.
+- **Instagram:** GIPHY stickers (sent or received) show at sticker size, see-through and moving, instead of a still on white in a photo frame; newer message kinds that carry a picture show it instead of "unavailable", and newer voice notes play; a cut-out sticker you send stays see-through in Moshi.
+- **Zalo calls:** Zalo's web app no longer offers calls, so the Zalo call button opens the one-to-one chat in Zalo PC (zalo://conversation) to call from there; hidden where Zalo PC is not installed, and groups are called from Zalo PC. Moshi no longer opens Zalo's web app for a call, so the Zalo connection is not interrupted.
+
 ## Moshi 0.11.0
 
 **Gói chuyển động đợt 3 "Pals+ vui nhộn": mascot có việc để làm, ăn mừng có vật lý.** Đợt cuối của ba đợt chuyển động; vẫn chỉ transform/opacity (và một canvas cho hạt), có bản rút gọn khi bật "giảm chuyển động".
