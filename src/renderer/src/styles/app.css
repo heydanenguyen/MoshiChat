@@ -16584,15 +16584,73 @@ html[data-vt='details']::view-transition-new(vt-chat) {
    details are flat paper split by hairlines, and glass is left in two places only (the title bar and the composer pill).
    Pickers, menus, sheets, toasts and the call card float above the paper and keep their own glass. */
 
-/* window: the default backdrop (no mesh picked) becomes --bg with the two tints; a mesh the person picked keeps its blobs */
+/* window: the default backdrop (no mesh picked) becomes --bg with two soft tints; a mesh the person picked keeps its blobs.
+   The tints are the first two blob elements, drifting very slowly (60 s and 73 s loops, transform only, two layers):
+   "living window tints", motion idea 12. The only glass above them is the title bar and the composer pill, so the
+   re-blur under them is small; the drift still rests with the other decorative loops while the window is in the
+   background or hidden (window-idle / window-hidden), and stands still under reduced motion. */
 :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh {
-  background:
-    radial-gradient(700px 320px at 8% -8%, var(--tint-a) 0, transparent 70%),
-    radial-gradient(560px 280px at 96% -12%, var(--tint-b) 0, transparent 70%),
-    var(--bg);
+  background: var(--bg);
 }
 :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh-blob {
   display: none;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) :is(.mesh-blob.b1, .mesh-blob.b2) {
+  display: block;
+  border-radius: 0;
+  filter: none;
+  opacity: 1;
+  will-change: transform;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh-blob.b1 {
+  left: -160px;
+  top: -170px;
+  width: 700px;
+  height: 360px;
+  background: radial-gradient(closest-side, var(--tint-a) 0, transparent 100%);
+  animation: quiet-tint-a 60s ease-in-out infinite;
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(:not([data-mesh]), [data-mesh='sunrise']) .mesh-blob.b2 {
+  left: auto;
+  right: -140px;
+  top: -190px;
+  width: 560px;
+  height: 340px;
+  background: radial-gradient(closest-side, var(--tint-b) 0, transparent 100%);
+  animation: quiet-tint-b 73s ease-in-out infinite;
+  animation-delay: 0s;
+}
+@keyframes quiet-tint-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(170px, 70px, 0) scale(1.15);
+  }
+  66% {
+    transform: translate3d(60px, 120px, 0) scale(0.95);
+  }
+}
+@keyframes quiet-tint-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(-150px, 90px, 0) scale(1.12);
+  }
+  66% {
+    transform: translate3d(-40px, 150px, 0) scale(0.92);
+  }
+}
+:root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']):is(.window-hidden, .window-idle) :is(.mesh-blob.b1, .mesh-blob.b2) {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-style='liquid'], [data-style='mono'], [data-style='pals']) :is(.mesh-blob.b1, .mesh-blob.b2) {
+    animation: none;
+  }
 }
 
 /* the title bar: the one glass bar, a hairline under it */
