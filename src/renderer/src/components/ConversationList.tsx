@@ -33,6 +33,7 @@ import { PLATFORMS, type Conversation, type Language, type MessageStatus, type P
 import { isPinned, useChatList, useShowPlatformBadge, useShownConversations, useStore, useT, useTagDefs, useUnreadCounts } from '../store'
 import { PlatformIcon } from './PlatformIcon'
 import { formatBadge, isUnread } from '../quickFilter'
+import { RollingNumber, UnreadPill } from './RollingNumber'
 import { formatListTime, modKey, shortcutLabel } from '../utils'
 import { openIds } from '../panes'
 import { popoverShift } from '../popover'
@@ -292,11 +293,8 @@ const ConversationRow = memo(function ConversationRow({
               )}
               {archivedMark && <Archive size={12} strokeWidth={2.2} aria-label={t('archivedMark')} />}
               {requestMark && <UserRoundPlus size={12} strokeWidth={2.2} aria-label={t('requestsTitle')} />}
-              {c.unreadCount > 0 ? (
-                <span className="unread-pill">{formatBadge(c.unreadCount)}</span>
-              ) : (
-                !quiet && unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />
-              )}
+              <UnreadPill count={c.unreadCount} />
+              {c.unreadCount <= 0 && !quiet && unread && <span className="unread-pill dot" role="img" aria-label={t('markedUnread')} title={t('markedUnread')} />}
             </span>
           </span>
         </span>
@@ -1088,7 +1086,11 @@ function NarrowChips(): JSX.Element {
         <button key={chip.id} type="button" className={`plat-chip ${filter === chip.id ? 'on' : ''}`} aria-pressed={filter === chip.id} tabIndex={i === Math.max(0, picked) ? 0 : -1} onClick={() => setFilter(chip.id)}>
           {chip.id !== 'all' && <PlatformIcon platform={chip.id} size={20} />}
           <span className="plat-chip-label">{chip.label}</span>
-          {chip.count > 0 && <em>{formatBadge(chip.count)}</em>}
+          {chip.count > 0 && (
+            <em>
+              <RollingNumber value={chip.count} />
+            </em>
+          )}
         </button>
       ))}
     </div>

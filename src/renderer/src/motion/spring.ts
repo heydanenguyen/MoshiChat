@@ -67,6 +67,10 @@ const SPRINGS: Array<{ name: string; ms: number; overshoot: number; cap?: number
   { name: 'peer', ms: 420, overshoot: 0.06 }, // the row's avatar and name flying to the chat header (idea 7)
   // pack 3
   { name: 'peek', ms: 420, overshoot: 0.3 }, // the pal peeking over the title bar at a ring (idea 14)
+  // pack 4
+  { name: 'swipe', ms: 380, overshoot: 0.2 }, // a swiped bubble springing back (idea 22)
+  { name: 'tick', ms: 260, overshoot: 0.4 }, // the reply icon snapping as the swipe crosses its threshold
+  { name: 'digits', ms: 300, overshoot: 0.2 }, // the unread pill's width when a digit is added or lost (idea 25)
 ]
 
 /** The CSS custom properties for the root: `--spring-<name>` (a linear() easing) and `--spring-<name>-ms` (its duration). */
@@ -94,4 +98,9 @@ export function bounceOf(style: StyleId | undefined): number {
     default:
       return 1
   }
+}
+
+/** A named spring from the root's custom properties (set by App.tsx from `springVars`), or an ease when it is not there. */
+export function cssSpring(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(`--spring-${name}`).trim() || 'cubic-bezier(0.16, 1, 0.3, 1)'
 }

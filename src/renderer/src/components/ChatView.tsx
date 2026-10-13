@@ -15,6 +15,8 @@ import { Receipt } from './Receipt'
 import { useLinger } from '../motion/linger'
 import { noteSent, takeSent } from '../motion/handoff'
 import { burst, lastTap } from '../motion/burst'
+import { attachSwipe } from '../motion/swipe'
+import { DISSOLVE_MS, armCollapse } from '../motion/collapse'
 import { Composer } from './Composer'
 import { EmptyState } from './EmptyState'
 import { GoneMedia, LinkCard, PostCard, StoryRef, SystemRow, VideoThumb } from './MessageParts'
@@ -1169,6 +1171,10 @@ function BubbleView({
     }))
   )
   const [confirmUnsend, setConfirmUnsend] = useState(false)
+  // Taking a message back: the bubble dissolves first (220 ms), then the store shows the "unsent" line and the thread closes the gap.
+  const [dissolving, setDissolving] = useState(false)
+  // Was it a live message when this row was drawn? Then the line it turns into fades in.
+  const [wasLive] = useState(() => !message.unsent)
   // tips: small labels on the bar's buttons (Settings > Chat > Message actions); on by default.
   // placement: where reactions sit (Settings > Chat): the lower edge (default), the top corner, a row below, or beside the end.
   // bubbleActions: which buttons the bar shows (Settings > Chat > Message actions); everything is on by default.
@@ -1319,12 +1325,34 @@ function BubbleView({
   const settled = message.status !== 'sending' && message.status !== 'failed'
   const showActions = settled && !message.unsent && BUBBLE_ACTIONS.some(wants)
 
+  // Swipe the bubble to the right (or press R on it) to reply (motion/swipe.ts).
+  const swipeable = features.reply && wants('reply') && settled && !message.unsent && !bubbleless && !dissolving
+  const replyNow = useRef(() => {})
+  replyNow.current = () => setReplyTo(message.conversationId, message)
+  useEffect(() => {
+    const row = rowRef.current
+    const stack = row?.querySelector<HTMLElement>(':scope > .bubble-stack')
+    const bubble = stack?.querySelector<HTMLElement>(':scope > .bubble')
+    const icon = row?.querySelector<HTMLElement>(':scope > .swipe-reply')
+    if (!swipeable || !row || !stack || !bubble || !icon) return
+    return attachSwipe({ bubble, stack, row, icon, reply: () => replyNow.current() })
+  }, [swipeable])
+  // Turned into the "unsent" line while drawn (here or on the platform): the rows that moved close the gap on the settle spring.
+  // (while it is being rendered, so before the DOM changes: the rows are noted where they still are; a no-op when the dissolve did it)
+  const armed = useRef(false)
+  if (!message.unsent) armed.current = false
+  else if (wasLive && !armed.current) {
+    armed.current = true
+    armCollapse(rowRef.current?.closest('.chat-scroll') ?? null)
+  }
+
   // Taken back: only a faint line where it was, like Messenger and Zalo show it.
   if (message.unsent) {
+    // (the entry it already played is not played again by the line it turns into)
     return (
-      <div className={`bubble-row ${fresh ? 'fresh' : ''}`} data-message-id={message.id}>
+      <div className={`bubble-row ${fresh && !wasLive ? 'fresh' : ''}`} data-message-id={message.id} ref={rowRef}>
         <div className="bubble-stack">
-          <div className={`bubble ${direction} ${position} unsent`}>
+          <div className={`bubble ${direction} ${position} unsent ${wasLive ? 'unsent-in' : ''}`}>
             <Undo2 size={13} strokeWidth={2.2} aria-hidden />
             {message.isOutgoing ? t('unsentMine') : t('unsentTheirs')}
           </div>
@@ -1391,14 +1419,33 @@ function BubbleView({
 
   return (
     <div
-      className={`bubble-row ${fresh ? 'fresh' : ''} ${highlighted ? 'highlight' : ''} ${reactionSlot && placement === 'top' ? 'react-top' : ''}`}
+      className={[
+        'bubble-row',
+        fresh && 'fresh',
+        highlighted && 'highlight',
+        reactionSlot && placement === 'top' && 'react-top',
+        dissolving && 'dissolving'
+      ]
+        .filter(Boolean)
+        .join(' ')}
       data-message-id={message.id}
       ref={rowRef}
     >
+      {swipeable && (
+        <span className="swipe-reply" aria-hidden>
+          <Reply size={15} strokeWidth={2.2} />
+        </span>
+      )}
       <div className="bubble-stack">
         {story && <StoryRef attachment={story} message={message} platform={platform} />}
         {!bubbleless && (
-          <div className={classes.join(' ')} style={entryStyle} onDoubleClick={heart}>
+          <div
+            className={classes.join(' ')}
+            style={entryStyle}
+            onDoubleClick={heart}
+            tabIndex={swipeable ? -1 : undefined}
+            data-swipe={swipeable ? '' : undefined}
+          >
             {heartBurst > 0 && (
               <span key={heartBurst} className="heart-burst" aria-hidden onAnimationEnd={() => setHeartBurst(0)}>
                 ❤️
@@ -1525,7 +1572,18 @@ function BubbleView({
                   className="btn danger small"
                   onClick={() => {
                     setConfirmUnsend(false)
-                    void unsend(message.conversationId, message.id)
+                    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                      void unsend(message.conversationId, message.id)
+                      return
+                    }
+                    setDissolving(true)
+                    setTimeout(() => {
+                      // (the rows are noted before the store changes anything)
+                      armCollapse(rowRef.current?.closest('.chat-scroll') ?? null)
+                      void unsend(message.conversationId, message.id)
+                      // (the store has shown the line by now; if the platform refuses, the message comes back whole)
+                      setDissolving(false)
+                    }, DISSOLVE_MS)
                   }}
                 >
                   {t('unsend')}
@@ -1767,15 +1825,38 @@ function barsFromWaveform(waveform: number[]): number[] {
   })
 }
 
+const RATES = [1, 1.5, 2]
+/** How long the fill stays full after a voice note ends before it empties. */
+const FILL_RESET_MS = 600
+
 function AudioPlayer({ attachment, message }: { attachment: Attachment; message: Message }): JSX.Element {
   const t = useT()
   const loadAttachment = useStore((s) => s.loadAttachment)
+  const language = useStore((s) => s.settings.language)
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [loading, setLoading] = useState(false)
   const [duration, setDuration] = useState(attachment.duration ?? 0)
+  const [rate, setRate] = useState(1)
   const bars = attachment.waveform?.length ? barsFromWaveform(attachment.waveform) : barsFor(attachment.id)
+  const emptyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(emptyTimer.current), [])
+  // Emptying the fill is not a sweep backwards: the transition is switched off for that one change.
+  const [resetting, setResetting] = useState(false)
+  const emptyAtOnce = (): void => {
+    setResetting(true)
+    setProgress(0)
+    setTimeout(() => setResetting(false), 80)
+  }
+  // (a new source resets the element's rate to its default, so both are kept)
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.defaultPlaybackRate = rate
+    audio.playbackRate = rate
+  }, [rate])
+  const rateLabel = String(rate).replace('.', language === 'vi' ? ',' : '.') + '×'
 
   const toggle = async (): Promise<void> => {
     const audio = audioRef.current
@@ -1784,6 +1865,9 @@ function AudioPlayer({ attachment, message }: { attachment: Attachment; message:
       audio.pause()
       return
     }
+    clearTimeout(emptyTimer.current)
+    // (pressed again in the moment after the end: from the start, not 100 % sweeping back)
+    if (progress > 0.98) emptyAtOnce()
     if (!audio.src || audio.src === window.location.href) {
       if (!attachment.url) {
         setLoading(true)
@@ -1806,17 +1890,43 @@ function AudioPlayer({ attachment, message }: { attachment: Attachment; message:
   const shown = playing && duration ? progress * duration : duration
 
   return (
-    <div className="audio-player">
-      <button className="audio-play" onClick={() => void toggle()} title={playing ? t('pause') : t('play')}>
-        {loading ? <span className="spinner" /> : playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
+    <div className={`audio-player ${playing ? 'playing' : ''}`}>
+      <button className="audio-play" onClick={() => void toggle()} title={playing ? t('pause') : t('play')} aria-label={playing ? t('pause') : t('play')}>
+        {loading ? (
+          <span className="spinner" />
+        ) : (
+          // Both icons are drawn; the one that is not wanted turns away and shrinks (app.css, "Motion pack 4").
+          <>
+            <Play className="audio-icon pp" size={16} fill="currentColor" />
+            <Pause className="audio-icon pa" size={16} fill="currentColor" />
+          </>
+        )}
       </button>
       <div className="audio-track">
-        <div className="audio-bars">
-          {bars.map((h, i) => (
-            <span key={i} style={{ height: h }} className={i / BAR_COUNT < progress ? 'played' : ''} />
-          ))}
+        <div className="audio-wave">
+          <div className="audio-bars">
+            {bars.map((h, i) => (
+              <span key={i} style={{ height: h }} />
+            ))}
+          </div>
+          {/* The same bars in full colour, uncovered from the left by --p. */}
+          <div className={`audio-bars audio-fill ${resetting ? 'resetting' : ''}`} style={{ '--p': `${(progress * 100).toFixed(2)}%` } as CSSProperties} aria-hidden>
+            {bars.map((h, i) => (
+              <span key={i} style={{ height: h }} />
+            ))}
+          </div>
         </div>
-        <span className="audio-time">{format(shown)}</span>
+        <div className="audio-foot">
+          <span className="audio-time">{format(shown)}</span>
+          <button
+            className="audio-speed"
+            onClick={() => setRate((r) => RATES[(RATES.indexOf(r) + 1) % RATES.length])}
+            title={t('voiceSpeed', { rate: rateLabel })}
+            aria-label={t('voiceSpeed', { rate: rateLabel })}
+          >
+            {rateLabel}
+          </button>
+        </div>
       </div>
       <audio
         ref={audioRef}
@@ -1825,7 +1935,9 @@ function AudioPlayer({ attachment, message }: { attachment: Attachment; message:
         onPause={() => setPlaying(false)}
         onEnded={() => {
           setPlaying(false)
-          setProgress(0)
+          // The fill stays full a moment, then empties.
+          clearTimeout(emptyTimer.current)
+          emptyTimer.current = setTimeout(emptyAtOnce, FILL_RESET_MS)
         }}
         onLoadedMetadata={(e) => {
           const d = e.currentTarget.duration
