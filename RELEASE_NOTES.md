@@ -1,3 +1,22 @@
+## Moshi 0.13.0
+
+**Năm chuyển động cuối của catalogue.** Vẫn lò xo thật, chỉ transform/opacity, có bản rút gọn khi bật "giảm chuyển động".
+
+### Trong cuộc chat
+- **Vuốt để trả lời (màn hình cảm ứng, bút):** kéo bubble sang phải, càng kéo càng nặng; qua ngưỡng thì biểu tượng trả lời búng một nhịp, thả ra là trả lời. Kéo bằng chuột vẫn bôi đen chữ như cũ; bấm vào bubble rồi nhấn R cũng trả lời.
+- **Tin thoại:** sóng âm đổ đầy từ trái theo thời gian phát, nút phát/tạm dừng đổi bằng xoay, thêm nút tốc độ 1× / 1,5× / 2×.
+- **Thu hồi tin:** bubble tan trong 220 ms rồi các tin bên dưới khép lên bằng lò xo thay vì nhảy.
+- **Số chưa đọc:** chữ số cuộn lên khi đổi, pill nở ra khi số tăng hàng; không chớp cả badge.
+
+### Giao diện mặc định
+- **Hai vệt màu nền trôi** rất chậm (vòng 60 s và 73 s), dừng khi cửa sổ ra nền hoặc bị ẩn.
+
+---
+
+### English
+- **Motion pack 4:** swipe to reply on touch and pen (rubber band, threshold pop; a mouse drag still selects text; R replies on a clicked bubble); the voice player fills its waveform as it plays, swaps play/pause by rotation and gains a 1×/1.5×/2× speed button; a taken-back message dissolves and the rows below slide closed on a spring; unread counts roll their digits.
+- **Default style:** the two window tints drift on 60 s / 73 s loops, resting when the window is in the background or hidden.
+
 ## Moshi 0.12.0
 
 **Icon mới, sticker Instagram hiện đúng, và nút gọi Zalo mở Zalo PC.**
